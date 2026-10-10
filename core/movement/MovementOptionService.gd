@@ -22,10 +22,14 @@ const STYLE_ORDER: Array = [
 ]
 
 
+## `stop_search`: null for every normal caller. A Dictionary seeded with `cost_margin` and
+## `max_candidates` receives `primary_cohesion`, `prefixes` and `skipped` (see `_fill_stop_search`);
+## the returned options are the same either way.
 static func generate_options(
 	context: Dictionary,
 	profile: Dictionary,
-	goal: Dictionary
+	goal: Dictionary,
+	stop_search: Variant = null
 ) -> Dictionary:
 	var context_result: Dictionary = ContextContract.validate(context)
 	if not bool(context_result["valid"]):
@@ -185,7 +189,64 @@ static func generate_options(
 	var deduplication: Dictionary = _deduplicate_candidates(validated)
 	if not bool(deduplication["valid"]):
 		return _failure(str(deduplication["reason"]), str(deduplication["field"]))
+	if stop_search is Dictionary:
+		_fill_stop_search(
+			stop_search as Dictionary, context, profile, goal, planning_walkable,
+			edge_costs, edge_sources, primary, deduplication["options"] as Array
+		)
 	return {"valid": true, "options": deduplication["options"], "reason": "", "field": ""}
+
+
+## Every prefix of the primary path that could replace the `conservative` option, so the caller
+## can pick the cell that has a reason to stop. A prefix is generated while its route cost stays
+## within capacity minus `cost_margin` and it is shorter than the primary path; the first
+## `max_candidates` by length are kept. `skipped` lists generated prefixes that cannot be offered.
+static func _fill_stop_search(
+	stop_search: Dictionary,
+	context: Dictionary,
+	profile: Dictionary,
+	goal: Dictionary,
+	planning_walkable: Dictionary,
+	edge_costs: Dictionary,
+	edge_sources: Dictionary,
+	primary: Dictionary,
+	options: Array
+) -> void:
+	var prefixes: Array = []
+	var skipped: Array = []
+	stop_search["primary_cohesion"] = float(primary.get("cohesion", 0.0))
+	stop_search["prefixes"] = prefixes
+	stop_search["skipped"] = skipped
+	var path: Array = primary.get("path", []) as Array
+	var limit: int = int(profile["capacity"]) - maxi(1, int(stop_search.get("cost_margin", 1)))
+	var affordable: Array = _longest_affordable_prefix(
+		context["origin"] as Dictionary, path, limit, planning_walkable,
+		context["terrain_costs"] as Dictionary, context["bounds"] as Dictionary, edge_costs
+	)
+	var taken: Dictionary = {}
+	for option_value: Variant in options:
+		var other: Dictionary = option_value as Dictionary
+		if _style_from_option_id(str(other["option_id"])) != "conservative":
+			taken[_mechanics_key(other)] = true
+	var region: Array = goal["destination_region"] as Array
+	var last_k: int = mini(mini(affordable.size(), path.size() - 1), int(stop_search.get("max_candidates", 0)))
+	for k: int in range(1, last_k + 1):
+		var prefix: Array = affordable.slice(0, k, 1, true)
+		var stop_cell: Dictionary = prefix.back() as Dictionary
+		if region.has(stop_cell):
+			skipped.append({"k": k, "destination": stop_cell.duplicate(true), "reason": "in_goal_region"})
+			continue
+		var option: Dictionary = _build_option(
+			context, profile, goal, planning_walkable, edge_costs, edge_sources, "conservative", prefix
+		)
+		if bool(option.get("failed", false)):
+			continue
+		if float(option["objective_progress"]) <= 0.0:
+			skipped.append({"k": k, "destination": stop_cell.duplicate(true), "reason": "no_progress"})
+		elif taken.has(_mechanics_key(option)):
+			skipped.append({"k": k, "destination": stop_cell.duplicate(true), "reason": "duplicate_mechanics"})
+		else:
+			prefixes.append({"k": k, "option": option})
 
 
 static func _deduplicate_candidates(candidates: Array) -> Dictionary:

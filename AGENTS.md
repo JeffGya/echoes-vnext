@@ -74,7 +74,7 @@ it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are 
 ```bash
 <godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 127 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short` and `stop_short_wiring` added since; post-`fingerprint`-suite split — see below.
+The 128 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring` and `stop_short_search` added since; post-`fingerprint`-suite split — see below.
 A `seam`-suite split was also tried, measured to give no speedup, and reverted — `seam` remains
 one suite):
 ```
@@ -94,7 +94,7 @@ movement_arbiter movement_fallback movement_option movement_path movement_style
 objective objective_combat old_echo onboarding passive pending_result prog realm
 realm_prog realm_reward realm_ui recruit retreat reward sanctum.layout sanctum.party
 sanctum.summon sanctum_pulse save_integrity seam shrine sit_res situational skill
-skill_loadout skill_reach skill_unlock stop_short stop_short_wiring
+skill_loadout skill_reach skill_unlock stop_short stop_short_search stop_short_wiring
 snapshot snapshot_contract snapshot_fingerprint snapshot_purity social_graph stage
 statinit structure support terrain thread trace traversal unified_resolve vector
 venture_char voice vow weave
@@ -227,7 +227,7 @@ though the wall-clock is shorter — do not run it alongside anything else that 
 `/tmp/echoes-vnext-*`.
 
 **Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
-`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 127
+`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 128
 live registered suites (regenerated 2026-09-20, updated same day after
 `fingerprint_determinism_self_check` was split into 7 per-mode `fingerprint_determinism_<mode>`
 suites, one shared suite name becoming 7) are split into 9 disjoint sets — every suite appears in

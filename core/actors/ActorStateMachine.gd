@@ -404,6 +404,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			and augmented_context.has("movement_goals") \
 			and augmented_context.has("movement_options") \
 			and _behavior_module.has_method("select_movement_intent"):
+		StopShortContextService.apply_cell_search(augmented_context, logger, t)
 		var movement_selection: Dictionary = _behavior_module.call(
 			"select_movement_intent",
 			augmented_context,

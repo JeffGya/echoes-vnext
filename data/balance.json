@@ -312,8 +312,8 @@
 				"rival_protect_penalty": -10.0
 			},
 			"stop_short": {
-				"_comment": "Stop-short (movement-model 7.5; decisions.md #108). Starting values; the designer sets every number. Feature is OFF until enabled is true. Fear and low morale favour guard only.",
-				"enabled": false,
+				"_comment": "Stop-short (movement-model 7.5; decisions.md #108). Starting values; the designer sets every number. The enabled flag switches the feature; cell_search.enabled switches the stop-cell search. Fear and low morale favour guard only.",
+				"enabled": true,
 				"stop_short_weight": 6.0,
 				"min_cause_strength": 0.15,
 				"urgency_ceiling": 1.0,
@@ -341,7 +341,8 @@
 				},
 				"guard": { "hostile_reach_extra": 1, "min_def": 1 },
 				"observe": { "marked_strength": 5, "mark_rounds": 1 },
-				"hold": { "min_cohesion": 0.5 }
+				"hold": { "min_cohesion": 0.5 },
+				"cell_search": { "enabled": true, "cost_margin": 1, "max_candidates": 4 }
 			},
 			"enemy_types": {
 				"_comment": "Per-type trait values — fed to DerivedStatService using the same birth_stats formula as echoes. Add new types here; no GDScript changes needed.",

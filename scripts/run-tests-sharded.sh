@@ -121,7 +121,7 @@ mkdir -p "$LOG_DIR" "$SAVE_ROOT"
 # not a regression from any single change; both figures are still a substantial improvement over
 # serial. Re-measure with repeat runs, not a single sample, before tightening any alarm further.
 SHARDS=(
-  "shard1|movement,old_echo,skill_reach,stop_short,stop_short_wiring,fingerprint_combat,fingerprint_determinism_combat|"
+  "shard1|movement,old_echo,skill_reach,stop_short,stop_short_search,stop_short_wiring,fingerprint_combat,fingerprint_determinism_combat|"
   "shard2|combat_roundtrip,echofactory,emotion,exclusive_action,ko_death,melee,morale,onboarding,passive,pending_result,sanctum_pulse,sit_res,situational,skill,snapshot,stage,fingerprint_purify_shrine,fingerprint_determinism_purify_shrine|"
   "shard3|actor,bark_popup,bond_trigger,combat_terrain,conversation_repair,divergence,divergence_bark,movement_arbiter,objective,retreat,sanctum.summon,skill_loadout,snapshot_purity,structure,support,terrain,fingerprint_recover,fingerprint_determinism_recover|"
   "shard4|archetype,behavior_char,calling,calling_behavior,combat_ui,contact,foundation_ui,institution,movement_fallback,movement_option,prog,realm_prog,sanctum.party,snapshot_fingerprint,traversal,vector,weave,fingerprint_protect,fingerprint_determinism_protect|"

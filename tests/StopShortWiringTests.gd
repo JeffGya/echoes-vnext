@@ -695,6 +695,10 @@ static func _live_turn(tag: String, overrides: Dictionary, actor_over: Dictionar
 const _ON: Dictionary = { "enabled": true, "stop_short_weight": 40.0 }
 
 
+## Feature off in this encounter's config copy (balance.json ships it on) with the strong weight.
+const _OFF: Dictionary = { "enabled": false, "stop_short_weight": 40.0 }
+
+
 static func _t_live_guard_stop_short_contract() -> Dictionary:
 	var errs: Array = []
 	var r: Dictionary = _live_turn("guard_on", _ON, { "fear": 45, "fear_base": 0, "morale": 60 }, 4)
@@ -737,7 +741,7 @@ static func _t_live_guard_stop_short_contract() -> Dictionary:
 
 static func _t_live_off_keeps_empty_stop_short() -> Dictionary:
 	var errs: Array = []
-	var r: Dictionary = _live_turn("guard_off", {}, { "fear": 45, "fear_base": 0, "morale": 60 }, 4)
+	var r: Dictionary = _live_turn("guard_off", { "enabled": false }, { "fear": 45, "fear_base": 0, "morale": 60 }, 4)
 	if not bool(r["ok"]):
 		return r
 	var last: Dictionary = r["last"] as Dictionary
@@ -794,18 +798,22 @@ static func _t_live_observe_vs_skill_mark() -> Dictionary:
 
 
 
-## balance.json ships enabled false, so without the command a frightened Echo never stops
-## short; `stopshort on` before the encounter starts turns the feature on for that encounter.
+## balance.json ships enabled true, so a frightened Echo stops short with no command. With the
+## config copy off, `stopshort on` before the encounter starts turns it on for that encounter.
 static func _t_debug_stop_short_default_and_on() -> Dictionary:
 	var errs: Array = []
 	var weight: Dictionary = { "stop_short_weight": 40.0 }
 	var fear: Dictionary = { "fear": 45, "fear_base": 0, "morale": 60 }
-	var off: Dictionary = _live_turn("dev_default", weight, fear, 4)
+	var dflt: Dictionary = _live_turn("dev_default", weight, fear, 4)
+	if not bool(dflt["ok"]):
+		return dflt
+	_eq(errs, "default override empty", (dflt["ectx"] as EncounterContext).stop_short_override, "")
+	_eq(errs, "default: stop-short", ((dflt["last"] as Dictionary).get("stop_short", {}) as Dictionary).get("benefit", ""), "guard")
+	var off: Dictionary = _live_turn("dev_cfg_off", _OFF, fear, 4)
 	if not bool(off["ok"]):
 		return off
-	_eq(errs, "default override empty", (off["ectx"] as EncounterContext).stop_short_override, "")
-	_eq(errs, "default: no stop", ((off["last"] as Dictionary).get("stop_short", {"x": 1}) as Dictionary).is_empty(), true)
-	var on: Dictionary = _live_turn("dev_on", weight, fear, 4, {}, "on")
+	_eq(errs, "config off: no stop", ((off["last"] as Dictionary).get("stop_short", {"x": 1}) as Dictionary).is_empty(), true)
+	var on: Dictionary = _live_turn("dev_on", _OFF, fear, 4, {}, "on")
 	if not bool(on["ok"]):
 		return on
 	_eq(errs, "encounter captured on", (on["ectx"] as EncounterContext).stop_short_override, "on")
@@ -836,7 +844,7 @@ static func _t_debug_stop_short_off_overrides_balance() -> Dictionary:
 ## A mid-fight `stopshort on` does nothing in the running encounter; the next encounter has it.
 static func _t_debug_stop_short_mid_fight_waits_for_next_encounter() -> Dictionary:
 	var errs: Array = []
-	var r: Dictionary = _live_turn("dev_mid", { "stop_short_weight": 40.0 },
+	var r: Dictionary = _live_turn("dev_mid", _OFF,
 		{ "fear": 45, "fear_base": 0, "morale": 60 }, 4, {}, "", "on")
 	if not bool(r["ok"]):
 		return r

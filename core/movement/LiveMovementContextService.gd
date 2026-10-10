@@ -183,8 +183,9 @@ func prepare_live_movement_context(
 		}
 	var goals: Array = goals_result.get("goals", []) as Array
 	var options: Array = []
+	var stop_search: Variant = _stop_search_request(actor, ectx, bdata)
 	if not bool(actor.get("is_quarry", false)):
-		options = _movement_live_options(movement_context, profile, goals, t)
+		options = _movement_live_options(movement_context, profile, goals, t, stop_search)
 	# V2-COMBAT-002 Slice 6E: gate the movement-aware layer on GOALS, not options.
 	# An empty option set only means no destination region was routable this activation
 	# (boxed in by allies, objective behind a wall, capacity 0 after truncation). The
@@ -192,7 +193,7 @@ func prepare_live_movement_context(
 	# unconditional `actor.idle`, so at least one STATIONARY candidate is always ranked
 	# and a valid zero-length intent is produced. Gating on options threw the whole
 	# board away and fell back to legacy nearest-enemy `select_intent` for the actor.
-	return {
+	var prepared: Dictionary = {
 		"valid": true,
 		# The PURSUE quarry is the ONE case where empty options are deliberate rather than
 		# incidental: `:1705` skips option generation for it entirely because
@@ -213,6 +214,9 @@ func prepare_live_movement_context(
 			"immune_to_displacement": displacement_immune,
 		},
 	}
+	if stop_search is Dictionary and not (stop_search["entries"] as Dictionary).is_empty():
+		prepared["stop_prefixes"] = stop_search["entries"]
+	return prepared
 
 
 ## V2-INFRA-003 pass 8: does Whole-band leadership make this mover immune to the
@@ -272,15 +276,32 @@ func _movement_live_options(
 	movement_context: Dictionary,
 	profile: Dictionary,
 	goals: Array,
-	t: int
+	t: int,
+	stop_search: Variant = null
 ) -> Array:
 	var options: Array = []
 	for goal_value: Variant in goals:
 		if not (goal_value is Dictionary):
 			continue
 		var goal: Dictionary = goal_value
+		var side_data: Variant = null
+		if stop_search is Dictionary and StopShortContextService.cell_search_goal_open(
+				stop_search["actor"] as Dictionary, goal, stop_search["stop_short"] as Dictionary):
+			var search_cfg: Dictionary = (stop_search["stop_short"] as Dictionary)["cell_search"] as Dictionary
+			side_data = {
+				"cost_margin": int(search_cfg.get("cost_margin", 1)),
+				"max_candidates": int(search_cfg.get("max_candidates", 4)),
+			}
 		var generated: Dictionary = MovementOptionServiceScript.generate_options(
-			movement_context, profile, goal)
+			movement_context, profile, goal, side_data)
+		if side_data is Dictionary and bool(generated.get("valid", false)) \
+				and (side_data as Dictionary).has("prefixes"):
+			(stop_search["entries"] as Dictionary)[str(goal["goal_id"])] = {
+				"primary_cohesion": (side_data as Dictionary)["primary_cohesion"],
+				"window": int(profile["capacity"]) - maxi(1, int((side_data as Dictionary)["cost_margin"])),
+				"prefixes": (side_data as Dictionary)["prefixes"],
+				"skipped": (side_data as Dictionary)["skipped"],
+			}
 		var generated_options: Array = generated.get("options", []) as Array
 		var generated_valid: bool = bool(generated.get("valid", false))
 		if not generated_valid or generated_options.is_empty():
@@ -305,6 +326,16 @@ func _movement_live_options(
 			options.append((option_value as Dictionary).duplicate(true))
 	_log_perception_narrowing(movement_context, t)
 	return options
+
+
+## Request for prefix-cell side data, or null. Only an Echo, with the effective stop-short flag
+## (including the debug override) and `cell_search` both on, gets one; `entries` is filled per goal.
+func _stop_search_request(actor: Dictionary, ectx: EncounterContext, bdata: Dictionary) -> Variant:
+	var cfg: Dictionary = StopShortContextService.with_override(
+		bdata.get("actor", {}) as Dictionary, ectx.stop_short_override).get("stop_short", {}) as Dictionary
+	if not StopShortContextService.cell_search_on(actor, cfg):
+		return null
+	return {"actor": actor, "stop_short": cfg, "entries": {}}
 
 
 ## `perceived_planning_cells` is a DORMANT contract field: every live call site today
