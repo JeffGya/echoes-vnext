@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://prototypes/sanctum_systems_exploration/PrototypeController.gd" id="1"]
+[ext_resource type="PackedScene" path="res://prototypes/sanctum_systems_exploration/ui/PrototypeUI.tscn" id="2"]
+
+[node name="SanctumLivingHouse" type="Node"]
+script = ExtResource("1")
+
+[node name="PrototypeUI" parent="." instance=ExtResource("2")]
+unique_name_in_owner = true

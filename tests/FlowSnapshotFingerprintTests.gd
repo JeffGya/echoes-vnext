@@ -91,6 +91,7 @@ static func register(runner) -> void:
 	runner.register_test("snapshot_purity/dispatch_preserves_pending_return_notification_until_sanctum", func(): return test_purity_dispatch_preserves_pending_return_notification_until_sanctum())
 	# V2-INFRA-003 Phase 5 Slice B — ResolveSnapshotBuilder's own purity guard.
 	runner.register_test("snapshot_purity/resolve_builder_double_build_is_stable", func(): return test_purity_resolve_builder_double_build_is_stable())
+	runner.register_test("snapshot_purity/stop_short_and_mark_keys_are_copies", func(): return test_purity_stop_short_and_mark_keys_are_copies())
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +177,20 @@ static func _setup_stage_explore_env(seed_tag: String) -> Dictionary:
 	return { "ok": true, "runtime": runtime }
 
 
+## A fresh-per-test FlowRuntime + disk boot + onboarding dispatch chain, same as
+## _setup_sanctum_env() below. A memoized-static-var version of this was tried (shared once per
+## test-runner process across four tests) but reverted per tests/AGENTS.md's isolation rule —
+## "Each test must set up its own environment. Never depend on global state, save files, or test
+## execution order." A static var persists across repeated invocations within the SAME Godot
+## process (e.g. the Debug Panel's `tests` command run twice without restarting the editor), so a
+## later run could silently inherit mutated state from an earlier one even though every
+## within-one-run ordering was proven safe. Not worth that risk for a suite this file's own
+## profiling showed was never the dominant cost (the sharded-runner win came from splitting
+## tests/FlowFingerprintTests.gd's suite registration, not from this file).
+static func _shared_sanctum_env() -> Dictionary:
+	return _setup_sanctum_env("fp_sanctum_shared")
+
+
 ## Canonical fingerprint projection: the full `data` payload plus sorted `actions` slot keys.
 ## Deliberately excludes `meta` (carries only the sim tick `t`, which is not part of the
 ## documented contract for this task and is otherwise deterministic-but-irrelevant scaffolding).
@@ -240,7 +255,7 @@ static func _hash(v: Variant) -> String:
 const SANCTUM_FINGERPRINT_HASH := "a26556e1eaf749a276123e740511222676b7c27f50981573d365042059f832df"
 
 static func test_sanctum_fingerprint() -> Dictionary:
-	var env := _setup_sanctum_env("fp_sanctum")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -284,7 +299,7 @@ static func test_sanctum_fingerprint() -> Dictionary:
 ## any direction. entry_cell now anchors to the host region, so party_pos does not move.
 ## Previous value: aee5d5cc22cc484d794f55c967c92d438ba103cb6cb943b61c76fb8b6d4426be.
 # RE-RECORDED, V2-COMBAT-003 terrain commit 5. The payload diff on this board is exactly one
-# hunk, dumped via the SE_DEBUG print below on this tree and on b4dd797: "situations" goes
+# hunk, captured on this tree and on b4dd797: "situations" goes
 # from [] to one entry — sit.1, type loot, non-objective, now at (11,10) and therefore inside
 # the party's opening reveal radius. Every other line of the payload is byte-identical, the
 # terrain included. RealmGenerator._place_situations now refuses a cell off the host region
@@ -320,7 +335,6 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 		return { "ok": false, "error": "Expected flow.stage_explore snapshot, got type=%s" % str(snap.get("type", "")) }
 
 	var actual := _hash(_fingerprint_projection(snap))
-	print("SE_DEBUG hash=%s payload=%s" % [actual, JSON.stringify(_fingerprint_projection(snap))])
 	if actual != STAGE_EXPLORE_FINGERPRINT_HASH:
 		return {
 			"ok": false,
@@ -344,7 +358,7 @@ static func test_stage_explore_fingerprint() -> Dictionary:
 ## Formerly KNOWN DEFECT (FlowStateMachine._rebuild_snapshot() used to consume these flags
 ## while "building" the snapshot) — Phase 3 fixed it; this probe now asserts purity directly.
 static func test_purity_build_does_not_consume_pending_flags() -> Dictionary:
-	var env := _setup_sanctum_env("purity_pending_flags")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -490,7 +504,7 @@ static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
 ## and so cannot be probed "through" a save-request seam here.)
 ## KNOWN DEFECT — Phase 3 inverts this assertion to "must not mutate".
 static func test_purity_sanctum_enter_releases_vow() -> Dictionary:
-	var env := _setup_sanctum_env("purity_vow_release")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
@@ -726,6 +740,55 @@ static func test_purity_snapshot_builders_do_not_mutate_bark() -> Dictionary:
 	return { "ok": true }
 
 
+## Stop-short and mark keys: two builds are identical, nothing is mutated, `stop_short` is a deep copy.
+static func test_purity_stop_short_and_mark_keys_are_copies() -> Dictionary:
+	var ctx := FlowContext.new()
+	ctx.config_service = null
+	var ectx := EncounterContext.new()
+	ectx.encounter_id = "purity_stop_short_001"
+	ectx.placement_seed = 1
+	ectx.combat_state = {}
+	var watched := {
+		"id": "enemy_watched", "name": "Watched", "stats": { "max_hp": 20 }, "current_hp": 20,
+		"fear": 0, "morale": 50, "faction": "enemy", "grid_pos": { "col": 3, "row": 0 },
+		"is_dead": false, "marked_by": "echo_stop", "_mark_kind": "observe",
+	}
+	ectx.actors = [watched]
+	ectx.last_actor_action = {
+		"source_id": "echo_stop",
+		"stop_short": {
+			"benefit": "observe", "performed": true, "stop_cell": { "col": 1, "row": 0 },
+			"subject_actor_id": "enemy_watched", "trace": {},
+		},
+	}
+	ctx.encounter_ctx = ectx
+	var actor_before := JSON.stringify(watched, "", true)
+	var last_before := JSON.stringify(ectx.last_actor_action, "", true)
+	var build1: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
+	var build2: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
+	var mismatches: Array = []
+	if JSON.stringify(build1, "", true) != JSON.stringify(build2, "", true):
+		mismatches.append("two builds differ")
+	var data: Dictionary = build1.get("data", {}) as Dictionary
+	var stop: Dictionary = (data.get("last_actor_action", {}) as Dictionary).get("stop_short", {}) as Dictionary
+	if str(stop.get("benefit", "")) != "observe":
+		mismatches.append("stop_short not projected: %s" % str(stop))
+	var proj: Dictionary = {}
+	for a_v in data.get("actors", []) as Array:
+		if str((a_v as Dictionary).get("id", "")) == "enemy_watched":
+			proj = a_v as Dictionary
+	if proj.get("is_marked", null) != true or proj.get("mark_kind", null) != "observe":
+		mismatches.append("mark keys: is_marked=%s mark_kind=%s" % [str(proj.get("is_marked")), str(proj.get("mark_kind"))])
+	(stop["stop_cell"] as Dictionary)["col"] = 9
+	if JSON.stringify(watched, "", true) != actor_before:
+		mismatches.append("actor dict changed by the build")
+	if JSON.stringify(ectx.last_actor_action, "", true) != last_before:
+		mismatches.append("ectx.last_actor_action changed (stop_short is aliased, not copied)")
+	if not mismatches.is_empty():
+		return { "ok": false, "error": " | ".join(mismatches) }
+	return { "ok": true }
+
+
 static func _set_actor_bark(ectx: EncounterContext, actor_id: String, line: String) -> void:
 	for a_v in ectx.actors:
 		if a_v is Dictionary and str((a_v as Dictionary).get("id", "")) == actor_id:
@@ -809,7 +872,7 @@ static func test_purity_ensure_layout_writes_save_data() -> Dictionary:
 ## show_awakening_overlay staying true on BOTH — it is the fix, not the probe, that makes this
 ## true; nothing here special-cases the flags to force a match.
 static func test_purity_generic_double_build_is_stable() -> Dictionary:
-	var env := _setup_sanctum_env("purity_double_build")
+	var env := _shared_sanctum_env()
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]

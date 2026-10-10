@@ -19,6 +19,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("weave/defer_adds_memory_mark", Callable(WeavingRiteTests, "_test_defer_adds_memory_mark"))
 	runner.register_test("weave/same_virtue_overspecialisation_lowers_readiness", Callable(WeavingRiteTests, "_test_same_virtue_overspecialisation_lowers_readiness"))
 	runner.register_test("weave/non_chosen_consequences_applied_on_accept", Callable(WeavingRiteTests, "_test_non_chosen_consequences_applied_on_accept"))
+	runner.register_test("weave/non_chosen_resist_fear_reduces_fear", Callable(WeavingRiteTests, "_test_non_chosen_resist_fear_reduces_fear"))
 	runner.register_test("weave/non_chosen_consequences_exist_for_reject_and_defer", Callable(WeavingRiteTests, "_test_non_chosen_consequences_exist_for_reject_and_defer"))
 	runner.register_test("weave/commitment_lock_blocks_non_confirm_runtime_actions", Callable(WeavingRiteTests, "_test_commitment_lock_blocks_non_confirm_runtime_actions"))
 	runner.register_test("weave/start_for_echo_transitions_to_rite", Callable(WeavingRiteTests, "_test_start_for_echo_transitions_to_rite"))
@@ -417,4 +418,32 @@ static func _test_start_for_echo_transitions_to_rite() -> Dictionary:
 	if str(runtime.flow_ctx.selected_weave_echo_id) != "echo.1":
 		return { "ok": false, "error": "Expected selected_weave_echo_id to be seeded" }
 
+	return { "ok": true }
+
+
+# echo.2 and echo.3 at rank 3 (past nascent in the real band table) take the same fear_delta;
+# only echo.3 carries resist_fear.
+static func _test_non_chosen_resist_fear_reduces_fear() -> Dictionary:
+	var flow_ctx := FlowContext.new()
+	flow_ctx.save_data = _make_save("courage")
+	var plain := _find_echo(flow_ctx.save_data, "echo.2")
+	var steady := _find_echo(flow_ctx.save_data, "echo.3")
+	plain["rank"] = 3
+	steady["rank"] = 3
+	steady["resilience_traits"] = ["resist_fear"]
+	var plain_before := int(plain["emotion"]["fear_current"])
+	var steady_before := int(steady["emotion"]["fear_current"])
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var controller := WeaveController.new(flow_ctx, cs, _make_logger())
+	controller._apply_weave_non_chosen_consequences([
+		{ "echo_id": "echo.2", "name": "Echo 2", "morale_delta": 0, "fear_delta": 10, "bond_delta": 0 },
+		{ "echo_id": "echo.3", "name": "Echo 3", "morale_delta": 0, "fear_delta": 10, "bond_delta": 0 },
+	], "echo.1", 3)
+	var plain_gain := int(plain["emotion"]["fear_current"]) - plain_before
+	var steady_gain := int(steady["emotion"]["fear_current"]) - steady_before
+	if plain_gain != 10:
+		return { "ok": false, "error": "control drift: expected fear gain 10, got %d" % plain_gain }
+	if steady_gain != 6:
+		return { "ok": false, "error": "expected resist_fear fear gain 6, got %d" % steady_gain }
 	return { "ok": true }

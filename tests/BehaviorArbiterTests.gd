@@ -78,6 +78,9 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(BehaviorArbiterTests, "_t_identity_bonus_rises_with_judgment_rank_fixed"))
 	runner.register_test("arbiter/directive_bonus_falls_with_judgment_rank_fixed",
 		Callable(BehaviorArbiterTests, "_t_directive_bonus_falls_with_judgment_rank_fixed"))
+	# V2-COMBAT-003.5 Group E: the player's Directive must reach echo-faction actors only.
+	runner.register_test("arbiter/directive_reaches_echo_faction_only",
+		Callable(BehaviorArbiterTests, "_t_directive_reaches_echo_faction_only"))
 
 
 # -------------------------
@@ -1339,7 +1342,7 @@ static func _mv_fixture(bystanders: Array) -> Dictionary:
 		str(goal["goal_id"]),
 		"option.combat.advance.baseline.c2r0.direct.d2r0.pc1r0-c2r0",
 		"advance", { "col": 2, "row": 0 }, [{ "col": 1, "row": 0 }, { "col": 2, "row": 0 }],
-		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], { "known_count": 0, "known_ids": [] }, 1.0,
+		2, 2, 0, 4, 2, 0.0, 0.0, 0.0, [], { "known_count": 0, "known_ids": [] }, 1.0, 2,
 		goal["planned_primary"] as Dictionary, goal["declared_fallback"] as Dictionary
 	)
 	var all_actors: Array = [mover]
@@ -1388,9 +1391,11 @@ static func _mv_bystander(id: String, position: Dictionary, actor_type: String, 
 	return actor
 
 
+## urgency_progress_gain kept at 0.0 here (production: 1.0) so Test D's scout_carefully gap
+## stays visible — see decisions #29/#38 in docs/stories/v2-combat-003.5/decisions.md.
 static func _mv_spatial_cfg() -> Dictionary:
 	return { "spatial_utility": {
-		"cap": 20.0, "urgency_weight": 4.0, "objective_progress_weight": 8.0,
+		"cap": 20.0, "urgency_weight": 4.0, "urgency_progress_gain": 0.0, "objective_progress_weight": 8.0,
 		"cohesion_weight": 4.0, "exposure_weight": -6.0, "congestion_weight": -2.0,
 		"commitment_weight": -2.0, "directive_objective_advance_weight": 4.0,
 		"directive_avoid_overcommit_weight": 2.0, "directive_exposure_acceptance_weight": 2.0,
@@ -1537,4 +1542,51 @@ static func _t_directive_bonus_falls_with_judgment_rank_fixed() -> Dictionary:
 		return { "ok": false, "error": "fixture broken: expected a positive baseline directive_bonus at judgment=0.0, got %s" % str(directive_low) }
 	if directive_high >= directive_low:
 		return { "ok": false, "error": "directive_bonus did not fall with rising judgment (GDD:1422 'Standing never buys obedience'): %s (judgment=0.0) -> %s (judgment=1.0)" % [str(directive_low), str(directive_high)] }
+	return { "ok": true }
+
+
+# Builds each actor's context through the production CombatTurnContextService, then sums
+# _directive_bonus over every action type the directive can touch. An enemy must score 0:
+# the Directive is the Keeper's order to the party. The two echo-faction actors prove the
+# fixture carries a live directive, so a zero for the enemy is not a broken setup. The ally
+# is built like a V2-STAGE-004 temporary ally (actor_type "enemy", faction "echo").
+static func _t_directive_reaches_echo_faction_only() -> Dictionary:
+	var config := ConfigService.new()
+	config.load_balance()
+	var balance: Dictionary = config.get_balance()
+	var bdata: Dictionary = balance.get("data", {})
+
+	var echo := { "id": "echo_dir_e", "faction": "echo", "actor_type": "echo", "is_dead": false, "grid_pos": { "col": 0, "row": 0 } }
+	var ally := { "id": "ally_dir_e", "faction": "echo", "actor_type": "enemy", "is_dead": false, "grid_pos": { "col": 1, "row": 0 } }
+	var enemy := { "id": "enemy_dir_e", "faction": "enemy", "actor_type": "enemy", "is_dead": false, "grid_pos": { "col": 5, "row": 5 } }
+
+	var flow_ctx := FlowContext.new()
+	flow_ctx.save_data = { "stage_context": { "active_directive_id": "directive.scout_carefully" } }
+	var ectx := EncounterContext.new()
+	ectx.encounter_id = "test.directive_faction_gate"
+	ectx.resolution_mode = EncounterResolutionModes.COMBAT
+	ectx.actors = [echo, ally, enemy]
+	flow_ctx.encounter_ctx = ectx
+
+	var directives := DirectiveService.new(flow_ctx.save_data)
+	directives.load_from_config(balance)
+	var svc := CombatTurnContextService.new(flow_ctx, config, directives, StructuredLogger.new())
+	var arbiter := BehaviorArbiter.new({})
+	var action_types: Array = (arbiter._cfg_get("directive_action_muls") as Dictionary).keys()
+
+	var totals: Dictionary = {}
+	for actor: Dictionary in [echo, ally, enemy]:
+		var ctx: Dictionary = svc.build_turn_context(actor, ectx, balance, bdata, 1, 1)["ctx"]
+		var directive: Dictionary = ctx.get("directive", {}) as Dictionary
+		var total: float = 0.0
+		for atype: Variant in action_types:
+			total += arbiter._directive_bonus(str(atype), directive, 0.0)
+		totals[str(actor["id"])] = total
+
+	if float(totals["echo_dir_e"]) <= 0.0:
+		return { "ok": false, "error": "fixture broken: echo actor got no directive_bonus (%s)" % str(totals) }
+	if float(totals["ally_dir_e"]) <= 0.0:
+		return { "ok": false, "error": "echo-faction ally (actor_type enemy) lost the directive: %s" % str(totals) }
+	if float(totals["enemy_dir_e"]) != 0.0:
+		return { "ok": false, "error": "enemy actor is biased by the player's directive: %s" % str(totals) }
 	return { "ok": true }

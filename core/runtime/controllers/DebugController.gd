@@ -299,6 +299,14 @@ func handle_force_claimant_combat(t: int) -> FlowActionOutcome:
 
 	explore_map["combat_intro_reason"] = "claimant_hostile"
 	stage["explore_map"] = explore_map
+
+	# Lives on `stage`, not `explore_map`: _reset_session_state() (FlowStageExploreState.gd)
+	# rebuilds explore_map from a field whitelist on every re-entry, which happens after
+	# every combat — a counter nested there would silently reset each time. `stage`'s other
+	# top-level fields are untouched by that rebuild.
+	var force_count: int = int(stage.get("debug_claimant_force_count", 0)) + 1
+	stage["debug_claimant_force_count"] = force_count
+
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 
 	flow_ctx.active_encounter_objective_index = -1
@@ -307,6 +315,7 @@ func handle_force_claimant_combat(t: int) -> FlowActionOutcome:
 		"stage_id": flow_ctx.stage_id,
 	})
 
+	flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + ".claimant_debug." + str(force_count)
 	return FlowActionOutcome.transition_outcome(
 		FlowStateIds.ENCOUNTER, "stage.claimant.combat_forced"
 	).with_save_reason("debug.claimant.force_combat")
@@ -350,6 +359,49 @@ func handle_guidance_set(action: Dictionary, t: int) -> FlowActionOutcome:
 		"subject_id":  str(guidance.get("subject_id", "")),
 		"cleared":     guidance.is_empty(),
 	})
+	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot)
+
+
+## debug.emotion.set — sets one roster Echo's fear_current, fear_base or morale_current (clamped 0-100).
+## Combat actors copy them at fight start, so the change shows from the next combat.
+func handle_emotion_set(action: Dictionary, t: int) -> FlowActionOutcome:
+	var echo_id: String = str(action.get("echo_id", "")).strip_edges()
+	var field: String = str(action.get("field", ""))
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var roster_v: Variant = (sanctum_v as Dictionary).get("roster", []) if sanctum_v is Dictionary else []
+	var echo_ref: Dictionary = {}
+	for echo_v: Variant in (roster_v as Array if roster_v is Array else []):
+		if echo_v is Dictionary and str((echo_v as Dictionary).get("id", "")) == echo_id:
+			echo_ref = echo_v as Dictionary
+			break
+	if echo_ref.is_empty() or not ["fear", "fear_base", "morale"].has(field):
+		logger.info(t, "debug.emotion.set.denied", "Emotion set denied", {
+			"echo_id": echo_id, "field": field,
+		})
+		return FlowActionOutcome.handled_outcome()
+	var value: int = int(action.get("value", 0))
+	match field:
+		"fear":
+			EmotionService.set_fear_current(echo_ref, value, logger, t)
+		"fear_base":
+			EmotionService.set_fear_base(echo_ref, value, logger, t)
+		"morale":
+			EmotionService.set_morale_current(echo_ref, value, logger, t)
+	logger.info(t, "debug.emotion.set", "Dev emotion value set", {
+		"echo_id": echo_id, "field": field, "value": int(action.get("value", 0)),
+	})
+	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot).with_save_reason("debug.emotion.set")
+
+
+## debug.stop_short.set — mode "on" or "off" overrides data.actor.stop_short.enabled from the
+## NEXT encounter start (FlowContext.dev_stop_short). Session-transient: no save is requested.
+func handle_stop_short_set(action: Dictionary, t: int) -> FlowActionOutcome:
+	var mode: String = str(action.get("mode", "")).strip_edges().to_lower()
+	if not ["on", "off"].has(mode):
+		logger.info(t, "debug.stop_short.set.denied", "Stop-short override denied", { "mode": mode })
+		return FlowActionOutcome.handled_outcome()
+	flow_ctx.dev_stop_short = mode
+	logger.info(t, "debug.stop_short.set", "Dev stop-short override set for the next encounter", { "mode": mode })
 	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot)
 
 

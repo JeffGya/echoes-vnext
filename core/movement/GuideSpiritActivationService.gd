@@ -64,6 +64,9 @@
 #   "option_id"       String  : correlation id (default "guide.step").
 #   "authored_source" String  : profile source label (default "guide_spirit_nonjoining").
 #   "mover_ko_only"   bool    : report "ko" instead of "death" when downed.
+#   "yield_ids"       Array   : ids of the party Echoes that step aside when they
+#                               stand on the escort step (escort mode only).
+#                               Default [] -> no one yields.
 #
 # ---------------------------------------------------------------------------
 # AUTHORED PACE (FROZEN):
@@ -83,10 +86,12 @@
 #             slice-1 routing primitive, already carries the two-solid-corners
 #             diagonal rule via StageTerrain.legal_neighbors, and honours terrain
 #             entry costs — which the raw BFS field did not.) Occupancy is NOT
-#             pre-pruned: the step is handed to the executor, whose own occupancy
-#             rule stops the spirit with stop_reason "occupied" — i.e. it waits,
-#             exactly like every other actor. Unreachable destination -> empty path
-#             -> "no_route".
+#             pre-pruned. If the step holds an occupant the caller listed in
+#             guide_state.yield_ids (and the context does not mark it hostile, dead,
+#             downed, a structure or a spirit), the two TRADE cells: see
+#             yielded_occupant(). Any other occupant stops the spirit with
+#             stop_reason "occupied" — it waits, like every other actor.
+#             Unreachable destination -> empty path -> "no_route".
 #
 #   protect — one step AWAY from the nearest threat, chosen among
 #             StageTerrain.legal_neighbors(origin, walkable, bounds) minus cells
@@ -276,7 +281,8 @@ static func activate_spirit(
 	context: Dictionary,
 	guide_state: Dictionary,
 	hazard_ctx: Dictionary,
-	capacity_cfg: Dictionary
+	capacity_cfg: Dictionary,
+	out_yield_cache: Dictionary = {}
 ) -> Dictionary:
 	var mover_id: String = str(spirit_actor.get("id", "guide.spirit"))
 	var origin: Dictionary = _cell_of(context.get("origin", {}) as Dictionary)
@@ -358,7 +364,42 @@ static func activate_spirit(
 	if guide_state.has("mover_ko_only"):
 		action_ctx["mover_ko_only"] = bool(guide_state["mover_ko_only"])
 
-	return ActivationService.activate(context, intent, profile, hazard_ctx, action_ctx)
+	var executor_context: Dictionary = context
+	if mode == MODE_ESCORT and not step.is_empty():
+		var yielder: String = _yield_candidate(context, guide_state, step)
+		# Handed to yielded_occupant() via out_yield_cache so it need not re-derive the
+		# same occupant this same activation already found. An optional out-param (not a
+		# result field, which ResultContract's exact-field check would reject) keeps this
+		# an opt-in side channel: callers that omit it are unaffected.
+		out_yield_cache["yielder"] = yielder
+		if not yielder.is_empty():
+			executor_context = _post_swap_context(context, origin, step, yielder)
+
+	return ActivationService.activate(executor_context, intent, profile, hazard_ctx, action_ctx)
+
+
+## Id of the Echo the spirit traded cells with in `result`, or "". The caller
+## writes that Echo onto result.origin; this service writes no actor.
+## `context` and `guide_state` must be the ones passed to activate_spirit().
+## The executor admits the spirit into an occupied step only when the occupant
+## was cleared for a swap, so "moved + eligible occupant" is exactly "swapped".
+##
+## `in_yield_cache`: pass the same Dictionary given to activate_spirit() as
+## `out_yield_cache` to reuse its already-computed yielder instead of re-running the
+## occupancy/yield_ids/relationships/perceived_actors lookup. Optional — omitted or a
+## cache miss (e.g. a hand-built `result`, or an unrelated activate_spirit call) falls
+## back to recomputing from `context`/`guide_state`, so this stays correct standalone.
+static func yielded_occupant(
+	context: Dictionary, guide_state: Dictionary, result: Dictionary, in_yield_cache: Dictionary = {}
+) -> String:
+	if str(guide_state.get("mode", "")) != MODE_ESCORT:
+		return ""
+	var planned: Array = result.get("planned_path", []) as Array
+	if planned.is_empty() or (result.get("actual_traversed_cells", []) as Array).is_empty():
+		return ""
+	if in_yield_cache.has("yielder"):
+		return str(in_yield_cache["yielder"])
+	return _yield_candidate(context, guide_state, _cell_of(planned[0] as Dictionary))
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +407,8 @@ static func activate_spirit(
 # ---------------------------------------------------------------------------
 
 ## First cell of the shortest route to the authored destination, or {} when there
-## is no destination / no route. Occupancy is deliberately NOT pruned here: the
-## executor's own occupancy rule makes the spirit wait ("occupied").
+## is no destination / no route. Occupancy is deliberately NOT pruned here: an
+## occupied step is either a swap or an "occupied" wait, decided in activate_spirit.
 static func _escort_step(
 	origin: Dictionary,
 	guide_state: Dictionary,
@@ -521,6 +562,54 @@ static func _threat_cells(guide_state: Dictionary) -> Array:
 		if threat.has("col") and threat.has("row"):
 			cells.append(_cell_of(threat))
 	return cells
+
+
+# ---------------------------------------------------------------------------
+# ESCORT YIELD (decision #59)
+# ---------------------------------------------------------------------------
+
+## The occupant of `step` when it may trade cells with the spirit, else "".
+## The caller's yield_ids list decides who is party; the context facts are a
+## second gate, so a hostile, dead, downed, structure or spirit occupant never
+## yields even if the caller lists it by mistake.
+static func _yield_candidate(context: Dictionary, guide_state: Dictionary, step: Dictionary) -> String:
+	var occupancy: Dictionary = context.get("occupancy", {}) as Dictionary
+	var occupant_id: String = str(occupancy.get(_cell_key(step), ""))
+	if occupant_id.is_empty() or occupant_id == str(context.get("mover_id", "")):
+		return ""
+	if not (guide_state.get("yield_ids", []) as Array).has(occupant_id):
+		return ""
+	var relationships: Dictionary = context.get("relationships", {}) as Dictionary
+	if str(relationships.get(occupant_id, "")) == "hostile":
+		return ""
+	for fact_value: Variant in context.get("perceived_actors", []) as Array:
+		var fact: Dictionary = fact_value as Dictionary
+		if str(fact.get("id", "")) != occupant_id:
+			continue
+		if bool(fact.get("is_dead", false)) or bool(fact.get("is_ko", false)) \
+				or bool(fact.get("is_structure", false)) or bool(fact.get("is_spirit", false)):
+			return ""
+	return occupant_id
+
+
+## The board as it stands after the trade: the yielder on the spirit's origin and
+## the step free. Keeping the yielder on the origin matters — hazard displacement
+## must not push the spirit back onto the cell the Echo now holds.
+static func _post_swap_context(
+	context: Dictionary, origin: Dictionary, step: Dictionary, yielder: String
+) -> Dictionary:
+	# Shallow top-level copy: only "occupancy" is ever mutated below, and this context
+	# is read-only downstream (MovementExecutor/CombatActivationService never mutate
+	# it), so every other nested field (perceived_actors, known_hazards,
+	# relationships, terrain_costs, movement_history, ...) can stay shared by
+	# reference instead of paying for a full recursive duplicate. Only "occupancy"
+	# itself needs its own copy, so the caller's dict is never mutated in place.
+	var swapped: Dictionary = context.duplicate(false)
+	var occupancy: Dictionary = (context.get("occupancy", {}) as Dictionary).duplicate()
+	occupancy.erase(_cell_key(step))
+	occupancy[_cell_key(origin)] = yielder
+	swapped["occupancy"] = occupancy
+	return swapped
 
 
 # ---------------------------------------------------------------------------

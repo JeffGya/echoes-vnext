@@ -390,7 +390,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# These six do not, and nothing else in this file would tell you whether
 			# that is a choice or debt. It is a choice. Full write-up and the cost of
 			# reversing it are on the V2-COMBAT-004 Notion page; the decision is also
-			# recorded in docs/v2-infra-003-defect-register.md.
+			# recorded in docs/stories/v2-infra-003/defect-register.md.
 			#
 			# The ownership rule Half A set is "every action has exactly one owner",
 			# not "every domain has a controller". These six have exactly one owner
@@ -592,6 +592,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# DebugController.handle_force_rank_up().
 			"debug.progression.force_rank_up":
 				_apply_action_outcome(_debug_controller().handle_force_rank_up(action, t), t)
+
+			"debug.emotion.set":
+				_apply_action_outcome(_debug_controller().handle_emotion_set(action, t), t)
+
+			"debug.stop_short.set":
+				_apply_action_outcome(_debug_controller().handle_stop_short_set(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":
@@ -1329,6 +1335,12 @@ func _handle_combat_confirm_round(t: int) -> void:
 	_resolve_next_actor(t)
 
 
+## One-line text for the `stopshort` debug status. Reads no state outside this runtime.
+func stop_short_status_line() -> String:
+	var actor_cfg: Dictionary = (config_service.get_balance().get("data", {}) as Dictionary).get("actor", {}) as Dictionary
+	return StopShortContextService.status_line(actor_cfg, flow_ctx.dev_stop_short, flow_ctx.encounter_ctx)
+
+
 ## COMBAT-SEQ: advances one step in the current round — resolves the next living actor
 ## and emits a per-actor snapshot.
 func _handle_combat_next_actor(t: int) -> void:
@@ -1401,7 +1413,8 @@ func _resolve_next_actor(t: int) -> void:
 	# fell through to BehaviorArbiter._DEFAULTS, making the balance.json values decorative.
 	# data.actor wins on collision so existing behaviour is unchanged. See
 	# ConfigService.merge_actor_cfg() / _get_actor_cfg_merged() above for the merge + per-run cache.
-	var actor_cfg: Dictionary = _get_actor_cfg_merged(bdata.get("actor", {}), leadership_expr_cfg)
+	var actor_cfg: Dictionary = StopShortContextService.with_override(
+		_get_actor_cfg_merged(bdata.get("actor", {}), leadership_expr_cfg), ectx.stop_short_override)
 	var prog_cfg_block: Dictionary    = bdata.get("progression", {})
 	var birth_stats_block: Dictionary = bdata.get("summoning", {}).get("birth_stats", {})
 	var round: int = int(combat_state.get("round_counter", 0))
@@ -1425,6 +1438,8 @@ func _resolve_next_actor(t: int) -> void:
 		ctx["movement_profile"] = movement_prepared["profile"]
 		ctx["movement_goals"] = movement_prepared["goals"]
 		ctx["movement_options"] = movement_prepared["options"]
+		if movement_prepared.has("stop_prefixes"):
+			ctx["movement_stop_prefixes"] = movement_prepared["stop_prefixes"]
 
 	# Resolve this actor's turn.
 	var movement_cfg_for_asm: Dictionary = movement_prepared.get("movement_cfg", {}) as Dictionary
@@ -1441,6 +1456,9 @@ func _resolve_next_actor(t: int) -> void:
 	# CombatTurnActionService. Exactly one last_round_results entry is still appended per call.
 	_combat_turn_action_service().resolve_activation(
 		actor, intent, action_type, asm, ectx, bdata, leadership_expr_cfg, round, t)
+	# The killer side of a melee kill, for the rank (decisions.md D-23). Writes only combat_state.
+	if not ectx.last_round_results.is_empty():
+		PaceService.record_kill(ectx.last_round_results.back(), ectx.actors, combat_state)
 
 	# Primary actions resolve before end-of-activation Burning. Purify is an
 	# external side effect and therefore shares this post-action boundary.
@@ -1484,6 +1502,11 @@ func _resolve_next_actor(t: int) -> void:
 					_path_from_pos = (_mv_result.get("origin", _path_from_pos) as Dictionary).duplicate(true)
 		ectx.last_actor_action["from_pos"] = _path_from_pos
 		ectx.last_actor_action["path"]     = _path_cells
+		# Always present, {} for any step that is not a stop-short.
+		var _stop_short_report: Dictionary = {}
+		if str(ectx.last_actor_action.get("source_id", "")) == str(actor.get("id", "")):
+			_stop_short_report = (intent.get("_stop_short_report", {}) as Dictionary).duplicate(true)
+		ectx.last_actor_action["stop_short"] = _stop_short_report
 
 	# V2-INFRA-003 Phase 6 Slice 6H: the PROG-003 accumulator and the S14b support fold moved to
 	# ContributionLedgerService, which now owns EncounterContext.echo_action_logs outright.
@@ -1532,7 +1555,7 @@ func _end_round(t: int) -> void:
 	#
 	# THE ORDER IS LOAD-BEARING and must not change:
 	#   SHRINE drain -> emotion tick -> RECOVER -> ENDURE -> GUIDE_SPIRIT -> PROTECT theft ->
-	#   PROTECT guard -> PURSUE contain -> check_end_condition.
+	#   PROTECT guard -> PURSUE contain -> reached enemies -> check_end_condition.
 	# The drain runs first because it can kill the shrine, which the end check must see, and
 	# because the emotion tick re-adjusts the morale it writes. PROTECT guard must follow PROTECT
 	# theft in the same round: check_end_condition reads protect_counter and totem_stolen together.
@@ -1580,6 +1603,10 @@ func _end_round(t: int) -> void:
 	_objective_service.apply_protect_guard_round(ectx, round, t)
 	_objective_service.apply_pursue_contain_round(ectx, round, t)
 
+	# Reached enemies for the rank ceiling. After the ENDURE wave spawn, so a wave enemy that
+	# lands next to the party counts this round. Writes only combat_state["reached_enemy_ids"].
+	PaceService.record_reached_enemies(ectx.actors, combat_state)
+
 	# V2-COMBAT-003: universal no-progress detector. Any actor-vs-actor damage this round
 	# (either faction) resets the streak. Scans the same ectx.last_round_results the T9
 	# no-damage-streak term above already reads, but with no faction or actor filter — this
@@ -1597,22 +1624,16 @@ func _end_round(t: int) -> void:
 	# GUIDE_SPIRIT protect fixture needs more real rounds than the no-progress limit to reach
 	# spirit_protected, with zero melee ever occurring, so a damage-only reset ended it as a
 	# forced retreat instead of the win it was always going to reach. Progress is therefore
-	# damage OR any per-objective progress counter advancing: protect_counter,
-	# guide_protect_counter (documented as monotonic — CombatState.create() — so any rise is
-	# unambiguous progress, never noise), contain_counter, hold_counter. Comparing a SUM is
-	# safe even though hold_counter alone can fall (carrier-down resets it): a fall can only
-	# ever make the sum smaller, never trigger a false reset, and if a carrier is being downed
-	# at all, damage is happening and _np_damage_this_round already resets the streak.
-	var _np_progress_sum: int = int(combat_state.get("protect_counter", 0)) \
-		+ int(combat_state.get("guide_protect_counter", 0)) \
-		+ int(combat_state.get("contain_counter", 0)) \
-		+ int(combat_state.get("hold_counter", 0))
-	var _np_last_progress_sum: int = int(combat_state.get("_no_progress_last_sum", -1))
-	if _np_damage_this_round or _np_progress_sum > _np_last_progress_sum:
+	# damage OR a board state this fight has never been in — see
+	# CombatState.get_progress_watch() and record_progress_watch(). The damage term is kept
+	# alongside it because a round can deal damage and end with the same visible board (a hit
+	# offset by a heal), and damage is the plainest statement that something happened.
+	var _np_watch: Dictionary = CombatState.get_progress_watch(ectx.actors, ectx.resolution_mode, combat_state)
+	var _np_novel: bool = CombatState.record_progress_watch(combat_state, _np_watch)
+	if _np_damage_this_round or _np_novel:
 		combat_state["no_progress_streak"] = 0
 	else:
 		combat_state["no_progress_streak"] = int(combat_state.get("no_progress_streak", 0)) + 1
-	combat_state["_no_progress_last_sum"] = _np_progress_sum
 
 	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read
 	# round_counter, hold_counter, and objective_params.

@@ -205,7 +205,7 @@ static func _add_purify(candidates: Array, context: Dictionary, pressure: Dictio
 	# protector, the blocker and the hostile breaker from round 1 puts four of five
 	# Echoes on guard duty and stalls the only win the mode has: measured over 20
 	# seeded encounters it took victories from 20/20 to 17/20 (one shrine destroyed,
-	# two unresolved at 30 rounds). See docs/v2-combat-003-handoff.md §18.
+	# two unresolved at 30 rounds). See docs/stories/v2-combat-003/handoff.md §18.
 	var shrine_failing: bool = health < 0.5
 	var alignment: String = str(pressure["mover_alignment"])
 	var role: String = str(pressure["factual_role"])

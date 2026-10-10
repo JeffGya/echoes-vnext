@@ -1,0 +1,369 @@
+diff --git a/core/PerfProbe.gd b/core/PerfProbe.gd
+new file mode 100644
+index 0000000..88953c3
+--- /dev/null
++++ b/core/PerfProbe.gd
+@@ -0,0 +1,70 @@
++# TEMP-PROBE: stutter investigation. Delete this file and every "TEMP-PROBE" line before any commit.
++# Prints one line when a measured span is slower than THRESHOLD_MS.
++class_name PerfProbe
++
++const THRESHOLD_MS := 8.0
++const FRAME_SPIKE_MS := 28.0
++
++static var last_action: String = ""
++static var last_action_msec: int = 0
++
++# Lap timer: begin() ... lap(name) ... end() prints one line with every phase.
++static var _group: String = ""
++static var _start: int = 0
++static var _last: int = 0
++static var _laps: PackedStringArray = PackedStringArray()
++
++# Accumulators: acc_add(name, start_usec) sums time and call count per name until acc_reset().
++static var _acc_us: Dictionary = {}
++static var _acc_n: Dictionary = {}
++
++
++static func now() -> int:
++	return Time.get_ticks_usec()
++
++
++## Returns the span in milliseconds. Prints when the span is at or above the threshold.
++static func report(label: String, start_usec: int, extra: String = "") -> float:
++	var ms: float = float(Time.get_ticks_usec() - start_usec) / 1000.0
++	if ms >= THRESHOLD_MS:
++		print("[PROBE] %-22s %6.1f ms %s" % [label, ms, extra])
++	return ms
++
++
++static func begin(group: String) -> void:
++	_group = group
++	_start = Time.get_ticks_usec()
++	_last = _start
++	_laps = PackedStringArray()
++	acc_reset()
++
++
++## Records the time since the previous lap (or begin) under `phase`.
++static func lap(phase: String) -> void:
++	var t: int = Time.get_ticks_usec()
++	_laps.append("%s=%.1f" % [phase, float(t - _last) / 1000.0])
++	_last = t
++
++
++## Prints the group line when the whole group is at or above the threshold.
++static func end(extra: String = "") -> void:
++	var total_ms: float = float(Time.get_ticks_usec() - _start) / 1000.0
++	if total_ms >= THRESHOLD_MS:
++		print("[PROBE] %s %.1f ms | %s | %s %s" % [_group, total_ms, " ".join(_laps), acc_text(), extra])
++
++
++static func acc_reset() -> void:
++	_acc_us.clear()
++	_acc_n.clear()
++
++
++static func acc_add(name: String, start_usec: int) -> void:
++	_acc_us[name] = int(_acc_us.get(name, 0)) + (Time.get_ticks_usec() - start_usec)
++	_acc_n[name] = int(_acc_n.get(name, 0)) + 1
++
++
++static func acc_text() -> String:
++	var parts := PackedStringArray()
++	for name in _acc_us:
++		parts.append("%s x%d=%.1f" % [name, int(_acc_n[name]), float(_acc_us[name]) / 1000.0])
++	return " ".join(parts)
+diff --git a/core/PerfProbe.gd.uid b/core/PerfProbe.gd.uid
+new file mode 100644
+index 0000000..a7e5699
+--- /dev/null
++++ b/core/PerfProbe.gd.uid
+@@ -0,0 +1 @@
++uid://b3nhq7no4gifr
+diff --git a/core/movement/MovementPathService.gd b/core/movement/MovementPathService.gd
+index bf7fcde..aaff76b 100644
+--- a/core/movement/MovementPathService.gd
++++ b/core/movement/MovementPathService.gd
+@@ -13,7 +13,21 @@ extends RefCounted
+ ## origin-to-destination line, then straighter relative progress. Numeric cell
+ ## order (col, then row) is used only for irreducible perfect symmetry, never
+ ## Dictionary iteration or lexical cell-key order.
+-static func shortest_path(
++static func shortest_path( # TEMP-PROBE wrapper: times the original, renamed _shortest_path_impl
++	origin: Dictionary,
++	destination: Dictionary,
++	walkable: Dictionary,
++	terrain_costs: Dictionary = {},
++	bounds: Dictionary = {},
++	edge_costs: Dictionary = {}
++) -> Dictionary:
++	var _probe_t := PerfProbe.now() # TEMP-PROBE
++	var _probe_r: Dictionary = _shortest_path_impl(origin, destination, walkable, terrain_costs, bounds, edge_costs) # TEMP-PROBE
++	PerfProbe.acc_add("shortest_path", _probe_t) # TEMP-PROBE
++	return _probe_r # TEMP-PROBE
++
++
++static func _shortest_path_impl( # TEMP-PROBE
+ 	origin: Dictionary,
+ 	destination: Dictionary,
+ 	walkable: Dictionary,
+@@ -107,7 +121,21 @@ static func shortest_path(
+ 
+ ## Returns {reachable, costs, reason}. `costs` maps canonical "col,row" keys to
+ ## minimum integer cost and always contains origin at 0 on success.
+-static func reachable_cost_region(
++static func reachable_cost_region( # TEMP-PROBE wrapper: times the original, renamed _reachable_cost_region_impl
++	origin: Dictionary,
++	capacity: int,
++	walkable: Dictionary,
++	terrain_costs: Dictionary = {},
++	bounds: Dictionary = {},
++	edge_costs: Dictionary = {}
++) -> Dictionary:
++	var _probe_t := PerfProbe.now() # TEMP-PROBE
++	var _probe_r: Dictionary = _reachable_cost_region_impl(origin, capacity, walkable, terrain_costs, bounds, edge_costs) # TEMP-PROBE
++	PerfProbe.acc_add("reachable_region", _probe_t) # TEMP-PROBE
++	return _probe_r # TEMP-PROBE
++
++
++static func _reachable_cost_region_impl( # TEMP-PROBE
+ 	origin: Dictionary,
+ 	capacity: int,
+ 	walkable: Dictionary,
+diff --git a/core/realms/ActiveStageService.gd b/core/realms/ActiveStageService.gd
+index 126cada..90819b9 100644
+--- a/core/realms/ActiveStageService.gd
++++ b/core/realms/ActiveStageService.gd
+@@ -398,7 +398,20 @@ func stage_movement_salt(stage: Dictionary) -> String:
+ #             If no objective exists either, returns {} (nothing left; party parks).
+ #
+ # No directive ID may be named here. All behaviour comes from reading directive fields.
+-func find_explore_target(
++func find_explore_target( # TEMP-PROBE wrapper: times the original, renamed _find_explore_target_impl
++	explore_map: Dictionary,
++	directive: Dictionary,
++	walkable: Dictionary,
++	explored_cells: Dictionary,
++	stage: Dictionary
++) -> Dictionary:
++	var _probe_t := PerfProbe.now() # TEMP-PROBE
++	var _probe_r: Dictionary = _find_explore_target_impl(explore_map, directive, walkable, explored_cells, stage) # TEMP-PROBE
++	PerfProbe.acc_add("find_explore_target", _probe_t) # TEMP-PROBE
++	return _probe_r # TEMP-PROBE
++
++
++func _find_explore_target_impl( # TEMP-PROBE
+ 	explore_map: Dictionary,
+ 	directive: Dictionary,
+ 	walkable: Dictionary,
+diff --git a/core/runtime/FlowRuntime.gd b/core/runtime/FlowRuntime.gd
+index c1e4cd9..fa44d26 100644
+--- a/core/runtime/FlowRuntime.gd
++++ b/core/runtime/FlowRuntime.gd
+@@ -675,12 +675,14 @@ func dispatch(action: Dictionary) -> Dictionary:
+ 	# Flow-owned save choke point (single save max per dispatch tick)
+ 	if flow_ctx.save_request:
+ 		var reason := str(flow_ctx.save_request_reason)
++		var _probe_save_t := Time.get_ticks_usec() # TEMP-PROBE
+ 		var ok := SaveService.save_to_file(
+ 			save_path,
+ 			flow_ctx.save_data,
+ 			logger,
+ 			t
+ 		)
++		print("[PROBE] SAVE FLUSH         %6.1f ms reason=%s" % [float(Time.get_ticks_usec() - _probe_save_t) / 1000.0, reason]) # TEMP-PROBE
+ 
+ 		logger.debug(t, "save.flush", "Save flush executed", {
+ 			"ok": ok,
+@@ -1374,13 +1376,17 @@ func _get_actor_cfg_merged(actor_data_cfg: Dictionary, maturity_cfg: Dictionary)
+ ## appends the result to last_round_results, emits a per-actor snapshot.
+ ## If no living actor remains, calls _end_round() instead.
+ func _resolve_next_actor(t: int) -> void:
++	PerfProbe.begin("COMBAT STEP") # TEMP-PROBE
+ 	var ectx: EncounterContext = flow_ctx.encounter_ctx
+ 	var combat_state: Dictionary = ectx.combat_state
+ 
+ 	# Find the next living actor starting at current_actor_index.
+ 	var next_idx: int = _find_next_living_actor_idx(ectx)
+ 	if next_idx == -1:
++		PerfProbe.lap("find_next") # TEMP-PROBE
+ 		_end_round(t)
++		PerfProbe.lap("end_round") # TEMP-PROBE
++		PerfProbe.end("(round end)") # TEMP-PROBE
+ 		return
+ 
+ 	# Advance pointers — current_actor_index advances PAST this actor after resolution.
+@@ -1414,12 +1420,14 @@ func _resolve_next_actor(t: int) -> void:
+ 		actor, ectx, balance, bdata, round, t)
+ 	var ctx: Dictionary = _turn_ctx_built["ctx"]
+ 	var movement_board_cfg: Dictionary = _turn_ctx_built["board_cfg"]
++	PerfProbe.lap("turn_context") # TEMP-PROBE
+ 
+ 	# V2-INFRA-003 Phase 6 Slice 6G: one instance held across this whole activation, so the
+ 	# preparation, the activation and the purify side effect all address the same object.
+ 	var _live_movement := _live_movement_context_service()
+ 	var movement_prepared: Dictionary = _live_movement.prepare_live_movement_context(
+ 		actor, ectx, combat_state, movement_board_cfg, bdata, t)
++	PerfProbe.lap("prepare_movement") # TEMP-PROBE
+ 	if bool(movement_prepared.get("valid", false)) and bool(movement_prepared.get("selection_enabled", false)):
+ 		ctx["movement_context"] = movement_prepared["movement_context"]
+ 		ctx["movement_profile"] = movement_prepared["profile"]
+@@ -1432,8 +1440,11 @@ func _resolve_next_actor(t: int) -> void:
+ 	if ectx.resolution_mode == EncounterResolutionModes.PURSUE and bool(actor.get("is_quarry", false)):
+ 		behavior_module = FleeBehaviorModule.new(movement_board_cfg)
+ 	var asm := ActorStateMachine.new(actor, behavior_module, actor_cfg, movement_cfg_for_asm)
++	PerfProbe.lap("asm_setup") # TEMP-PROBE
+ 	var intent: Dictionary = asm.advance_turn(ctx, logger, t)
++	PerfProbe.lap("asm_advance_turn") # TEMP-PROBE
+ 	var _movement_result: Dictionary = _live_movement.apply_live_activation(actor, intent, movement_prepared, asm, ctx, t)
++	PerfProbe.lap("apply_activation") # TEMP-PROBE
+ 	var action_type: String = intent.get("action_type", "actor.idle")
+ 
+ 	# V2-INFRA-003 Phase 6 Slice 6H: the activation bark append, the combat.actor_turn log and
+@@ -1441,6 +1452,7 @@ func _resolve_next_actor(t: int) -> void:
+ 	# CombatTurnActionService. Exactly one last_round_results entry is still appended per call.
+ 	_combat_turn_action_service().resolve_activation(
+ 		actor, intent, action_type, asm, ectx, bdata, leadership_expr_cfg, round, t)
++	PerfProbe.lap("resolve_activation") # TEMP-PROBE
+ 	# The killer side of a melee kill, for the rank (decisions.md D-23). Writes only combat_state.
+ 	if not ectx.last_round_results.is_empty():
+ 		PaceService.record_kill(ectx.last_round_results.back(), ectx.actors, combat_state)
+@@ -1490,8 +1502,10 @@ func _resolve_next_actor(t: int) -> void:
+ 
+ 	# V2-INFRA-003 Phase 6 Slice 6H: the PROG-003 accumulator and the S14b support fold moved to
+ 	# ContributionLedgerService, which now owns EncounterContext.echo_action_logs outright.
++	PerfProbe.lap("post_action") # TEMP-PROBE
+ 	_contribution_ledger_service().accumulate_turn(
+ 		actor, ectx, prog_cfg_block, birth_stats_block, t)
++	PerfProbe.lap("ledger") # TEMP-PROBE
+ 
+ 	# Advance current_actor_index past this actor so the next call finds the correct one.
+ 	combat_state["current_actor_index"] = next_idx + 1
+@@ -1503,8 +1517,12 @@ func _resolve_next_actor(t: int) -> void:
+ 		actor, ectx, movement_board_cfg, t)
+ 
+ 	# Emit per-actor snapshot — UI shows updated board + arrow + action text for this actor.
++	PerfProbe.lap("pursue_escape") # TEMP-PROBE
+ 	flow_ctx.last_snapshot = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, t)
++	PerfProbe.lap("build_snapshot") # TEMP-PROBE
+ 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
++	PerfProbe.lap("refresh_snapshot") # TEMP-PROBE
++	PerfProbe.end() # TEMP-PROBE
+ 
+ 
+ ## COMBAT-SEQ: called after the last actor in the round has acted.
+diff --git a/core/runtime/controllers/VentureController.gd b/core/runtime/controllers/VentureController.gd
+index b8dbed6..39efa3f 100644
+--- a/core/runtime/controllers/VentureController.gd
++++ b/core/runtime/controllers/VentureController.gd
+@@ -228,13 +228,19 @@ func _skill_loadout_service() -> SkillLoadoutService:
+ ## The whole turn body lives in StageExploreTurnService.advance_turn(); this maps its
+ ## status onto the four pre-extraction snapshot tails.
+ func handle_advance_turn(_action: Dictionary, t: int) -> FlowActionOutcome:
++	PerfProbe.begin("STAGE ADVANCE") # TEMP-PROBE
+ 	var status := _turn_service().advance_turn(directive_service, t)
++	PerfProbe.lap("advance_turn") # TEMP-PROBE
+ 	if status == "not_exploring":
+ 		# Pre-extraction: a BARE flow_machine.refresh_snapshot() with no rebuild.
++		PerfProbe.end("(not_exploring)") # TEMP-PROBE
+ 		return FlowActionOutcome.refresh_outcome()
+ 	# no_stage / no_target / advanced all rebuilt from save_data then refreshed.
+ 	# refresh_snapshot() alone only re-validates ctx.last_snapshot — it does not rebuild.
+-	return FlowActionOutcome.snapshot_outcome(StageExploreSnapshotBuilder.build(flow_ctx, t))
++	var _probe_snap := StageExploreSnapshotBuilder.build(flow_ctx, t) # TEMP-PROBE
++	PerfProbe.lap("build_snapshot") # TEMP-PROBE
++	PerfProbe.end("status=" + status) # TEMP-PROBE
++	return FlowActionOutcome.snapshot_outcome(_probe_snap)
+ 
+ 
+ ## stage.engage_situation — resolve a situation the party has reached.
+diff --git a/ui/AppRoot.gd b/ui/AppRoot.gd
+index a19b648..6f25ec4 100644
+--- a/ui/AppRoot.gd
++++ b/ui/AppRoot.gd
+@@ -185,13 +185,30 @@ func _flush_logs_to_console() -> void:
+ 		print(LogFormatter.format(logs[i]))
+ 	_last_log_index = logs.size()
+ 	
++# TEMP-PROBE: a frame that took too long, with the last action that ran before it.
++func _process(delta: float) -> void:
++	if delta * 1000.0 >= PerfProbe.FRAME_SPIKE_MS:
++		print("[PROBE] FRAME SPIKE        %6.1f ms  last_action=%s (%d ms ago)" % [
++			delta * 1000.0, PerfProbe.last_action, Time.get_ticks_msec() - PerfProbe.last_action_msec])
++
+ func _on_ui_action_selected(action: Dictionary) -> void:
++	var _probe_total := PerfProbe.now() # TEMP-PROBE
++	var _probe_type := str(action.get("type", "")) # TEMP-PROBE
++	PerfProbe.last_action = _probe_type # TEMP-PROBE
++	PerfProbe.last_action_msec = Time.get_ticks_msec() # TEMP-PROBE
++	var _probe_t := PerfProbe.now() # TEMP-PROBE
+ 	var snap := runtime.dispatch(action)
++	var _probe_dispatch := PerfProbe.report("dispatch", _probe_t, _probe_type) # TEMP-PROBE
++	_probe_t = PerfProbe.now() # TEMP-PROBE
+ 	_render_snapshot(snap)
+-	
++	var _probe_render := PerfProbe.report("render_snapshot", _probe_t, _probe_type) # TEMP-PROBE
++
+ 	_maybe_start_econ_timer_from_snapshot(snap)
+ 	_maybe_stop_econ_timer_from_snapshot(snap)
++	_probe_t = PerfProbe.now() # TEMP-PROBE
+ 	_flush_logs_to_console()
++	var _probe_flush := PerfProbe.report("flush_logs", _probe_t, "%s logs=%d" % [_probe_type, _last_log_index]) # TEMP-PROBE
++	PerfProbe.report("ACTION TOTAL", _probe_total, "%s dispatch=%.1f render=%.1f flush=%.1f" % [_probe_type, _probe_dispatch, _probe_render, _probe_flush]) # TEMP-PROBE
+ 
+ func _on_layout_changed(layout: Dictionary) -> void:
+ 	_current_layout = layout.duplicate(true)
+diff --git a/ui/screens/combat/CombatBoardScreen.gd b/ui/screens/combat/CombatBoardScreen.gd
+index d74e098..8cfc7e9 100644
+--- a/ui/screens/combat/CombatBoardScreen.gd
++++ b/ui/screens/combat/CombatBoardScreen.gd
+@@ -227,7 +227,9 @@ func set_snapshot(snap: Dictionary) -> void:
+ 	if _should_reset_presentation(data):
+ 		_reset_presentation_state()
+ 	_reset_transient_ui()
++	var _probe_t := PerfProbe.now() # TEMP-PROBE
+ 	_render(data, snap.get("actions", {}))
++	PerfProbe.report("combat _render", _probe_t) # TEMP-PROBE
+ 	_active_encounter_id = str(data.get("encounter_id", ""))
+ 	_presentation_board_size = Vector2i(
+ 		int(data.get("board_cols", 10)),
+@@ -323,7 +325,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
+ 	_current_rows = int(data.get("board_rows", 10))
+ 	var terrain_v: Variant = data.get("terrain", {})
+ 	var terrain: Dictionary = terrain_v if terrain_v is Dictionary else {}
++	var _probe_board_t := PerfProbe.now() # TEMP-PROBE
+ 	_draw_board(_current_cols, _current_rows, terrain)
++	PerfProbe.report("combat _draw_board", _probe_board_t) # TEMP-PROBE
+ 	_center_board(_current_cols, _current_rows)
+ 
+ 	var actors: Array = data.get("actors", [])
+diff --git a/ui/screens/venture/StageExploreScreen.gd b/ui/screens/venture/StageExploreScreen.gd
+index 2c93623..52edd71 100644
+--- a/ui/screens/venture/StageExploreScreen.gd
++++ b/ui/screens/venture/StageExploreScreen.gd
+@@ -313,12 +313,14 @@ func set_snapshot(snap: Dictionary) -> void:
+ 	var snap_type := str(snap.get("type", ""))
+ 	var data: Dictionary    = snap.get("data", {})
+ 	var actions: Dictionary = snap.get("actions", {})
++	var _probe_t := PerfProbe.now() # TEMP-PROBE
+ 
+ 	match snap_type:
+ 		"flow.stage":
+ 			_enter_preview_mode(data, actions)
+ 		_:  # flow.stage_explore
+ 			_enter_explore_mode(data, actions)
++	PerfProbe.report("stage set_snapshot", _probe_t, snap_type) # TEMP-PROBE
+ 
+ 
+ # ─── Preview mode ─────────────────────────────────────────────────────────────
+@@ -840,7 +842,9 @@ func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "")
+ 	# realm switches or rerun regenerations.
+ 	var stage_id:       String = str(data.get("stage_id", ""))
+ 	var realm_id:       String = str(data.get("realm_id", ""))
++	var _probe_hash_t := PerfProbe.now() # TEMP-PROBE
+ 	var terrain_sig:    int    = str(terrain).hash()   # deterministic content signature
++	PerfProbe.report("stage terrain hash", _probe_hash_t) # TEMP-PROBE
+ 	var explored_size:  int    = explored.size()
+ 	var paint_key: String = "%s|%s|%d|%s|%d|%d" % [realm_id, stage_id, terrain_sig, mode, expected_count, explored_size]
+ 	if paint_key == _last_paint_key:

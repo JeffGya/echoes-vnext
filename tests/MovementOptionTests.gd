@@ -8,6 +8,7 @@ const ActorFact = preload("res://core/movement/contracts/MovementPerceivedActorF
 const HazardFact = preload("res://core/movement/contracts/MovementKnownHazardFact.gd")
 const MovementGoal = preload("res://core/movement/contracts/MovementGoal.gd")
 const MovementProfile = preload("res://core/movement/contracts/MovementProfile.gd")
+const LiveMovement = preload("res://core/movement/LiveMovementContextService.gd")
 
 
 static func register(runner: CoreTestRunner) -> void:
@@ -20,12 +21,28 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_option/conservative_prefix", Callable(MovementOptionTests, "_t_conservative_prefix"))
 	runner.register_test("movement_option/purpose_primary_styles", Callable(MovementOptionTests, "_t_purpose_primary_styles"))
 	runner.register_test("movement_option/truthful_hold", Callable(MovementOptionTests, "_t_truthful_hold"))
-	runner.register_test("movement_option/truncated_attack_downgrades", Callable(MovementOptionTests, "_t_truncated_attack_downgrades"))
+	runner.register_test("movement_option/truncated_attack_keeps_primary", Callable(MovementOptionTests, "_t_truncated_attack_keeps_primary"))
 	runner.register_test("movement_option/hold_in_place_no_endpoints", Callable(MovementOptionTests, "_t_hold_in_place_no_endpoints"))
 	runner.register_test("movement_option/perceived_intersection_and_occupancy", Callable(MovementOptionTests, "_t_perceived_intersection_and_occupancy"))
 	runner.register_test("movement_option/reversed_inputs_stable", Callable(MovementOptionTests, "_t_reversed_inputs_stable"))
 	runner.register_test("movement_option/mirrored_metrics_covary", Callable(MovementOptionTests, "_t_mirrored_metrics_covary"))
 	runner.register_test("movement_option/invalid_inputs_before_generation", Callable(MovementOptionTests, "_t_invalid_inputs_before_generation"))
+	runner.register_test("movement_option/withdraw_uses_retreating_style", Callable(MovementOptionTests, "_t_withdraw_uses_retreating_style"))
+	runner.register_test("movement_option/lateral_flanks_around_threat", Callable(MovementOptionTests, "_t_lateral_flanks_around_threat"))
+	runner.register_test("movement_option/lateral_distance_one_falls_back_to_baseline", Callable(MovementOptionTests, "_t_lateral_distance_one_falls_back_to_baseline"))
+	runner.register_test("movement_option/forceful_pays_control_cost_for_fewer_steps", Callable(MovementOptionTests, "_t_forceful_pays_control_cost_for_fewer_steps"))
+	runner.register_test("movement_option/overcommitted_spends_toward_capacity", Callable(MovementOptionTests, "_t_overcommitted_spends_toward_capacity"))
+	runner.register_test("movement_option/low_exposure_diverges_from_safe", Callable(MovementOptionTests, "_t_low_exposure_diverges_from_safe"))
+	runner.register_test("movement_option/forceful_overcommitted_low_exposure_reachable_end_to_end", Callable(MovementOptionTests, "_t_forceful_overcommitted_low_exposure_reachable_end_to_end"))
+	runner.register_test("movement_option/lateral_extra_for_non_lateral_purposes", Callable(MovementOptionTests, "_t_lateral_extra_for_non_lateral_purposes"))
+	runner.register_test("movement_option/low_exposure_distinct_from_safe_without_hazards", Callable(MovementOptionTests, "_t_low_exposure_distinct_from_safe_without_hazards"))
+	runner.register_test("movement_option/lateral_extra_never_renames_primary", Callable(MovementOptionTests, "_t_lateral_extra_never_renames_primary"))
+	runner.register_test("movement_option/lateral_extra_never_renames_other_candidate", Callable(MovementOptionTests, "_t_lateral_extra_never_renames_other_candidate"))
+	runner.register_test("movement_option/low_exposure_hazards_outrank_threat_distance", Callable(MovementOptionTests, "_t_low_exposure_hazards_outrank_threat_distance"))
+	runner.register_test("movement_option/generate_options_guards_lateral_against_full_candidate_set", Callable(MovementOptionTests, "_t_generate_options_guards_lateral_against_full_candidate_set"))
+	runner.register_test("movement_option/live_options_logs_unreachable_destination_region", Callable(MovementOptionTests, "_t_live_options_logs_unreachable_destination_region"))
+	runner.register_test("movement_option/live_options_logs_perception_narrowing", Callable(MovementOptionTests, "_t_live_options_logs_perception_narrowing"))
+	runner.register_test("movement_option/live_options_silent_when_perceived_matches_walkable", Callable(MovementOptionTests, "_t_live_options_silent_when_perceived_matches_walkable"))
 
 
 static func _t_edge_costs_all_public_apis() -> Dictionary:
@@ -245,9 +262,14 @@ static func _t_purpose_primary_styles() -> Dictionary:
 	var cap_result: Dictionary = OptionService.generate_options(
 		cap_context, _profile(6), _goal("advance", [_cell(6, 0)])
 	)
+	# The cap tracks STYLE_ORDER.size() (11). This board has no reachable forceful or
+	# overcommitted candidate and no hostile for a lateral extra. low_exposure shares
+	# safe's eligible set here but picks the furthest-progress cell, so it survives as a
+	# fifth, distinct route. Global style order is still exact.
 	var cap_options: Array = cap_result["options"] as Array
-	if cap_options.size() != 4 \
-		or _styles(cap_options) != ["direct", "safe", "cohesive", "conservative"]:
+	if cap_options.size() != 5 \
+		or _styles(cap_options) != ["direct", "safe", "cohesive", "conservative"] \
+		or not str((cap_options[4] as Dictionary)["option_id"]).contains(".low_exposure.d"):
 		return _fail("Option cap and global style order must be exact: %s" % str(cap_result))
 
 	var direct: Dictionary = (cap_options[0] as Dictionary).duplicate(true)
@@ -281,9 +303,18 @@ static func _t_truthful_hold() -> Dictionary:
 	return _pass()
 
 
-# A far engage target whose route exceeds capacity must not advertise an out-of-range
-# strike: every option that stops short of the goal region downgrades to a bare actor.move.
-static func _t_truncated_attack_downgrades() -> Dictionary:
+# A far engage target whose route exceeds capacity keeps `planned_primary` VERBATIM on
+# every option, in range or not.
+#
+# INVERTED by V2-COMBAT-003.5 Phase 3c, which made this generator the live per-turn
+# producer. The recorded pre-change fact was the opposite: an option ending outside the
+# goal region rewrote a range-bound primary into a bare `actor.move`. Live, that rewrite
+# is destructive — `BehaviorArbiter._validate_movement_inputs` demands planned_action ==
+# planned_primary and answers a mismatch by discarding the WHOLE board, and the rewrite
+# also drops `target_id`, so a truncated approach stops naming who it is closing on.
+# It protected nothing: `CombatActivationService` revalidates the primary at the final
+# cell and takes the declared fallback when it is out of range.
+static func _t_truncated_attack_keeps_primary() -> Dictionary:
 	var context: Dictionary = _context(_line_cells(0, 5, 0))
 	var goal: Dictionary = MovementGoal.build(
 		"goal.combat.engage.hunter.c5r0",
@@ -302,20 +333,22 @@ static func _t_truncated_attack_downgrades() -> Dictionary:
 	var options: Array = result["options"] as Array
 	if options.is_empty():
 		return _fail("Truncated engage must still emit a movement option: %s" % str(result))
-	var move_plan: Dictionary = ActionPlan.build("actor.move")
+	var out_of_range_seen: bool = false
 	for option_value: Variant in options:
 		var option: Dictionary = option_value as Dictionary
-		var plan: Dictionary = option["planned_action"] as Dictionary
-		if (goal["destination_region"] as Array).has(option["destination"] as Dictionary):
-			if plan != (goal["planned_primary"] as Dictionary):
-				return _fail("In-range endpoint must retain the melee plan: %s" % str(option))
-		elif plan != move_plan:
-			return _fail("Out-of-range endpoint must downgrade to bare actor.move: %s" % str(option))
+		if not (goal["destination_region"] as Array).has(option["destination"] as Dictionary):
+			out_of_range_seen = true
+		if (option["planned_action"] as Dictionary) != (goal["planned_primary"] as Dictionary):
+			return _fail("Every endpoint must carry planned_primary verbatim: %s" % str(option))
+	if not out_of_range_seen:
+		return _fail("Fixture produced no out-of-range endpoint — the assertion is vacuous")
 	var primary: Dictionary = _find_style(options, "direct")
 	if primary.is_empty() or primary["destination"] != _cell(2, 0):
 		return _fail("Primary must truncate to capacity endpoint (2,0): %s" % str(primary))
-	if str((primary["planned_action"] as Dictionary)["type"]) != "actor.move":
-		return _fail("Truncated primary must downgrade melee to actor.move: %s" % str(primary))
+	if str((primary["planned_action"] as Dictionary)["type"]) != "melee_attack":
+		return _fail("Truncated primary must keep the melee plan: %s" % str(primary))
+	if str((primary["planned_action"] as Dictionary)["target_id"]) != "enemy.a":
+		return _fail("Truncated primary must keep naming its target: %s" % str(primary))
 	return _pass()
 
 
@@ -357,6 +390,97 @@ static func _t_perceived_intersection_and_occupancy() -> Dictionary:
 	)
 	if not bool(dead_occupied["valid"]) or not (dead_occupied["options"] as Array).is_empty():
 		return _fail("A dead actor retained in canonical occupancy must still block traversal: %s" % str(dead_occupied))
+	return _pass()
+
+
+## Follow-up #8. generate_options() can legally return {valid: true, options: []} when a
+## goal's whole destination region is unreachable — the same fixture as
+## _t_perceived_intersection_and_occupancy's "hidden" case above. The live per-turn caller,
+## LiveMovementContextService._movement_live_options(), must not let that shape pass
+## through silently: it must log movement.options_rejected so a stalled Echo is
+## explainable, per the docstring guarantee at LiveMovementContextService.gd:269-270.
+static func _t_live_options_logs_unreachable_destination_region() -> Dictionary:
+	var cells: Array = _line_cells(0, 3, 0)
+	var perceived: Dictionary = _walkable(cells)
+	perceived["1,0"] = false
+	var context: Dictionary = _context(cells, [], {}, perceived)
+	var goal: Dictionary = _goal("advance", [_cell(3, 0)])
+	var logger := StructuredLogger.new()
+	var service := LiveMovement.new(FlowContext.new(), logger)
+	var options: Array = service._movement_live_options(context, _profile(3), [goal], 5)
+	if not options.is_empty():
+		return _fail("Unreachable destination region must still publish zero options: %s" % str(options))
+	var found: Dictionary = {}
+	for entry_value: Variant in logger.get_logs():
+		var entry: Dictionary = entry_value as Dictionary
+		if str(entry.get("type", "")) == "movement.options_rejected":
+			found = entry
+			break
+	if found.is_empty():
+		return _fail("No movement.options_rejected log entry — a stalled Echo would be silent")
+	var data: Dictionary = found.get("data", {}) as Dictionary
+	if str(data.get("reason", "")) != "no_viable_option":
+		return _fail("Wrong rejection reason: %s" % str(data))
+	if str(data.get("mover_id", "")) != "mover.a":
+		return _fail("Wrong mover_id logged: %s" % str(data))
+	if str(data.get("goal_id", "")) != str(goal.get("goal_id", "")):
+		return _fail("Wrong goal_id logged: %s" % str(data))
+	return _pass()
+
+
+## `perceived_planning_cells` is a DORMANT contract field (LiveMovementContextService.gd:310-315):
+## no live call site can currently make it differ from `authoritative_walkable`. This proves the
+## defensive log fires the day it does, using a cell OFF the chosen route so the goal still
+## succeeds — narrowing must be reported even when it does not block movement this turn.
+static func _t_live_options_logs_perception_narrowing() -> Dictionary:
+	var cells: Array = []
+	for col in range(4):
+		for row in range(2):
+			cells.append(_cell(col, row))
+	var walkable: Dictionary = _walkable(cells)
+	var perceived: Dictionary = walkable.duplicate(true)
+	perceived["0,1"] = false
+	var context: Dictionary = _context(cells, [], {}, perceived)
+	var goal: Dictionary = _goal("advance", [_cell(3, 0)])
+	var logger := StructuredLogger.new()
+	var service := LiveMovement.new(FlowContext.new(), logger)
+	var options: Array = service._movement_live_options(context, _profile(3), [goal], 5)
+	if options.is_empty():
+		return _fail("Route stays reachable off the narrowed cell; options must not be empty: %s" % str(options))
+	var found: Dictionary = {}
+	for entry_value: Variant in logger.get_logs():
+		var entry: Dictionary = entry_value as Dictionary
+		if str(entry.get("type", "")) == "movement.options_rejected":
+			found = entry
+			break
+	if found.is_empty():
+		return _fail("No movement.options_rejected log entry for a narrowed planning graph")
+	var data: Dictionary = found.get("data", {}) as Dictionary
+	if str(data.get("reason", "")) != "perception_narrowed_planning_graph":
+		return _fail("Wrong rejection reason: %s" % str(data))
+	if str(data.get("field", "")) != "perceived_planning_cells":
+		return _fail("Wrong field logged: %s" % str(data))
+	if str(data.get("mover_id", "")) != "mover.a":
+		return _fail("Wrong mover_id logged: %s" % str(data))
+	return _pass()
+
+
+## Regression guard: every live call site today passes the same dictionary for both
+## `authoritative_walkable` and `perceived_planning_cells` (LiveMovementContextService.gd:147-148,
+## :600-601). This proves that real shape stays silent — no false alarm on any board in play.
+static func _t_live_options_silent_when_perceived_matches_walkable() -> Dictionary:
+	var cells: Array = _line_cells(0, 3, 0)
+	var context: Dictionary = _context(cells)
+	var goal: Dictionary = _goal("advance", [_cell(3, 0)])
+	var logger := StructuredLogger.new()
+	var service := LiveMovement.new(FlowContext.new(), logger)
+	var options: Array = service._movement_live_options(context, _profile(3), [goal], 5)
+	if options.is_empty():
+		return _fail("Baseline reachable goal must still publish options: %s" % str(options))
+	for entry_value: Variant in logger.get_logs():
+		var entry: Dictionary = entry_value as Dictionary
+		if str(entry.get("type", "")) == "movement.options_rejected":
+			return _fail("Unexpected movement.options_rejected log when perceived matches walkable: %s" % str(entry))
 	return _pass()
 
 
@@ -485,6 +609,416 @@ static func _t_invalid_inputs_before_generation() -> Dictionary:
 	if bool(result["valid"]) \
 		or str(result["reason"]) != "invalid_goal.goal_region_contains_origin":
 		return _fail("Non-hold origin goal must fail before generation: %s" % str(result))
+	return _pass()
+
+
+## V2-COMBAT-003.5 Phase 3a gap 4 — withdraw must no longer fall through to the
+## "direct" route-shape label; it gets its own "retreating" token.
+static func _t_withdraw_uses_retreating_style() -> Dictionary:
+	var context: Dictionary = _context(_line_cells(0, 2, 0))
+	var result: Dictionary = OptionService.generate_options(context, _profile(2), _goal("withdraw", [_cell(2, 0)]))
+	if not bool(result["valid"]):
+		return _fail("Expected valid withdraw generation: %s" % str(result))
+	if _find_style(result["options"] as Array, "retreating").is_empty():
+		return _fail("Withdraw purpose must emit the retreating route-shape: %s" % str(result))
+	if not _find_style(result["options"] as Array, "direct").is_empty():
+		return _fail("Withdraw purpose must not also emit direct: %s" % str(result))
+	return _pass()
+
+
+## Gap 3 — lateral must genuinely flank around a perceived threat rather than
+## retrace `_build_primary`'s straight line under a different label.
+static func _t_lateral_flanks_around_threat() -> Dictionary:
+	var cells: Array = []
+	for col in range(6):
+		for row in range(3):
+			cells.append(_cell(col, row))
+	var origin: Dictionary = _cell(0, 1)
+	var hostile: Dictionary = _actor("enemy.flank", _cell(0, 0), "enemy")
+	var context: Dictionary = _context(cells, [hostile], {"enemy.flank": "hostile"}, {}, [], origin)
+	var goal: Dictionary = _goal("reposition", [_cell(4, 1)])
+	var result: Dictionary = OptionService.generate_options(context, _profile(4), goal)
+	if not bool(result["valid"]):
+		return _fail("Expected valid reposition generation: %s" % str(result))
+	var lateral: Dictionary = _find_style(result["options"] as Array, "lateral")
+	if lateral.is_empty():
+		return _fail("Reposition purpose must emit a lateral option: %s" % str(result))
+	if lateral["destination"] != _cell(3, 2):
+		return _fail("Lateral must offset off the straight line toward the threat: %s" % str(lateral))
+
+	var advance_result: Dictionary = OptionService.generate_options(
+		context, _profile(4), _goal("advance", [_cell(4, 1)])
+	)
+	var straight: Dictionary = _find_style(advance_result["options"] as Array, "direct")
+	if straight["destination"] == lateral["destination"] or straight["path"] == lateral["path"]:
+		return _fail("Lateral route must genuinely differ from the straight route: %s / %s" % [straight, lateral])
+	return _pass()
+
+
+## Blocker 1 (QA fix pass) — a flank destination is always exactly 1 Chebyshev step off
+## the baseline destination, so when the origin is already 1 step from the destination
+## region, the flank option always scores objective_progress 0.0. This must fall back to
+## the unoffset baseline route rather than returning zero options.
+static func _t_lateral_distance_one_falls_back_to_baseline() -> Dictionary:
+	var cells: Array = []
+	for col in range(6):
+		for row in range(3):
+			cells.append(_cell(col, row))
+	var origin: Dictionary = _cell(3, 1)
+	var hostile: Dictionary = _actor("enemy.near", _cell(3, 0), "enemy")
+	var context: Dictionary = _context(cells, [hostile], {"enemy.near": "hostile"}, {}, [], origin)
+	var goal: Dictionary = _goal("regroup", [_cell(4, 1)])
+	var result: Dictionary = OptionService.generate_options(context, _profile(2), goal)
+	if not bool(result["valid"]):
+		return _fail("Expected valid regroup generation at distance 1: %s" % str(result))
+	if (result["options"] as Array).is_empty():
+		return _fail("Distance-1 regroup must fall back to the baseline route, not zero options: %s" % str(result))
+	var lateral: Dictionary = _find_style(result["options"] as Array, "lateral")
+	if lateral.is_empty():
+		return _fail("Expected a lateral primary even after falling back to baseline: %s" % str(result))
+	return _pass()
+
+
+## Gap 1 — forceful must be willing to pay hostile-control surcharges to take a
+## route `_build_primary` (cost-optimal) avoids, producing a distinct path to
+## the same destination.
+static func _t_forceful_pays_control_cost_for_fewer_steps() -> Dictionary:
+	var cells: Array = [
+		_cell(0, 0), _cell(1, 0), _cell(2, 0), _cell(3, 0), _cell(4, 0),
+		_cell(0, 1), _cell(2, 1), _cell(4, 1),
+	]
+	var origin: Dictionary = _cell(0, 0)
+	var context: Dictionary = _context(cells, [], {}, {}, [], origin)
+	var planning_walkable: Dictionary = OptionService._planning_walkable(context)
+	var edge_costs: Dictionary = {
+		"0,0>1,0": 1, "1,0>2,0": 1, "2,0>3,0": 1, "3,0>4,0": 1,
+	}
+	var goal: Dictionary = _goal("advance", [_cell(4, 0)])
+	var profile: Dictionary = _profile(8)
+	var primary: Dictionary = OptionService._build_primary(
+		context, profile, goal, planning_walkable, edge_costs, {}, "direct"
+	)
+	var forceful: Dictionary = OptionService._build_forceful(
+		context, profile, goal, planning_walkable, edge_costs, {}
+	)
+	if primary.is_empty() or forceful.is_empty():
+		return _fail("Expected both routes to be viable: %s / %s" % [primary, forceful])
+	if primary["destination"] != _cell(4, 0) or forceful["destination"] != _cell(4, 0):
+		return _fail("Both routes must reach the same destination: %s / %s" % [primary, forceful])
+	if primary["path"] == forceful["path"]:
+		return _fail("Forceful must diverge from the cost-optimal primary path: %s" % str(forceful))
+	if int(forceful["route_cost"]) <= int(primary["route_cost"]):
+		return _fail("Forceful's control-tolerant route must cost more than the avoiding one: %s / %s" % [primary, forceful])
+	return _pass()
+
+
+## Gap 1 — overcommitted spends toward capacity instead of taking the cheapest
+## affordable destination in the region.
+static func _t_overcommitted_spends_toward_capacity() -> Dictionary:
+	var context: Dictionary = _context(_line_cells(0, 5, 0))
+	var planning_walkable: Dictionary = OptionService._planning_walkable(context)
+	var goal: Dictionary = _goal("advance", [_cell(2, 0), _cell(5, 0)])
+	var profile: Dictionary = _profile(5)
+	var primary: Dictionary = OptionService._build_primary(
+		context, profile, goal, planning_walkable, {}, {}, "direct"
+	)
+	var overcommitted: Dictionary = OptionService._build_overcommitted(
+		context, profile, goal, planning_walkable, {}, {}
+	)
+	if primary.is_empty() or overcommitted.is_empty():
+		return _fail("Expected both routes to be viable: %s / %s" % [primary, overcommitted])
+	if primary["destination"] != _cell(2, 0):
+		return _fail("Primary must take the cheapest destination: %s" % str(primary))
+	if overcommitted["destination"] != _cell(5, 0):
+		return _fail("Overcommitted must spend toward capacity: %s" % str(overcommitted))
+	if int(overcommitted["route_cost"]) <= int(primary["route_cost"]):
+		return _fail("Overcommitted must cost more than the cheapest primary: %s / %s" % [primary, overcommitted])
+	return _pass()
+
+
+## Gap 2 — low-exposure reorders the safe selector's two metrics, so it can
+## pick a genuinely different candidate than `_select_safe` does.
+static func _t_low_exposure_diverges_from_safe() -> Dictionary:
+	var primary: Dictionary = {
+		"option_id": "option.combat.advance.baseline.c9r9.d0r0.pstay",
+		"destination": _cell(0, 0), "path": [], "route_cost": 3,
+		"exposure": 0.5, "hazard_summary": {"known_count": 2, "known_ids": ["hazard.a", "hazard.b"]},
+	}
+	var fewer_hazards_worse_exposure: Dictionary = primary.duplicate(true)
+	fewer_hazards_worse_exposure["destination"] = _cell(1, 0)
+	fewer_hazards_worse_exposure["path"] = [_cell(1, 0)]
+	fewer_hazards_worse_exposure["route_cost"] = 1
+	fewer_hazards_worse_exposure["exposure"] = 0.6
+	fewer_hazards_worse_exposure["hazard_summary"] = {"known_count": 1, "known_ids": ["hazard.a"]}
+	var lower_exposure_same_hazards: Dictionary = primary.duplicate(true)
+	lower_exposure_same_hazards["destination"] = _cell(2, 0)
+	lower_exposure_same_hazards["path"] = [_cell(2, 0)]
+	lower_exposure_same_hazards["route_cost"] = 2
+	lower_exposure_same_hazards["exposure"] = 0.3
+	lower_exposure_same_hazards["hazard_summary"] = {"known_count": 2, "known_ids": ["hazard.a", "hazard.b"]}
+	var candidates: Array = [fewer_hazards_worse_exposure, lower_exposure_same_hazards]
+
+	var safe: Dictionary = OptionService._select_safe(candidates, primary)
+	var low_exposure: Dictionary = OptionService._select_low_exposure(candidates, primary, [])
+	if safe.is_empty() or low_exposure.is_empty():
+		return _fail("Expected both selectors to find an improving candidate: %s / %s" % [safe, low_exposure])
+	if safe["destination"] != _cell(1, 0):
+		return _fail("Safe must prioritise fewer known hazards: %s" % str(safe))
+	if low_exposure["destination"] != _cell(2, 0):
+		return _fail("Low-exposure must prioritise lower exposure: %s" % str(low_exposure))
+	if safe["destination"] == low_exposure["destination"]:
+		return _fail("Safe and low-exposure must diverge on this board: %s / %s" % [safe, low_exposure])
+	return _pass()
+
+
+## Phase 6 fix — live combat never builds reposition/regroup goals, so `lateral` only
+## reached a live board once it became an extra candidate for every other purpose.
+## It flanks a perceived hostile only: with just an ally on the board there is none.
+static func _t_lateral_extra_for_non_lateral_purposes() -> Dictionary:
+	var cells: Array = []
+	for col in range(6):
+		for row in range(3):
+			cells.append(_cell(col, row))
+	var origin: Dictionary = _cell(0, 1)
+	var hostile: Dictionary = _actor("enemy.flank", _cell(0, 0), "enemy")
+	var context: Dictionary = _context(cells, [hostile], {"enemy.flank": "hostile"}, {}, [], origin)
+	for purpose: String in ["advance", "intercept", "cut_off"]:
+		var result: Dictionary = OptionService.generate_options(context, _profile(4), _goal(purpose, [_cell(4, 1)]))
+		if not bool(result["valid"]):
+			return _fail("Expected valid %s generation: %s" % [purpose, str(result)])
+		var lateral: Dictionary = _find_style(result["options"] as Array, "lateral")
+		if lateral.is_empty() or lateral["destination"] != _cell(3, 2):
+			return _fail("%s must carry the flanking lateral extra: %s" % [purpose, str(result)])
+	var ally: Dictionary = _actor("ally.only", _cell(0, 0))
+	var ally_context: Dictionary = _context(cells, [ally], {"ally.only": "friendly"}, {}, [], origin)
+	var ally_result: Dictionary = OptionService.generate_options(ally_context, _profile(4), _goal("advance", [_cell(4, 1)]))
+	if not _find_style(ally_result["options"] as Array, "lateral").is_empty():
+		return _fail("No perceived hostile means no lateral extra: %s" % str(ally_result))
+	return _pass()
+
+
+## Phase 6 fix — with no known hazards `_select_safe` and `_select_low_exposure` shared
+## an eligible set and a pick, so dedup always dropped low_exposure. Threat distance
+## at the destination now separates them.
+static func _t_low_exposure_distinct_from_safe_without_hazards() -> Dictionary:
+	var no_hazards: Dictionary = {"known_count": 0, "known_ids": []}
+	var primary: Dictionary = {
+		"option_id": "option.combat.advance.baseline.c9r9.direct.d1r0.pc1r0",
+		"destination": _cell(1, 0), "path": [_cell(1, 0)], "route_cost": 1,
+		"exposure": 1.0, "hazard_summary": no_hazards, "objective_progress": 0.2,
+	}
+	var near_threat: Dictionary = primary.duplicate(true)
+	near_threat["destination"] = _cell(1, 1)
+	near_threat["path"] = [_cell(1, 1)]
+	near_threat["exposure"] = 0.0
+	var far_from_threat: Dictionary = primary.duplicate(true)
+	far_from_threat["destination"] = _cell(1, 3)
+	far_from_threat["path"] = [_cell(1, 2), _cell(1, 3)]
+	far_from_threat["route_cost"] = 2
+	far_from_threat["exposure"] = 0.0
+	var candidates: Array = [near_threat, far_from_threat]
+	var hostiles: Array = [_cell(2, 0)]
+	var safe: Dictionary = OptionService._select_safe(candidates, primary)
+	var low_exposure: Dictionary = OptionService._select_low_exposure(candidates, primary, hostiles)
+	if safe.is_empty() or safe["destination"] != _cell(1, 1):
+		return _fail("Safe must keep its cheapest improving pick: %s" % str(safe))
+	if low_exposure.is_empty() or low_exposure["destination"] != _cell(1, 3):
+		return _fail("Low-exposure must end farthest from the hostile: %s" % str(low_exposure))
+
+	# End to end: a hazard-free board where the control-free cells are also the ones
+	# closest to the hostile's side. Both styles must survive dedup as different routes.
+	var cells: Array = []
+	for col in range(6):
+		for row in range(5):
+			cells.append(_cell(col, row))
+	var controller: Dictionary = _actor(
+		"enemy.ctl", _cell(3, 1), "enemy", false, false, false, false, false, true
+	)
+	var context: Dictionary = _context(cells, [controller], {"enemy.ctl": "hostile"}, {}, [], _cell(0, 1))
+	var result: Dictionary = OptionService.generate_options(context, _profile(4), _goal("advance", [_cell(5, 1)]))
+	if not bool(result["valid"]):
+		return _fail("Expected valid hazard-free generation: %s" % str(result))
+	var e2e_low: Dictionary = _find_style(result["options"] as Array, "low_exposure")
+	var e2e_safe: Dictionary = _find_style(result["options"] as Array, "safe")
+	if e2e_low.is_empty():
+		return _fail("low_exposure must survive dedup on a hazard-free board: %s" % str(result))
+	if not e2e_safe.is_empty() and e2e_safe["destination"] == e2e_low["destination"]:
+		return _fail("safe and low_exposure must not collapse to one cell: %s" % str(result))
+	return _pass()
+
+
+## Decision #51 — a far target lets capacity cut the flank short onto the primary's own
+## cell. That lateral used to win dedup (STYLE_ORDER) and rename the intercept route.
+static func _t_lateral_extra_never_renames_primary() -> Dictionary:
+	var cells: Array = []
+	for col in range(10):
+		for row in range(3):
+			cells.append(_cell(col, row))
+	var hostile: Dictionary = _actor("enemy.far", _cell(0, 0), "enemy")
+	var context: Dictionary = _context(cells, [hostile], {"enemy.far": "hostile"}, {}, [], _cell(0, 1))
+	var goal: Dictionary = _goal("intercept", [_cell(9, 1)])
+	var profile: Dictionary = _profile(2)
+
+	var result: Dictionary = OptionService.generate_options(context, profile, goal)
+	if not bool(result["valid"]):
+		return _fail("Expected valid intercept generation: %s" % str(result))
+	var options: Array = result["options"] as Array
+	var intercept: Dictionary = _find_style(options, "intercept")
+	if intercept.is_empty():
+		return _fail("The intercept primary must keep its own name: %s" % str(result))
+
+	# Proves the board reaches the collapse: the unguarded flank ends on the primary's cell.
+	var walkable: Dictionary = OptionService._planning_walkable(context)
+	walkable.erase(_key(_cell(0, 0)))
+	var control: Dictionary = OptionService._build_control(context, walkable)
+	var unguarded: Dictionary = OptionService._build_lateral_extra(
+		context, profile, goal, walkable, control["edge_costs"] as Dictionary,
+		control["edge_sources"] as Dictionary, []
+	)
+	if unguarded.is_empty() or unguarded["destination"] != intercept["destination"]:
+		return _fail("Fixture must shorten the flank onto the primary cell: %s vs %s" % [unguarded, intercept])
+	var guarded: Dictionary = OptionService._build_lateral_extra(
+		context, profile, goal, walkable, control["edge_costs"] as Dictionary,
+		control["edge_sources"] as Dictionary, [intercept["destination"] as Dictionary]
+	)
+	if not guarded.is_empty():
+		return _fail("A lateral ending on the primary cell must not be built: %s" % str(guarded))
+	for option_value: Variant in options:
+		var option: Dictionary = option_value as Dictionary
+		if str(option["option_id"]).contains(".lateral.d") and option["destination"] == intercept["destination"]:
+			return _fail("No lateral may share the primary destination: %s" % str(result))
+	return _pass()
+
+
+## Decision #53 — the guard from #51 only excluded the primary's own cell. Reuses the
+## same collapse fixture, but proves the guard scans the full `taken_destinations` list:
+## the flank's shortened endpoint matches an entry at index 1, not index 0, so a guard
+## that only checked the first (primary-shaped) entry would miss it.
+static func _t_lateral_extra_never_renames_other_candidate() -> Dictionary:
+	var cells: Array = []
+	for col in range(10):
+		for row in range(3):
+			cells.append(_cell(col, row))
+	var hostile: Dictionary = _actor("enemy.far", _cell(0, 0), "enemy")
+	var context: Dictionary = _context(cells, [hostile], {"enemy.far": "hostile"}, {}, [], _cell(0, 1))
+	var goal: Dictionary = _goal("intercept", [_cell(9, 1)])
+	var profile: Dictionary = _profile(2)
+
+	var walkable: Dictionary = OptionService._planning_walkable(context)
+	walkable.erase(_key(_cell(0, 0)))
+	var control: Dictionary = OptionService._build_control(context, walkable)
+	var unguarded: Dictionary = OptionService._build_lateral_extra(
+		context, profile, goal, walkable, control["edge_costs"] as Dictionary,
+		control["edge_sources"] as Dictionary, []
+	)
+	if unguarded.is_empty():
+		return _fail("Fixture must still shorten the flank without a guard: %s" % str(unguarded))
+	var other_candidate_cell: Dictionary = unguarded["destination"] as Dictionary
+	var unrelated_primary_cell: Dictionary = _cell(0, 2)
+	var guarded: Dictionary = OptionService._build_lateral_extra(
+		context, profile, goal, walkable, control["edge_costs"] as Dictionary,
+		control["edge_sources"] as Dictionary, [unrelated_primary_cell, other_candidate_cell]
+	)
+	if not guarded.is_empty():
+		return _fail(
+			"A lateral colliding with any non-primary candidate must not be built: %s" % str(guarded)
+		)
+	return _pass()
+
+
+## Decision #53's own gap, closed: the two tests above prove `_build_lateral_extra`'s
+## internal loop scans whatever `taken_destinations` it is given — they do NOT prove
+## `generate_options()`'s call site actually passes the full candidate list, not just the
+## primary's. This fixture collides the unguarded flank with `forceful` (destination 5,1),
+## a genuinely non-primary candidate (primary/"direct" lands on 5,2) — so a call site
+## regressed to primary-only would let `lateral` steal `forceful`'s cell here, where the two
+## tests above cannot see it. Calls the real public `generate_options()` entry point.
+static func _t_generate_options_guards_lateral_against_full_candidate_set() -> Dictionary:
+	var cells: Array = []
+	for col in range(7):
+		for row in range(3):
+			cells.append(_cell(col, row))
+	var hostile: Dictionary = _actor(
+		"enemy.far", _cell(6, 0), "enemy", false, false, false, false, false, true
+	)
+	var context: Dictionary = _context(cells, [hostile], {"enemy.far": "hostile"}, {}, [], _cell(0, 1))
+	var goal: Dictionary = _goal("advance", [_cell(6, 1)])
+	var profile: Dictionary = _profile(6)
+
+	var result: Dictionary = OptionService.generate_options(context, profile, goal)
+	if not bool(result["valid"]):
+		return _fail("Expected valid advance generation: %s" % str(result))
+	var options: Array = result["options"] as Array
+	var direct: Dictionary = _find_style(options, "direct")
+	var forceful: Dictionary = _find_style(options, "forceful")
+
+	# Computed early so a missing `forceful` can be diagnosed below: this is the flank
+	# destination an unguarded dedup would produce, independent of `options`.
+	var walkable: Dictionary = OptionService._planning_walkable(context)
+	var control: Dictionary = OptionService._build_control(context, walkable)
+	var unguarded: Dictionary = OptionService._build_lateral_extra(
+		context, profile, goal, walkable, control["edge_costs"] as Dictionary,
+		control["edge_sources"] as Dictionary, []
+	)
+
+	if direct.is_empty() or forceful.is_empty():
+		if forceful.is_empty() and not unguarded.is_empty():
+			for option_value: Variant in options:
+				var stolen_check: Dictionary = option_value as Dictionary
+				if str(stolen_check["option_id"]).contains(".lateral.d") \
+						and stolen_check["destination"] == unguarded["destination"]:
+					return _fail(
+						("forceful is missing — a lateral option now occupies its expected " +
+						"destination (%s), meaning the dedup guard let lateral steal forceful's " +
+						"cell: %s") % [str(unguarded["destination"]), str(result)]
+					)
+		return _fail("Fixture must reach both direct and forceful: %s" % str(result))
+	if direct["destination"] == forceful["destination"]:
+		return _fail("Fixture requires forceful to be a genuinely non-primary destination: %s" % str(result))
+
+	# Proves the board reaches the collision: the unguarded flank lands on forceful's cell,
+	# not the primary's.
+	if unguarded.is_empty() or unguarded["destination"] != forceful["destination"]:
+		return _fail("Fixture must collide the flank with forceful's cell: %s vs %s" % [unguarded, forceful])
+
+	for option_value: Variant in options:
+		var option: Dictionary = option_value as Dictionary
+		if str(option["option_id"]).contains(".lateral.d") and option["destination"] == forceful["destination"]:
+			return _fail(
+				"generate_options() let lateral steal a non-primary candidate's cell: %s" % str(result)
+			)
+	return _pass()
+
+
+## Decision #52 — at equal exposure, known hazards outrank distance from a hostile.
+static func _t_low_exposure_hazards_outrank_threat_distance() -> Dictionary:
+	var primary: Dictionary = {
+		"option_id": "option.combat.advance.baseline.c9r9.direct.d1r0.pc1r0",
+		"destination": _cell(1, 0), "path": [_cell(1, 0)], "route_cost": 1,
+		"exposure": 1.0, "hazard_summary": {"known_count": 1, "known_ids": ["hazard.a"]},
+		"objective_progress": 0.2,
+	}
+	var hostiles: Array = [_cell(2, 0)]
+	# Same exposure and farther from the hostile, but through two hazards: never eligible.
+	var far_but_hazardous: Dictionary = primary.duplicate(true)
+	far_but_hazardous["destination"] = _cell(1, 4)
+	far_but_hazardous["path"] = [_cell(1, 1), _cell(1, 2), _cell(1, 3), _cell(1, 4)]
+	far_but_hazardous["hazard_summary"] = {"known_count": 2, "known_ids": ["hazard.a", "hazard.b"]}
+	if not OptionService._select_low_exposure([far_but_hazardous], primary, hostiles).is_empty():
+		return _fail("More hazards than the primary must never qualify on threat distance")
+
+	# Both qualify; the hazard-free cell wins although the other is farther from the hostile.
+	var far_same_hazards: Dictionary = far_but_hazardous.duplicate(true)
+	far_same_hazards["hazard_summary"] = primary["hazard_summary"]
+	var near_no_hazards: Dictionary = primary.duplicate(true)
+	near_no_hazards["destination"] = _cell(1, 1)
+	near_no_hazards["path"] = [_cell(1, 1)]
+	near_no_hazards["hazard_summary"] = {"known_count": 0, "known_ids": []}
+	var picked: Dictionary = OptionService._select_low_exposure(
+		[far_same_hazards, near_no_hazards, far_but_hazardous], primary, hostiles
+	)
+	if picked.is_empty() or picked["destination"] != _cell(1, 1):
+		return _fail("Fewer hazards must outrank threat distance in the sort: %s" % str(picked))
 	return _pass()
 
 
@@ -637,6 +1171,79 @@ static func _expected_option_id(
 		str(goal["goal_id"]).trim_prefix("goal."), style,
 		int(destination["col"]), int(destination["row"]), token,
 	]
+
+
+## Follow-up to the dedup-cap fix (V2-COMBAT-003.5 Phase 3a cleanup): `forceful`,
+## `overcommitted` and `low_exposure` are allowlisted styles, but with the cap frozen at 4
+## kept options and sorted by STYLE_ORDER, they were structurally excluded from
+## `generate_options()`'s real output on almost any board. This proves each is reachable
+## through the full pipeline (not just its builder function called directly, which the
+## other tests in this file already cover) once the cap tracks the true style count.
+static func _t_forceful_overcommitted_low_exposure_reachable_end_to_end() -> Dictionary:
+	# forceful: a 2-step controlled route beats a cheaper-but-longer 3-step clean route on
+	# step count, even though it costs more once repriced — see _build_forceful's doc comment.
+	var forceful_cells: Array = [_cell(0, 0), _cell(1, 0), _cell(2, 0), _cell(0, 1), _cell(0, 2), _cell(0, 3)]
+	var forceful_controller: Dictionary = _actor(
+		"enemy.forceful", _cell(2, -1), "enemy", false, false, false, false, false, true
+	)
+	var forceful_context: Dictionary = _context(
+		forceful_cells, [forceful_controller], {"enemy.forceful": "hostile"}
+	)
+	var forceful_goal: Dictionary = _goal("advance", [_cell(0, 3), _cell(2, 0)])
+	var forceful_result: Dictionary = OptionService.generate_options(
+		forceful_context, _profile(4), forceful_goal
+	)
+	if not bool(forceful_result["valid"]):
+		return _fail("Expected valid forceful-reachable generation: %s" % str(forceful_result))
+	var direct: Dictionary = _find_style(forceful_result["options"] as Array, "direct")
+	var forceful: Dictionary = _find_style(forceful_result["options"] as Array, "forceful")
+	if direct.is_empty() or forceful.is_empty():
+		return _fail("Expected both direct and forceful in real output: %s" % str(forceful_result))
+	if direct["destination"] == forceful["destination"] \
+			or int(forceful["route_cost"]) <= int(direct["route_cost"]):
+		return _fail("Forceful must diverge from and cost more than direct: %s" % str(forceful_result))
+
+	# overcommitted: goal region spans a cheap-near and an expensive-far destination;
+	# overcommitted spends toward capacity where direct takes the cheapest.
+	var overcommitted_context: Dictionary = _context(_line_cells(0, 5, 0))
+	var overcommitted_goal: Dictionary = _goal("advance", [_cell(2, 0), _cell(5, 0)])
+	var overcommitted_result: Dictionary = OptionService.generate_options(
+		overcommitted_context, _profile(5), overcommitted_goal
+	)
+	if not bool(overcommitted_result["valid"]):
+		return _fail("Expected valid overcommitted-reachable generation: %s" % str(overcommitted_result))
+	var overcommitted: Dictionary = _find_style(overcommitted_result["options"] as Array, "overcommitted")
+	if overcommitted.is_empty() or overcommitted["destination"] != _cell(5, 0):
+		return _fail("Expected overcommitted to spend toward capacity: %s" % str(overcommitted_result))
+
+	# low_exposure: a controlled first two cells make hazard count monotonic in path length,
+	# so safe prefers the shortest viable prefix, while a longer same-hazard route dilutes
+	# the fixed controlled-edge count and wins on exposure instead — genuine divergence.
+	var exposure_cells: Array = _line_cells(0, 6, 0)
+	var exposure_controller: Dictionary = _actor(
+		"enemy.exposure", _cell(0, -1), "enemy", false, false, false, false, false, true
+	)
+	var exposure_hazards: Array = [
+		HazardFact.build("hazard.e1", _cell(1, 0), "unstable"),
+		HazardFact.build("hazard.e2", _cell(2, 0), "unstable"),
+	]
+	var exposure_context: Dictionary = _context(
+		exposure_cells, [exposure_controller], {"enemy.exposure": "hostile"}, {}, exposure_hazards
+	)
+	var exposure_goal: Dictionary = _goal("advance", [_cell(3, 0)])
+	var exposure_result: Dictionary = OptionService.generate_options(exposure_context, _profile(6), exposure_goal)
+	if not bool(exposure_result["valid"]):
+		return _fail("Expected valid low_exposure-reachable generation: %s" % str(exposure_result))
+	var safe: Dictionary = _find_style(exposure_result["options"] as Array, "safe")
+	var low_exposure: Dictionary = _find_style(exposure_result["options"] as Array, "low_exposure")
+	if safe.is_empty() or low_exposure.is_empty():
+		return _fail("Expected both safe and low_exposure in real output: %s" % str(exposure_result))
+	if safe["destination"] == low_exposure["destination"] \
+			or int((safe["hazard_summary"] as Dictionary)["known_count"]) \
+				>= int((low_exposure["hazard_summary"] as Dictionary)["known_count"]) \
+			or float(low_exposure["exposure"]) >= float(safe["exposure"]):
+		return _fail("Safe and low_exposure must genuinely diverge: %s" % str(exposure_result))
+	return _pass()
 
 
 static func _pass() -> Dictionary:

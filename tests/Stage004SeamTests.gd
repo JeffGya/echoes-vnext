@@ -60,6 +60,12 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(Stage004SeamTests, "_t_no_ally_contact_no_ally_actor"))
 	runner.register_test("seam/claimant_failed_forces_combat_and_sets_markers",
 		Callable(Stage004SeamTests, "_t_claimant_failed_forces_combat_and_sets_markers"))
+	runner.register_test("seam/claimant_failed_sets_fresh_encounter_id",
+		Callable(Stage004SeamTests, "_t_claimant_failed_sets_fresh_encounter_id"))
+	runner.register_test("seam/debug_force_claimant_combat_sets_fresh_encounter_id",
+		Callable(Stage004SeamTests, "_t_debug_force_claimant_combat_sets_fresh_encounter_id"))
+	runner.register_test("seam/debug_force_claimant_combat_survives_tick_reset",
+		Callable(Stage004SeamTests, "_t_debug_force_claimant_combat_survives_tick_reset"))
 	runner.register_test("seam/nonobjective_charge_failed_sets_hostile_flag",
 		Callable(Stage004SeamTests, "_t_nonobjective_charge_failed_sets_hostile_flag"))
 	runner.register_test("seam/objective_charge_failed_does_not_set_hostile_flag",
@@ -375,6 +381,122 @@ static func _t_claimant_failed_forces_combat_and_sets_markers() -> Dictionary:
 	return { "ok": true }
 
 
+# Follow-up #13: a hostile-Claimant fight must get its own encounter_id, not inherit
+# a stale one left behind by an earlier fight in the same stage.
+static func _t_claimant_failed_sets_fresh_encounter_id() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_encid")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var t: int = env["t"]
+
+	var stale_id := "realm.01.stage.0.earlier_fight"
+	flow_ctx.encounter_id = stale_id
+
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var explore_map: Dictionary = stage.get("explore_map", {})
+	var sit_id := "sit_encounter_id_test"
+	var situations: Array = explore_map.get("situations", [])
+	situations.append({ "id": sit_id, "resolved": false, "revealed": true, "is_objective": false, "objective_index": -1 })
+	explore_map["situations"] = situations
+	stage["explore_map"] = explore_map
+	FlowStageExploreState._write_stage_back(flow_ctx, stage)
+
+	var contact: Dictionary = { "id": sit_id, "role": "claimant", "outcome": "failed" }
+	runtime._apply_action_outcome(
+		runtime._contact_controller().apply_contact_outcome(contact, stage, explore_map, t), t)
+
+	var expected := "realm.01.stage.0." + sit_id + ".claimant"
+	if flow_ctx.encounter_id == stale_id:
+		return { "ok": false, "error": "encounter_id still equals the stale sentinel — not reset" }
+	if str(flow_ctx.encounter_id).is_empty():
+		return { "ok": false, "error": "encounter_id is empty after claimant-failed forced combat" }
+	if str(flow_ctx.encounter_id) != expected:
+		return {
+			"ok": false,
+			"error": "Expected encounter_id='%s', got '%s'" % [expected, str(flow_ctx.encounter_id)]
+		}
+	return { "ok": true }
+
+
+# Follow-up #13: the debug force_claimant_combat command has the same bug (its own
+# docstring says it re-implements the claimant-hostile branch) — same fix, keyed
+# by a persisted per-stage counter since this command has no real sit_id.
+static func _t_debug_force_claimant_combat_sets_fresh_encounter_id() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_debug_encid")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+
+	var stale_id := "realm.01.stage.0.earlier_fight"
+	flow_ctx.encounter_id = stale_id
+
+	# Fresh stage — explore_map.debug_claimant_force_count is absent (defaults to 0),
+	# so this first call produces force_count = 1.
+	runtime.dispatch({ "type": "debug.claimant.force_combat" })
+
+	var expected := "realm.01.stage.0.claimant_debug.1"
+	if flow_ctx.encounter_id == stale_id:
+		return { "ok": false, "error": "encounter_id still equals the stale sentinel — not reset" }
+	if str(flow_ctx.encounter_id).is_empty():
+		return { "ok": false, "error": "encounter_id is empty after debug.claimant.force_combat" }
+	if str(flow_ctx.encounter_id) != expected:
+		return {
+			"ok": false,
+			"error": "Expected encounter_id='%s', got '%s'" % [expected, str(flow_ctx.encounter_id)]
+		}
+	return { "ok": true }
+
+
+# Follow-up review fix: qa-verifier found the counter nested inside explore_map, so
+# FlowStageExploreState._reset_session_state() — which runs on EVERY re-entry into
+# flow.stage_explore, including after every combat resolves — silently wiped it back
+# to 0. Proves the counter survives a REAL re-entry, not just a manual sim_tick reset.
+# Drives FlowStageExploreState.enter() directly on a fresh instance — behaviourally
+# identical to the registered singleton's enter() the real flow_machine.transition()
+# calls, since this state has no instance fields (mutation goes through flow_ctx).
+static func _t_debug_force_claimant_combat_survives_tick_reset() -> Dictionary:
+	var env: Dictionary = _boot_env("claimant_debug_tick_reset")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed (realm not created)" }
+	var runtime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var t: int = env["t"]
+
+	runtime.dispatch({ "type": "debug.claimant.force_combat" })
+	var first_id: String = str(flow_ctx.encounter_id)
+
+	# Sentinel on a field _reset_session_state() always clears to "" — proves the
+	# re-entry below really ran the reset, not a no-op.
+	var stage_before: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var map_before: Dictionary = stage_before.get("explore_map", {})
+	map_before["last_situation_id"] = "sentinel_before_reset"
+	stage_before["explore_map"] = map_before
+	FlowStageExploreState._write_stage_back(flow_ctx, stage_before)
+
+	# Real re-entry into flow.stage_explore — the same path every post-combat return
+	# (win or lose) takes. This is what wiped the old explore_map-nested counter.
+	FlowStageExploreState.new().enter(flow_ctx, t)
+
+	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	var map_after: Dictionary = stage_after.get("explore_map", {})
+	if str(map_after.get("last_situation_id", "sentinel_before_reset")) == "sentinel_before_reset":
+		return { "ok": false, "error": "last_situation_id sentinel survived — enter() did not run the real session reset" }
+
+	runtime.dispatch({ "type": "debug.claimant.force_combat" })
+	var second_id: String = str(flow_ctx.encounter_id)
+
+	if first_id != "realm.01.stage.0.claimant_debug.1":
+		return { "ok": false, "error": "Expected first_id='realm.01.stage.0.claimant_debug.1', got '%s'" % first_id }
+	if second_id == first_id:
+		return { "ok": false, "error": "encounter_id did not change after real stage_explore re-entry — still '%s'" % second_id }
+	if second_id != "realm.01.stage.0.claimant_debug.2":
+		return { "ok": false, "error": "Expected second_id='realm.01.stage.0.claimant_debug.2', got '%s'" % second_id }
+	return { "ok": true }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 4-5. Charge pressure marker — ContactController.apply_contact_outcome "charge" role
 # ─────────────────────────────────────────────────────────────────────────────
@@ -574,21 +696,48 @@ static func _t_charge_pressure_bumps_endure_wave_size_and_clears_flag() -> Dicti
 # ─────────────────────────────────────────────────────────────────────────────
 # 8-11, 19-20. Companion invite compute-once / no-stack / gating — V2-INFRA-003 Phase 4
 # Slice 5 moved this to RecruitmentConsequenceService.compute_ally_recruit_offer_if_eligible
-# (is_victory, rounds_total, t), reached via runtime._recruitment_consequence_service().
-# Called directly (underscore is convention only; no real GDScript privacy —
-# precedent: LeadershipEmotionTests.gd calls CombatTurnActionService._apply_kill_momentum(...)).
+# (is_victory, rounds_total, t), instantiated directly by _light_recruitment_env() rather
+# than reached through a full FlowRuntime.
 # flow_ctx.dev_force_recruit forces the roll outcome ("success"/"fail") so these
 # tests don't depend on the seeded roll landing a particular way.
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Lightweight env for RecruitmentConsequenceService methods — these read/write flow_ctx +
+# config_service + logger only (see core/sanctum/RecruitmentConsequenceService.gd), never
+# touch encounter machinery, RealmService terrain, or the roster/EchoFactory setup _boot_env()
+# exists for. Constructs the service directly instead of going through FlowRuntime.new()+
+# boot() (disk save I/O) + RealmService.get_or_create + 3-echo roster generation, none of
+# which this service reads. save_data is a bare dict matching the shape
+# FlowStageExploreState._get_current_stage/_write_stage_back and SanctumService
+# .get_active_party_echoes expect — same minimal-context pattern as
+# _t_final_snapshot_has_combat_intro_line_and_no_recruit_offer_key below.
+static func _light_recruitment_env(tag: String) -> Dictionary:
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var config := ConfigService.new()
+	config.load_balance()
+
+	var flow_ctx := FlowContext.new()
+	flow_ctx.config_service = config
+	flow_ctx.logger = logger
+	flow_ctx.campaign_seed = CampaignSeed.new(12346)
+	flow_ctx.realm_id = "realm.01"
+	flow_ctx.stage_id = "stage.0"
+	flow_ctx.encounter_id = "realm.01.stage.0." + tag
+	flow_ctx.save_data = {
+		"realms": { "realm.01": { "stages": [ { "index": 0, "explore_map": {} } ] } },
+		"sanctum": {},
+	}
+
+	var service := RecruitmentConsequenceService.new(flow_ctx, config, logger)
+	return { "flow_ctx": flow_ctx, "config_service": config, "logger": logger, "service": service }
+
 
 # Builds a minimal env with a joined is_ally actor + a source ally_contact on
 # explore_map — the two preconditions _compute_ally_recruit_offer_if_eligible
 # requires before it will write anything.
 static func _make_ally_offer_env(tag: String, ally_dead: bool = false) -> Dictionary:
-	var env: Dictionary = _boot_env(tag)
-	if env.is_empty():
-		return {}
-	var runtime = env["runtime"]
+	var env: Dictionary = _light_recruitment_env(tag)
 	var flow_ctx: FlowContext = env["flow_ctx"]
 
 	var ectx := EncounterContext.new()
@@ -615,7 +764,8 @@ static func _make_ally_offer_env(tag: String, ally_dead: bool = false) -> Dictio
 	stage["explore_map"] = explore_map
 	FlowStageExploreState._write_stage_back(flow_ctx, stage)
 
-	return { "runtime": runtime, "flow_ctx": flow_ctx, "ectx": ectx }
+	env["ectx"] = ectx
+	return env
 
 
 # V2-STAGE-004 Phase 4 redesign: the invite now lives on save_data.sanctum.companion_invite
@@ -634,13 +784,11 @@ static func _read_companion_invite(flow_ctx: FlowContext) -> Dictionary:
 # the roll succeeded.
 static func _t_companion_invite_created_on_successful_roll() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_created")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if invite.is_empty():
@@ -658,14 +806,12 @@ static func _t_companion_invite_created_on_successful_roll() -> Dictionary:
 # touch the already-written invite), even if the ally's underlying state changed between calls.
 static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_noreroll")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	var ectx: EncounterContext = env["ectx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 	var invite1: Dictionary = _read_companion_invite(flow_ctx).duplicate(true)
 	if invite1.is_empty():
 		return { "ok": false, "error": "first call did not write a companion invite" }
@@ -675,7 +821,7 @@ static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> 
 	(ectx.actors[0] as Dictionary)["current_hp"] = 1
 	ectx.echo_action_logs["ally_test_01"] = { "damage_dealt": 0, "damage_taken": 0, "kills": 0 }
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 1)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 1)
 	var invite2: Dictionary = _read_companion_invite(flow_ctx)
 
 	if int(invite2.get("chance", -1)) != int(invite1.get("chance", -2)):
@@ -691,13 +837,11 @@ static func _t_companion_invite_same_encounter_second_call_does_not_reroll() -> 
 # invite — the dead-ally gate runs before the roll is ever evaluated.
 static func _t_companion_invite_dead_ally_gate_no_invite() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_dead_gate", true)
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -709,13 +853,11 @@ static func _t_companion_invite_dead_ally_gate_no_invite() -> Dictionary:
 # produce an invite.
 static func _t_companion_invite_nonvictory_gate_no_invite() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_nonvictory_gate")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(false, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(false, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -728,13 +870,11 @@ static func _t_companion_invite_nonvictory_gate_no_invite() -> Dictionary:
 # "failed offer" record like the old resolve-screen field had).
 static func _t_companion_invite_failed_roll_no_invite() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_failed_roll")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.dev_force_recruit = "fail"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 
 	var invite: Dictionary = _read_companion_invite(flow_ctx)
 	if not invite.is_empty():
@@ -748,14 +888,12 @@ static func _t_companion_invite_failed_roll_no_invite() -> Dictionary:
 # specifically, distinct from the same-encounter compute-once guard tested above.
 static func _t_companion_invite_no_stack_does_not_overwrite_pending() -> Dictionary:
 	var env: Dictionary = _make_ally_offer_env("invite_nostack")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	var ectx: EncounterContext = env["ectx"]
 	flow_ctx.dev_force_recruit = "success"
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 0)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 0)
 	var invite1: Dictionary = _read_companion_invite(flow_ctx).duplicate(true)
 	if invite1.is_empty():
 		return { "ok": false, "error": "first encounter did not write a companion invite" }
@@ -768,7 +906,7 @@ static func _t_companion_invite_no_stack_does_not_overwrite_pending() -> Diction
 		"ally_test_02": { "damage_dealt": 20, "damage_taken": 10, "kills": 1 },
 	}
 
-	runtime._recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(true, 3, 1)
+	service.compute_ally_recruit_offer_if_eligible(true, 3, 1)
 	var invite2: Dictionary = _read_companion_invite(flow_ctx)
 
 	if str(invite2.get("ally_name", "")) != str(invite1.get("ally_name", "")):
@@ -915,12 +1053,13 @@ static func _t_objective_state_has_charge_pressure_applied_bool() -> Dictionary:
 # but must NOT touch a pending sanctum.companion_invite — the invite is Sanctum-scoped now
 # and persists until the player explicitly accepts/declines it (no auto-clear on teardown).
 static func _t_clear_ally_fields_clears_contact_and_intro_not_companion_invite() -> Dictionary:
-	var env: Dictionary = _boot_env("clear_fields")
-	if env.is_empty():
-		return { "ok": false, "error": "setup failed (realm not created)" }
-	var runtime = env["runtime"]
+	# clear_ally_fields_if_present, like compute_ally_recruit_offer_if_eligible above, only
+	# reads/writes flow_ctx + config_service + logger — no encounter machinery, no roster.
+	# Uses the same lightweight env for the same reason.
+	var env: Dictionary = _light_recruitment_env("clear_fields")
+	var service: RecruitmentConsequenceService = env["service"]
 	var flow_ctx: FlowContext = env["flow_ctx"]
-	var t: int = env["t"]
+	var t: int = 0
 
 	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
 	var explore_map: Dictionary = stage.get("explore_map", {})
@@ -937,7 +1076,7 @@ static func _t_clear_ally_fields_clears_contact_and_intro_not_companion_invite()
 		"chance": 60, "ally_name": "Pending Ally",
 	}
 
-	runtime._recruitment_consequence_service().clear_ally_fields_if_present(t)
+	service.clear_ally_fields_if_present(t)
 
 	var stage_after: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
 	var map_after: Dictionary = stage_after.get("explore_map", {})
@@ -3099,7 +3238,8 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	stage_explore.set("_bottom_hud_region", stage_explore.get_node("%BottomHudRegion"))
 	stage_explore.set("_step_budget_row", stage_explore.get_node("%StepBudgetRow"))
 	stage_explore.set("_directive_badge", stage_explore.get_node("%DirectiveBadge"))
-	stage_explore.set("_party_layer", stage_explore.get_node("PartyTokenLayer"))
+	stage_explore.set("_party_layer", stage_explore.get_node("%PartyTokenLayer"))
+	stage_explore.set("_board_root", stage_explore.get_node("%BoardRoot"))
 	stage_explore.call("set_layout", {
 		"profile": &"wide",
 		"logical_size": Vector2(1800, 900),
@@ -3109,8 +3249,9 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	if directive_badge == null or absf((directive_badge.offset_right - directive_badge.offset_left) - 204.0) > 0.1:
 		stage_explore.queue_free()
 		return { "ok": false, "error": "StageExplore directive badge is not capped while field gains wide space" }
-	var board := stage_explore.get_node_or_null("Board") as TileMapLayer
-	if board == null:
+	var board := stage_explore.get_node_or_null("%Board") as TileMapLayer
+	var board_root := stage_explore.get_node_or_null("%BoardRoot") as Node2D
+	if board == null or board_root == null:
 		stage_explore.queue_free()
 		return { "ok": false, "error": "StageExplore board missing" }
 	board.set_cell(Vector2i(4, 7), 0, Vector2i.ZERO)
@@ -3138,8 +3279,8 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	var visual_min := center_min - Vector2(64, 64)
 	var visual_max := center_max + Vector2(64, 32)
 	var preview_scale := float(stage_explore.get("_preview_scale"))
-	var transformed_min := board.position + visual_min * preview_scale
-	var transformed_max := board.position + visual_max * preview_scale
+	var transformed_min := board_root.position + visual_min * preview_scale
+	var transformed_max := board_root.position + visual_max * preview_scale
 	var safe_preview: Rect2 = stage_explore.call("_preview_safe_rect")
 	var epsilon := 0.1
 	if transformed_min.x < safe_preview.position.x - epsilon \
@@ -3184,45 +3325,58 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 			"ok": false,
 			"error": "Stage compact preview leaves only %.1f units for the spatial field" % compact_preview_rect.size.y,
 		}
-	stage_explore.set("_current_mode", &"explore")
+	stage_explore.queue_free()
+
+	# Live resize in explore mode, on the real camera: the camera keeps its world point and the
+	# player's zoom, and its zoom floor follows the new viewport.
+	var tree := Engine.get_main_loop() as SceneTree
+	var fixture_host := tree.current_scene.get_node_or_null("UISnapshotRenderer") if tree != null and tree.current_scene != null else null
+	if fixture_host == null:
+		return { "ok": false, "error": "Ready fixture host unavailable for StageExplore live resize test" }
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(960, 540)
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	fixture_host.add_child(viewport)
+	var resized := stage_explore_scene.instantiate() as StageExploreScreen
+	viewport.add_child(resized)
 	var compact_layout := {
 		"profile": &"compact",
 		"logical_size": Vector2(960, 540),
 		"safe_insets": Vector4.ZERO,
 	}
-	var compact_focus: Vector2 = (stage_explore.call("_explore_spatial_rect", compact_layout) as Rect2).get_center()
-	var focused_world_point := (visual_min + visual_max) * 0.5
-	board.scale = Vector2(0.77, 0.77)
-	board.position = compact_focus - focused_world_point * board.scale.x
-	var compact_board_position := board.position
-	stage_explore.call("set_layout", {
+	resized.set_layout(compact_layout)
+	var big_map := _stage_explore_reuse_snapshot()
+	big_map["data"]["map_width"] = 60
+	big_map["data"]["map_height"] = 60
+	resized.set_snapshot(big_map)
+	var resized_camera := resized.get("camera") as BoardCameraController
+	var compact_min_zoom: float = resized_camera.get("_min_zoom")
+	resized_camera.zoom = Vector2(0.77, 0.77)
+	resized_camera.position = Vector2(123.0, -77.0)
+	viewport.size = Vector2i(1800, 900)
+	resized.set_layout({
 		"profile": &"wide",
 		"logical_size": Vector2(1800, 900),
 		"safe_insets": Vector4.ZERO,
 	})
-	var wide_layout := {
-		"profile": &"wide",
-		"logical_size": Vector2(1800, 900),
-		"safe_insets": Vector4.ZERO,
-	}
-	var wide_focus: Vector2 = (stage_explore.call("_explore_spatial_rect", wide_layout) as Rect2).get_center()
-	var focused_after_resize := (wide_focus - board.position) / board.scale.x
-	if not focused_after_resize.is_equal_approx(focused_world_point) \
-			or board.scale != Vector2(0.77, 0.77) \
-			or board.position == compact_board_position:
-		stage_explore.queue_free()
+	var wide_min_zoom: float = resized_camera.get("_min_zoom")
+	var kept_point := resized_camera.position.is_equal_approx(Vector2(123.0, -77.0))
+	var kept_zoom := resized_camera.zoom.is_equal_approx(Vector2(0.77, 0.77))
+	viewport.free()
+	if not kept_point or not kept_zoom:
 		return { "ok": false, "error": "StageExplore live resize did not preserve its focused world point and zoom" }
-	stage_explore.queue_free()
+	if wide_min_zoom <= compact_min_zoom:
+		return { "ok": false, "error": "StageExplore live resize did not refit the camera zoom floor (%f -> %f)" % [compact_min_zoom, wide_min_zoom] }
 
 	var combat_scene := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
 	var combat := combat_scene.instantiate()
 	if combat == null:
 		return { "ok": false, "error": "Failed to instantiate CombatBoardScreen" }
 	combat.set("_back_button", combat.get_node("BackButton"))
-	combat.set("_board", combat.get_node("Board"))
-	combat.set("_move_telegraph_layer", combat.get_node("MoveTelegraphLayer"))
-	combat.set("_token_layer", combat.get_node("TokenLayer"))
-	combat.set("_distance_layer", combat.get_node("DistanceLayer"))
+	combat.set("_board", combat.get_node("%Board"))
+	combat.set("_move_telegraph_layer", combat.get_node("%MoveTelegraphLayer"))
+	combat.set("_token_layer", combat.get_node("%TokenLayer"))
+	combat.set("_distance_layer", combat.get_node("%DistanceLayer"))
 	combat.set("_round_label", combat.get_node("RoundLabel"))
 	combat.set("_objective_banner", combat.get_node("%ObjectiveBanner"))
 	combat.set("_recenter_button", combat.get_node("%RecenterButton"))

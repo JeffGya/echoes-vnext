@@ -239,6 +239,11 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	_bark_is_response = false  # V2-VOICE-001
 	if _actor.has("emotion"):
 		(_actor["emotion"] as Dictionary).erase("_resilience_fired")
+	# Set by CombatTurnActionService._resist_fear() during another actor's activation.
+	# Consumed here, not at the bark read, so a turn that returns early (refusal) drops it
+	# instead of voicing a stale resilience several turns later.
+	var resist_fear_since_last_turn: bool = bool(_actor.get("_resist_fear_fired", false))
+	_actor.erase("_resist_fear_fired")
 
 	# PROG-010: capture emotional state at turn start (for event detection)
 	var start_fear: int = int(_actor.get("fear", 0))
@@ -247,12 +252,6 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 	# PROG-010: check last_echo_standing
 	var last_echo_standing := _is_last_echo_standing(context)
-
-	# PROG-009: tick per-round runtime cooldown counters before candidate generation.
-	if _actor.has("_read_field_cooldown"):
-		_actor["_read_field_cooldown"] = maxi(0, int(_actor["_read_field_cooldown"]) - 1)
-	if _actor.has("_withdraw_cooldown"):
-		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
 
 	# COMBAT-003 + V2-PROG-006 + V2-PROG-010 + V2-PROG-012 Phase 7: Absolute Fear Rule — dynamic threshold.
 	# Band base from refusal_thresholds_by_band (nascent=65, forming=80, grounded=88, whole=95) is now
@@ -372,6 +371,10 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	augmented_context["presence_strength"] = presence_strength
 	augmented_context["rank_strength"]     = rank_strength
 	augmented_context["resilience_traits"] = resilience_traits
+	# V2-COMBAT-003.5 Phase 3b: BehaviorArbiter's movement-style term reads this.
+	# `ctx_inputs` above carries the same value but only reaches
+	# MaturityExpressionService, so the arbiter saw "" until this line existed.
+	augmented_context["calling_family"]    = calling_family
 	augmented_context["leadership_traits"] = leadership_traits
 	# V2-INFRA-003 pass 8: BehaviorArbiter reads OTHER actors' Whole-band leadership
 	# traits (aura score effects), so it needs the trait table and the band map, not
@@ -401,6 +404,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			and augmented_context.has("movement_goals") \
 			and augmented_context.has("movement_options") \
 			and _behavior_module.has_method("select_movement_intent"):
+		StopShortContextService.apply_cell_search(augmented_context, logger, t)
 		var movement_selection: Dictionary = _behavior_module.call(
 			"select_movement_intent",
 			augmented_context,
@@ -425,6 +429,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 			intent["_divergence_probe"] = movement_selection.get("_divergence_probe", {})
 			intent["_decision_inputs"] = movement_selection.get("_decision_inputs", {})
 			intent["_guidance_response"] = movement_selection.get("_guidance_response", {})
+			StopShortContextService.carry(intent, movement_selection, _actor, logger, t)
 		else:
 			# The movement path rejected the board. Record and announce the exact
 			# reason before falling back — see the legacy selector ledger at the top
@@ -450,7 +455,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		legacy_selector_no_context_uses += 1
 		intent = _behavior_module.select_intent(augmented_context)
 	_last_intent = intent
-	# Persist last_intent to actor dict so _build_board_summary() can read it next turn.
+	# Persist last_intent to actor dict so BoardAssessmentService.build_board_summary() can read it next turn.
 	# ActorStateMachine is recreated each turn (FlowRuntime.new per actor), so _last_intent
 	# would otherwise reset to {} on every turn — meaning situational conditions that depend
 	# on the previous action (repeated_move_penalty, repeated_guard_penalty) never fire.
@@ -651,7 +656,8 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var end_fear: int = int(_actor.get("fear", 0))
 	var end_morale: int = int(_actor.get("morale", 50))
 	var end_morale_tier: String = EmotionService.get_morale_tier(end_morale)
-	var resilience_fired: bool = (_actor.get("emotion", {}) as Dictionary).get("_resilience_fired", false)
+	var resilience_fired: bool = resist_fear_since_last_turn \
+		or bool((_actor.get("emotion", {}) as Dictionary).get("_resilience_fired", false))
 	var action_type: String = str(intent.get("action_type", ""))
 	var arch: String = str(_actor.get("archetype_birth", ""))
 	var calling: String = str(_actor.get("calling_origin", ""))
@@ -660,6 +666,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# V2-PROG-012 Phase 11 playtest fix: config-driven divergence bark cooldown
 	# — see data.maturity_expression.divergence.bark_cooldown_ticks.
 	var divergence_bark_cooldown: int = int(expr_cfg.get("divergence", {}).get("bark_cooldown_ticks", 10))
+	# V2-COMBAT-003.5 Phase 5 decision #47: config-driven combat_resilient bark
+	# cooldown — see data.maturity_expression.combat_resilient.bark_cooldown_ticks.
+	var resilient_bark_cooldown: int = int(expr_cfg.get("combat_resilient", {}).get("bark_cooldown_ticks", 10))
 	# V2-COMBAT-003 phase 9 TEMPORARY visual (V2-COMBAT-004 removes it): the
 	# Echo's answer to the Keeper's guidance, so a player can finally see it.
 	var guidance_consent: String = str(guidance_response.get("consent", ""))
@@ -667,7 +676,8 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var guidance_reason_text: String = str(guidance_response.get("reason_text", ""))
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
-		divergence_bark_cooldown, guidance_consent, guidance_reason_text, guidance_reading)
+		divergence_bark_cooldown, guidance_consent, guidance_reason_text, guidance_reading,
+		resilient_bark_cooldown)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -818,7 +828,8 @@ func _select_bark(
 	divergence_cooldown_ticks: int = 10,
 	guidance_consent: String = "",
 	guidance_reason_text: String = "",
-	guidance_reading: String = ""
+	guidance_reading: String = "",
+	resilient_cooldown_ticks: int = 10
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -826,9 +837,14 @@ func _select_bark(
 	# Priority 1: combat_last_stand
 	if last_echo_standing:
 		context_key = "combat_last_stand"
-	# Priority 2: combat_resilient
-	elif resilience_fired:
+	# Priority 2: combat_resilient — V2-COMBAT-003.5 Phase 5 decision #47: gated by its own
+	# cooldown HERE, at selection, not after. Gating only after context_key was already
+	# claimed would still crowd out fear_extreme/fear_rising/morale_falling/guidance/divergence
+	# below on a cooldown turn (this if/elif chain never reaches them once a branch matches),
+	# even on turns where ShoutBank has no line to show and nothing becomes visible.
+	elif resilience_fired and t >= int(_actor.get("_resilient_bark_next_t", 0)):
 		context_key = "combat_resilient"
+		_actor["_resilient_bark_next_t"] = t + resilient_cooldown_ticks
 	# Priority 3: combat_fear_extreme (fear crossed 80)
 	elif end_fear >= 80 and start_fear < 80:
 		context_key = "combat_fear_extreme"
@@ -913,7 +929,7 @@ func _select_bark(
 	# connects the real interface), so a response is already rare, and the
 	# routine cooldown must never swallow the first player-visible proof of it.
 	const _HIGH_PRIORITY_BARK: Array = [
-		"combat_last_stand", "combat_resilient",
+		"combat_last_stand",
 		"combat_fear_extreme", "combat_fear_rising", "combat_morale_falling",
 		"combat_guidance_object", "combat_guidance_refuse", "combat_guidance_interpret"
 	]
@@ -921,9 +937,18 @@ func _select_bark(
 	# routine _bark_next_t gate (see the Priority 5.5 comment above) but is not
 	# unconditional like Tier 1 — it gets its own, separate, shorter cooldown so
 	# the same Echo cannot voice divergence on two consecutive turns.
+	# V2-COMBAT-003.5 Phase 5 decision #47: combat_resilient moved out of
+	# _HIGH_PRIORITY_BARK for the same reason — Phase 5's resist_fear wiring
+	# (decision #46) makes _resilience_fired true far more often than before, so
+	# an unconditional exemption let a Standing 3+ resist_fear echo taking regular
+	# hits bark it on nearly every turn, crowding out fear/morale/guidance barks.
+	# Its cooldown is already applied above, at priority selection — this gate
+	# never needs to re-check it here.
 	if context_key == "combat_divergence":
 		if t < int(_actor.get("_divergence_bark_next_t", 0)):
 			return
+	elif context_key == "combat_resilient":
+		pass  # its cooldown was already enforced above, at priority selection
 	elif not _HIGH_PRIORITY_BARK.has(context_key):
 		if t < int(_actor.get("_bark_next_t", 0)):
 			return
@@ -961,6 +986,9 @@ func _select_bark(
 		_actor["_bark_next_t"] = t + _compute_bark_cooldown()
 		# V2-PROG-012 Phase 11 playtest fix: divergence-specific cooldown —
 		# transient-only, same pattern as _bark_next_t (no new save field).
+		# combat_resilient's own cooldown is set earlier, at priority selection —
+		# not here, so it applies even on a turn where no ShoutBank line is found
+		# (see the Priority 2 comment above).
 		if context_key == "combat_divergence":
 			_actor["_divergence_bark_next_t"] = t + divergence_cooldown_ticks
 
@@ -1211,9 +1239,10 @@ func _get_most_feared_ally(allies: Array) -> Dictionary:
 
 # PROG-009: Update per-round passive state counters after each turn.
 # Okofor: tracks anchor_rounds for guard/protect_ally bonus (+8 per round, cap 3 rounds = +24).
-# Onyamesu: tracks stationary_rounds for soft-taunt eligibility.
 # Skill once-per-combat flags are set here when the skill fires.
-# Skill cooldowns (read_field, withdraw) are ticked at turn START instead.
+# Runtime cooldown counters (_withdraw_cooldown, _read_field_cooldown) tick here,
+# at turn END, so they still hold at BehaviorArbiter's cooldown check earlier in
+# the same actor's next turn (V2-COMBAT-003.5 Phase 5; follow-up #12).
 ## `logger` is optional so existing direct-drive test callers keep their signature.
 ## When present, the two fear-relieving passives below emit an audit line — without
 ## it the Onyamesu/Okomfo fear relief is invisible to the ledger.
@@ -1224,17 +1253,17 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 	var moved: bool = bool(actual_moved_override) if actual_moved_override != null \
 		else (action == "actor.move" or action == "actor.withdraw")
 
+	if _actor.has("_withdraw_cooldown"):
+		_actor["_withdraw_cooldown"] = maxi(0, int(_actor["_withdraw_cooldown"]) - 1)
+	if _actor.has("_read_field_cooldown"):
+		_actor["_read_field_cooldown"] = maxi(0, int(_actor["_read_field_cooldown"]) - 1)
+
 	match calling_origin:
 		"okofor":
 			if moved:
 				_actor["_anchor_rounds"] = 0
 			else:
 				_actor["_anchor_rounds"] = mini(int(_actor.get("_anchor_rounds", 0)) + 1, 3)
-		"onyamesu":
-			if moved:
-				_actor["_stationary_rounds"] = 0
-			else:
-				_actor["_stationary_rounds"] = int(_actor.get("_stationary_rounds", 0)) + 1
 		"okomfo":
 			if action == "actor.read_field":
 				var streak: int     = int(_actor.get("_read_field_streak", 0)) + 1
@@ -1298,7 +1327,25 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 				if str(ma.get("id", "")) == mark_target:
 					ma["marked_by"]       = str(_actor.get("id", ""))
 					ma["_mark_duration"]  = 2
+					# A skill mark replaces a weaker observe mark outright.
+					ma.erase("marked_strength")
+					ma.erase("_mark_kind")
 					break
+
+	# Generic observe (a stop-short benefit): a weaker, shorter mark that never replaces one.
+	if action == "actor.observe":
+		var observe_target: String = str(intent.get("target_id", ""))
+		var observe_cfg: Dictionary = ((((context.get("cfg", {}) as Dictionary).get("data", {}) as Dictionary)
+			.get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary).get("observe", {}) as Dictionary
+		for ob_v in context.get("all_actors", []):
+			if not (ob_v is Dictionary): continue
+			var ob: Dictionary = ob_v
+			if str(ob.get("id", "")) == observe_target and str(ob.get("marked_by", "")).is_empty():
+				ob["marked_by"]       = str(_actor.get("id", ""))
+				ob["_mark_duration"]  = int(observe_cfg.get("mark_rounds", 1))
+				ob["marked_strength"] = float(observe_cfg.get("marked_strength", 5))
+				ob["_mark_kind"]      = "observe"
+				break
 
 	# Tick mark duration — decrement on the marked actor's turn (we do it each round here)
 	if _actor.has("_mark_duration"):
@@ -1306,6 +1353,8 @@ func _update_passive_state(intent: Dictionary, context: Dictionary, t: int,
 		if dur <= 0:
 			_actor.erase("marked_by")
 			_actor.erase("_mark_duration")
+			_actor.erase("marked_strength")
+			_actor.erase("_mark_kind")
 		else:
 			_actor["_mark_duration"] = dur
 

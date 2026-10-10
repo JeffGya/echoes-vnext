@@ -36,7 +36,8 @@
 #     requested no save and must not start: FlowRuntime._mark_save_requested() joins reasons
 #     with "|", so a save queued here would glue its reason onto the next dispatch's string.
 #   - Calls no controller. It calls CombatService, LeadershipEmotionService and
-#     ContributionLedgerService — all domain services.
+#     ContributionLedgerService — all domain services — plus the pure resist_fear and
+#     expression-band helpers on EmotionService/MaturityExpressionService (no mutation).
 #
 # CONSTRUCTOR DEPENDENCIES — TWO, following the LiveMovementContextService precedent from
 # slice 6G. config_service is NOT taken: the body reads no config of its own. Everything it
@@ -55,7 +56,7 @@
 #           leadership_expr_cfg, passed in;
 #           `round` and `t`, passed in — so the log lines and CombatService.resolve_action()
 #           carry the exact values the caller logged for the same turn.
-#   WRITES  ectx.last_round_results (EXACTLY ONE append per call, on every arm);
+#   WRITES  ectx.last_round_results (one append per call, except when the actor.guard arm gets {} from CombatService);
 #           ectx.round_bark_events (the activation bark, and the combat_ko promotion);
 #           ectx.echo_action_logs, through ContributionLedgerService only;
 #           the target actor: fear, _last_attacker_id, morale (guard absorb, near death),
@@ -145,6 +146,7 @@ func resolve_activation(
 	})
 
 	# Resolve the action and append result to last_round_results.
+	var results_before: int = ectx.last_round_results.size()
 	match action_type:
 		"melee_attack":
 			var target_id: String = str(intent.get("target_id", ""))
@@ -187,8 +189,8 @@ func resolve_activation(
 					# In-combat fear accumulation: each hit adds fear pressure to the defender (runtime dict only).
 					var combat_emo_cfg: Dictionary = bdata.get("combat", {}).get("emotion", {})
 					var fear_per_hit: int = int(combat_emo_cfg.get("fear_per_hit", 2))
-					var hit_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
-						target, fear_per_hit, ectx.actors, leadership_expr_cfg)
+					var hit_fear_applied := _resist_fear(target, LeadershipEmotionServiceScript.apply_fear_gain(
+						target, fear_per_hit, ectx.actors, leadership_expr_cfg), leadership_expr_cfg)
 					var _fear_before: int = int(target.get("fear", 0))
 					target["fear"] = mini(100, _fear_before + hit_fear_applied)
 					# S14b Tier 2 (offensive): credit the attacker the EFFECTIVE post-clamp fear
@@ -313,8 +315,8 @@ func resolve_activation(
 						var nd_morale: int = int(combat_emo_cfg.get("morale_on_near_death", 7))
 						var nd_fear:   int = int(combat_emo_cfg.get("fear_on_near_death", 8))
 						target["morale"] = mini(100, int(target.get("morale", 50)) + nd_morale)
-						var nd_fear_applied := LeadershipEmotionServiceScript.apply_fear_gain(
-							target, nd_fear, ectx.actors, leadership_expr_cfg)
+						var nd_fear_applied := _resist_fear(target, LeadershipEmotionServiceScript.apply_fear_gain(
+							target, nd_fear, ectx.actors, leadership_expr_cfg), leadership_expr_cfg)
 						target["fear"]   = mini(100, int(target.get("fear", 0)) + nd_fear_applied)
 						logger.info(t, "actor.near_death", "Near-death trigger — morale+fear tick", {
 							"actor_id": str(target.get("id", "")),
@@ -421,6 +423,27 @@ func resolve_activation(
 				"damage":      0,
 				"is_kill":     false,
 			})
+
+	# Stop-short step only: the report rides on the entry this call appended, if any.
+	var stop_short_report: Dictionary = intent.get("_stop_short_report", {}) as Dictionary
+	if not stop_short_report.is_empty() and ectx.last_round_results.size() > results_before:
+		(ectx.last_round_results.back() as Dictionary)["stop_short"] = stop_short_report.duplicate(true)
+
+
+## The target's own resist_fear, applied after leadership dampening, on per-hit and near-death
+## fear only. Deliberately NOT inside apply_fear_gain(): that choke also carries fear_per_round,
+## the witness and overwhelm paths, which V2-EMOTION-002 (fear economy) owns.
+## Band is derived from rank, not actor._expression_band, because a target can be hit before
+## its first turn writes that field.
+## Sets target._resist_fear_fired; ActorStateMachine consumes it at the start of the target's
+## own next turn and voices combat_resilient then (barks are only chosen on the speaker's turn).
+static func _resist_fear(target: Dictionary, amount: int, expr_cfg: Dictionary) -> int:
+	var band := MaturityExpressionService.get_expression_band_for_echo(
+		target, expr_cfg.get("band_by_standing", {}) as Dictionary)
+	var traits: Array = target.get("resilience_traits", []) as Array
+	if EmotionService.resist_fear_fires(amount, traits, band):
+		target["_resist_fear_fired"] = true
+	return EmotionService.apply_resist_fear(amount, traits, band)
 
 
 ## S14b/leadership: the kill_momentum trait ripple, moved with its sole production caller (the

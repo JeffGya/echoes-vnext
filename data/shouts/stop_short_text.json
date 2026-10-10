@@ -1,0 +1,43 @@
+{
+	"_status": "Wording reviewed and edited by Jeff on 2026-10-09; kept until a tone-of-voice document exists. Keys starting with an underscore are notes, not text. Voice rule V26: a line an Echo says about itself is first person. A line about ANOTHER Echo must sit under a node with _about_other true and use the project pronoun lookup; no such line exists now.",
+	"row_word": {
+		"_status": "PROPOSAL (placeholder). return_route is built in PR2.",
+		"guard": "Braces",
+		"observe": "Watches",
+		"hold": "Holds",
+		"return_route": "Stays back"
+	},
+	"reason_line": {
+		"_status": "PROPOSAL (placeholder). A benefit with no with_cause entry for a code uses its plain line.",
+		"guard": {
+			"_status": "PROPOSAL",
+			"plain": "I stop and brace.",
+			"with_cause": {
+				"fear": "I stop and brace. I realize I am too scared.",
+				"morale": "I stop and brace. I am not prepared."
+			}
+		},
+		"observe": {
+			"_status": "PROPOSAL",
+			"plain": "I would rather watch and observe first.",
+			"with_cause": {}
+		},
+		"hold": {
+			"_status": "PROPOSAL",
+			"plain": "I will stay close to the others.",
+			"with_cause": {}
+		},
+		"return_route": {
+			"_status": "PROPOSAL (PR2)",
+			"plain": "I prefer to stop, where I can still get back.",
+			"with_cause": {}
+		}
+	},
+	"cause_clause": {
+		"_status": "PROPOSAL (placeholder). Wording for calling_weight and values is an example only.",
+		"fear": "I am too afraid to go this far.",
+		"morale": "My heart is not fully in it.",
+		"calling_weight": "That is how I am.",
+		"values": "That is how I am."
+	}
+}

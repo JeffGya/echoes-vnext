@@ -81,6 +81,7 @@
 #     data.combat.charge_pressure                 protect_duration_bonus, endure_wave_bonus
 #     data.combat.objective_modes.<mode>          scaled objective params (see D30)
 #     data.combat.encounter_approach.surprise_fear
+#     data.combat.movement.capacity + data.rewards pace_* + stage base -> ectx.pace_cfg
 #     data.contact.ally                           level_base / growth / max, ally build cfg
 #     data.stages                                 terrain signature, via RealmGenerator
 #     data.maturity_expression                    passed to LeadershipEmotionService
@@ -89,7 +90,7 @@
 #
 #   WRITES (flow_ctx.encounter_ctx)
 #     encounter_id, resolution_mode, initiative_cfg, pre_encounter_morale, terrain,
-#     objective_params, charge_pressure_applied, actors, placement_seed, purifier_id
+#     objective_params, charge_pressure_applied, actors, placement_seed, pace_cfg, purifier_id
 #
 #   WRITES (flow_ctx)
 #     encounter_ctx (created), encounter_machine (created), save_request +
@@ -138,7 +139,7 @@
 # resolve_objective_params had 25 call sites in tests/ObjectiveCombatTests.gd, every one of
 # which was repointed to this class in the same change.
 #
-# DEFECT NOTES — recorded in docs/v2-infra-003-defect-register.md, deliberately NOT fixed:
+# DEFECT NOTES — recorded in docs/stories/v2-infra-003/defect-register.md, deliberately NOT fixed:
 # D30 (data.combat.objective_modes still has no ConfigService owner; the read MOVED here, so
 # the site count is unchanged), D17 (answered from this call site: escort destination and
 # spirit spawn CAN coincide, via the relaxation branch), D79 (the depth-scaled placement
@@ -153,6 +154,10 @@ const LeadershipEmotionService = preload("res://core/combat/LeadershipEmotionSer
 var flow_ctx: FlowContext
 var config_service
 var logger
+
+
+const STRETCH_FILL_SCATTER: String = "scatter"
+const STRETCH_FILL_VALUES: Array = ["scatter", "none"]
 
 
 func _init(_flow_ctx: FlowContext, _config_service = null, _logger = null) -> void:
@@ -171,6 +176,7 @@ func setup(t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		flow_ctx.encounter_ctx = EncounterContext.new()
 		flow_ctx.encounter_ctx.encounter_id = flow_ctx.encounter_id
+		flow_ctx.encounter_ctx.stop_short_override = flow_ctx.dev_stop_short
 		# COMBAT-006 dev toggle: use override if set, otherwise default to PURIFY_SHRINE.
 		if not flow_ctx.dev_combat_objective.is_empty():
 			flow_ctx.encounter_ctx.resolution_mode = flow_ctx.dev_combat_objective
@@ -324,17 +330,20 @@ func setup(t: int) -> void:
 			if flow_ctx.config_service != null:
 				var cb_bal2: Dictionary = flow_ctx.config_service.get_balance()
 				cb_board_cfg_block = cb_bal2.get("data", {}).get("combat", {}).get("board", {})
-			var cb_base_cols: int = int(cb_board_cfg_block.get("base_cols",          12))
-			var cb_base_rows: int = int(cb_board_cfg_block.get("base_rows",          12))
+			var cb_base_cols: int = int(cb_board_cfg_block.get("base_cols",          18))
+			var cb_base_rows: int = int(cb_board_cfg_block.get("base_rows",          18))
 			var cb_growth:    int = int(cb_board_cfg_block.get("growth_per_completion", 1))
-			var cb_max_cols:  int = int(cb_board_cfg_block.get("max_cols",            22))
-			var cb_max_rows:  int = int(cb_board_cfg_block.get("max_rows",            22))
+			var cb_max_cols:  int = int(cb_board_cfg_block.get("max_cols",            28))
+			var cb_max_rows:  int = int(cb_board_cfg_block.get("max_rows",            28))
 			var cb_cols: int = mini(cb_base_cols + completion_index * cb_growth, cb_max_cols)
 			var cb_rows: int = mini(cb_base_rows + completion_index * cb_growth, cb_max_rows)
-			# V2-STAGE-004 P3b: PURSUE board is 2× one dimension, randomised per encounter seed.
+			var cb_stretch_mul: float = 1.0
+			# V2-STAGE-004 P3b: PURSUE board stretches one dimension by
+			# pursue_override.long_multiplier, randomised per encounter seed.
 			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.PURSUE:
 				var _pur_override: Dictionary = cb_board_cfg_block.get("pursue_override", {})
-				var _pur_mul: float = float(_pur_override.get("long_multiplier", 2.0))
+				var _pur_mul: float = float(_pur_override.get("long_multiplier", 4.0))
+				cb_stretch_mul = _pur_mul
 				var _pur_rng := RandomNumberGenerator.new()
 				if flow_ctx.campaign_seed != null:
 					_pur_rng = flow_ctx.campaign_seed.get_rng(
@@ -345,11 +354,13 @@ func setup(t: int) -> void:
 					cb_cols = int(float(cb_cols) * _pur_mul)
 				else:
 					cb_rows = int(float(cb_rows) * _pur_mul)
-			# V2-STAGE-004 P3c: GUIDE_SPIRIT board is 5× one dimension, randomised per encounter seed.
+			# V2-STAGE-004 P3c: GUIDE_SPIRIT board stretches one dimension by
+			# guide_spirit_override.long_multiplier, randomised per encounter seed.
 			# Same mechanism as the PURSUE override above — both "long board" objectives.
 			if flow_ctx.encounter_ctx.resolution_mode == EncounterResolutionModes.GUIDE_SPIRIT:
 				var _gsb_override: Dictionary = cb_board_cfg_block.get("guide_spirit_override", {})
 				var _gsb_mul: float = float(_gsb_override.get("long_multiplier", 5.0))
+				cb_stretch_mul = _gsb_mul
 				var _gsb_rng := RandomNumberGenerator.new()
 				if flow_ctx.campaign_seed != null:
 					_gsb_rng = flow_ctx.campaign_seed.get_rng(
@@ -366,7 +377,7 @@ func setup(t: int) -> void:
 			var cb_terrain: Dictionary = StageTerrain.generate(
 				cb_realm_seed,
 				stage_index,
-				cb_signature,
+				scale_signature_for_stretch(cb_signature, cb_stretch_mul),
 				cb_bounds,
 				"combat.terrain." + flow_ctx.encounter_ctx.encounter_id
 			)
@@ -547,8 +558,16 @@ func setup(t: int) -> void:
 				var _ea_expr_cfg: Dictionary = _ea_data.get("maturity_expression", {})
 				for _ea_i in range(echo_actors.size()):
 					var _ea_actor: Dictionary = echo_actors[_ea_i]
-					var _ea_applied := LeadershipEmotionService.apply_fear_gain(
-						_ea_actor, _ea_bump, echo_actors, _ea_expr_cfg)
+					# V2-COMBAT-003.5 Phase 5 decision #48: resist_fear after leadership
+					# dampening, same wrapper CombatTurnActionService uses. Fires before any
+					# actor's first turn, so — like the per-hit path — band must come from
+					# rank, not the not-yet-written _expression_band field; _resist_fear()
+					# already handles that. The flag it sets lets the echo voice
+					# combat_resilient on their own opening turn.
+					var _ea_applied := CombatTurnActionService._resist_fear(_ea_actor,
+						LeadershipEmotionService.apply_fear_gain(
+							_ea_actor, _ea_bump, echo_actors, _ea_expr_cfg),
+						_ea_expr_cfg)
 					echo_actors[_ea_i]["fear"] = clampi(
 						int(_ea_actor.get("fear", 0)) + _ea_applied, 0, 100)
 
@@ -662,6 +681,10 @@ func setup(t: int) -> void:
 		flow_ctx.encounter_ctx.actors = all_actors.duplicate(true)
 		flow_ctx.encounter_ctx.placement_seed = placement_seed
 
+		# Pace par. Computed here, not straight after place_actors(), because the RECOVER relic
+		# and the PURSUE quarry spawn after placement. Reads positions only; draws no RNG.
+		_setup_pace(t)
+
 		# COMBAT-006: select purifier and initialise cooldown field on the actor.
 		if not shrine_actor.is_empty() and not shrine_cfg.is_empty():
 			var purifier_id: String = ShrineService.select_purifier(echo_actors, shrine_cfg)
@@ -689,6 +712,74 @@ func setup(t: int) -> void:
 					{ "purifier_id": flow_ctx.encounter_ctx.purifier_id,
 					  "shrine_id":   shrine_actor.get("id", "") })
 
+
+
+## Writes ectx.pace_cfg for a pace mode (PaceService.compute_par); leaves it {} otherwise.
+func _setup_pace(t: int) -> void:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	# The keeper-intro trial pays its fixed 40 Ase trial reward and no pace bonus (decisions.md D-18).
+	if not PaceService.is_pace_mode(ectx.resolution_mode, str(ectx.objective_params.get("guide_mode", ""))) \
+			or ectx.encounter_id == "keeper_intro.first_trial":
+		return
+	var capacity_cfg: Dictionary = {}
+	if flow_ctx.config_service != null:
+		capacity_cfg = flow_ctx.config_service.get_balance().get("data", {}).get(
+			"combat", {}).get("movement", {}).get("capacity", {})
+	var reward_cfg: Dictionary = ConfigService.get_rewards_cfg(flow_ctx.config_service)
+	var par: float = PaceService.compute_par(
+		ectx.actors, ectx.resolution_mode, ectx.objective_params, capacity_cfg)
+	ectx.pace_cfg = {
+		"par_rounds":      par,
+		"pace_full_ratio": float(reward_cfg.get("pace_full_ratio", 1.1)),
+		"pace_zero_ratio": float(reward_cfg.get("pace_zero_ratio", 1.6)),
+		"pace_bonus_pct":  float(reward_cfg.get("pace_bonus_pct", 0.05)),
+		# The live state needs the Ase a win would pay (design §7). Pure read, no RNG.
+		"stage_base":      ActiveStageService.get_stage_base_reward(flow_ctx, flow_ctx.config_service),
+	}
+	if logger != null:
+		logger.info(t, "combat.pace.par", "Pace par set at fight start", {
+			"encounter_id": ectx.encounter_id,
+			"mode":         ectx.resolution_mode,
+			"par_rounds":   par,
+		})
+
+
+## Returns `signature` itself unless its `stretch_fill` is "scatter" and the board is stretched
+## (multiplier > 1.0); then returns a copy with plateau_count_min/max scaled. Any other
+## `stretch_fill` value, or none, means "none".
+static func scale_signature_for_stretch(signature: Dictionary, multiplier: float) -> Dictionary:
+	if multiplier <= 1.0 or str(signature.get("stretch_fill", "none")) != STRETCH_FILL_SCATTER:
+		return signature
+	var scaled: Dictionary = signature.duplicate(true)
+	var count_min: int = maxi(int(round(float(signature.get("plateau_count_min", 3)) * multiplier)), 1)
+	var count_max: int = maxi(int(round(float(signature.get("plateau_count_max", 5)) * multiplier)), count_min)
+	scaled["plateau_count_min"] = count_min
+	scaled["plateau_count_max"] = count_max
+	return scaled
+
+
+## Warns about a `stretch_fill` value outside STRETCH_FILL_VALUES. Warn-only, like the
+## other validate_config_integrity checks; the scaling treats an unknown value as "none".
+static func validate_stretch_fill_config(balance_data: Dictionary, logger, t: int) -> bool:
+	var stages_v: Variant = balance_data.get("stages", {})
+	var stages: Dictionary = stages_v if stages_v is Dictionary else {}
+	var shape_v: Variant = stages.get("map_shape", {})
+	var shape: Dictionary = shape_v if shape_v is Dictionary else {}
+	var by_v: Variant = shape.get("by_virtue", {})
+	var by_virtue: Dictionary = by_v if by_v is Dictionary else {}
+	var all_valid := true
+	for virtue in by_virtue:
+		var sig_v: Variant = by_virtue[virtue]
+		if not (sig_v is Dictionary) or not (sig_v as Dictionary).has("stretch_fill"):
+			continue
+		var value: String = str((sig_v as Dictionary)["stretch_fill"])
+		if not STRETCH_FILL_VALUES.has(value):
+			all_valid = false
+			if logger != null:
+				logger.info(t, "terrain.config.warn",
+					"map_shape.by_virtue.%s.stretch_fill '%s' is not one of %s; treated as 'none'." % [virtue, value, STRETCH_FILL_VALUES],
+					{ "virtue": str(virtue), "value": value })
+	return all_valid
 
 
 # Deterministic guard against the id-keyed round-loop freeze. Scans the assembled

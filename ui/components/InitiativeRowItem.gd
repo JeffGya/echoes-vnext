@@ -1,7 +1,32 @@
 extends HBoxContainer
 
+## Tap on the row. The combat screen locks its camera onto this actor.
+signal row_pressed(actor_id: String)
+
 @onready var _name_label: Label = %NameLabel
 @onready var _action_label: Label = %ActionLabel
+
+var _actor_id: String = ""
+
+
+func _ready() -> void:
+	gui_input.connect(_on_gui_input)
+
+
+func set_actor_id(actor_id: String) -> void:
+	_actor_id = actor_id
+
+
+# Every button and touch event is accepted, so no press or release on a row reaches the
+# board-tap handler on the screen root behind it.
+func _on_gui_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		accept_event()
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		accept_event()
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			row_pressed.emit(_actor_id)
 
 
 func setup_row(actor_name: String, action_text: String, is_active: bool, is_dead: bool, active_action_color: Color) -> void:

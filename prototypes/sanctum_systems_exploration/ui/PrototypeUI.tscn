@@ -1,0 +1,567 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://prototypes/sanctum_systems_exploration/ui/PrototypeUI.gd" id="1"]
+[ext_resource type="Script" path="res://prototypes/sanctum_systems_exploration/ui/PrototypeHouseView.gd" id="2"]
+[ext_resource type="Theme" path="res://prototypes/sanctum_systems_exploration/ui/PrototypeTheme.tres" id="3"]
+[ext_resource type="PackedScene" path="res://prototypes/sanctum_systems_exploration/ui/NeedPressureDisplay.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://prototypes/sanctum_systems_exploration/ui/RelationshipMap.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://prototypes/sanctum_systems_exploration/ui/IncidentContext.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://prototypes/sanctum_systems_exploration/ui/HistoryMomentCard.tscn" id="7"]
+[ext_resource type="PackedScene" path="res://prototypes/sanctum_systems_exploration/ui/IncidentResultOverlay.tscn" id="8"]
+[ext_resource type="PackedScene" path="res://prototypes/sanctum_systems_exploration/ui/ArrivalReveal.tscn" id="9"]
+
+[node name="PrototypeUI" type="Control"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3")
+script = ExtResource("1")
+morning_background = Color(0.045, 0.077, 0.066, 1)
+afternoon_background = Color(0.075, 0.082, 0.055, 1)
+evening_background = Color(0.061, 0.059, 0.063, 1)
+night_background = Color(0.019, 0.031, 0.059, 1)
+
+[node name="Background" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.045, 0.077, 0.066, 1)
+
+[node name="HouseView" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+offset_top = 100.0
+offset_bottom = -60.0
+focus_mode = 2
+clip_contents = true
+script = ExtResource("2")
+ink = Color(0.09, 0.145, 0.133, 1)
+gold = Color(0.91, 0.77, 0.48, 1)
+paper = Color(0.94, 0.89, 0.78, 1)
+earth = Color(0.47, 0.32, 0.23, 1)
+earth_edge = Color(0.31, 0.32, 0.25, 1)
+path_color = Color(0.66, 0.51, 0.35, 1)
+canopy = Color(0.43, 0.53, 0.4, 1)
+canopy_light = Color(0.54, 0.61, 0.45, 1)
+wall_color = Color(0.72, 0.44, 0.29, 1)
+roof_color = Color(0.82, 0.65, 0.46, 1)
+flame_color = Color(0.93, 0.67, 0.38, 1)
+social_cue_color = Color(0.56, 0.83, 0.74, 1)
+warning_color = Color(0.9, 0.71, 0.36, 1)
+open_incident_color = Color(0.94, 0.55, 0.35, 1)
+joined_incident_color = Color(0.95, 0.82, 0.5, 1)
+resolved_incident_color = Color(0.65, 0.84, 0.66, 1)
+iso_units = Vector2(48, 24)
+grove_positions = PackedVector2Array(-20, -7, -16, -12, -10, -12, -3, -12, 5, -12, 13, -12, 20, -8, -19, 3, -15, 9, -9, 14, -4, 18, 4, 18, 11, 12, 16, 5)
+morning_tint = Color(1.08, 1.02, 0.9, 1)
+afternoon_tint = Color(1.13, 1.01, 0.78, 1)
+evening_tint = Color(0.83, 0.7, 0.68, 1)
+night_tint = Color(0.42, 0.5, 0.69, 1)
+
+[node name="Utility" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_right = 1.0
+offset_left = 20.0
+offset_top = 14.0
+offset_right = -20.0
+offset_bottom = 94.0
+
+[node name="Row" type="HBoxContainer" parent="Utility"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Utility/Row"]
+layout_mode = 2
+custom_minimum_size = Vector2(100, 48)
+text = "VILLAGE"
+theme_override_font_sizes/font_size = 21
+
+[node name="Spacer" type="Control" parent="Utility/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="Clock" type="Label" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(170, 48)
+text = "Setup"
+
+[node name="Start" type="Button" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(194, 56)
+text = "Let the village live"
+
+[node name="Pause" type="Button" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(76, 48)
+text = "Pause"
+toggle_mode = true
+
+[node name="Normal" type="Button" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(82, 48)
+text = "Normal"
+toggle_mode = true
+
+[node name="Fast" type="Button" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(70, 48)
+text = "Fast 3×"
+toggle_mode = true
+
+[node name="NextBeat" type="Button" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(106, 48)
+text = "Next beat"
+
+[node name="Lab" type="Button" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(64, 48)
+text = "Lab"
+
+[node name="Back" type="Button" parent="Utility/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(68, 48)
+text = "Back"
+
+[node name="ContextPanel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -380.0
+offset_top = 100.0
+offset_right = -20.0
+offset_bottom = -68.0
+grow_horizontal = 0
+
+[node name="PanelStack" type="VBoxContainer" parent="ContextPanel"]
+layout_mode = 2
+
+[node name="PanelTitle" type="Label" parent="ContextPanel/PanelStack"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "A place in the village"
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 22
+
+[node name="PanelSubtitle" type="Label" parent="ContextPanel/PanelStack"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(324, 0)
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.72, 0.76, 0.65, 1)
+
+[node name="ContextTabs" type="HBoxContainer" parent="ContextPanel/PanelStack"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Current" type="Button" parent="ContextPanel/PanelStack/ContextTabs"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(80, 48)
+size_flags_horizontal = 3
+text = "Current"
+toggle_mode = true
+
+[node name="Recent" type="Button" parent="ContextPanel/PanelStack/ContextTabs"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(80, 48)
+size_flags_horizontal = 3
+text = "Recent"
+toggle_mode = true
+
+[node name="PanelScroll" type="ScrollContainer" parent="ContextPanel/PanelStack"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Content" type="VBoxContainer" parent="ContextPanel/PanelStack/PanelScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Body" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(324, 0)
+autowrap_mode = 2
+text = "Observe the village."
+theme_override_font_sizes/font_size = 16
+
+[node name="NeedPressureDisplay" parent="ContextPanel/PanelStack/PanelScroll/Content" instance=ExtResource("4")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="RelationshipMap" parent="ContextPanel/PanelStack/PanelScroll/Content" instance=ExtResource("5")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="IncidentContext" parent="ContextPanel/PanelStack/PanelScroll/Content" instance=ExtResource("6")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="HistoryCards" type="VBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+[node name="Moment0" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment1" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment2" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment3" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment4" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment5" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment6" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment7" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment8" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment9" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment10" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+[node name="Moment11" parent="ContextPanel/PanelStack/PanelScroll/Content/HistoryCards" instance=ExtResource("7")]
+layout_mode = 2
+
+[node name="LabControls" type="VBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="SeedLabel" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+text = "Seed · applying starts a fresh setup"
+
+[node name="SeedRow" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="Seed" type="LineEdit" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/SeedRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+text = "24051987"
+max_length = 16
+
+[node name="ApplySeed" type="Button" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/SeedRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(70, 48)
+text = "Apply"
+
+[node name="TuningRow0" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel0" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow0"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Shared tuning"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning0" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow0"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 3.0
+step = 0.1
+value = 1.0
+
+[node name="TuningRow1" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel1" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow1"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Shared tuning"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning1" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow1"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 3.0
+step = 0.1
+value = 1.0
+
+[node name="TuningRow2" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel2" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow2"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Shared tuning"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning2" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow2"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 3.0
+step = 0.1
+value = 1.0
+
+[node name="TuningRow3" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel3" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow3"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Shared tuning"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning3" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow3"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 3.0
+step = 0.1
+value = 1.0
+
+[node name="TuningRow4" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel4" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow4"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Shared tuning"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning4" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow4"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 3.0
+step = 0.1
+value = 1.0
+
+[node name="TuningRow5" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel5" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow5"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Social frequency"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning5" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow5"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 0.0
+max_value = 3.0
+step = 0.1
+value = 1.0
+
+[node name="TuningRow6" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel6" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow6"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Warning · seconds"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning6" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow6"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 15.0
+max_value = 180.0
+step = 5.0
+value = 60.0
+
+[node name="TuningRow7" type="HBoxContainer" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+layout_mode = 2
+
+[node name="TuningLabel7" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow7"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(148, 0)
+autowrap_mode = 2
+text = "Intervention · seconds"
+theme_override_font_sizes/font_size = 16
+
+[node name="Tuning7" type="HSlider" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls/TuningRow7"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+size_flags_horizontal = 3
+min_value = 15.0
+max_value = 90.0
+step = 5.0
+value = 45.0
+
+[node name="ReducedMotion" type="CheckButton" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Reduced motion"
+
+[node name="Reset" type="Button" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Reset current setup"
+
+[node name="Setup" type="Button" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Choose another layout"
+
+[node name="DebugReadout" type="Label" parent="ContextPanel/PanelStack/PanelScroll/Content/LabControls"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(324, 0)
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 16
+
+[node name="Choices" type="GridContainer" parent="ContextPanel/PanelStack"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="Choice0" type="Button" parent="ContextPanel/PanelStack/Choices"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
+text = "Choose"
+
+[node name="Choice1" type="Button" parent="ContextPanel/PanelStack/Choices"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
+text = "Choose"
+
+[node name="Choice2" type="Button" parent="ContextPanel/PanelStack/Choices"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
+text = "Choose"
+
+[node name="Choice3" type="Button" parent="ContextPanel/PanelStack/Choices"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
+text = "Choose"
+
+[node name="HistoryPagination" type="HBoxContainer" parent="ContextPanel/PanelStack"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HistoryPrev" type="Button" parent="ContextPanel/PanelStack/HistoryPagination"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(70, 48)
+text = "Newer"
+
+[node name="HistoryPage" type="Label" parent="ContextPanel/PanelStack/HistoryPagination"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+horizontal_alignment = 1
+text = "1 / 1"
+
+[node name="HistoryNext" type="Button" parent="ContextPanel/PanelStack/HistoryPagination"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(70, 48)
+text = "Older"
+
+[node name="Footer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -55.0
+offset_right = -24.0
+offset_bottom = -12.0
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Status" type="Label" parent="Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Choose a site for each institution."
+theme_override_font_sizes/font_size = 16
+
+[node name="Help" type="Label" parent="Footer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Drag to pan · Wheel to zoom · Arrows + Enter to select · Esc to return"
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.58, 0.66, 0.57, 1)
+
+[node name="IncidentResultOverlay" parent="." instance=ExtResource("8")]
+unique_name_in_owner = true
+layout_mode = 1
+[node name="ArrivalReveal" parent="." instance=ExtResource("9")]
+unique_name_in_owner = true
+layout_mode = 1

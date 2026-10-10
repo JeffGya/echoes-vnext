@@ -1,0 +1,164 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://prototypes/sanctum_systems_exploration/ui/IncidentContext.gd" id="1"]
+
+[node name="IncidentContext" type="VBoxContainer"]
+theme_override_constants/separation = 12
+script = ExtResource("1")
+[node name="Place" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Village path"
+theme_override_font_sizes/font_size = 18
+[node name="NowHeading" type="Label" parent="."]
+layout_mode = 2
+text = "WHAT THEY ARE SAYING"
+[node name="Now" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Two people are speaking."
+[node name="UrgencyRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+[node name="Urgency" type="Label" parent="UrgencyRow"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(110, 0)
+text = "STATUS · Watching"
+[node name="StageRail" type="HBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+[node name="Warning" type="Label" parent="StageRail"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "FORMING"
+horizontal_alignment = 1
+[node name="Open" type="Label" parent="StageRail"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "OPEN"
+horizontal_alignment = 1
+[node name="Joined" type="Label" parent="StageRail"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "JOINED"
+horizontal_alignment = 1
+[node name="Resolved" type="Label" parent="StageRail"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "SETTLED"
+horizontal_alignment = 1
+[node name="UrgencyRail" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 5
+[node name="Urgency0" type="ColorRect" parent="UrgencyRail"]
+layout_mode = 2
+custom_minimum_size = Vector2(30, 10)
+size_flags_horizontal = 3
+[node name="Urgency1" type="ColorRect" parent="UrgencyRail"]
+layout_mode = 2
+custom_minimum_size = Vector2(30, 10)
+size_flags_horizontal = 3
+[node name="Urgency2" type="ColorRect" parent="UrgencyRail"]
+layout_mode = 2
+custom_minimum_size = Vector2(30, 10)
+size_flags_horizontal = 3
+[node name="Urgency3" type="ColorRect" parent="UrgencyRail"]
+layout_mode = 2
+custom_minimum_size = Vector2(30, 10)
+size_flags_horizontal = 3
+[node name="Urgency4" type="ColorRect" parent="UrgencyRail"]
+layout_mode = 2
+custom_minimum_size = Vector2(30, 10)
+size_flags_horizontal = 3
+[node name="CauseHeading" type="Label" parent="."]
+layout_mode = 2
+text = "WHY"
+[node name="Cause" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "A tense moment is forming."
+[node name="ActionHeading" type="Label" parent="."]
+layout_mode = 2
+text = "ACTION"
+[node name="Action" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+text = "Nothing to choose yet."
+[node name="ReplyCues" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 5
+[node name="Heading" type="Label" parent="ReplyCues"]
+layout_mode = 2
+text = "IF YOU CHOOSE"
+[node name="Cue0" type="Label" parent="ReplyCues"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="Cue1" type="Label" parent="ReplyCues"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="Cue2" type="Label" parent="ReplyCues"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="Aftermath" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+[node name="Heading" type="Label" parent="Aftermath"]
+layout_mode = 2
+text = "WHAT CHANGED"
+[node name="Response" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+[node name="AftermathText" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="EffectA" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="EffectB" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="BondHeading" type="Label" parent="Aftermath"]
+layout_mode = 2
+text = "RELATIONSHIP"
+[node name="BondChange" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+[node name="ParticipantViewsHeading" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "THEIR VIEW OF EACH OTHER"
+[node name="ParticipantViews" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="KeeperReactionsHeading" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "THEIR RESPONSE TO YOU"
+[node name="KeeperReactions" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2
+[node name="NextHeading" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "NEXT"
+[node name="NextBehaviors" type="Label" parent="Aftermath"]
+unique_name_in_owner = true
+layout_mode = 2
+autowrap_mode = 2

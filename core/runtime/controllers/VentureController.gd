@@ -242,9 +242,20 @@ func handle_advance_turn(_action: Dictionary, t: int) -> FlowActionOutcome:
 ## seam service); choice panel → overlay on the explore snapshot; everything else → the
 ## situation resolve card on flow.resolve.
 func handle_engage_situation(action: Dictionary, t: int) -> FlowActionOutcome:
-	var verdict := _situation_engagement_service().engage_situation(str(action.get("situation_id", "")), econ, t)
+	var sit_id := str(action.get("situation_id", ""))
+	var verdict := _situation_engagement_service().engage_situation(sit_id, econ, t)
 	match str(verdict.get("outcome", "")):
 		"async":
+			# V2-COMBAT-003.5 Phase 2a (board variety): encounter_id previously identified only
+			# the STAGE (realm_id + stage_id, set once in handle_select_stage), so every fight
+			# inside one stage shared the same seed identity and produced identical terrain and
+			# spawn cells every time. sit_id (the encountered situation's own "sit.<idx>" id,
+			# unique per stage — RealmGenerator._place_situations) is appended here so each fight
+			# gets a distinct encounter_id. Every seed path keyed on encounter_id
+			# (EncounterSetupService terrain/board/placement, EncounterObjectiveSpawnService,
+			# CombatRoundObjectiveService theft, retreat, RecruitmentConsequenceService,
+			# LiveMovementContextService) now varies per encounter with no other change needed.
+			flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + "." + sit_id
 			return FlowActionOutcome.transition_outcome(
 				FlowStateIds.ENCOUNTER, str(verdict.get("reason", ""))
 			)
@@ -523,6 +534,9 @@ func handle_select_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	var stage_id := str(action.get("stage_id", ""))
 	flow_ctx.stage_id     = stage_id
 	flow_ctx.encounter_id = flow_ctx.realm_id + "." + stage_id  # BUG-003: was always ""
+	# Stage-level default. handle_engage_situation() appends the situation id on entry to any
+	# async objective (combat, shrine, recover, protect, endure, pursue, guide_spirit — see
+	# SituationResolutionService._ASYNC_OBJ_TYPES), so each one gets its own identity (V2-COMBAT-003.5 Phase 2a).
 	flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset on stage entry
 	# PROG-009: persist skill loadout to save before entering the stage
 	_skill_loadout_service().persist_equipped_skills(t)

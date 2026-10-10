@@ -165,6 +165,16 @@ static func validate(value: Dictionary) -> Dictionary:
 	return V.ok()
 
 
+## Indexes perceived_actors facts by id. Shared by BehaviorArbiter's
+## movement-input validation and ActionCandidateGenerator's target-health lookup.
+static func facts_by_id(movement_context: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	for fact_value: Variant in movement_context["perceived_actors"] as Array:
+		var fact: Dictionary = fact_value as Dictionary
+		result[str(fact["id"])] = fact
+	return result
+
+
 static func _stable_variant_key(value: Variant) -> String:
 	match typeof(value):
 		TYPE_DICTIONARY:

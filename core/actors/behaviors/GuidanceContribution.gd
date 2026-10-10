@@ -138,6 +138,7 @@ const _REASON_TEXT: Dictionary = {
 	"bond_pull":          "she will not leave the one she is bound to",
 	"leader_cover":       "another already told her where to stand",
 	"keeper_guidance":    "she reads it the way you do",
+	"style_expression":   "she made the only right move",
 }
 
 ## Prose for the baseline answer — §6.6's third permitted primary, used when no single
@@ -156,6 +157,44 @@ const _PURPOSE_TEXT: Dictionary = {
 	"withdraw":    "she is already pulling back",
 	"read":        "she is still reading the ground",
 	"escort":      "she is already walking someone out",
+}
+
+## He-form of every canonical she-form line above (plus the two literal fallbacks in
+## `_reason_text()`), keyed by the exact she-form string. A whole-string lookup, not a
+## fragment replace: some lines use "her" as an object pronoun, not only possessive
+## ("her vow holds her" -> "his vow holds him"), so a naive global swap would be wrong.
+const _HE_FORM: Dictionary = {
+	"this is not what she was called to do": "this is not what he was called to do",
+	"her calling presses the other way": "his calling presses the other way",
+	"it is not in her nature": "it is not in his nature",
+	"it goes against what she holds to": "it goes against what he holds to",
+	"her temperament pulls another way": "his temperament pulls another way",
+	"she has no heart for it": "he has no heart for it",
+	"she is too afraid of that ground": "he is too afraid of that ground",
+	"what is in front of her changed": "what is in front of him changed",
+	"what she is holding will not wait": "what he is holding will not wait",
+	"she is closer to finishing what matters": "he is closer to finishing what matters",
+	"she will not break from the others": "he will not break from the others",
+	"it is further than she will commit": "it is further than he will commit",
+	"her vow holds her": "his vow holds him",
+	"she will not leave the one she is bound to": "he will not leave the one he is bound to",
+	"another already told her where to stand": "another already told him where to stand",
+	"she reads it the way you do": "he reads it the way you do",
+	"she made the only right move": "he made the only right move",
+	"she is already moving where it matters": "he is already moving where it matters",
+	"she is already in the fight": "he is already in the fight",
+	"she is already cutting a way off": "he is already cutting a way off",
+	"she is already covering someone": "he is already covering someone",
+	"she is already holding the ground that counts": "he is already holding the ground that counts",
+	"she is already after the one who ran": "he is already after the one who ran",
+	"she is already closing a way out": "he is already closing a way out",
+	"she is already moving to better ground": "he is already moving to better ground",
+	"she is already closing on the others": "he is already closing on the others",
+	"she is already pulling back": "he is already pulling back",
+	"she is still reading the ground": "he is still reading the ground",
+	"she is already walking someone out": "he is already walking someone out",
+	"she is already doing what matters more": "he is already doing what matters more",
+	"she reads the board differently": "he reads the board differently",
 }
 
 
@@ -243,7 +282,9 @@ static func resolve(
 		"reading":           reading,
 		"response":          _legacy_response(consent, reading),
 		"reason":            reason,
-		"reason_text":       _reason_text(consent, reading, reason, self_plan),
+		"reason_text":       _substitute_pronouns(
+			_reason_text(consent, reading, reason, self_plan), str(actor.get("gender", "female"))
+		),
 		"contest":           contest,
 		"option_spread":     spread,
 		"suggested_key":     str(suggested.get("key", "")),
@@ -369,6 +410,15 @@ static func _reason_text(
 	if str(reason.get("source", "")) == "baseline":
 		return str(_PURPOSE_TEXT.get(str(self_plan.get("purpose", "")), "she is already doing what matters more"))
 	return str(_REASON_TEXT.get(str(reason.get("code", "")), "she reads the board differently"))
+
+
+## Whole-string lookup, not a fragment replace (see `_HE_FORM`). Fails open: an unmapped
+## string — including "" — returns unchanged, same safety net as
+## ConversationService._substitute_pronouns.
+static func _substitute_pronouns(text: String, gender: String) -> String:
+	if gender != "male":
+		return text
+	return str(_HE_FORM.get(text, text))
 
 
 ## Consent carries the strength. An interpreted reading with full consent is the

@@ -1,6 +1,6 @@
 # ui/ — Agent Instructions
 
-> Snapshot renderer. Dispatches actions. Never touches sim state directly.
+> Snapshot renderer. Emits actions for AppRoot.gd to dispatch. Never touches sim state directly.
 > Full contracts: `../CONVENTIONS.md`. Full context: `../docs/CONTEXT.md`.
 
 ---
@@ -19,7 +19,7 @@ When the player acts, the UI emits an action — it never mutates state itself.
 # FORBIDDEN in any ui/ file
 FlowContext.save_data          # no
 SanctumService.get_roster()    # no
-FlowRuntime.dispatch(action)   # no — emit action_requested signal instead
+FlowRuntime.dispatch(action)   # no — emit action_requested; only AppRoot.gd calls dispatch()
 SaveService.flush()            # no
 ```
 
@@ -61,7 +61,8 @@ func set_snapshot(snap: Dictionary) -> void
 signal action_requested(action: Dictionary)
 ```
 
-Screens never call `dispatch()`. They emit `action_requested` → shell → AppRoot → FlowRuntime.
+Screens never call `dispatch()`. They emit `action_requested` → shell → `AppRoot.gd`, the one
+sanctioned dispatcher, which calls `FlowRuntime.dispatch()`.
 
 ---
 
@@ -69,7 +70,7 @@ Screens never call `dispatch()`. They emit `action_requested` → shell → AppR
 
 | Shell | Handles |
 |-------|---------|
-| `SanctumShell.gd` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage` |
+| `SanctumShell.gd` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage`, `flow.weaving_rite` |
 | `RealmShell.gd` | `flow.stage_map`, `flow.stage`, `flow.stage_explore`, `flow.encounter`, `flow.keeper_trial`, `flow.resolve` |
 
 AppRoot routes on `snapshot.type` → shell. Shell routes to screen.
@@ -115,8 +116,8 @@ func _on_toggle_pressed():
 ## Player-Facing Display Rules
 
 - Show **Standing** not `rank`, **Step** not `level`, **Storyweight** not `xp_total`
-- Show calling by name: Ward / Break / Veil / Path / Rite / Root — not internal ID
-- Show morale as tier: inspired / steady / shaken / broken — not raw number
+- Show the calling by its display name, not the internal ID (callings: Okofor, Aduro, Onyamesu, Okomfo, Kra-Soro, Sum-Okwanfo; see `docs/calling-reference.md`)
+- Show emotion as the projected `emotional_status` (radiant, whole, grounded, uncertain, hesitant, burdened, pressed, strained, fraying, hollow) through `EmotionPresentation.gd` — not raw morale or fear, and not the morale tier
 - Never show internal `id` fields to the player
 
 ---
@@ -144,7 +145,7 @@ Pre-stage prep belongs on `StageMapScreen`. When in doubt, ask Jeff before addin
 
 ## Touch Targets
 
-- Minimum: **48×48dp** for all interactive elements
-- Preferred: 56×56dp for primary CTAs
-- Spacing: at least 8dp between adjacent touch targets
-- Safe zone: 16dp margin from screen edges
+- Minimum: **48×48 logical units** for all interactive elements
+- Preferred: 56×56 logical units for primary CTAs
+- Spacing: at least 8 logical units between adjacent touch targets
+- Safe zone: 16 logical units of margin from screen edges

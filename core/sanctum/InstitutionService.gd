@@ -141,7 +141,9 @@ static func assign_echo(inst_id: String, echo_id: String, save_data: Dictionary,
 	return true
 
 
-static func remove_echo(inst_id: String, echo_id: String, save_data: Dictionary, econ: EconomyService, inst_cfg: Dictionary, logger: StructuredLogger, t: int) -> bool:
+## band_by_standing (data.maturity_expression.band_by_standing) feeds resist_fear on the
+## natural-fit fear hit; omitted, every echo reads as nascent and the trait never fires.
+static func remove_echo(inst_id: String, echo_id: String, save_data: Dictionary, econ: EconomyService, inst_cfg: Dictionary, logger: StructuredLogger, t: int, band_by_standing: Dictionary = {}) -> bool:
 	if not is_unlocked(inst_id, save_data):
 		return false
 	var inst: Dictionary = _get_inst(inst_id, save_data)
@@ -174,7 +176,9 @@ static func remove_echo(inst_id: String, echo_id: String, save_data: Dictionary,
 			if morale_delta != 0:
 				EmotionService.apply_morale_delta(echo, morale_delta, "institution.unassign.natural_fit", logger, t)
 			if fear_delta != 0:
-				EmotionService.apply_fear_delta(echo, fear_delta, "institution.unassign.natural_fit", 999, logger, t)
+				EmotionService.apply_fear_delta(echo, fear_delta, "institution.unassign.natural_fit", 999, logger, t,
+					echo.get("resilience_traits", []) as Array,
+					MaturityExpressionService.get_expression_band_for_echo(echo, band_by_standing))
 	logger.info(t, "sanctum.institution.echo_removed", inst_id, { "id": inst_id, "echo_id": echo_id, "condition_drop": old_cond + "->" + new_cond })
 	return true
 

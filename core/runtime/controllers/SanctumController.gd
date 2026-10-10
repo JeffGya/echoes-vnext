@@ -498,7 +498,8 @@ func handle_institution_remove_echo(action: Dictionary, t: int) -> FlowActionOut
 	if inst_id.is_empty() or echo_id.is_empty():
 		return FlowActionOutcome.handled_outcome()
 	var inst_cfg := ConfigService.get_institutions_cfg(config_service)
-	if InstitutionServiceScript.remove_echo(inst_id, echo_id, flow_ctx.save_data, econ, inst_cfg, logger, t):
+	if InstitutionServiceScript.remove_echo(inst_id, echo_id, flow_ctx.save_data, econ, inst_cfg, logger, t,
+			ConfigService.get_maturity_expression_band_by_standing(config_service)):
 		return FlowActionOutcome.reenter_outcome().with_save_reason("institution.remove_echo")
 	return FlowActionOutcome.handled_outcome()
 

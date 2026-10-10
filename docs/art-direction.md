@@ -25,7 +25,7 @@ Reverent, warm, ancient-modern. The UI should feel like a sacred ledger — deli
 
 ## Platform & Touch Rules
 
-- **Minimum touch target:** 48×48dp (72px at 1.5× scale)
+- **Minimum touch target:** 48×48 logical units
 - **Safe zones:** top 64px (notch/status), bottom 64px (home indicator)
 - **One-thumb reach zone:** bottom 60% of screen is comfortable
 - **No hover states** — all interactions must work with tap only
@@ -189,7 +189,7 @@ The starting Sanctum is dormant, not broken or ruined. Its structures, sacred tr
 
 Used in the Sanctum's Thread Reserve Strip.
 
-- **Size:** 48×48dp (meets mobile touch target)
+- **Size:** 48×48 logical units (meets the touch target)
 - **Shape:** Circle; no rectangular border
 - **Rendering:** `_draw()` via layered `draw_circle()` calls (12 steps) to approximate a radial gradient
   - Inner (center) = quality tier fill color for that virtue

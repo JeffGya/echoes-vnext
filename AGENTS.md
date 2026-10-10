@@ -10,10 +10,10 @@
 
 ## Project Identity
 
-Godot 4.6.1 GDScript strategy game. Deterministic core simulation with snapshot-driven UI.
+Godot 4 GDScript strategy game (engine version: `config/features` in `project.godot`). Deterministic core simulation with snapshot-driven UI.
 The player runs a Sanctum, summons Echoes (returning fragments of stolen stories), and leads them through Realm trials.
 
-**Stack:** 100% GDScript. No web, no TypeScript, no Python. Godot 4.6.1 only.
+**Stack:** 100% GDScript. No web, no TypeScript, no Python. Godot 4 only.
 
 ---
 
@@ -23,9 +23,25 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 > (`.claude/worktrees/<branch>/`), pass that path. The literal path below is the main
 > checkout and is usually on a different branch — running it verifies the wrong code.
 
-> **Pass `timeout: 300000` on every Bash call that runs Godot.** The tool auto-backgrounds
-> at 120s and the suite takes ~7 MINUTES (measured 2026-08-25; the old "~173s" in this file was stale by ~4 minutes). A backgrounded run cannot notify a subagent, so its
-> work is lost. This has cost this project many agent-hours.
+> **Never run Godot on the default Bash timeout.** The tool auto-backgrounds at 120s, and **a
+> backgrounded run cannot notify a subagent** — it finishes without waking the agent and the result
+> is lost. This has cost this project many agent-hours. Each command below carries the `timeout` and
+> `alarm` it needs. Pass them. Never tune one down.
+>
+> **Backgrounding permission differs by layer.** The MAIN conversation may background freely: it is
+> woken when the work finishes and can collect the result. **A SUBAGENT may never background
+> anything** — not a Bash command, not another agent. Nothing wakes it. Where work wants parallel
+> fan-out, a subagent recommends the fan-out and the main conversation runs it.
+>
+> **Long runs belong to the main conversation.** A subagent does not run a command that can take
+> longer than 2 minutes, and it does not wait on one. This covers every measurement cell, probe
+> slice, sharded or full suite run, and any command the tool would move to the background. The
+> subagent builds the probe or script, then ends its turn with a RUN REQUEST. The main conversation
+> runs it, checks the result, and sends the output back to the subagent or uses it to continue.
+> Short filtered runs (`tests <filter>`, the compile check, `--import`) stay with the subagent.
+> A RUN REQUEST states: (1) the exact command, with the `timeout` and `alarm` to pass; (2) the
+> expected duration; (3) every file the run edits, and the step inside the script that restores it
+> (a `trap`); (4) how to verify the restore; (5) which output to read back.
 
 ### Compile check (no editor needed)
 ```bash
@@ -47,11 +63,13 @@ believe any fingerprint failure.
 Tests run inside Godot via the Debug Panel (`F1` → `tests`) or headlessly. There is no
 standalone CLI runner — Godot must execute them.
 
-Full suite (**~7 minutes**, measured 2026-08-25 — `fingerprint` alone is ~3 min of it. Pass `timeout: 600000`, NOT 300000; 5 minutes now truncates a healthy run and looks like a hang):
+Full suite — **pass `timeout: 1200000`**, never 300000 or 600000, and the `alarm` below. Its
+duration grows with the test count and swings with machine load, so no figure is recorded here:
+this file has carried three in turn and each went stale. A too-high timeout costs nothing; a
+too-low one loses the whole run:
 ```bash
-/usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 1500 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
 ```
-
 **One suite only (~5s)** — use this while working, and the full suite once at the end:
 ```bash
 /usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests vow
@@ -61,29 +79,56 @@ suite list, runs zero tests, and emits NO `Tests:` line — while still exiting 
 it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are not file names:
 `Stage004SeamTests` registers as `seam`, so the filter `stage004` matches nothing.
 
-**Get the authoritative list from the runner, never from memory or a planning doc.** Regenerate it:
+**Get the authoritative list from the runner, never from memory or a planning doc.** Regenerate it
+(the regex includes `.` so dotted suite names like `sanctum.layout` are not dropped):
 ```bash
-<godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_]*\)"/\1/p'
+<godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 90 registered suite names, captured 2026-08-22:
+The 128 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring` and `stop_short_search` added since; post-`fingerprint`-suite split — see below.
+A `seam`-suite split was also tried, measured to give no speedup, and reverted — `seam` remains
+one suite):
 ```
-actor arbiter archetype bark_popup behavior behavior_arbiter bond_trigger bridge calling
-calling_behavior combat combat_baseline combat_initiative combat_roundtrip combat_terrain
-combat_ui consequence contact contact_actor continuity conversation_repair cooldown derived
-directive directive_cfg divergence divergence_bark echo_party echofactory economy emotion
-exclusive_action explore explore_p5 expr fingerprint flow_transaction foundation_ui grid
-identity institution intel ko_death leadership melee morale movement movement_arbiter
-movement_option movement_path objective objective_combat old_echo onboarding passive prog realm
-realm_prog realm_reward realm_ui recruit retreat reward sanctum_pulse save_integrity seam
-shrine sit_res situational skill skill_loadout skill_unlock snapshot snapshot_contract
-snapshot_fingerprint snapshot_purity social_graph stage statinit structure support terrain
-thread traversal unified_resolve vector venture_char voice vow weave
+actor arbiter archetype bark_popup behavior behavior_arbiter behavior_char bond_trigger
+bridge calling calling_behavior combat combat_baseline combat_initiative
+combat_roundtrip combat_terrain combat_ui consequence contact contact_actor continuity
+conversation_repair cooldown derived directive directive_cfg divergence divergence_bark
+echo_party echofactory economy emotion exclusive_action explore explore_p5 expr
+fingerprint_combat fingerprint_determinism_combat fingerprint_determinism_endure
+fingerprint_determinism_guide_spirit fingerprint_determinism_protect
+fingerprint_determinism_purify_shrine fingerprint_determinism_pursue
+fingerprint_determinism_recover fingerprint_endure fingerprint_guide_spirit
+fingerprint_protect fingerprint_purify_shrine fingerprint_pursue fingerprint_recover
+flow_transaction foundation_ui grid guidance guidance_bark identity institution intel
+ko_death leadership live_movement_style maturity_baseline melee morale movement
+movement_arbiter movement_fallback movement_option movement_path movement_style
+objective objective_combat old_echo onboarding passive pending_result prog realm
+realm_prog realm_reward realm_ui recruit retreat reward sanctum.layout sanctum.party
+sanctum.summon sanctum_pulse save_integrity seam shrine sit_res situational skill
+skill_loadout skill_reach skill_unlock stop_short stop_short_search stop_short_wiring
+snapshot snapshot_contract snapshot_fingerprint snapshot_purity social_graph stage
+statinit structure support terrain thread trace traversal unified_resolve vector
+venture_char voice vow weave
 ```
+Added since that capture: `board_camera.bounds board_camera.echo_detail board_camera.input
+board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera` (all in shard9).
 Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
-(it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`).
+(it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`),
+`fingerprint` (now `fingerprint_combat`, `fingerprint_purify_shrine`, `fingerprint_recover`,
+`fingerprint_protect`, `fingerprint_endure`, `fingerprint_pursue`, `fingerprint_guide_spirit`,
+plus their determinism-check counterparts `fingerprint_determinism_combat`,
+`fingerprint_determinism_purify_shrine`, `fingerprint_determinism_recover`,
+`fingerprint_determinism_protect`, `fingerprint_determinism_endure`,
+`fingerprint_determinism_pursue`, `fingerprint_determinism_guide_spirit` — no bare `fingerprint`
+or `fingerprint_determinism_self_check` suite exists any more).
  `tests snapshot` matches
 `snapshot`, `snapshot_contract`, `snapshot_fingerprint` and `snapshot_purity`. An unmatched
 filter prints the available suite names and runs nothing.
+
+**Exact-match mode — `tests =<name1>,<name2>,...`.** A leading `=` switches from substring
+containment to case-insensitive suite-name EQUALITY, comma-separated, so a caller can isolate a
+suite whose name is a literal substring of a sibling's (`tests =combat_roundtrip` runs only that
+suite, not `combat`/`combat_terrain`/`combat_baseline` too). Additive: plain `tests <filter>`
+substring behaviour is unchanged. Built for scripted/sharded runs; still usable interactively.
 
 ### Save isolation — DELETE THE WHOLE SAVE DIRECTORY BEFORE EVERY RUN
 
@@ -142,10 +187,110 @@ suites.
 agent runs the compile check plus a FILTERED run at most, and asks for a full run rather than
 starting one. A full run takes minutes and blocks the machine.
 
+### Sharded full-suite runs (parallel, same restriction as the FULL suite)
+
+**Pass `timeout: 1800000` (30 minutes) on the Bash call that runs this script** — real margin over
+shard7's 900s override (the current per-shard maximum) plus process-teardown time. A shorter
+timeout risks the same "tool auto-backgrounds, subagent never notified, work lost" failure called
+out above for the full serial suite.
+
+```bash
+scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"
+```
+
+**Coverage gap — `movement_fallback` is NOT validated by a sharded run.** See "Always run the FULL
+suite before committing" below: that rule exists in part because this guard only sees its own
+shard's ~16 suites here, not all ~124, so a clean sharded run cannot substitute for it.
+
+Launches several headless Godot processes at once — each with its own `ECHOES_TEST_SAVE_DIR`
+under `/tmp/echoes-vnext-sharded/` and a single `tests =<exact suite names>` invocation — and sums
+every shard's `Tests: N total, N passed, M failed` line into one combined result. Wall-clock is
+driven by the single slowest shard, not `serial time / shard count` — line-count-balanced shards
+do NOT balance runtime (measured 2026-09-20: one 18-suite shard took 763s against a ~270-280s
+second-slowest tier). See the shard-map comment in the script for the current split and its
+rationale.
+
+**Measured result (qa-verifier, 2026-09-20, final): 546-666s (9m06s-11m06s) sharded across repeat
+runs, down from a 788s pre-split baseline and a ~1090s serial baseline — a real, substantial
+improvement, though repeat measurements show enough contention variance on this machine that the
+low end of that range (not a single-run figure) should not be treated as guaranteed.** History: the
+whole `fingerprint` suite (8 tests, one shared suite name) was originally one indivisible
+registered suite measured at 623s SOLO/UNCONTENDED, and a 900s alarm under 10-way contention still
+fired while it was running — a hard floor no amount of shard rebalancing could lower, because
+suite-name sharding cannot split one suite. It was split into 8 per-mode suite names
+(`fingerprint_<mode>`, one per resolution mode, plus `fingerprint_determinism_self_check`), then
+`fingerprint_determinism_self_check` was split further into 7 per-mode
+`fingerprint_determinism_<mode>` suites — this second split is what actually delivered the 788→546s
+win, since the first split alone left `fingerprint_determinism_self_check` as the new 787s
+critical path, essentially unchanged from before. A further attempt to split the `seam` suite
+(tests/Stage004SeamTests.gd, the shard that became the new bottleneck after the fingerprint work)
+was tried and MEASURED to give no improvement — `seam` was never the real cost; the actual driver
+of that shard is `fingerprint_pursue`/`fingerprint_determinism_pursue`, two tests each running one
+full combat encounter to completion. That's a real, further-unreducible-by-sharding floor: making
+it cheaper means changing the test's own encounter length/assertions, out of scope here. `seam` was
+reverted back to a single suite name. shard7 (which holds `seam` plus the two pursue suites) carries
+a 900s alarm override for real margin over its measured range (539-666s across repeat runs).
+
+**Same restriction as the full suite: only the orchestrator and the QA/verification role may run
+it.** It is still exclusive-resource-heavy (several concurrent Godot processes hitting disk) even
+though the wall-clock is shorter — do not run it alongside anything else that touches
+`/tmp/echoes-vnext-*`.
+
+**Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
+`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 128
+live registered suites (regenerated 2026-09-20, updated same day after
+`fingerprint_determinism_self_check` was split into 7 per-mode `fingerprint_determinism_<mode>`
+suites, one shared suite name becoming 7) are split into 9 disjoint sets — every suite appears in
+exactly one shard, none selected twice, none dropped. `qa-verifier`: a sharded run's combined
+total should equal a serial full run's total exactly, no adjustment needed. **When a suite list
+changes** (a new `*Tests.gd` file registered in `ui/AppRoot.gd`, or a suite-registration rename
+like this one), the shard map in `scripts/run-tests-sharded.sh` and this count must be updated
+together — nothing checks this automatically yet.
+
+**Per-shard timeout is a HANG CEILING, not an expected duration — `wait` returns as soon as each
+shard's process exits on its own, so a shard that finishes early does not wait out the rest of
+its alarm.** The alarm only fires, and kills the shard, if it is still running past that many
+seconds. Three separate verification passes on 2026-09-20 misread a fired-or-not-yet-fired alarm
+value ("900s") as the run's actual duration — it is not; it is only the point past which we know
+the shard was still running, not how long it actually took.
+
+`ALARM_SECS` in the script (700s as of 2026-09-20) is the DEFAULT, applied to any shard whose map
+entry has no per-shard override. A real measured run found one shard (18 suites,
+line-count-balanced) taking 763s — 4 of 7 shards were killed by the old 200s alarm before that was
+caught. The shard map was then split further (see the script's shard-map comment); this still left
+500s unsafe — qa-verifier's re-measurement found shard6 (then the whole `fingerprint` suite alone)
+taking 623s SOLO/UNCONTENDED, and three more shards landing within 2-42s of the 500s alarm under
+10-way contention. A subsequent global 900s alarm then STILL killed shard6 under 10-way contention
+while it was still running, proving that suite did not fit any value sized for the other 9 shards.
+The `fingerprint` suite registration was then split into 8 per-mode suite names, 7 of which rode
+in shard1-5/7/8 with unrelated suites, leaving shard6 holding only
+`fingerprint_determinism_self_check` (2400s override) — the one test that still re-ran all seven
+modes internally. That suite has now been split the same way, into 7 per-mode
+`fingerprint_determinism_<mode>` suites, one joining each of shard1-5/7/8 alongside its
+corresponding `fingerprint_<mode>` main suite. **shard6 no longer exists.** shard7 carries a 900s
+override (see below); every other shard uses the 700s default.
+
+**The shard map (`SHARDS` in the script) has a per-shard alarm override as its third
+`|`-delimited field**, empty meaning "use the default": 700s covers eight of the nine shards with
+real margin (all measured well under 400s in the final timed run). shard7 (`seam` +
+`fingerprint_pursue` + `fingerprint_determinism_pursue`) is the one exception, overridden to 900s
+— real margin over its measured range (539-666s across repeat runs); the 700s default would have
+left as little as 34s of margin against the highest observed figure,
+thin enough to risk a false alarm-kill under contention.
+
+If any shard's log is missing a `Tests:` line, the script fails loudly (exit 1) rather than
+treating a silent zero as a pass — the same "unmatched filter runs nothing and exits 0" trap
+described above, just per-shard.
+
 **Always run the FULL suite before committing.** This codebase has cross-cutting guards — a
 one-file change has broken tests in unrelated suites more than once (the dispatch-action count
 guard, and a UI test that wired nodes from another screen). Filter while iterating; never ship on a
-filtered run alone.
+filtered run alone. **This specifically includes the sharded run**: `movement_fallback`
+(`MovementFallbackGuardTests`) is registered LAST in `ui/AppRoot.gd` because it reads a
+legacy-selector ledger that every other suite in the SAME PROCESS may write to. A sharded run only
+puts it alongside its own shard's ~16 sibling suites, not all ~124, so a clean sharded PASS on
+`movement_fallback` does NOT have full-suite validity — a fallback triggered by a suite in a
+different shard is invisible to it. Only the full serial suite validates this guard correctly.
 
 **Only ONE suite run at a time.** Tests share `/tmp/echoes-vnext-tests/`; two concurrent runs
 corrupt each other's save fixtures.
@@ -224,7 +369,7 @@ CONVENTIONS.md    Full architecture contracts
 
 ### Code Boundaries — never cross
 - `core/` has zero UI node refs or Godot scene tree calls
-- `ui/` never calls `dispatch()` directly; never reads `FlowContext`, `SaveService`, or any sim internal
+- `ui/` never calls `dispatch()` directly, except `AppRoot.gd`, the UI host that dispatches the action requests screens emit; `ui/` never reads `FlowContext`, `SaveService`, or any sim internal
 - `data/` is read-only; schema changes are additive only (never remove or rename existing fields)
   - **Exception (V2-PROG-012 precedent):** a rename/removal is permitted when the old name is actively misleading or its value was unreachable (silently falling through to a code default), provided **every** consumer is migrated in the same change and no alias is left behind. V2-PROG-012 renamed four keys under this exception — `presence_dampen_scale` → `composure_dampen_scale`, `directive_band_mul` → `directive_interpretation_mul`, per-calling `absolute_fear_threshold` → `absolute_fear_offset`, `vector_to_virtue_primary` → `virtue_vector_key` — after auditing every `core/`, `ui/`, `tests/`, and `docs/` reference. Default to the additive-only rule; reach for this exception only with the same full-repo audit, and say so in the story writeup.
 
@@ -276,7 +421,7 @@ Set the model explicitly on every delegated call. Omitting it silently inherits 
 
 | Tier | Use it for |
 |---|---|
-| `haiku` | Mechanical bulk work: renames from an approved table, boilerplate, format conversion, log triage |
+| `haiku` | Clear, mechanical work with a checkable result: renames from an approved table, boilerplate, format conversion, log triage, running a given script and copying its output (guardrails in `CLAUDE.md`, Model tiers) |
 | `sonnet` | The default. Well-specified implementation with clear acceptance criteria |
 | `opus` | Genuinely tricky work: concurrency, subtle algorithms, adversarial verification, gnarly debugging |
 
@@ -449,7 +594,7 @@ production code to make its own test pass.
 - **Build structure in `.tscn`** — scripts render values and apply profile values such as margins, columns, visibility, wrap widths, and min/max sizes
 - Never create/reparent the UI hierarchy or construct visual styles programmatically in `.gd`; layout relationships and theme hooks belong in `.tscn`
 - Reusable visual treatments belong in `assets/theme/LivingTreeSystem.tres`; extend the theme instead of restyling the same patterns per scene
-- Godot 4.6.1 responsive base is 1280×720 landscape; desktop starts at 1600×900 and may resize down to 960×540
+- The responsive base is 1280×720 landscape; desktop starts at 1600×900 and may resize down to 960×540
 - Responsive means profile recomposition, capped readable UI, and spatial surplus on wide views — not uniform root scaling or scroll containers everywhere
 - `SanctumShell` owns the inset BottomRail via `_cached_nav` — do NOT inject nav into snapshots
 - `RealmShell` owns the inset, capped EchoBar (88 logical units high) — do NOT render it in individual screens
@@ -522,7 +667,7 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
 10. Letting autowrap determine first-pass geometry without authored/profile wrap widths
 11. Leaving stale offsets on a full-rect container after changing responsive profiles
 12. Hiding a shell Control without synchronizing its independent `CanvasLayer` visibility/input
-13. Running Godot without `timeout: 300000` — the Bash tool auto-backgrounds at 120s and a subagent then loses all its work
+13. Running Godot on the default Bash timeout — it auto-backgrounds at 120s and a subagent then loses all its work. Use the `timeout` and `alarm` given per command under **Tests**. A subagent may never background anything; the main conversation may.
 14. Believing a fingerprint failure before rebuilding the script class cache with `--import`
 15. Trusting the runner's exit code — it is always 0; only the `Tests: N total, N passed, M failed` line is evidence
 16. Re-running the full suite to read a different field instead of grepping the log you already produced
@@ -543,6 +688,10 @@ Read `docs/v2-migration-map.md` before starting any Alignment story.
     **A comment earns its place only by saying what the code cannot** — a non-obvious constraint, an invariant a future edit would break, a trap, or a decision whose alternative looks equally reasonable. Write it once, at the authority, not at every caller.
 
     **Where things go:** why the change was made → commit message. Design rationale and measurements → the story's handoff or `docs/`. What a reader needs *at that line* to avoid breaking it → the comment. **A comment block should be shorter than the code it explains**; if it is longer, the reasoning belongs elsewhere and the comment should point there.
+29. **Testing real input with `SubViewport.push_input()`.** It does not emulate touch from mouse. For real engine input use `Input.parse_input_event()` and then `Input.flush_buffered_events()` in the root window.
+30. **Instantiating `AppRoot` in a test.** Its `_ready` starts the test runner again. Drive the live `AppRoot` that hosts the run, and restore its previous screen.
+31. **Rendering screenshots with `--headless`.** The dummy renderer gives a null texture. On macOS, run `scripts/screenshot.gd` from a real window (command in the header of that script).
+
 Full lesson history: `docs/LESSONS.md`
 
 ---
@@ -601,4 +750,5 @@ domains while selecting the least costly tier suited to the actual difficulty.
 - `docs/LESSONS.md` — corrected behaviours
 - `docs/skills/godot-echoes-dev.md` — implementation patterns, checklists
 - `docs/skills/echoes-sankofa-gdd.md` — design knowledge, V2 terminology
+- `docs/skills/ponytail.md` — smallest-complete-change coding mode (level `full`); code agents and `qa-verifier` use it
 - `docs/Echoes vNext Working GDD.md` — primary design canon

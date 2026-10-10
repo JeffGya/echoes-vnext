@@ -1,0 +1,1298 @@
+{
+  "version": 3,
+  "default_seed": 24051987,
+  "tuning": {
+    "rest_weight": 1,
+    "company_weight": 1,
+    "purpose_weight": 1,
+    "day_minutes": 12,
+    "routine_seconds": 30,
+    "social_frequency": 1,
+    "warning_seconds": 60,
+    "intervention_seconds": 45
+  },
+  "tuning_ranges": {
+    "rest_weight": [
+      0,
+      3,
+      0.1
+    ],
+    "company_weight": [
+      0,
+      3,
+      0.1
+    ],
+    "purpose_weight": [
+      0,
+      3,
+      0.1
+    ],
+    "day_minutes": [
+      3,
+      24,
+      1
+    ],
+    "routine_seconds": [
+      10,
+      90,
+      5
+    ],
+    "social_frequency": [
+      0,
+      3,
+      0.1
+    ],
+    "warning_seconds": [
+      15,
+      180,
+      5
+    ],
+    "intervention_seconds": [
+      15,
+      90,
+      5
+    ]
+  },
+  "rules": {
+    "pressure_max": 20,
+    "pressure_gain_per_second": 0.18,
+    "pressure_relief_per_second": 0.6,
+    "preference_score": 3,
+    "crowd_score": 2,
+    "emotion_score": 0.05,
+    "travel_units_per_second": 1.6
+  },
+  "waypoints": {
+    "flame": {
+      "pos": [
+        0,
+        0
+      ],
+      "links": [
+        "north",
+        "west",
+        "east",
+        "courtyard"
+      ]
+    },
+    "courtyard": {
+      "pos": [
+        0,
+        7
+      ],
+      "links": [
+        "flame",
+        "hearth_near",
+        "training_near",
+        "threshold"
+      ]
+    },
+    "west": {
+      "pos": [
+        -8,
+        0
+      ],
+      "links": [
+        "flame",
+        "quiet",
+        "hearth_near",
+        "left_walk"
+      ]
+    },
+    "east": {
+      "pos": [
+        8,
+        0
+      ],
+      "links": [
+        "flame",
+        "training_near",
+        "right_walk"
+      ]
+    },
+    "north": {
+      "pos": [
+        0,
+        -7
+      ],
+      "links": [
+        "flame",
+        "left_walk",
+        "right_walk"
+      ]
+    },
+    "left_walk": {
+      "pos": [
+        -8,
+        -7
+      ],
+      "links": [
+        "north",
+        "west",
+        "hearth_far"
+      ]
+    },
+    "right_walk": {
+      "pos": [
+        8,
+        -7
+      ],
+      "links": [
+        "north",
+        "east",
+        "training_far"
+      ]
+    },
+    "quiet": {
+      "pos": [
+        -16,
+        0
+      ],
+      "links": [
+        "west",
+        "hearth_far"
+      ]
+    },
+    "threshold": {
+      "pos": [
+        0,
+        17
+      ],
+      "links": [
+        "courtyard"
+      ]
+    },
+    "hearth_near": {
+      "pos": [
+        -9,
+        8
+      ],
+      "links": [
+        "courtyard",
+        "west"
+      ]
+    },
+    "hearth_far": {
+      "pos": [
+        -17,
+        -8
+      ],
+      "links": [
+        "quiet",
+        "left_walk"
+      ]
+    },
+    "training_near": {
+      "pos": [
+        9,
+        8
+      ],
+      "links": [
+        "courtyard",
+        "east"
+      ]
+    },
+    "training_far": {
+      "pos": [
+        17,
+        -8
+      ],
+      "links": [
+        "right_walk"
+      ]
+    }
+  },
+  "places": {
+    "flame": {
+      "name": "Ase Flame",
+      "node": "flame",
+      "description": "The village centre. Sit by the Ase Flame and feel its warmth."
+    },
+    "courtyard": {
+      "name": "Courtyard",
+      "node": "courtyard",
+      "description": "Shared ground where people cross paths."
+    },
+    "quiet": {
+      "name": "Quiet edge",
+      "node": "quiet",
+      "description": "A sheltered spot away from the busy paths."
+    },
+    "threshold": {
+      "name": "Threshold",
+      "node": "threshold",
+      "description": "The road out and the road home. You can see who comes and goes."
+    },
+    "hearth": {
+      "name": "Hearth",
+      "node": "",
+      "description": "A warm seat near others, with room for quiet company."
+    },
+    "training": {
+      "name": "Training Grounds",
+      "node": "",
+      "description": "Open ground for practice and something to do."
+    }
+  },
+  "sites": [
+    {
+      "id": "hearth_near",
+      "institution": "hearth",
+      "name": "Hearth · shared path",
+      "description": "Near the courtyard, where more people pass by."
+    },
+    {
+      "id": "hearth_far",
+      "institution": "hearth",
+      "name": "Hearth · sheltered edge",
+      "description": "A longer walk with fewer people nearby."
+    },
+    {
+      "id": "training_near",
+      "institution": "training",
+      "name": "Training · shared path",
+      "description": "Practice close to the village paths."
+    },
+    {
+      "id": "training_far",
+      "institution": "training",
+      "name": "Training · outer court",
+      "description": "A quieter place to concentrate."
+    }
+  ],
+  "topics": [
+    {
+      "id": "feelings",
+      "label": "How are you feeling?",
+      "replies": [
+        {
+          "id": "company",
+          "label": "Would some company help?",
+          "family": "company"
+        },
+        {
+          "id": "space",
+          "label": "Take the space you need.",
+          "family": "rest"
+        }
+      ]
+    },
+    {
+      "id": "activity",
+      "label": "What are you doing?",
+      "replies": [
+        {
+          "id": "encourage",
+          "label": "Keep at it.",
+          "family": "current"
+        },
+        {
+          "id": "pause",
+          "label": "Would a pause help?",
+          "family": "rest"
+        }
+      ]
+    },
+    {
+      "id": "place",
+      "label": "How does this place feel?",
+      "replies": [
+        {
+          "id": "stay",
+          "label": "You can stay here.",
+          "family": "stay"
+        },
+        {
+          "id": "alternative",
+          "label": "Try a different spot.",
+          "family": "alternative"
+        }
+      ]
+    }
+  ],
+  "response_lines": {
+    "accept": "I can do that.",
+    "reinterpret": "Not that. This would help more.",
+    "decline": "Not now. I need to finish this.",
+    "repeated": "We spoke about that. My answer has not changed."
+  },
+  "social": {
+    "bond_thresholds": {
+      "friend_min": 30,
+      "rival_max": -30
+    },
+    "check_chance_per_second": 0.16,
+    "open_incident_seconds": 90,
+    "joining_ms": 1000,
+    "incident_access": {
+      "thresholds": {
+        "private_max": -4.0,
+        "appeal_min": 5.0,
+        "fear_center": 35.0,
+        "rest_center": 8.0,
+        "courage_center": 50.0,
+        "wisdom_center": 50.0,
+        "fear_weight": 0.22,
+        "rest_weight": 0.30,
+        "courage_weight": 0.10,
+        "wisdom_weight": 0.07,
+        "bond_weight": 0.08,
+        "impression_weight": 0.40
+      },
+      "family_bias": {
+        "companionship": 0.0,
+        "care": 1.0,
+        "practice": -0.5
+      },
+      "archetype_bias": {
+        "loyal": 1.0,
+        "proud": -1.0,
+        "reflective": -1.5,
+        "empathic": 1.5,
+        "canny": 0.0,
+        "stoic": -1.5,
+        "valiant": -0.5,
+        "devout": 1.0,
+        "ambitious": -0.5
+      },
+      "reasons": {
+        "private": "They want to work this out together.",
+        "open": "They are still listening if you choose to step in.",
+        "appeal": "{appeal} wants your help before this gets worse."
+      }
+    },
+    "templates": [
+      {
+        "id": "welcome_company",
+        "family": "companionship",
+        "label": "Welcome company",
+        "cue_text": "They sit together and talk easily.",
+        "bond_delta": 2,
+        "duration_ms": 2000,
+        "cooldown_ms": 45000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+            "company_delta": -3
+          },
+          "receiver": {
+            "company_delta": -2
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "welcomed",
+            "influence": {
+              "company": 1
+            }
+          },
+          "receiver": {
+            "tag": "comfortable",
+            "influence": {
+              "company": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "quiet_company",
+        "family": "companionship",
+        "label": "Quiet company",
+        "cue_text": "They sit together without needing to talk.",
+        "bond_delta": 1,
+        "duration_ms": 2000,
+        "cooldown_ms": 45000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+            "company_delta": -2
+          },
+          "receiver": {
+            "rest_delta": -1,
+            "company_delta": -1
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "at_ease",
+            "influence": {
+              "company": 1
+            }
+          },
+          "receiver": {
+            "tag": "space_respected",
+            "influence": {
+              "rest": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "unwanted_attention",
+        "family": "companionship",
+        "label": "Unwanted attention",
+        "cue_text": "One moves closer while the other needs room.",
+        "bond_delta": -2,
+        "duration_ms": 2500,
+        "cooldown_ms": 60000,
+        "warning": true,
+        "participant_effects": {
+          "initiator": {
+            "company_delta": -1
+          },
+          "receiver": {
+            "rest_delta": 1,
+            "fear_delta": 1
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "rebuffed",
+            "influence": {
+              "company": -1
+            }
+          },
+          "receiver": {
+            "tag": "crowded",
+            "influence": {
+              "company": -2,
+              "rest": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "accepted_support",
+        "family": "care",
+        "label": "Accepted support",
+        "cue_text": "One offers help. The other accepts.",
+        "bond_delta": 2,
+        "duration_ms": 2500,
+        "cooldown_ms": 60000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+            "rest_delta": 1,
+            "company_delta": -1
+          },
+          "receiver": {
+            "rest_delta": -4,
+            "fear_delta": -2
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "helpful",
+            "influence": {
+              "company": 1
+            }
+          },
+          "receiver": {
+            "tag": "supported",
+            "influence": {
+              "company": 2,
+              "rest": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "declined_help",
+        "family": "care",
+        "label": "Declined help",
+        "cue_text": "One offers help. The other says no without a fight.",
+        "bond_delta": 0,
+        "duration_ms": 1800,
+        "cooldown_ms": 45000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+          },
+          "receiver": {
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "boundary_heard",
+            "influence": {
+              "company": 0
+            }
+          },
+          "receiver": {
+            "tag": "boundary_kept",
+            "influence": {
+              "rest": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "protective_response",
+        "family": "care",
+        "label": "Protective response",
+        "cue_text": "One stays close when the other is having a hard time.",
+        "bond_delta": 3,
+        "duration_ms": 2500,
+        "cooldown_ms": 60000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+            "rest_delta": 2,
+            "company_delta": -2
+          },
+          "receiver": {
+            "rest_delta": -5,
+            "fear_delta": -3,
+            "morale_delta": 2
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "protective",
+            "influence": {
+              "purpose": 1
+            }
+          },
+          "receiver": {
+            "tag": "protected",
+            "influence": {
+              "company": 2
+            }
+          }
+        }
+      },
+      {
+        "id": "caregiver_strain",
+        "family": "care",
+        "label": "Caregiver strain",
+        "cue_text": "An offer of help lands when neither has much left.",
+        "bond_delta": -1,
+        "duration_ms": 2500,
+        "cooldown_ms": 60000,
+        "warning": true,
+        "participant_effects": {
+          "initiator": {
+            "rest_delta": 2
+          },
+          "receiver": {
+            "rest_delta": -1
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "overextended",
+            "influence": {
+              "rest": 2
+            }
+          },
+          "receiver": {
+            "tag": "uneasy_debt",
+            "influence": {
+              "company": -1
+            }
+          }
+        }
+      },
+      {
+        "id": "shared_practice",
+        "family": "practice",
+        "label": "Shared practice",
+        "cue_text": "They practice side by side.",
+        "bond_delta": 2,
+        "duration_ms": 2500,
+        "cooldown_ms": 50000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+            "purpose_delta": -3
+          },
+          "receiver": {
+            "purpose_delta": -3
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "challenged",
+            "influence": {
+              "purpose": 1
+            }
+          },
+          "receiver": {
+            "tag": "challenged",
+            "influence": {
+              "purpose": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "competitive_practice",
+        "family": "practice",
+        "label": "Friendly competition",
+        "cue_text": "Their practice turns into a friendly contest.",
+        "bond_delta": 1,
+        "duration_ms": 2500,
+        "cooldown_ms": 60000,
+        "warning": true,
+        "participant_effects": {
+          "initiator": {
+            "purpose_delta": -3
+          },
+          "receiver": {
+            "purpose_delta": -3
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "challenged",
+            "influence": {
+              "purpose": 2
+            }
+          },
+          "receiver": {
+            "tag": "challenged",
+            "influence": {
+              "purpose": 2
+            }
+          }
+        }
+      },
+      {
+        "id": "encouragement",
+        "family": "practice",
+        "label": "Encouragement",
+        "cue_text": "One keeps the other going through practice.",
+        "bond_delta": 2,
+        "duration_ms": 2200,
+        "cooldown_ms": 50000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+            "purpose_delta": -2
+          },
+          "receiver": {
+            "purpose_delta": -3,
+            "morale_delta": 1
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "encouraging",
+            "influence": {
+              "company": 1
+            }
+          },
+          "receiver": {
+            "tag": "recognized",
+            "influence": {
+              "purpose": 2
+            }
+          }
+        }
+      },
+      {
+        "id": "recognition",
+        "family": "practice",
+        "label": "Recognition",
+        "cue_text": "One notices the other has been putting in the work.",
+        "bond_delta": 3,
+        "duration_ms": 2200,
+        "cooldown_ms": 60000,
+        "warning": false,
+        "participant_effects": {
+          "initiator": {
+            "purpose_delta": -2
+          },
+          "receiver": {
+            "purpose_delta": -2,
+            "morale_delta": 2
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "respectful",
+            "influence": {
+              "purpose": 1
+            }
+          },
+          "receiver": {
+            "tag": "recognized",
+            "influence": {
+              "purpose": 2
+            }
+          }
+        }
+      },
+      {
+        "id": "impatience",
+        "family": "practice",
+        "label": "Impatience",
+        "cue_text": "They cannot agree on the pace of practice.",
+        "bond_delta": -2,
+        "duration_ms": 2500,
+        "cooldown_ms": 60000,
+        "warning": true,
+        "participant_effects": {
+          "initiator": {
+            "purpose_delta": -2
+          },
+          "receiver": {
+            "purpose_delta": 1,
+            "morale_delta": -1
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "impatient",
+            "influence": {
+              "purpose": 1
+            }
+          },
+          "receiver": {
+            "tag": "judged",
+            "influence": {
+              "purpose": -2
+            }
+          }
+        }
+      },
+      {
+        "id": "rivalry",
+        "family": "practice",
+        "label": "Rivalry",
+        "cue_text": "The contest stops feeling friendly.",
+        "bond_delta": -3,
+        "duration_ms": 2800,
+        "cooldown_ms": 75000,
+        "warning": true,
+        "participant_effects": {
+          "initiator": {
+            "purpose_delta": -3
+          },
+          "receiver": {
+            "purpose_delta": -3
+          }
+        },
+        "impressions": {
+          "initiator": {
+            "tag": "challenged",
+            "influence": {
+              "purpose": 2
+            }
+          },
+          "receiver": {
+            "tag": "challenged",
+            "influence": {
+              "purpose": 2
+            }
+          }
+        }
+      }
+    ],
+    "incidents": {
+      "companionship": {
+        "label": "Someone needs space",
+        "issue_activity": "asking for space",
+        "post_resolution_cooldown_ms": 120000,
+        "replies": [
+          {
+            "id": "give_space",
+            "label": "Make room for quiet",
+            "consequence_cue": {
+              "tone": "calm",
+              "text": "Give them room. They may both settle."
+            },
+            "bond_delta": 2,
+            "participant_effects": [
+              {
+                "role": "initiator",
+                "rest_delta": 0
+              },
+              {
+                "role": "receiver",
+                "rest_delta": -3,
+                "fear_delta": -2
+              }
+            ],
+            "aftermath": "They made room and the argument stopped.",
+            "participant_views": {
+              "initiator": "They did not mean to crowd anyone, but they can step back.",
+              "receiver": "They listened when I asked for space."
+            },
+            "keeper_reactions": {
+              "initiator": "Thank you for stopping this before it got worse.",
+              "receiver": "Thank you for giving me room to say no."
+            },
+            "cause_resolution": {
+              "status": "eased",
+              "eased_text": "They have room to step back.",
+              "remaining_text": "They still need space from each other.",
+              "surviving_cause": "One of them still feels crowded."
+            },
+            "aftermath_behavior": {
+              "duration_ms": 6000,
+              "orientation": "away",
+              "activities": {
+                "initiator": "making room",
+                "receiver": "taking needed space"
+              },
+              "next_families": {
+                "initiator": "rest",
+                "receiver": "rest"
+              }
+            }
+          },
+          {
+            "id": "name_harm",
+            "label": "Name what caused harm",
+            "consequence_cue": {
+              "tone": "honest",
+              "text": "Name the hurt. It may take time to land."
+            },
+            "bond_delta": 3,
+            "participant_effects": [
+              {
+                "role": "initiator",
+                "morale_delta": -1
+              },
+              {
+                "role": "receiver",
+                "fear_delta": -2
+              }
+            ],
+            "aftermath": "They named what happened and sat with it.",
+            "participant_views": {
+              "initiator": "They deserved a clear answer, even if it was hard to hear.",
+              "receiver": "They finally understood why I pulled away."
+            },
+            "keeper_reactions": {
+              "initiator": "Thank you for making us say what happened.",
+              "receiver": "Thank you for not brushing it aside."
+            },
+            "cause_resolution": {
+              "status": "remains",
+              "eased_text": "They have said what hurt.",
+              "remaining_text": "The hurt is named, but they still need time apart.",
+              "surviving_cause": "The hurt from being crowded is still there."
+            },
+            "aftermath_behavior": {
+              "duration_ms": 6000,
+              "orientation": "toward",
+              "activities": {
+                "initiator": "sitting with what was named",
+                "receiver": "sitting with what was named"
+              },
+              "next_families": {
+                "initiator": "autonomous",
+                "receiver": "autonomous"
+              }
+            }
+          }
+        ]
+      },
+      "care": {
+        "label": "Help is too much right now",
+        "issue_activity": "trying to help without pushing",
+        "post_resolution_cooldown_ms": 120000,
+        "replies": [
+          {
+            "id": "respect_boundary",
+            "label": "Respect the boundary",
+            "consequence_cue": {
+              "tone": "gentle",
+              "text": "Step back. The tiredness may still need time."
+            },
+            "bond_delta": 2,
+            "participant_effects": [
+              {
+                "role": "initiator",
+                "rest_delta": -2
+              },
+              {
+                "role": "receiver",
+                "rest_delta": -2
+              }
+            ],
+            "aftermath": "They paused the help and both took a breath.",
+            "participant_views": {
+              "initiator": "They need help, but not from me right now.",
+              "receiver": "They heard me when I said I could not take more."
+            },
+            "keeper_reactions": {
+              "initiator": "Thank you for showing me when to step back.",
+              "receiver": "Thank you for letting me rest."
+            },
+            "cause_resolution": {
+              "status": "remains",
+              "eased_text": "They have stopped pushing each other.",
+              "remaining_text": "They have stopped pushing, but the tiredness is still there.",
+              "surviving_cause": "One of them still needs more rest."
+            },
+            "aftermath_behavior": {
+              "duration_ms": 6000,
+              "orientation": "away",
+              "activities": {
+                "initiator": "letting care pause",
+                "receiver": "taking a breath"
+              },
+              "next_families": {
+                "initiator": "rest",
+                "receiver": "rest"
+              }
+            }
+          },
+          {
+            "id": "share_care",
+            "label": "Share the burden",
+            "consequence_cue": {
+              "tone": "supportive",
+              "text": "Share the work. They may feel less alone."
+            },
+            "bond_delta": 3,
+            "participant_effects": [
+              {
+                "role": "initiator",
+                "rest_delta": -3
+              },
+              {
+                "role": "receiver",
+                "rest_delta": -3,
+                "morale_delta": 1
+              }
+            ],
+            "aftermath": "They split the work and stayed with it together.",
+            "participant_views": {
+              "initiator": "They were carrying too much alone.",
+              "receiver": "They did not leave me to handle it by myself."
+            },
+            "keeper_reactions": {
+              "initiator": "Thank you for helping us share the work.",
+              "receiver": "Thank you for making this feel possible."
+            },
+            "cause_resolution": {
+              "status": "eased",
+              "eased_text": "They are carrying the work together now.",
+              "remaining_text": "The work is still too much for one person.",
+              "surviving_cause": "There is still too much work to carry alone."
+            },
+            "aftermath_behavior": {
+              "duration_ms": 6000,
+              "orientation": "toward",
+              "activities": {
+                "initiator": "sharing the burden",
+                "receiver": "sharing the burden"
+              },
+              "next_families": {
+                "initiator": "company",
+                "receiver": "company"
+              }
+            }
+          }
+        ]
+      },
+      "practice": {
+        "label": "Practice turns sharp",
+        "issue_activity": "arguing over practice",
+        "post_resolution_cooldown_ms": 120000,
+        "replies": [
+          {
+            "id": "set_terms",
+            "label": "Set fair terms",
+            "consequence_cue": {
+              "tone": "steady",
+              "text": "Set fair rules. They may try again together."
+            },
+            "bond_delta": 2,
+            "participant_effects": [
+              {
+                "role": "initiator",
+                "purpose_delta": -2
+              },
+              {
+                "role": "receiver",
+                "purpose_delta": -2
+              }
+            ],
+            "aftermath": "They agreed on the rules and started again.",
+            "participant_views": {
+              "initiator": "They push hard, but they can keep it fair.",
+              "receiver": "They want the same thing I do: to get better."
+            },
+            "keeper_reactions": {
+              "initiator": "Thank you for setting fair rules.",
+              "receiver": "Thank you for keeping this about practice."
+            },
+            "cause_resolution": {
+              "status": "eased",
+              "eased_text": "They have rules they can both work with.",
+              "remaining_text": "They still disagree about how to practice.",
+              "surviving_cause": "They still disagree about how hard to push."
+            },
+            "aftermath_behavior": {
+              "duration_ms": 6000,
+              "orientation": "toward",
+              "activities": {
+                "initiator": "resetting their practice",
+                "receiver": "resetting their practice"
+              },
+              "next_families": {
+                "initiator": "purpose",
+                "receiver": "purpose"
+              }
+            }
+          },
+          {
+            "id": "cool_down",
+            "label": "Call a pause",
+            "consequence_cue": {
+              "tone": "cool",
+              "text": "Call a break. They may need time before trying again."
+            },
+            "bond_delta": 1,
+            "participant_effects": [
+              {
+                "role": "initiator",
+                "rest_delta": -2
+              },
+              {
+                "role": "receiver",
+                "rest_delta": -2
+              }
+            ],
+            "aftermath": "They stopped the contest before either said more.",
+            "participant_views": {
+              "initiator": "They were not trying to start a fight, but it was getting there.",
+              "receiver": "They need time away from me before we try again."
+            },
+            "keeper_reactions": {
+              "initiator": "Thank you for calling the break.",
+              "receiver": "Thank you. I needed that pause."
+            },
+            "cause_resolution": {
+              "status": "remains",
+              "eased_text": "They have stepped away before it got worse.",
+              "remaining_text": "The contest has stopped, but they still disagree about practice.",
+              "surviving_cause": "They still disagree about how to practice together."
+            },
+            "aftermath_behavior": {
+              "duration_ms": 6000,
+              "orientation": "away",
+              "activities": {
+                "initiator": "cooling down",
+                "receiver": "cooling down"
+              },
+              "next_families": {
+                "initiator": "rest",
+                "receiver": "rest"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "autonomous_results": {
+      "settled": {
+        "bond_delta": 0,
+        "participant_effects": [
+
+        ],
+		"aftermath": "They stepped apart and let it pass.",
+		"participant_views": {
+		  "initiator": "I can let this go for now.",
+		  "receiver": "We can leave it here."
+		},
+		"aftermath_behavior": {
+          "duration_ms": 6000,
+          "orientation": "away",
+          "activities": {
+            "initiator": "taking a quiet minute",
+            "receiver": "taking a quiet minute"
+          },
+          "next_families": {
+            "initiator": "autonomous",
+            "receiver": "autonomous"
+          }
+        }
+      },
+      "frustrated": {
+        "bond_delta": -4,
+        "participant_effects": [
+          {
+            "role": "initiator",
+            "morale_delta": -2
+          },
+          {
+            "role": "receiver",
+            "fear_delta": 2
+          }
+        ],
+		"aftermath": "They left upset and kept their distance.",
+		"participant_views": {
+		  "initiator": "They did not hear me.",
+		  "receiver": "I need some space from them."
+		},
+		"aftermath_behavior": {
+          "duration_ms": 6000,
+          "orientation": "away",
+          "activities": {
+            "initiator": "keeping their distance",
+            "receiver": "keeping their distance"
+          },
+          "next_families": {
+            "initiator": "rest",
+            "receiver": "rest"
+          }
+        }
+      }
+    }
+  },
+  "reaction_voice": {
+    "cue_duration_ms": 2000,
+    "social": {
+      "welcome_company": {"live_text": "{initiator} sits with {receiver} at {place}.", "history_text": "{initiator} sat with {receiver} at {place}.", "views": {"initiator": "I am glad they stayed with me.", "receiver": "I am comfortable staying here."}, "memories": {"initiator": "I remember us talking without forcing it.", "receiver": "I remember choosing to stay and talk."}, "reactions": {"initiator": {"kind": "welcomed", "motion": "closer"}, "receiver": {"kind": "appreciative", "motion": "acknowledge"}}},
+      "quiet_company": {"live_text": "{initiator} shares a quiet seat with {receiver} at {place}.", "history_text": "{initiator} shared a quiet seat with {receiver} at {place}.", "views": {"initiator": "I am glad we do not have to fill the silence.", "receiver": "I can sit here without performing."}, "memories": {"initiator": "I remember a quiet seat beside them.", "receiver": "I remember being allowed some silence."}, "reactions": {"initiator": {"kind": "appreciative", "motion": "acknowledge"}, "receiver": {"kind": "welcomed", "motion": "closer"}}},
+      "unwanted_attention": {"live_text": "{initiator} steps close while {receiver} needs room at {place}.", "history_text": "{initiator} stepped close while {receiver} needed room at {place}.", "views": {"initiator": "I am crowding them, even if I mean well.", "receiver": "I need them to give me room."}, "memories": {"initiator": "I remember realizing I had stood too close.", "receiver": "I remember needing to step back."}, "reactions": {"initiator": {"kind": "uncomfortable", "motion": "step_back"}, "receiver": {"kind": "crowded", "motion": "angle_away"}}},
+      "accepted_support": {"live_text": "{initiator} offers {receiver} a hand at {place}.", "history_text": "{initiator} offered {receiver} a hand at {place}.", "views": {"initiator": "I can help without taking over.", "receiver": "I am relieved they stayed with me."}, "memories": {"initiator": "I remember offering a hand they could use.", "receiver": "I remember accepting help when I needed it."}, "reactions": {"initiator": {"kind": "appreciative", "motion": "acknowledge"}, "receiver": {"kind": "welcomed", "motion": "closer"}}},
+      "declined_help": {"live_text": "{initiator} offers help; {receiver} says no calmly at {place}.", "history_text": "{initiator} offered help; {receiver} said no calmly at {place}.", "views": {"initiator": "I can step back when they say no.", "receiver": "I need to handle this part myself."}, "memories": {"initiator": "I remember letting them keep their boundary.", "receiver": "I remember saying no without a fight."}, "reactions": {"initiator": {"kind": "uncomfortable", "motion": "step_back"}, "receiver": {"kind": "appreciative", "motion": "acknowledge"}}},
+      "protective_response": {"live_text": "{initiator} stays near while {receiver} steadies themselves at {place}.", "history_text": "{initiator} stayed near while {receiver} steadied themselves at {place}.", "views": {"initiator": "I am staying close until they feel safer.", "receiver": "I feel safer with them beside me."}, "memories": {"initiator": "I remember staying until they found their footing.", "receiver": "I remember not being left alone."}, "reactions": {"initiator": {"kind": "appreciative", "motion": "closer"}, "receiver": {"kind": "welcomed", "motion": "acknowledge"}}},
+      "caregiver_strain": {"live_text": "{initiator} reaches for {receiver}, but both are worn thin at {place}.", "history_text": "{initiator} reached for {receiver}, but both were worn thin at {place}.", "views": {"initiator": "I want to help, but I am running thin too.", "receiver": "I can see this is costing them."}, "memories": {"initiator": "I remember wanting to help with too little left.", "receiver": "I remember seeing how tired they were."}, "reactions": {"initiator": {"kind": "hurt", "motion": "withdraw"}, "receiver": {"kind": "uncomfortable", "motion": "step_back"}}},
+      "shared_practice": {"live_text": "{initiator} practices beside {receiver} at {place}.", "history_text": "{initiator} practiced beside {receiver} at {place}.", "views": {"initiator": "I am sharper when they keep pace with me.", "receiver": "I am learning from the way they work."}, "memories": {"initiator": "I remember matching their pace through practice.", "receiver": "I remember learning beside them."}, "reactions": {"initiator": {"kind": "challenged", "motion": "square_up"}, "receiver": {"kind": "challenged", "motion": "square_up"}}},
+      "competitive_practice": {"live_text": "{initiator} turns practice with {receiver} into a friendly contest at {place}.", "history_text": "{initiator} turned practice with {receiver} into a friendly contest at {place}.", "views": {"initiator": "I want to see how far I can push this.", "receiver": "I am ready to meet their pace."}, "memories": {"initiator": "I remember the contest sharpening my focus.", "receiver": "I remember meeting their challenge."}, "reactions": {"initiator": {"kind": "challenged", "motion": "square_up"}, "receiver": {"kind": "challenged", "motion": "square_up"}}},
+      "encouragement": {"live_text": "{initiator} keeps {receiver} going through practice at {place}.", "history_text": "{initiator} kept {receiver} going through practice at {place}.", "views": {"initiator": "I can see they have one more try in them.", "receiver": "I can keep going with that in mind."}, "memories": {"initiator": "I remember telling them not to stop there.", "receiver": "I remember finding one more try."}, "reactions": {"initiator": {"kind": "appreciative", "motion": "acknowledge"}, "receiver": {"kind": "welcomed", "motion": "closer"}}},
+      "recognition": {"live_text": "{initiator} notices the work {receiver} has put in at {place}.", "history_text": "{initiator} noticed the work {receiver} had put in at {place}.", "views": {"initiator": "I can see how much work they have done.", "receiver": "I am glad someone noticed the work."}, "memories": {"initiator": "I remember naming the work they had done.", "receiver": "I remember being seen for the work."}, "reactions": {"initiator": {"kind": "appreciative", "motion": "acknowledge"}, "receiver": {"kind": "welcomed", "motion": "acknowledge"}}},
+      "impatience": {"live_text": "{initiator} keeps correcting {receiver} at {place}.", "history_text": "{initiator} kept correcting {receiver} at {place}.", "views": {"initiator": "I am losing patience with this pace.", "receiver": "I feel pushed before I am ready."}, "memories": {"initiator": "I remember pressing for a faster pace.", "receiver": "I remember feeling rushed."}, "reactions": {"initiator": {"kind": "challenged", "motion": "square_up"}, "receiver": {"kind": "hurt", "motion": "step_back"}}},
+      "rivalry": {"live_text": "{initiator} and {receiver} stop treating the contest as friendly at {place}.", "history_text": "{initiator} and {receiver} stopped treating the contest as friendly at {place}.", "views": {"initiator": "I am no longer sure this is helping either of us.", "receiver": "I feel the contest turning against us."}, "memories": {"initiator": "I remember the contest turning sour.", "receiver": "I remember wanting distance from the contest."}, "reactions": {"initiator": {"kind": "hurt", "motion": "withdraw"}, "receiver": {"kind": "hurt", "motion": "withdraw"}}}
+    },
+    "incident_families": {
+      "companionship": {"warning_live": "{initiator} asks {receiver} for space at {place}.", "warning_history": "{initiator} asked {receiver} for space at {place}.", "open_live": "{initiator} and {receiver} need a clear word before this grows.", "exchange_lines": [{"speaker": "initiator", "text": "I am trying to be close, not crowd you."}, {"speaker": "receiver", "text": "I need you to give me room right now."}]},
+      "care": {"warning_live": "{initiator}'s help is landing badly with {receiver} at {place}.", "warning_history": "{initiator}'s help landed badly with {receiver} at {place}.", "open_live": "{initiator} and {receiver} need a clear word before this grows.", "exchange_lines": [{"speaker": "initiator", "text": "I am trying to help, but I keep getting it wrong."}, {"speaker": "receiver", "text": "I need you to stop deciding what I can carry."}]},
+      "practice": {"warning_live": "{initiator} and {receiver} turn practice sharp at {place}.", "warning_history": "{initiator} and {receiver} turned practice sharp at {place}.", "open_live": "{initiator} and {receiver} need a clear word before this grows.", "exchange_lines": [{"speaker": "initiator", "text": "I need you to take this practice seriously."}, {"speaker": "receiver", "text": "I am trying, but your pace is not the only one that matters."}]}
+    },
+    "incident_replies": {
+      "companionship.give_space": {"live_text": "They make room and the argument settles.", "history_text": "They made room and the argument settled.", "views": {"initiator": "I am giving them the room they asked for.", "receiver": "I can breathe with this space."}, "memories": {"initiator": "I remember stepping back when they asked.", "receiver": "I remember being given room to breathe."}, "reactions": {"initiator": {"kind": "uncomfortable", "motion": "step_back"}, "receiver": {"kind": "crowded", "motion": "angle_away"}}},
+      "companionship.name_harm": {"live_text": "They name the hurt and sit with it.", "history_text": "They named the hurt and sat with it.", "views": {"initiator": "I am hearing what my closeness did to them.", "receiver": "I feel heard, even if the hurt remains."}, "memories": {"initiator": "I remember hearing plainly where I caused harm.", "receiver": "I remember saying why I pulled away."}, "reactions": {"initiator": {"kind": "hurt", "motion": "step_back"}, "receiver": {"kind": "appreciative", "motion": "acknowledge"}}},
+      "care.respect_boundary": {"live_text": "They pause the help and both take a breath.", "history_text": "They paused the help and both took a breath.", "views": {"initiator": "I am giving them the pause they need.", "receiver": "I can rest without being pushed."}, "memories": {"initiator": "I remember stepping back when help was too much.", "receiver": "I remember being allowed to rest."}, "reactions": {"initiator": {"kind": "uncomfortable", "motion": "step_back"}, "receiver": {"kind": "appreciative", "motion": "acknowledge"}}},
+      "care.share_care": {"live_text": "They split the work and stay with it together.", "history_text": "They split the work and stayed with it together.", "views": {"initiator": "I am carrying this with them now.", "receiver": "I am not carrying this alone now."}, "memories": {"initiator": "I remember taking up part of the work.", "receiver": "I remember the work becoming lighter together."}, "reactions": {"initiator": {"kind": "appreciative", "motion": "closer"}, "receiver": {"kind": "welcomed", "motion": "closer"}}},
+      "practice.set_terms": {"live_text": "They agree on fair terms and begin again.", "history_text": "They agreed on fair terms and began again.", "views": {"initiator": "I am ready to try again without cutting corners.", "receiver": "I can meet them on terms that feel fair."}, "memories": {"initiator": "I remember agreeing to fair terms.", "receiver": "I remember returning to practice on fair terms."}, "reactions": {"initiator": {"kind": "challenged", "motion": "square_up"}, "receiver": {"kind": "challenged", "motion": "square_up"}}},
+      "practice.cool_down": {"live_text": "They stop the contest before either says more.", "history_text": "They stopped the contest before either said more.", "views": {"initiator": "I am taking the space I need to cool down.", "receiver": "I need a little distance before we try again."}, "memories": {"initiator": "I remember choosing the break before I said more.", "receiver": "I remember stepping away to cool down."}, "reactions": {"initiator": {"kind": "uncomfortable", "motion": "angle_away"}, "receiver": {"kind": "uncomfortable", "motion": "angle_away"}}}
+    },
+    "autonomous": {
+      "settled": {"live_text": "They step apart and let the moment pass.", "history_text": "They stepped apart and let the moment pass.", "views": {"initiator": "I can let this go for now.", "receiver": "I can leave this here for now."}, "memories": {"initiator": "I remember letting the moment pass.", "receiver": "I remember leaving it there."}, "reactions": {"initiator": {"kind": "uncomfortable", "motion": "angle_away"}, "receiver": {"kind": "uncomfortable", "motion": "angle_away"}}},
+      "frustrated": {"live_text": "They leave upset and keep their distance.", "history_text": "They left upset and kept their distance.", "views": {"initiator": "I am leaving before this gets worse.", "receiver": "I need distance from them right now."}, "memories": {"initiator": "I remember leaving while I was still upset.", "receiver": "I remember needing distance from them."}, "reactions": {"initiator": {"kind": "hurt", "motion": "withdraw"}, "receiver": {"kind": "hurt", "motion": "withdraw"}}}
+    },
+    "summoning": {
+      "manifest_live": "{newcomer} steps from the Flame.",
+      "arrival_history": "{newcomer} reached {place} after arriving at the Flame.",
+      "witness_reactions": {"approach": {"kind": "welcomed", "motion": "closer", "perspective": "I move closer when {newcomer} appears."}, "watch": {"kind": "appreciative", "motion": "acknowledge", "perspective": "I watch {newcomer} find their feet."}, "avoid": {"kind": "uncomfortable", "motion": "angle_away", "perspective": "I give {newcomer} room from where I am."}}
+    },
+    "warning_witnesses": {"max": 3, "roles": [
+      {"id": "support", "eligible_archetypes": ["loyal", "empathic", "devout"], "target": "receiver", "reaction": {"kind": "appreciative", "motion": "closer"}, "perspective": "I saw {receiver} tighten up, so I stayed nearby."},
+      {"id": "side", "eligible_archetypes": ["proud", "valiant", "ambitious"], "target": "initiator", "reaction": {"kind": "challenged", "motion": "square_up"}, "perspective": "I could see why {initiator} pushed back."},
+      {"id": "watch", "eligible_archetypes": ["reflective", "stoic", "canny"], "target": "receiver", "reaction": {"kind": "appreciative", "motion": "acknowledge"}, "perspective": "I watched to see whether either of them stepped back."},
+      {"id": "leave", "rest_at_least": 14, "target": "receiver", "reaction": {"kind": "uncomfortable", "motion": "withdraw"}, "perspective": "I kept walking; that contest was not mine to settle."}
+    ]}
+  },
+  "summoning": {
+    "start_ase": 60,
+    "ase_cap": 120,
+    "ase_per_day": 60,
+    "cost": 60,
+    "max_population": 9,
+    "welcome_choices": [
+      {
+        "id": "make_room",
+        "label": "Make room beside the Flame",
+        "cue": {"tone": "warm", "text": "They may feel there is a place for them here."},
+        "direction": "welcome",
+        "result": "The circle opened around them.",
+        "live_text": "{newcomer} sees the circle make room.",
+        "reaction_cue": {"kind": "welcomed", "motion": "closer"},
+        "memory": "I remember the circle making room for me."
+      },
+      {
+        "id": "offer_quiet",
+        "label": "Offer a quiet start",
+        "cue": {"tone": "gentle", "text": "They may settle better without a crowd."},
+        "direction": "space",
+        "result": "The village gave them a little room to breathe.",
+        "live_text": "{newcomer} sees the village give them room.",
+        "reaction_cue": {"kind": "appreciative", "motion": "acknowledge"},
+        "memory": "I remember being given room to breathe."
+      }
+    ],
+    "newcomers": [
+      {
+        "id": "adwoa",
+        "name": "Adwoa",
+        "description": "Bright-eyed map keeper",
+        "color": "#d8798d",
+        "mark": 6,
+        "portrait": {"bust_id": "adwoa_coral_scarf", "silhouette": "round scarf and one raised brow", "marking": "coral cheek patch with three loose threads"},
+        "standing": 2,
+        "calling": "Calling undecided",
+        "fear": 24,
+        "morale": 63,
+        "pressures": {"rest": 5, "company": 11, "purpose": 8},
+        "bias": {"rest": 0, "company": 3, "purpose": 2},
+        "preferences": {"rest": ["hearth", "quiet"], "company": ["hearth", "courtyard"], "purpose": ["courtyard", "threshold"]},
+        "sociability": 0.7,
+        "node": "flame",
+        "dialogue": {"feelings": "I am glad there are people here.", "activity": "I keep track of where everyone goes.", "place": "A shared table tells you a lot."},
+        "traits": {"courage": 54, "wisdom": 61, "faith": 48},
+        "arrival_options": [
+          {"kind": "person", "target_id": "kweku", "family": "company", "cause": "Kweku looks like someone who knows the paths."},
+          {"kind": "place", "place": "hearth", "family": "company", "cause": "The Hearth has room for a first conversation."},
+          {"kind": "withdrawal", "place": "quiet", "family": "rest", "cause": "A quiet edge will help her take it in."}
+        ]
+      },
+      {
+        "id": "mensah",
+        "name": "Mensah",
+        "description": "Careful woodworker",
+        "color": "#7da8a1",
+        "mark": 7,
+        "portrait": {"bust_id": "mensah_teal_wrap", "silhouette": "square shoulders and folded sleeves", "marking": "teal forearm patch with a frayed cuff"},
+        "standing": 3,
+        "calling": "Calling undecided",
+        "fear": 38,
+        "morale": 55,
+        "pressures": {"rest": 9, "company": 4, "purpose": 13},
+        "bias": {"rest": 1, "company": -1, "purpose": 4},
+        "preferences": {"rest": ["quiet", "hearth"], "company": ["courtyard", "hearth"], "purpose": ["training", "threshold"]},
+        "sociability": -0.2,
+        "node": "flame",
+        "dialogue": {"feelings": "I need a little time to look around.", "activity": "I notice what has been mended and what has not.", "place": "A quiet bench is enough for now."},
+        "traits": {"courage": 58, "wisdom": 57, "faith": 42},
+        "arrival_options": [
+          {"kind": "person", "target_id": "abena", "family": "purpose", "cause": "Abena looks serious about finishing a task."},
+          {"kind": "place", "place": "training", "family": "purpose", "cause": "The training ground gives him something clear to do."},
+          {"kind": "withdrawal", "place": "quiet", "family": "rest", "cause": "He needs a quiet place before he can join in."}
+        ]
+      },
+      {
+        "id": "sena",
+        "name": "Sena",
+        "description": "Soft-spoken drummer",
+        "color": "#a788d4",
+        "mark": 8,
+        "portrait": {"bust_id": "sena_violet_beads", "silhouette": "narrow face and bead-wrapped braids", "marking": "violet temple patch with bead-like loose threads"},
+        "standing": 1,
+        "calling": "Calling undecided",
+        "fear": 47,
+        "morale": 48,
+        "pressures": {"rest": 8, "company": 9, "purpose": 5},
+        "bias": {"rest": 2, "company": 1, "purpose": 0},
+        "preferences": {"rest": ["quiet", "hearth"], "company": ["hearth", "courtyard"], "purpose": ["courtyard", "training"]},
+        "sociability": 0.1,
+        "node": "flame",
+        "dialogue": {"feelings": "I am listening before I say much.", "activity": "I tap out a rhythm when I am thinking.", "place": "The Hearth sounds different when people are kind."},
+        "traits": {"courage": 43, "wisdom": 65, "faith": 59},
+        "arrival_options": [
+          {"kind": "person", "target_id": "ama", "family": "company", "cause": "Ama makes room for people without making a fuss."},
+          {"kind": "place", "place": "hearth", "family": "company", "cause": "She can hear the village best from the Hearth."},
+          {"kind": "withdrawal", "place": "quiet", "family": "rest", "cause": "She needs a calm place to listen first."}
+        ]
+      }
+    ]
+  }
+}

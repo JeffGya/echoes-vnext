@@ -641,14 +641,14 @@ static func _t_option_exact() -> Dictionary:
 	var stay: Dictionary = OptionContract.build(
 		"goal.combat.advance.baseline.c1r1", "option.combat.advance.baseline.c1r1.direct.d1r1.pstay", "advance", {"col": 1, "row": 1}, [],
 		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []},
-		1.0, _action("actor.guard"), _action("actor.idle")
+		1.0, 0, _action("actor.guard"), _action("actor.idle")
 	)
 	if not _matches(OptionContract.validate(stay, {"col": 1, "row": 1}), "stationary_option_requires_stay_capable_purpose", "purpose"):
 		return _fail("stationary option accepted for a purpose that exists to move")
 	var engage_stay: Dictionary = OptionContract.build(
 		"goal.combat.engage.baseline.c1r1", "option.combat.engage.baseline.c1r1.direct.d1r1.pstay", "engage", {"col": 1, "row": 1}, [],
 		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []},
-		1.0, _action("melee_attack", "enemy.a"), _action("actor.idle")
+		1.0, 0, _action("melee_attack", "enemy.a"), _action("actor.idle")
 	)
 	if not bool(OptionContract.validate(engage_stay, {"col": 1, "row": 1})["valid"]):
 		return _fail("stationary option rejected for a stay-capable purpose")
@@ -813,7 +813,7 @@ static func _option() -> Dictionary:
 		"goal.recover.advance.runner.c2r1", "option.recover.advance.runner.c2r1.direct.d2r1.pc2r1",
 		"advance", {"col": 2, "row": 1}, [{"col": 2, "row": 1}],
 		1, 1, 0, 2, 1, 0.0, 0.125, 1.0, [],
-		{"known_count": 1, "known_ids": ["hazard.binding.1"]}, 1.0,
+		{"known_count": 1, "known_ids": ["hazard.binding.1"]}, 1.0, 1,
 		_action("actor.move", "objective.relic"), _action("actor.idle")
 	)
 

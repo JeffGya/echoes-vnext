@@ -3,10 +3,12 @@ extends Control
 class_name SanctumShell
 
 @onready var overlay_root: Control = %OverlayRoot
+# WorldLayer.follow_viewport_enabled (in the .tscn) is what lets the Camera2D move the board.
+# Without it the camera changes only the viewport canvas transform, which a CanvasLayer ignores.
 @onready var _world_layer: CanvasLayer = $WorldLayer
 @onready var spatial_layer: Control = $WorldLayer/SpatialLayer
 @onready var spatial_view: Node2D = $WorldLayer/SpatialLayer/SpatialView
-@onready var camera: Camera2D = $WorldLayer/SpatialLayer/SpatialView/Camera2D
+@onready var camera: BoardCameraController = $WorldLayer/SpatialLayer/SpatialView/Camera2D
 @onready var spatial_renderer: Node2D = $WorldLayer/SpatialLayer/SpatialView/SanctumSpatialRenderer2
 @onready var _ui_layer: CanvasLayer = $UILayer
 @onready var _overlay_container: Control = $UILayer/Control
@@ -40,15 +42,18 @@ var _blocking_modal_active_check: Callable = Callable()
 # The shell owns the persistent nav bar so all sanctum-family screens share it.
 var _cached_nav: Dictionary = {}
 
-# Camera config (Phase B)
-var _zoom_levels := [Vector2(0.5, 0.5), Vector2(1.0, 1.0), Vector2(1.5, 1.5), Vector2(2.0, 2.0)]
-var _zoom_index := 2 # Start at 1.5× (index 2)
-var _pan_speed  := 2.5
+# Start zoom. Wheel, pinch and the Z levels are all on BoardCameraController, set in
+# SanctumShell.tscn (decisions.md #95).
+const _DEFAULT_ZOOM := 2.0 # decisions.md #71
 
-var _is_panning := false
-var _last_pointer_pos := Vector2.ZERO
+# Tells a board tap from a drag from a pinch. Fed from _input because the STOP chrome over the
+# board takes presses before any Control on the board could see them.
+var _pointer := BoardPointerTracker.new()
+# False when the press that started the gesture landed on a panel: a drag there pans nothing.
+var _drag_pans := true
 var _current_snap_type := ""
 var _echo_detail_open := false
+var _featured_echo_id := ""
 var _institutions_open := false
 var _placement_mode := false
 var _placement_building_id := ""
@@ -102,8 +107,6 @@ const _NOTIFICATION_COMPACT_HEIGHT := 240.0
 const _NOTIFICATION_STANDARD_HEIGHT := 260.0
 const _NOTIFICATION_WIDE_HEIGHT := 280.0
 
-var _floor_bounds_sv := Rect2(Vector2.ZERO, Vector2.ZERO) # floor bounds in SpatialView-local pixels
- 
 # PackedScenes will be preloaded later
 var _scene_by_flow_type: Dictionary = {}
 var _sanctum_scene := preload("res://ui/screens/sanctum/SanctumScreen.tscn")
@@ -123,6 +126,8 @@ var _modal_scene_by_id: Dictionary = {
 }
 
 func _ready() -> void:
+	_pointer.tap.connect(_on_pointer_tap)
+	_pointer.drag_pan.connect(_on_pointer_drag_pan)
 	_scene_by_flow_type = {
 		"flow.sanctum": _sanctum_scene,
 		"flow.summon": _summon_scene,
@@ -135,9 +140,10 @@ func _ready() -> void:
 	_center_spatial_view()
 	spatial_layer.resized.connect(_on_spatial_layer_resized)
 
-	camera.zoom = _zoom_levels[_zoom_index]
+	var levels := Array(camera.zoom_levels)
+	camera.configure_zoom_range(levels.min(), levels.max(), _DEFAULT_ZOOM)
 	_recompute_floor_bounds()
-	_clamp_camera_to_floor()
+	camera.reclamp()
 	# CanvasLayer does not inherit visibility from its Control parent.
 	# Sync world, UI, chrome, and notification layers whenever the shell changes.
 	visibility_changed.connect(_sync_ui_layer_visibility)
@@ -159,10 +165,23 @@ func _sync_ui_layer_visibility() -> void:
 	# Disable it when SanctumShell is hidden so it does not affect the viewport
 	# while RealmShell (or any other screen) is active.
 	camera.enabled = effective_visible
+	if not effective_visible:
+		_pointer.reset()
+
+
+# A release lost to a focus change would leave a finger counted or a drag owned.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_pointer.reset()
 
 
 func set_snapshot(snap: Dictionary) -> void:
 	_current_snap_type = str(snap.get("type", ""))
+	if _current_snap_type != "flow.sanctum":
+		_pointer.reset()
+	# The board view (and its echo detail) guards Space; Summon, Vows, Weaving and Echo Party need
+	# Space on their own buttons.
+	camera.guard_space_on_buttons = _current_snap_type == "flow.sanctum"
 	_active_modal_id = &""
 	_active_modal_payload = {}
 
@@ -323,106 +342,83 @@ func _update_notification_layout() -> void:
 	if _notification_body_scroll != null:
 		_notification_body_scroll.custom_minimum_size.y = 72.0 if profile == &"compact" else 88.0
 
-func _unhandled_input(event: InputEvent) -> void:
-	# Don't steal UI clicks: only pan when dragging with MMB or Space+LMB for now.
-	# We'll add touch-pan next (one finger drag on empty space). After we decide UI gesture rules.
-	
-	# --- Zoom wheel (dev convenience) ---
+enum _PressHit { OPEN_BOARD, PANEL, INTERACTIVE }
+
+# Space+drag stays with BoardCameraController (space_drag_pan), so a Space press never starts a gesture here.
+func _input(event: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
+	_pointer.note_touch(event)
+	if _is_primary_press(event) and not _begin_board_press(_event_position(event)):
+		return
+	if _pointer.handle_event(event):
+		get_viewport().set_input_as_handled()
+
+
+static func _event_position(event: InputEvent) -> Vector2:
+	if event is InputEventMouse:
+		return (event as InputEventMouse).position
+	return (event as InputEventScreenTouch).position
+
+
+static func _is_primary_press(event: InputEvent) -> bool:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-
-		if _echo_detail_open:
-			return
-
-		if mb.pressed and (mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN):
-			_toggle_zoom(mb.button_index == MOUSE_BUTTON_WHEEL_UP)
-			get_viewport().set_input_as_handled()
-			return
-
-		# Space + LMB starts panning (trackpad friendly)
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed and Input.is_key_pressed(KEY_SPACE):
-				_is_panning = true
-				get_viewport().set_input_as_handled()
-				return
-			if not mb.pressed and _is_panning:
-				_is_panning = false
-				get_viewport().set_input_as_handled()
-				return
-	
-	# Pinch-to-zoom (mobile) — smooth continuous zoom, NOT snap-to-level.
-	# Works in both normal view and placement mode.
-	if event is InputEventMagnifyGesture:
-		if _echo_detail_open:
-			return
-		var factor := (event as InputEventMagnifyGesture).factor
-		var new_zoom := (camera.zoom * factor).clamp(Vector2(0.5, 0.5), Vector2(2.0, 2.0))
-		camera.zoom = new_zoom
-		_clamp_camera_to_floor()
-		get_viewport().set_input_as_handled()
-		return
-
-	if event is InputEventPanGesture:
-		if _echo_detail_open:
-			return
-		var pg := event as InputEventPanGesture
-		# pg.delta is already a screen-space delta
-		_pan_by_delta(pg.delta)
-		get_viewport().set_input_as_handled()
-		return
-
-	if event is InputEventMouseMotion:
-		if _echo_detail_open:
-			return
-		if _is_panning:
-			var mm := event as InputEventMouseMotion
-			_pan_by_delta(mm.relative)
-			get_viewport().set_input_as_handled()
-			return
-
-	# Z toggles zoom levels
-	if event is InputEventKey and event.pressed and not event.echo:
-		if _echo_detail_open:
-			return
-		var k := event as InputEventKey
-		if k.keycode == KEY_Z:
-			_zoom_index = (_zoom_index + 1) % _zoom_levels.size()
-			camera.zoom = _zoom_levels[_zoom_index]
-			_clamp_camera_to_floor()
-			get_viewport().set_input_as_handled()
-			return
+		return mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT
+	return event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed
 
 
-func _input(event: InputEvent) -> void:
-	if not _can_accept_spatial_pointer_input():
-		return
-	if not (event is InputEventMouseButton):
-		return
-	var mb := event as InputEventMouseButton
-	if not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
-		return
-	if Input.is_key_pressed(KEY_SPACE):
-		return
-	if _control_or_ancestor_is_interactive(get_viewport().gui_get_hovered_control()):
-		return
+# True when a press may start a tap or drag. A press on a button, field or other control that takes
+# input never does; a press on a panel can tap but not pan.
+func _begin_board_press(point: Vector2) -> bool:
+	if not _can_accept_spatial_pointer_input() or Input.is_key_pressed(KEY_SPACE):
+		return false
+	var hit := _classify_press(point)
+	_drag_pans = hit == _PressHit.OPEN_BOARD
+	return hit != _PressHit.INTERACTIVE
 
-	if _placement_mode:
-		# _input() fires before GUI/mouse_filter processing, so placement taps are
-		# caught here regardless of what Controls are in the scene tree.
-		# Use gui_get_hover_control() to detect when the cursor is over a UI button
-		# (Cancel, Confirm, strip) and let it handle its own click via _gui_input.
-		if _try_placement_tap(mb.position):
-			get_viewport().set_input_as_handled()
-		return
 
-	# Normal mode: check hit, route by kind.
-	if _try_open_occupant_at_viewport_point(mb.position):
-		get_viewport().set_input_as_handled()
+# Walks the visible chrome instead of asking the viewport for its hovered control: a touch press
+# arrives before the hover has moved to it.
+func _classify_press(point: Vector2) -> int:
+	var result: int = _PressHit.OPEN_BOARD
+	var pending: Array[Node] = [_ui_layer, _chrome_layer, _notification_layer]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		var control := node as Control
+		if control != null:
+			if not control.visible:
+				continue
+			var local := control.get_global_transform_with_canvas().affine_inverse() * point
+			var inside := Rect2(Vector2.ZERO, control.size).has_point(local)
+			if control.clip_contents and not inside:
+				continue
+			if inside and control.mouse_filter != Control.MOUSE_FILTER_IGNORE:
+				if _control_or_ancestor_is_interactive(control):
+					return _PressHit.INTERACTIVE
+				if control is PanelContainer or control is Panel or control is ScrollContainer or control is ColorRect:
+					result = _PressHit.PANEL
+		pending.append_array(node.get_children())
+	return result
+
+
+func _on_pointer_tap(pos: Vector2) -> void:
+	if _echo_detail_open:
+		_try_switch_or_close_echo_detail_at_viewport_point(pos)
+	elif _placement_mode:
+		_try_placement_tap(pos)
+	else:
+		_try_open_occupant_at_viewport_point(pos)
+
+
+func _on_pointer_drag_pan(screen_delta: Vector2) -> void:
+	if _drag_pans:
+		camera.drag_pan(screen_delta)
 
 func _can_accept_spatial_pointer_input() -> bool:
 	if _blocking_modal_active_check.is_valid() and bool(_blocking_modal_active_check.call()):
 		return false
-	return not _echo_detail_open and _current_snap_type == "flow.sanctum"
+	return _current_snap_type == "flow.sanctum"
 
 func _bottom_chrome_inset() -> int:
 	var safe: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
@@ -629,26 +625,6 @@ func _update_rail_tone(snap_type: String) -> void:
 		return
 	_bottom_rail.modulate = Color(1, 1, 1, 1.0 if snap_type == "flow.sanctum" else 0.86)
 
-func _pan_by_delta(screen_delta: Vector2) -> void:
-	# Camera moves opposite to drag direction for "grab world" feel.
-	var z := camera.zoom.x
-	if z <= 0.0:
-		z = 1.0
-	camera.position -= (screen_delta * _pan_speed) / z
-	_clamp_camera_to_floor()
-	
-func _toggle_zoom(zoom_in: bool) -> void:
-	# Only 2 levels for MVP: near/far toggle.
-	# Wheel up = zoom in (closer)
-	if zoom_in:
-		_zoom_index = min(_zoom_index + 1, _zoom_levels.size() - 1)
-	else:
-		_zoom_index = max(_zoom_index - 1, 0)
-		
-	camera.zoom = _zoom_levels[_zoom_index]
-	_clamp_camera_to_floor()
-
-
 # Routes a tap to the correct handler based on the hit occupant kind.
 func _try_open_occupant_at_viewport_point(viewport_point: Vector2) -> bool:
 	if spatial_renderer == null or not spatial_renderer.has_method("find_occupant_at_viewport_point"):
@@ -687,15 +663,52 @@ func _try_open_echo_detail_at_viewport_point_from_hit(hit: Dictionary) -> bool:
 	var occupant_id := str(hit.get("id", ""))
 	if occupant_id.is_empty():
 		return false
-	_saved_camera_position = camera.position
-	_saved_camera_zoom = camera.zoom
+	# Only save the pre-detail camera state on first open. Switching to another echo while
+	# detail is already open must keep the original values so closing still restores the
+	# board view the player left, not the already-zoomed-in detail framing.
+	if not _echo_detail_open:
+		_saved_camera_position = camera.position
+		# The ease target, not a mid-ease value, so closing returns to a real zoom level.
+		_saved_camera_zoom = camera.zoom_goal()
 	_echo_detail_open = true
+	_featured_echo_id = occupant_id
 	_active_overlay.call("open_echo_detail", occupant_id)
 	if spatial_renderer != null and spatial_renderer.has_method("set_featured_occupant"):
 		spatial_renderer.call("set_featured_occupant", occupant_id)
-	_focus_camera_for_echo_detail(true)
+	camera.select(occupant_id)
+	var occupant_pos_v: Variant = hit.get("position", Vector2.ZERO)
+	var occupant_pos: Vector2 = occupant_pos_v if occupant_pos_v is Vector2 else Vector2.ZERO
+	_focus_camera_for_echo_detail(occupant_pos, true)
 	_update_rail_tone(_current_snap_type)
 	return true
+
+
+# While the detail view is open, a board tap switches to a different echo, re-confirms the
+# same echo (no-op), or — on empty space — closes the detail view the same way the back
+# button does. Building taps (ase_flame/institution) are ignored here; they have no detail view.
+func _try_switch_or_close_echo_detail_at_viewport_point(viewport_point: Vector2) -> bool:
+	if spatial_renderer == null or not spatial_renderer.has_method("find_occupant_at_viewport_point"):
+		return false
+	var hit_v: Variant = spatial_renderer.call("find_occupant_at_viewport_point", viewport_point)
+	var hit: Dictionary = hit_v if hit_v is Dictionary else {}
+	if hit.is_empty():
+		_close_echo_detail_from_board_tap()
+		return true
+	var kind := str(hit.get("kind", "echo"))
+	if kind == "ase_flame" or kind == "institution":
+		return false
+	var occupant_id := str(hit.get("id", ""))
+	if occupant_id.is_empty() or occupant_id == _featured_echo_id:
+		return true
+	return _try_open_echo_detail_at_viewport_point_from_hit(hit)
+
+
+# Mirrors the back-button close path (overlay closes its own panel, then the shell restores
+# the camera) so tapping empty board space closes detail the same way.
+func _close_echo_detail_from_board_tap() -> void:
+	if _active_overlay != null and _active_overlay.has_method("close_echo_detail"):
+		_active_overlay.call("close_echo_detail")
+	_restore_echo_detail_shell_state()
 
 
 # ---- Institutions panel ----
@@ -757,14 +770,10 @@ func _enter_placement_mode(inst_id: String, valid_cells: Array, floor_cells: Arr
 	_placement_valid_cells    = valid_cells
 	_placement_floor_cells    = floor_cells
 	_placement_occupied_cells = occupied_cells
-	# Allow map taps to reach _unhandled_input. Three Control layers would
-	# otherwise consume every click before _unhandled_input fires:
-	#   1. UILayer/Control (full-screen, STOP by default)
-	#   2. SanctumScreen overlay (full-screen, STOP by default)
-	#   3. WorldLayer/SpatialLayer (full-screen Control, STOP by default)
-	# Setting all three to PASS lets clicks on empty map space fall through.
-	# Buttons inside the overlay (Cancel, Confirm, strip) keep their own STOP
-	# filter and continue to capture their own clicks correctly.
+	# Placement taps and drags reach the pointer tracker through _input and _classify_press, before
+	# the GUI pass, so a cell pick does not depend on these layers. They are still set to PASS, so neither
+	# full-screen Control (UILayer/Control, the overlay) consumes a press on open map.
+	# Buttons inside the overlay (Cancel, Confirm, strip) keep STOP and take their own clicks.
 	if _overlay_container != null:
 		_overlay_container.mouse_filter = Control.MOUSE_FILTER_PASS
 	if _active_overlay != null:
@@ -833,16 +842,13 @@ func _try_placement_tap(viewport_point: Vector2) -> bool:
 	return true
 
 
-func _focus_camera_for_echo_detail(animated: bool) -> void:
-	if spatial_renderer == null or not spatial_renderer.has_method("get_primary_occupant_position"):
-		return
-	var occupant_pos_v: Variant = spatial_renderer.call("get_primary_occupant_position")
-	if not (occupant_pos_v is Vector2):
-		return
-	var occupant_pos: Vector2 = occupant_pos_v
+# occupant_pos is in SanctumSpatialRenderer-local space (from the hit dict at the tap site), but
+# camera.position is interpreted in SpatialView-local space — spatial_renderer's own position
+# offset must be added so the two spaces line up.
+func _focus_camera_for_echo_detail(occupant_pos: Vector2, animated: bool) -> void:
 	var safe_zoom := Vector2(max(_detail_zoom.x, 0.001), max(_detail_zoom.y, 0.001))
 	var horizontal_shift := (spatial_layer.size.x / safe_zoom.x) * 0.20
-	var target_position := occupant_pos - Vector2(horizontal_shift, 0.0)
+	var target_position := spatial_renderer.position + occupant_pos - Vector2(horizontal_shift, 0.0)
 	_animate_camera_to(target_position, _detail_zoom, animated)
 
 
@@ -850,8 +856,10 @@ func _restore_echo_detail_shell_state() -> void:
 	if not _echo_detail_open:
 		return
 	_echo_detail_open = false
+	_featured_echo_id = ""
 	if spatial_renderer != null and spatial_renderer.has_method("set_featured_occupant"):
 		spatial_renderer.call("set_featured_occupant", "")
+	camera.deselect()
 	_animate_camera_to(_saved_camera_position, _saved_camera_zoom, true)
 	_update_rail_tone(_current_snap_type)
 
@@ -859,17 +867,23 @@ func _restore_echo_detail_shell_state() -> void:
 func _animate_camera_to(target_position: Vector2, target_zoom: Vector2, animated: bool) -> void:
 	if _camera_tween != null and _camera_tween.is_running():
 		_camera_tween.kill()
+	target_position = camera.clamped_position(target_position, target_zoom)
 	if not animated:
+		# A tween killed above never runs its end callback, so release its hold here.
+		camera.cancel_zoom_ease()
+		camera.end_screen_animation()
 		camera.position = target_position
 		camera.zoom = target_zoom
-		_clamp_camera_to_floor()
+		camera.reclamp()
 		return
+	camera.begin_screen_animation()
 	_camera_tween = create_tween()
 	_camera_tween.set_trans(Tween.TRANS_SINE)
 	_camera_tween.set_ease(Tween.EASE_OUT)
 	_camera_tween.parallel().tween_property(camera, "zoom", target_zoom, 0.42)
 	_camera_tween.parallel().tween_property(camera, "position", target_position, 0.42)
-	_camera_tween.tween_callback(_clamp_camera_to_floor)
+	_camera_tween.tween_callback(camera.end_screen_animation)
+	_camera_tween.tween_callback(camera.reclamp)
 	
 func _center_camera_on_floor() -> void:
 	if spatial_renderer == null:
@@ -895,33 +909,40 @@ func _center_camera_on_floor() -> void:
 		# (tm.position is included because map_to_local is local-to-tm, not including tm.position)
 		spatial_renderer.position = -(tm.position + center_local)
 
-		# Camera stays at origin; panning/zoom works from there
-		camera.position = Vector2.ZERO
+		# Sanctum snapshots arrive every second or two (bank timer, drift). Re-centering after the
+		# player has moved the camera would undo their pan on the next refresh.
+		if not camera.has_manual_override:
+			camera.position = Vector2.ZERO
 		_recompute_floor_bounds()
-		_clamp_camera_to_floor()
-	
+		camera.reclamp()
+
 func _center_spatial_view() -> void:
 	# Put Node2D origin in the middle of the available UI rect
 	spatial_view.position = spatial_layer.size * 0.5
-	
+
 func _on_spatial_layer_resized() -> void:
 	_center_spatial_view()
 	_recompute_floor_bounds()
-	_clamp_camera_to_floor()
-	
-func _recompute_floor_bounds() -> void:
-	_floor_bounds_sv = Rect2(Vector2.ZERO, Vector2.ZERO)
+	camera.reclamp()
 
+# Screen-specific: knows the Floor node path. Computes the floor's pixel footprint (with a
+# half-tile expansion so the diamond edges are included) and hands the size to
+# BoardCameraController.configure_bounds() — the shared component owns the actual clamp math
+# and assumes the caller has centered content on local origin (see _center_camera_on_floor()).
+func _recompute_floor_bounds() -> void:
 	if spatial_renderer == null:
+		camera.configure_bounds(Vector2.ZERO, FLOOR_PAD.x)
 		return
 
 	var floor := spatial_renderer.get_node_or_null("Floor")
 	if floor == null or not (floor is TileMapLayer):
+		camera.configure_bounds(Vector2.ZERO, FLOOR_PAD.x)
 		return
 
 	var tm := floor as TileMapLayer
 	var rect_cells: Rect2i = tm.get_used_rect()
 	if rect_cells.size == Vector2i.ZERO:
+		camera.configure_bounds(Vector2.ZERO, FLOOR_PAD.x)
 		return
 
 	# Corners in cell space
@@ -949,36 +970,5 @@ func _recompute_floor_bounds() -> void:
 	min_y -= half.y
 	max_y += half.y
 
-	# Convert into SpatialView-local pixels:
-	# tm is under spatial_renderer, both are Node2D under spatial_view,
-	# so local-to-spatial_view is: spatial_renderer.position + tm.position + local_point
-	var offset := spatial_renderer.position + tm.position
-	var top_left := offset + Vector2(min_x, min_y)
 	var size := Vector2(max_x - min_x, max_y - min_y)
-
-	_floor_bounds_sv = Rect2(top_left, size)
-
-func _clamp_camera_to_floor() -> void:
-	if _floor_bounds_sv.size == Vector2.ZERO:
-		return
-
-	# Visible size in world units depends on zoom
-	var z := camera.zoom
-	var safe_z := Vector2(max(z.x, 0.001), max(z.y, 0.001))
-	var half_view := (spatial_layer.size / safe_z) * 0.5
-
-	var min_x := _floor_bounds_sv.position.x - FLOOR_PAD.x + half_view.x
-	var max_x := _floor_bounds_sv.position.x + _floor_bounds_sv.size.x + FLOOR_PAD.x - half_view.x
-	var min_y := _floor_bounds_sv.position.y - FLOOR_PAD.y + half_view.y
-	var max_y := _floor_bounds_sv.position.y + _floor_bounds_sv.size.y + FLOOR_PAD.y - half_view.y
-
-	# If the view is larger than bounds on an axis, lock to center on that axis
-	if min_x > max_x:
-		camera.position.x = (min_x + max_x) * 0.5
-	else:
-		camera.position.x = clamp(camera.position.x, min_x, max_x)
-
-	if min_y > max_y:
-		camera.position.y = (min_y + max_y) * 0.5
-	else:
-		camera.position.y = clamp(camera.position.y, min_y, max_y)
+	camera.configure_bounds(size, FLOOR_PAD.x)

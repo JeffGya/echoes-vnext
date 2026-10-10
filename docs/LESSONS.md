@@ -13,26 +13,130 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
-### Emotion changes need an actor beat; barks need spoken timing
+### 33 — Emotion changes need an actor beat; barks need spoken timing
 
 **Rule:** Pair visible support or self-regulation outcomes with readable actor movement as well as the emotion chip; reveal barks progressively in the moment.
 **Why:** Jeffrey found Feel Section C too dependent on emotion-bar options and asked for more visible Echo movement/action and typewriter speech.
 **How to apply:** Give supplied source actions anticipation and commitment, and changed recipients a visible settle without inventing passive actions or healing. Keep unchanged outcomes quiet; drive progressive speech from the shared playback clock and show full text in rest/reduced motion.
 **Mistake count:** 1
 
-### Emotion feedback uses the shared Sanctum palette
+---
+
+### 32 — Emotion feedback uses the shared Sanctum palette
 
 **Rule:** Flash an emotion change in the matching shared emotion colour, not a generic gold highlight.
 **Why:** Jeffrey directed the combat Feel mockup to reuse the Sanctum emotion colours.
 **How to apply:** Trace Sanctum's `EmotionPresentation.text_theme()` to `EmotionStatus*/colors/font_color` in `LivingTreeSystem.tres`; use that colour for the transient flash and preserve readable text contrast.
 **Mistake count:** 1
 
-### Prototype tokens still need expressive game feel
+---
+
+### 31 — Prototype tokens still need expressive game feel
 
 **Rule:** Combat mockups must show anticipation, commitment, impact and recovery, even while actors remain simple tokens. Keep cards, screens and the board regular, and preserve the requester-selected graphic iteration.
 **Why:** Jeffrey found direct token motion and subtle chip changes stiff and emotionally unreadable. Extending organic shapes into cards, screens and the board exceeded the assignment; after reviewing the internal cue changes, he requested restoration of the previous rigid-line iteration.
 **How to apply:** Preserve the restored rigid graphic baseline until another visual change is requested. Keep expressive motion and clear damage/recovery feedback; a request for storybook feeling does not make a new silhouette treatment approved.
 **Mistake count:** 3
+
+---
+
+### 27 — A completion notification is not a result
+
+**Rule.** When an agent reports "completed", wait for its report. Read the report before you act on it.
+**Why.** Jeff corrected this in the camera story: the orchestrator treated a notification as finished work, and the work was not finished.
+**How to apply.** After any agent stops, read its report, then audit the tree (see `AGENTS.md`, "After any agent stops, killed or completed"). Do not start the next step on the notification alone.
+**Mistake count:** 1
+
+---
+
+### 26 — Every agent writes in STE
+
+**Rule.** Every agent communicates and writes in ASD Simplified Technical English (STE): one
+statement per sentence, short sentences, active voice, one word for one meaning, no idioms. This
+applies to reports, documents, questions and replies. The limits are in `CLAUDE.md`
+("Every agent writes in STE").
+
+**Why.** Jeff, 2026-09-25, on the pace-reward design spec: "Too much language is doing double work
+and is open for interpretation which needs too much content to explain it. I rather be clear."
+Terms such as "room to spare" and "pace bonus" had no exact definition, and one idea had several
+names.
+
+**How to apply.** Put the STE rule in every agent brief. In a design document, define each
+technical term once in a terms table, then use only that term.
+
+---
+
+### 25 — Story documents go in their own folder, not in `docs/`
+
+**Rule.** A document created for one story (spec, decisions, handoff, plan, follow-up list) goes in
+`docs/stories/<story-id>/`. Use the backlog ID when one exists, otherwise a short working name
+(e.g. `docs/stories/pace-reward/`). The top of `docs/` is for project-wide documents only (GDD,
+MEMORY, LESSONS, canon index, system references).
+
+**Why.** Jeff, 2026-09-25: keep the main `docs/` folder clean. Story files such as
+`v2-combat-003.5-decisions.md` and `v2-infra-003-defect-register.md` had accumulated beside the
+project-wide documents.
+
+**Story decisions too.** Jeff, 2026-09-25: an answer that only concerns one story goes to
+`docs/stories/<story-id>/decisions.md`, numbered D-01, D-02, …, not to `ANSWERS.md`. `ANSWERS.md`
+keeps only project-wide decisions that later stories must follow. Cite a story decision as
+`decisions.md D-NN`, and a project decision as `ANSWERS.md #NN`.
+
+**How to apply.** Before an agent writes a new story document, give it the story folder path in
+the brief. Moving the existing story documents out of `docs/` (and updating every link to them) is
+a separate task, not part of any feature story.
+
+---
+
+### 24 — Two similarly-named test files can be silently swapped
+
+**From the test-performance initiative (PRs #70-#72), 2026-09-21.** `tests/FlowFingerprintTests.gd`
+(suite `fingerprint_*`) and `tests/FlowSnapshotFingerprintTests.gd` (suites `snapshot_fingerprint`,
+`snapshot_purity`) sit one letter apart in an editor file list. Early analysis applied a
+fixture-sharing optimization to the wrong one — the file that was never the bottleneck — before the
+mistake was caught by directly reading both files' registered `suite()` names and test counts.
+
+**Rule.** Before optimizing or reasoning about a named test file, confirm its registered suite
+name(s) and test count against the runner output, not against the filename alone. Two files with
+adjacent names are not evidence they cover the same thing.
+
+---
+
+### 23 — A per-shard alarm value is a hang ceiling, not a measured duration
+
+**From the test-performance initiative (PR #71), 2026-09-21.** `wait` in `scripts/run-tests-sharded.sh`
+returns as soon as a backgrounded shard process exits on its own; the `perl alarm` only fires if the
+shard is still running past that many seconds. Three separate verification passes during this
+initiative read a fired-or-not-yet-fired alarm value (e.g. "900s") as if it were the shard's actual
+runtime, leading to wrong conclusions about what was slow. This is already documented in the script's
+own comments and in `AGENTS.md`'s "Sharded full-suite runs" section — recorded here so it also
+appears in the durable mistake log, not only at the site of the code.
+
+**Rule.** An alarm timeout that did not fire tells you the run finished before that ceiling. It never
+tells you how long the run actually took. Read the log's own `elapsed_secs=N` line (each shard log's
+final line, written by `scripts/run-tests-sharded.sh` from `date +%s` before/after the run), not the
+alarm value.
+
+---
+
+### 22 — A shared static-var fixture is unsafe even when every within-run ordering is proven safe
+
+**From the test-performance initiative (PR #71), 2026-09-21.** `FlowSnapshotFingerprintTests.gd`
+memoized one shared, mutable `FlowRuntime` across four tests via a static var, to skip a repeated
+disk-boot-plus-onboarding setup. Every test that used it was confirmed read-only against the shared
+state, or re-verified its own setup afterward — safe for any single run. A Codex review on PR #71
+caught the real problem: a static var persists across repeated invocations within the SAME Godot
+process (e.g. the Debug Panel's `tests` command run twice without restarting), so a later run can
+silently inherit state mutated by an earlier one, even when no test run has ever shown a failure.
+This violates `tests/AGENTS.md`'s isolation rule — "Never depend on global state... or test
+execution order" — which the within-one-run proof never actually satisfied.
+
+**Rule.** Cross-test shared mutable state (a static var, a cached instance) is unsafe regardless of
+how carefully the sharing tests are audited, because the risk is cross-*run*, not cross-test. Prefer
+lighter direct construction instead — build the minimal state directly, bypass the expensive setup,
+and give every test its own instance.
+
+---
 
 ### 21 — Price the sum, not the item
 

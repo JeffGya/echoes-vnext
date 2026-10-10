@@ -532,8 +532,8 @@ The authoritative explanation source.
   "primary": {
     "code": String,
     "source": String,                  # hard_rule | objective | danger | bond | vow |
-                                      # calling | vector | emotion | directive |
-                                      # guidance | equipment | baseline
+                                      # calling | vector | movement_style | emotion |
+                                      # directive | guidance | equipment | baseline
     "subject_id": String,
     "causal_kind": String,             # hard_override | co_decisive | baseline
     "material": bool,
@@ -1044,10 +1044,17 @@ The vocabulary should stay small enough to learn and broad enough to serve both 
 | `escort` | Maintain a moving protection relationship |
 | `carry` | Relocate an objective or burden-bearing subject |
 
+**Goal sources in live combat (status, 2026-10-10).** A purpose exists in the model before something creates goals with it. Today live combat creates no goal with the purposes `reposition` or `regroup`. `reposition` is created only by `StagePartyMovementAdapter` (stage exploration). No code creates `regroup`; the arbiter, the option builder and the style service already handle both purposes.
+
+| Purpose | Planned live-combat source | Story |
+|---|---|---|
+| `reposition` | Pre-positioning and mid-battle Keeper guidance; directive stances | V2-COMBAT-004, V2-DIRECTIVE-002 |
+| `regroup` | Keeper guidance; bond rescue, screening and regrouping events | V2-COMBAT-004 (bond triggers from V2-BOND-002) |
+
 Movement styles describe how the intent is expressed:
 
 - direct;
-- measured;
+- restrained;
 - careful;
 - forceful;
 - cohesive;
@@ -1064,7 +1071,7 @@ An intent and style may combine:
 - low-exposure reposition;
 - cohesive regroup;
 - lateral cut-off;
-- measured escort.
+- restrained escort.
 
 ---
 
@@ -1718,6 +1725,15 @@ Two spirit models remain distinct:
 - joined spirit: normal allied NPC activation.
 
 The shared model does not automatically increase the non-joining spirit from its authored one-cell round-end pace to the v1 2–6-unit combat envelope. Changing that pace requires an explicit mode decision.
+
+**Escort yield.** A living, friendly, non-structure Echo standing on the escort spirit's next
+planned cell does not hold it indefinitely — win only requires a living Echo within
+`escort_radius` of the spirit, never occupation of one specific tile, so an indefinite hold is
+never the correct outcome. Every round the spirit's step is blocked this way, the Echo and the
+spirit trade cells as part of the spirit's own activation: no action or movement cost to the
+Echo. A hostile, dead, downed, structure, or spirit occupant never yields — those still produce
+the ordinary occupied wait. The trade fires a bark (`spirit_escort_yield`) so a repeating swap
+reads as the party protecting the spirit, not a stuck loop.
 
 ---
 

@@ -252,6 +252,22 @@ static func apply_morale_delta(echo: Dictionary, delta: int, cause: String, logg
 	})
 
 
+## resist_fear gate, shared with the mid-combat fear paths that write actor["fear"]
+## directly (CombatTurnActionService). Any band past the rawest ("nascent") gets relief;
+## enumerating band names is how this gate lost forming when the band table was
+## re-spaced under it (V2-COMBAT-003 §15.3). Pure — never mutates.
+static func resist_fear_fires(delta: int, resilience_traits: Array, expression_band: String) -> bool:
+	return delta > 0 and "resist_fear" in resilience_traits \
+			and expression_band != "nascent" and expression_band != ""
+
+
+## Returns delta reduced by 40% when resist_fear fires, else delta unchanged. Pure.
+static func apply_resist_fear(delta: int, resilience_traits: Array, expression_band: String) -> int:
+	if resist_fear_fires(delta, resilience_traits, expression_band):
+		return int(round(float(delta) * 0.60))
+	return delta
+
+
 ## Adds delta to fear_current (clamped 0–100). Logs emotion.fear.drift.
 ## If fear_current >= fear_threshold after change, also logs emotion.fear.threshold_crossed.
 ## Stores _last_drift on the emotion block (transient; not saved to disk).
@@ -275,15 +291,8 @@ static func apply_fear_delta(
 	var emo: Dictionary = echo["emotion"]
 	var old_val := int(emo.get("fear_current", 0))
 
-	# V2-PROG-006: resist_fear — reduce fear delta by 40%. Any band past the rawest
-	# ("nascent") gets relief; enumerating band names is how this gate lost forming
-	# when the band table was re-spaced under it (V2-COMBAT-003 §15.3).
-	var effective_delta := delta
-	var trait_fired := false
-	if delta > 0 and "resist_fear" in resilience_traits and expression_band != "nascent" \
-			and expression_band != "":
-		effective_delta = int(round(float(delta) * 0.60))
-		trait_fired = true
+	var trait_fired := resist_fear_fires(delta, resilience_traits, expression_band)
+	var effective_delta := apply_resist_fear(delta, resilience_traits, expression_band)
 
 	var new_val := clampi(old_val + effective_delta, 0, 100)
 	emo["fear_current"] = new_val

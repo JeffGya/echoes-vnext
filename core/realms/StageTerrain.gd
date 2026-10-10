@@ -220,7 +220,7 @@ const BRIDGE_KINDS_LOAD_BEARING: Array = [BRIDGE_KIND_CONNECT, BRIDGE_KIND_ISLAN
 # V2-COMBAT-003 terrain commit 2 — default `connect_min_region_cells`.
 # A walkable region of at least this many cells that is cut off from the host region is a
 # board split and gets bridged back in. A region below it is scenery and is left alone.
-# 6 comes from the measured size distribution (docs/v2-combat-003-handoff.md §12.1): it is
+# 6 comes from the measured size distribution (docs/stories/v2-combat-003/handoff.md §12.1): it is
 # bimodal with an empty 6-to-10 bucket, so any threshold in 6..10 gives the same split.
 const _MIN_CONNECT_REGION_CELLS: int = 6
 
@@ -734,7 +734,7 @@ static func walkable_set(terrain: Dictionary) -> Dictionary:
 	# Saves are disposable and the owner accepts a clean break, so the fallback is not here
 	# to preserve an old campaign. It is here because dropping the key is SILENT: an old
 	# board would simply lose ground, no error, no failing test — the exact trap named in
-	# docs/v2-combat-003-handoff.md section 12.6. Five lines of insurance against a silent
+	# docs/stories/v2-combat-003/handoff.md section 12.6. Five lines of insurance against a silent
 	# loss of walkable ground is the right trade. The generator never writes "stragglers"
 	# again, so on any newly generated board this branch is dead code by construction.
 	#

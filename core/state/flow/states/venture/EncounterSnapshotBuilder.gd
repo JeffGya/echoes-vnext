@@ -51,6 +51,13 @@ extends RefCounted
 # COMBAT-007: Pure static helper functions — projection and objective state.
 # ────────────────────────────────────────────────────────────────────────────
 
+## "" when unmarked, "observe" for the generic mark, "skill" for a skill mark.
+static func _mark_kind(actor: Dictionary) -> String:
+	if str(actor.get("marked_by", "")).is_empty():
+		return ""
+	return "observe" if str(actor.get("_mark_kind", "")) == "observe" else "skill"
+
+
 ## Derives the actor's operational combat status.
 ## Emotional state is represented exclusively by emotional_status in the snapshot.
 static func _derive_status(actor: Dictionary) -> String:
@@ -106,6 +113,8 @@ static func _project_actor(actor: Dictionary, contribution_ledger: Variant = nul
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
 		# V2-VOICE-001: bark fields — written by ActorStateMachine, read by CombatBoardScreen.
+		"is_marked":        not str(actor.get("marked_by", "")).is_empty(),
+		"mark_kind":        EncounterSnapshotBuilder._mark_kind(actor),
 		"bark_line":        bark_line_val,
 		"bark_context":     str(actor.get("_bark_context",     "")),
 		"bark_tier":        str(actor.get("_bark_tier",        "")),
@@ -114,11 +123,6 @@ static func _project_actor(actor: Dictionary, contribution_ledger: Variant = nul
 		# V2-PROG-010: maturity expression — written by ActorStateMachine.advance_turn()
 		"expression_band":   str(actor.get("_expression_band",   "")),
 		"presence_strength": float(actor.get("_presence_strength", 0.1)),
-		# V2-PROG-012 Phase 1: hidden autonomy outputs — no consumer reads these yet.
-		"judgment":          float(actor.get("_judgment",  0.0)),
-		"presence":          float(actor.get("_presence",  0.0)),
-		"composure":         float(actor.get("_composure", 0.0)),
-		"legibility":        float(actor.get("_legibility", 0.0)),
 	}
 	# S14a: offensive contribution ledger, projected read-only for the resolve screen / S14 recruit formula.
 	if contribution_ledger is Dictionary:
@@ -242,7 +246,7 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 			var _gs_guard_progress: int = int(combat_state.get("guide_protect_counter", 0)) if not combat_state.is_empty() else 0
 			_gs_rounds_remaining = maxi(0, _rounds_required - _gs_guard_progress)
 
-	return {
+	var out: Dictionary = {
 		"type":                  obj_type,
 		"shrine_hp":             shrine_hp,
 		"shrine_alive":          shrine_alive,
@@ -281,6 +285,16 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 		# to this encounter's objective. Default false.
 		"charge_pressure_applied": ectx.charge_pressure_applied if ectx != null else false,
 	}
+	# Pace mode only; the key is absent otherwise (design §7). par_rounds stays out of the
+	# snapshot: it is a raw float (ANSWERS.md #59).
+	var _pace_src: Dictionary = combat_state if not combat_state.is_empty() \
+		else (ectx.pace_cfg if ectx != null else {})
+	var _pace: String = PaceService.pace_state(_round, float(_pace_src.get("par_rounds", 0.0)),
+		float(_pace_src.get("pace_full_ratio", 0.0)), float(_pace_src.get("pace_zero_ratio", 0.0)),
+		int(_pace_src.get("stage_base", 0)), float(_pace_src.get("pace_bonus_pct", 0.0)))
+	if not _pace.is_empty():
+		out["pace_state"] = _pace
+	return out
 
 
 ## V2-STAGE-004 S15 prep: short context line for a hostile-claimant-forced combat.

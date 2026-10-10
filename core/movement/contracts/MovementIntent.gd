@@ -17,6 +17,7 @@ const REQUIRED_FIELDS: Array = [
 	"planned_action",
 	"fallback",
 	"pressure_sources",
+	"movement_style",
 ]
 
 
@@ -30,7 +31,8 @@ static func build(
 	commitment: int,
 	planned_action: Dictionary,
 	fallback: Dictionary,
-	pressure_sources: Array
+	pressure_sources: Array,
+	movement_style: String = ""
 ) -> Dictionary:
 	return {
 		"mover_id": mover_id,
@@ -43,6 +45,7 @@ static func build(
 		"planned_action": planned_action.duplicate(true),
 		"fallback": fallback.duplicate(true),
 		"pressure_sources": V.canonical_string_array(pressure_sources),
+		"movement_style": movement_style,
 	}
 
 
@@ -98,4 +101,9 @@ static func validate(value: Dictionary, origin: Dictionary) -> Dictionary:
 	var pressure_result: Dictionary = V.require_strictly_sorted_unique_strings(value, "pressure_sources")
 	if not bool(pressure_result["valid"]):
 		return pressure_result
+	# §6.5. "" is legal: a stationary winner and the route-shape `screen` have no
+	# §9 style word, and the stage party path resolves none.
+	var style_type: Dictionary = V.require_type(value, "movement_style", TYPE_STRING)
+	if not bool(style_type["valid"]):
+		return style_type
 	return V.ok()

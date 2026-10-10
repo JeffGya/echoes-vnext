@@ -34,6 +34,8 @@ var stalemate_cfg: Dictionary = {}
 var last_round_results: Array = []
 # COMBAT-SEQ: most recent single actor action result — updated after each actor acts; {} between rounds.
 var last_actor_action: Dictionary = {}
+# FlowContext.dev_stop_short at encounter start ("" = balance.json). Not saved.
+var stop_short_override: String = ""
 # COMBAT-005: transient combat result — set by FlowRuntime._end_round(); not persisted.
 # Shape: { "victory": bool, "reason": String, "round_ended": int, "shrine_hp": int }
 var combat_result: Dictionary = {}
@@ -95,6 +97,12 @@ var objective_params: Dictionary = {}
 # explore_map.hostile_charge_sit_id consumption in EncounterSetupService.setup()) was
 # applied to THIS encounter's objective. Transient, never persisted. Default false.
 var charge_pressure_applied: bool = false
+
+# Pace inputs, set once by EncounterSetupService from fight-start positions; transient.
+# { par_rounds, pace_full_ratio, pace_zero_ratio, pace_bonus_pct, stage_base } for a pace mode,
+# {} for a no-pace mode or the keeper-intro trial.
+# CombatState.create() copies it into combat_state.
+var pace_cfg: Dictionary = {}
 
 # Optional deterministic notes for debugging / temporary tests
 var notes: Array[String] = []

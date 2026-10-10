@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://ui/shells/RealmShell.tscn" id="1_shell"]
+[ext_resource type="PackedScene" path="res://ui/components/ModalHost.tscn" id="2_modal"]
+
+[node name="ScreenshotHarness" type="Node"]
+
+[node name="ContentLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="RealmShell" parent="ContentLayer" instance=ExtResource("1_shell")]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="ModalLayer" type="CanvasLayer" parent="."]
+layer = 40
+
+[node name="ModalHost" parent="ModalLayer" instance=ExtResource("2_modal")]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

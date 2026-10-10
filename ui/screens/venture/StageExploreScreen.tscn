@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://ui/screens/venture/DirectiveBadge.gd" id="6_dirbadge"]
 [ext_resource type="PackedScene" uid="uid://voice001_bark_popup_layer" path="res://ui/screens/combat/BarkPopupLayer.tscn" id="7_barklayer"]
 [ext_resource type="Script" uid="uid://culh5bvr1nyo7" path="res://ui/screens/venture/GhostFootprintLayer.gd" id="8_ghostlayer"]
+[ext_resource type="Script" uid="uid://cmas1ml5am5ou" path="res://ui/shared/BoardCamera.gd" id="9_board_camera"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_explore"]
 texture = ExtResource("2_tile")
@@ -122,27 +123,38 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_script")
 
-[node name="Board" type="TileMapLayer" parent="." unique_id=2125377735]
+[node name="WorldLayer" type="CanvasLayer" parent="." unique_id=500100001]
+follow_viewport_enabled = true
+
+[node name="BoardRoot" type="Node2D" parent="WorldLayer" unique_id=500100002]
+unique_name_in_owner = true
+
+[node name="Board" type="TileMapLayer" parent="WorldLayer/BoardRoot" unique_id=2125377735]
+unique_name_in_owner = true
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
 
-[node name="BridgeLayer" type="TileMapLayer" parent="Board" unique_id=2125377741]
+[node name="BridgeLayer" type="TileMapLayer" parent="WorldLayer/BoardRoot/Board" unique_id=2125377741]
+unique_name_in_owner = true
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
 self_modulate = Color(0.87, 0.58, 0.24, 0.55)
 
-[node name="GhostFootprintLayer" type="Node2D" parent="Board" unique_id=2125377740]
+[node name="GhostFootprintLayer" type="Node2D" parent="WorldLayer/BoardRoot/Board" unique_id=2125377740]
 unique_name_in_owner = true
 script = ExtResource("8_ghostlayer")
 
-[node name="FogLayer" type="TileMapLayer" parent="." unique_id=2125377736]
+[node name="FogLayer" type="TileMapLayer" parent="WorldLayer/BoardRoot" unique_id=2125377736]
+unique_name_in_owner = true
 y_sort_enabled = true
 tile_set = SubResource("TileSet_explore")
 self_modulate = Color(0, 0, 0, 0.65)
 
-[node name="SituationLayer" type="Node2D" parent="." unique_id=478481283]
+[node name="SituationLayer" type="Node2D" parent="WorldLayer/BoardRoot" unique_id=478481283]
+unique_name_in_owner = true
 
-[node name="HiddenMarkerTemplate" type="Control" parent="SituationLayer" unique_id=1933236967]
+[node name="HiddenMarkerTemplate" type="Control" parent="WorldLayer/BoardRoot/SituationLayer" unique_id=1933236967]
+unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(48, 48)
 layout_mode = 3
@@ -152,7 +164,7 @@ offset_top = -24.0
 offset_right = 24.0
 offset_bottom = 24.0
 
-[node name="HiddenCircle" type="PanelContainer" parent="SituationLayer/HiddenMarkerTemplate" unique_id=1615739421]
+[node name="HiddenCircle" type="PanelContainer" parent="WorldLayer/BoardRoot/SituationLayer/HiddenMarkerTemplate" unique_id=1615739421]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -161,7 +173,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_hidden_circle")
 
-[node name="HiddenLabel" type="Label" parent="SituationLayer/HiddenMarkerTemplate/HiddenCircle" unique_id=641500080]
+[node name="HiddenLabel" type="Label" parent="WorldLayer/BoardRoot/SituationLayer/HiddenMarkerTemplate/HiddenCircle" unique_id=641500080]
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 20
@@ -169,7 +181,8 @@ text = "?"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="RevealedMarkerTemplate" type="Control" parent="SituationLayer" unique_id=122208737]
+[node name="RevealedMarkerTemplate" type="Control" parent="WorldLayer/BoardRoot/SituationLayer" unique_id=122208737]
+unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(48, 48)
 layout_mode = 3
@@ -179,7 +192,7 @@ offset_top = -24.0
 offset_right = 24.0
 offset_bottom = 24.0
 
-[node name="RevealedCircle" type="PanelContainer" parent="SituationLayer/RevealedMarkerTemplate" unique_id=2025686668]
+[node name="RevealedCircle" type="PanelContainer" parent="WorldLayer/BoardRoot/SituationLayer/RevealedMarkerTemplate" unique_id=2025686668]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -188,7 +201,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_revealed_circle")
 
-[node name="TypeLabel" type="Label" parent="SituationLayer/RevealedMarkerTemplate/RevealedCircle" unique_id=2009400576]
+[node name="TypeLabel" type="Label" parent="WorldLayer/BoardRoot/SituationLayer/RevealedMarkerTemplate/RevealedCircle" unique_id=2009400576]
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 11
@@ -196,7 +209,8 @@ text = "?"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ResolvedMarkerTemplate" type="Control" parent="SituationLayer" unique_id=728444170]
+[node name="ResolvedMarkerTemplate" type="Control" parent="WorldLayer/BoardRoot/SituationLayer" unique_id=728444170]
+unique_name_in_owner = true
 visible = false
 custom_minimum_size = Vector2(48, 48)
 layout_mode = 3
@@ -206,7 +220,7 @@ offset_top = -24.0
 offset_right = 24.0
 offset_bottom = 24.0
 
-[node name="ResolvedCircle" type="PanelContainer" parent="SituationLayer/ResolvedMarkerTemplate" unique_id=970922362]
+[node name="ResolvedCircle" type="PanelContainer" parent="WorldLayer/BoardRoot/SituationLayer/ResolvedMarkerTemplate" unique_id=970922362]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -215,7 +229,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_resolved_circle")
 
-[node name="ResolvedLabel" type="Label" parent="SituationLayer/ResolvedMarkerTemplate/ResolvedCircle" unique_id=1877363521]
+[node name="ResolvedLabel" type="Label" parent="WorldLayer/BoardRoot/SituationLayer/ResolvedMarkerTemplate/ResolvedCircle" unique_id=1877363521]
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_font_sizes/font_size = 16
@@ -223,8 +237,19 @@ text = "✓"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="PartyTokenLayer" type="Node2D" parent="." unique_id=772494547]
+[node name="PartyTokenLayer" type="Node2D" parent="WorldLayer/BoardRoot" unique_id=772494547]
+unique_name_in_owner = true
 script = ExtResource("3_ptl")
+
+[node name="BoardCamera" type="Camera2D" parent="WorldLayer" unique_id=500100003 node_paths=PackedStringArray("wheel_surface")]
+unique_name_in_owner = true
+script = ExtResource("9_board_camera")
+manual_resume_delay = 3.0
+wheel_zoom_step = 1.1
+wheel_surface = NodePath("../..")
+zoom_to_pointer = true
+space_drag_pan = false
+zoom_levels = PackedFloat32Array(0.5, 1, 1.5, 2, 2.5)
 
 [node name="HudStrip" type="PanelContainer" parent="." unique_id=1175640428]
 visible = false
@@ -292,6 +317,7 @@ anchor_right = 1.0
 offset_bottom = 32.0
 grow_horizontal = 2
 alignment = 1
+mouse_filter = 0
 theme_override_constants/separation = 12
 
 [node name="StepsLabel" type="Label" parent="BottomHudRegion/StepBudgetRow" unique_id=5100000004]
@@ -326,6 +352,7 @@ anchor_bottom = 1.0
 offset_top = -56.0
 grow_horizontal = 2
 grow_vertical = 0
+mouse_filter = 0
 theme_override_constants/separation = 12
 
 [node name="StageCompleteButton" type="Button" parent="BottomHudRegion/ActionBar" unique_id=1357924680]

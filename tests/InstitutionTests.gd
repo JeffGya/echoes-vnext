@@ -1,13 +1,14 @@
 # res://tests/InstitutionTests.gd
 # Tests for V2-SANCTUM-002: InstitutionService
 #
-# 13 tests covering:
+# 14 tests covering:
 #   Unlock gating (continuity threshold)
 #   Establish (Ekwan spend + unlock)
 #   Echo assign/remove (Ase/Ekwan spend, capacity, party auto-remove)
 #   Condition transitions (neglected/healthy/strained)
 #   Compatibility (natural_fit)
 #   Determinism
+#   resist_fear on the natural-fit unassign fear hit
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -29,6 +30,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("institution/condition_strained_outside_healthy", Callable(InstitutionTests, "_t_condition_strained_outside_healthy"))
 	runner.register_test("institution/compatibility_natural_fit",          Callable(InstitutionTests, "_t_compatibility_natural_fit"))
 	runner.register_test("institution/determinism",                        Callable(InstitutionTests, "_t_determinism"))
+	runner.register_test("institution/resist_fear_reduces_unassign_fear",  Callable(InstitutionTests, "_t_resist_fear_reduces_unassign_fear"))
 
 
 # ---------------------------------------------------------------------------
@@ -298,4 +300,30 @@ static func _t_determinism() -> Dictionary:
 			return { "ok": false, "error": "Institution ids differ at index %d" % i }
 		if a.get("is_candidate", null) != b.get("is_candidate", null):
 			return { "ok": false, "error": "is_candidate differs at index %d" % i }
+	return { "ok": true, "error": "" }
+
+
+# Two natural-fit echoes at rank 3 (past nascent) leave the Hearth; only resilience_traits differs.
+static func _t_resist_fear_reduces_unassign_fear() -> Dictionary:
+	var bands := { "1": "nascent", "2": "nascent", "3": "forming" }
+	var plain := _make_echo("e_plain", "pillar", "onyamesu")
+	var steady := _make_echo("e_steady", "pillar", "onyamesu")
+	for e in [plain, steady]:
+		e["rank"] = 3
+	steady["resilience_traits"] = ["resist_fear"]
+	var save := _make_save(1, 100, 50, [plain, steady])
+	var inst_cfg := _make_inst_cfg()
+	var logger := _make_logger()
+	var econ := _make_econ(save)
+	InstitutionService.establish("hearth", save, econ, inst_cfg, logger, 1)
+	InstitutionService.assign_echo("hearth", "e_plain", save, econ, inst_cfg, logger, 2)
+	InstitutionService.assign_echo("hearth", "e_steady", save, econ, inst_cfg, logger, 3)
+	InstitutionService.remove_echo("hearth", "e_plain", save, econ, inst_cfg, logger, 4, bands)
+	InstitutionService.remove_echo("hearth", "e_steady", save, econ, inst_cfg, logger, 5, bands)
+	var fear_delta := int(inst_cfg.get("unassign_natural_fit_fear_delta", 5))
+	if int(plain["emotion"]["fear_current"]) != fear_delta:
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [fear_delta, int(plain["emotion"]["fear_current"])] }
+	var expected := roundi(float(fear_delta) * 0.6)
+	if int(steady["emotion"]["fear_current"]) != expected:
+		return { "ok": false, "error": "expected resist_fear fear %d, got %d" % [expected, int(steady["emotion"]["fear_current"])] }
 	return { "ok": true, "error": "" }

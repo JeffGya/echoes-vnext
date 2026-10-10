@@ -41,6 +41,10 @@
 #        "mover_hp"           int      : mover's CURRENT hp. When present, KO/death is
 #                                        computed from cumulative hazard damage. When absent,
 #                                        the mover is treated as never downed.
+#        "stop_short_benefit" Dictionary: action plan a stop-short plays first (step 3a);
+#                                        falls through to the planned action when invalid.
+#        "stop_short_cell"    Dictionary: planned stop cell. When present, the stop-short benefit
+#                                        resolves only if the mover really ends there.
 #        "mover_ko_only"      bool      : when the mover would be downed (remaining hp <= 0),
 #                                        report "ko" if true, else "death" (default false).
 #
@@ -79,13 +83,20 @@ const _ACTIVATION_PHASE: String = "activation"
 ## Chebyshev reach per action type, and the reach for any action absent from the table.
 ## THE single authority: every "can I act on that target from here?" question in the
 ## movement domain resolves through `reach_for`, never through an adjacency test or a
-## literal 1. Values are all 1 today, so every caller behaves exactly as an adjacency
-## test does — but when a weapon/skill story raises one of them, range-aware behaviour
-## follows with no further edit.
+## literal 1.
+## Reach of the stationary skills `actor.mark` and `actor.reveal`. Their offer gates in
+## ActionCandidateGenerator read this same constant: a gate wider than the reach makes
+## activation resolve the planned action as idle.
+const SKILL_REACH: int = 3
+## Reach of the generic `actor.observe` a stop-short can play (decisions.md #108).
+const OBSERVE_REACH: int = 3
 const ACTION_RANGES: Dictionary = {
 	"melee_attack": 1,
 	"protect_ally": 1,
 	"actor.purify_shrine": 1,
+	"actor.mark": SKILL_REACH,
+	"actor.reveal": SKILL_REACH,
+	"actor.observe": OBSERVE_REACH,
 }
 const DEFAULT_ACTION_RANGE: int = 1
 
@@ -202,8 +213,13 @@ static func activate(
 	var downed_in_move: bool = has_hp and (mover_hp - move_damage) <= 0
 
 	if not downed_in_move:
+		var stop_benefit: Dictionary = _plan(action_ctx.get("stop_short_benefit", {}))
+		var planned_stop: Dictionary = action_ctx.get("stop_short_cell", {}) as Dictionary
+		var reached_stop: bool = planned_stop.is_empty() or _same_cell(planned_stop, final_cell)
+		if not stop_benefit.is_empty() and reached_stop and _action_valid_at(stop_benefit, final_cell, action_ctx):
+			resolved_action = stop_benefit
 		# 3) Revalidate the primary action at the FINAL cell.
-		if _action_valid_at(planned_action, final_cell, action_ctx):
+		elif _action_valid_at(planned_action, final_cell, action_ctx):
 			resolved_action = planned_action.duplicate(true)
 		# 4) Purpose-restricted declared fallback.
 		elif (
@@ -285,7 +301,8 @@ static func activate(
 		declared_fallback,
 		_project_hazards(events),
 		objective_progress,
-		hostile_constraints
+		hostile_constraints,
+		str(intent.get("movement_style", ""))
 	)
 
 
@@ -298,6 +315,10 @@ static func _plan(value: Variant) -> Dictionary:
 	if value is Dictionary:
 		return (value as Dictionary).duplicate(true)
 	return {}
+
+
+static func _same_cell(a: Dictionary, b: Dictionary) -> bool:
+	return int(a.get("col", -1)) == int(b.get("col", -2)) and int(a.get("row", -1)) == int(b.get("row", -2))
 
 
 ## Is `action` still performable from `final_cell`? Empty target -> position

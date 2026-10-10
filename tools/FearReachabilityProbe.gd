@@ -187,9 +187,16 @@ static func _run_scenario(sc: Dictionary) -> Dictionary:
 	var expr_cfg: Dictionary = bal.get("maturity_expression", {})
 	var roster: Array = []
 	var party_ids: Array = []
+	# Fold seed_variant into the EchoFactory seed_root too — it already drives the
+	# pinned campaign seed (pinned_root above) for terrain/spawns, but party
+	# composition was keyed on seed_tag alone, so every seed_variant of the same
+	# scenario summoned an IDENTICAL party. Only terrain/spawns actually resampled,
+	# defeating the "sample several before trusting a headline number" method this
+	# file's own header prescribes.
+	var echo_seed_root: String = "%s:%d" % [seed_tag, int(sc.get("seed_variant", 0))]
 	for i in range(5):
 		var echo: Dictionary = EchoFactory.generate(
-			seed_tag, "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+			echo_seed_root, "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
 		echo["id"] = "echo_%04d" % (i + 1)
 		echo["rank"] = int(sc.get("rank", 1))
 		# Mirror the REAL summon path (FlowRuntime ~:1370). EchoFactory.generate()

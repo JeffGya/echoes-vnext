@@ -226,13 +226,16 @@ func handle_calling_confirm(action: Dictionary, t: int) -> FlowActionOutcome:
 
 	# Read calling_cfg from balance.json.
 	var calling_cfg_v: Variant = {}
+	var band_by_standing: Dictionary = {}
 	if config_service != null:
 		var bal: Dictionary = config_service.get_balance()
 		calling_cfg_v = bal.get("data", {}).get("calling", {})
+		band_by_standing = ConfigService.get_maturity_expression_band_by_standing(config_service)
 	var calling_cfg: Dictionary = calling_cfg_v if calling_cfg_v is Dictionary else {}
 
 	# Confirm the calling — mutates echo_ref in place.
-	var confirmed: String = CallingService.confirm_calling(echo_ref, chosen_calling_id, calling_cfg, logger, t)
+	var confirmed: String = CallingService.confirm_calling(echo_ref, chosen_calling_id, calling_cfg, logger, t,
+		band_by_standing)
 	if confirmed.is_empty():
 		logger.debug(t, "sanctum.calling.denied", "Calling confirm denied (invalid chosen_calling_id)", {
 			"echo_id":           echo_id,

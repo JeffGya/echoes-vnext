@@ -48,6 +48,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("emotion/sanctum_tick_fear_below_base",     Callable(EmotionTests, "_t_sanctum_tick_fear_below_base"))
 	runner.register_test("emotion/sanctum_tick_fear_at_base",        Callable(EmotionTests, "_t_sanctum_tick_fear_at_base"))
 	runner.register_test("emotion/arbiter_floor_blend",              Callable(EmotionTests, "_t_arbiter_floor_blend"))
+	runner.register_test("emotion/resist_fear_reduces_combat_exit_loss", Callable(EmotionTests, "_t_resist_fear_reduces_combat_exit_loss"))
+	runner.register_test("emotion/resist_fear_slows_sanctum_tick_rise",  Callable(EmotionTests, "_t_resist_fear_slows_sanctum_tick_rise"))
 
 
 # -------------------------
@@ -877,4 +879,58 @@ static func _t_arbiter_floor_blend() -> Dictionary:
 	if int(actor.get("fear_base", -1)) != 15:
 		return { "ok": false, "error": "EchoActor.from_echo() must map emotion.fear_base → actor.fear_base. Got %d" % int(actor.get("fear_base", -1)) }
 
+	return { "ok": true }
+
+
+# -------------------------
+# resist_fear through EmotionConsequenceService, with the real band_by_standing table.
+# Rank 3 is the first band past nascent; rank 1 is the nascent control.
+# -------------------------
+
+static func _rf_echo(id: String, rank: int, resist: bool, fear_current: int, fear_base: int) -> Dictionary:
+	return { "id": id, "rank": rank, "resilience_traits": ["resist_fear"] if resist else [],
+		"emotion": { "faith": 50, "morale_base": 50, "morale_current": 50,
+			"fear_current": fear_current, "fear_base": fear_base, "win_streak": 0, "loss_streak": 0 } }
+
+
+static func _rf_service(roster: Array) -> EmotionConsequenceService:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var flow_ctx := FlowContext.new()
+	flow_ctx.save_data = { "sanctum": { "roster": roster } }
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	return EmotionConsequenceService.new(flow_ctx, cs, logger)
+
+
+static func _t_resist_fear_reduces_combat_exit_loss() -> Dictionary:
+	var plain := _rf_echo("rf_plain", 3, false, 0, 0)
+	var steady := _rf_echo("rf_steady", 3, true, 0, 0)
+	var nascent := _rf_echo("rf_nascent", 1, true, 0, 0)
+	var svc := _rf_service([plain, steady, nascent])
+	var loss_fear := int(ConfigService.get_emotion_drift_cfg(svc.config_service).get("combat_exit_loss_fear", 0))
+	svc.apply_encounter_emotion_drift("loss", 1)
+	var plain_fear := int(plain["emotion"]["fear_current"])
+	if loss_fear <= 0 or plain_fear != loss_fear:
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [loss_fear, plain_fear] }
+	var expected := roundi(float(loss_fear) * 0.6)
+	if int(steady["emotion"]["fear_current"]) != expected:
+		return { "ok": false, "error": "expected resist_fear fear %d, got %d" % [expected, int(steady["emotion"]["fear_current"])] }
+	if int(nascent["emotion"]["fear_current"]) != loss_fear:
+		return { "ok": false, "error": "nascent resist_fear should stay dormant: expected %d, got %d" % [loss_fear, int(nascent["emotion"]["fear_current"])] }
+	return { "ok": true }
+
+
+# Below fear_base the tick drives fear UP, so resist_fear slows that rise too.
+static func _t_resist_fear_slows_sanctum_tick_rise() -> Dictionary:
+	var plain := _rf_echo("rf_tick_plain", 3, false, 0, 8)
+	var steady := _rf_echo("rf_tick_steady", 3, true, 0, 8)
+	var svc := _rf_service([plain, steady])
+	var tick := absi(int(ConfigService.get_emotion_drift_cfg(svc.config_service).get("sanctum_tick_fear", 0)))
+	svc.apply_sanctum_emotion_tick(1)
+	if tick <= 0 or int(plain["emotion"]["fear_current"]) != mini(tick, 8):
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [mini(tick, 8), int(plain["emotion"]["fear_current"])] }
+	var expected := roundi(float(mini(tick, 8)) * 0.6)
+	if int(steady["emotion"]["fear_current"]) != expected:
+		return { "ok": false, "error": "expected resist_fear tick %d, got %d" % [expected, int(steady["emotion"]["fear_current"])] }
 	return { "ok": true }

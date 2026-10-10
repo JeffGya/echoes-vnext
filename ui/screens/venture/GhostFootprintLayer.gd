@@ -1,11 +1,9 @@
 # res://ui/screens/venture/GhostFootprintLayer.gd
 # V2-STAGE-004 Phase 5 (P5 UI/UX fix): board-local ghost footprints for explore travel.
 #
-# Ghosts are dropped at cells the party has just vacated during the travel scroll, so the
-# traversal reads as a fading trail glued to the terrain. This node is parented to the Board
-# TileMapLayer, so its draw coordinates are board-LOCAL and it inherits the board's transform
-# (position + scale) automatically — ghosts scroll and zoom WITH the terrain, mirroring how
-# SituationLayer stays synced to the board.
+# Ghosts are dropped at cells the party has just vacated during a walk, so the traversal reads as a
+# fading trail glued to the terrain. This node is parented to the Board TileMapLayer, so its draw
+# coordinates are board-LOCAL and it moves with the board and the camera.
 #
 # Ghosts are only ever created via drop_ghost() (called from the travel-tween segment chain),
 # so screen resize / re-entry / preview→explore transitions never spawn a stray ghost. Each

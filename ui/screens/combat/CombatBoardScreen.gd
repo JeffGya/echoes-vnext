@@ -21,19 +21,27 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
+const PacePresentation := preload("res://ui/components/PacePresentation.gd")
+const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.gd")
 
-@onready var _board: TileMapLayer                   = $Board
+# WorldLayer.follow_viewport_enabled (in the .tscn) is what lets the Camera2D move the board.
+# Without it the camera changes only the viewport canvas transform, which a CanvasLayer ignores.
+@onready var _world_layer: CanvasLayer              = $WorldLayer
+# Board content is centred on world origin here, because the camera bounds are symmetric about it.
+@onready var _board_root: Node2D                    = %BoardRoot
+@onready var camera: BoardCameraController          = %BoardCamera
+@onready var _board: TileMapLayer                   = %Board
 # V2-COMBAT-003 terrain commit 4 (decision 16) — a bridge is its own tile. A CHILD of Board,
 # so it inherits every pan, zoom and centring transform with no sync code, and it draws a
 # tinted overlay ON TOP of the ordinary ground tile rather than replacing it — so the board
 # silhouette and the isometric overlap order are byte-identical to before. The tint is a
 # PLACEHOLDER for the real bridge art; the geometry it reads is already in the terrain dict.
-@onready var _bridge_layer: TileMapLayer            = $Board/BridgeLayer
-@onready var _move_telegraph_layer: Node2D          = $MoveTelegraphLayer
-@onready var _token_layer: CombatTokenLayer         = $TokenLayer
+@onready var _bridge_layer: TileMapLayer            = %BridgeLayer
+@onready var _move_telegraph_layer: Node2D          = %MoveTelegraphLayer
+@onready var _token_layer: CombatTokenLayer         = %TokenLayer
 # V2-VOICE-001: bark popup layer — optional; null-checked before use.
 @onready var _bark_popup_layer: BarkPopupLayer      = get_node_or_null("%BarkPopupLayer") as BarkPopupLayer
-@onready var _distance_layer: CombatDistanceLayer   = $DistanceLayer
+@onready var _distance_layer: CombatDistanceLayer   = %DistanceLayer
 @onready var _back_button: Button                   = $BackButton
 @onready var _round_label: Label                    = $RoundLabel
 @onready var _objective_label: Label                = $ObjectiveLabel
@@ -86,6 +94,14 @@ const _PIP_COUNT:  int    = 5
 # _normal is the authored base; _urgent is a duplicate re-tinted for the PROTECT stolen state.
 var _normal_banner_style: StyleBoxFlat = null
 var _urgent_banner_style: StyleBoxFlat = null
+# Authored .tscn font colours, restored when the fight has no pace_state.
+var _round_label_color: Color = Color.WHITE
+var _banner_glyph_color: Color = Color.WHITE
+var _banner_progress_color: Color = Color.WHITE
+# Pace colour blend (decisions.md D-28). The last applied pace_state; "" = none applied yet or a
+# no-pace fight. The blend tween starts only when this value changes between two pace states.
+var _last_pace_state: String = ""
+var _pace_tween: Tween = null
 
 const _SPEED_SLOW:   float = 3.0
 const _SPEED_NORMAL: float = 1.5
@@ -96,6 +112,9 @@ const _MOVE_DURATION_FAST: float = 0.20
 const _TELEGRAPH_DURATION_SLOW: float = 0.28
 const _TELEGRAPH_DURATION_NORMAL: float = 0.16
 const _TELEGRAPH_DURATION_FAST: float = 0.09
+# Pace drop brightening (decisions.md D-28): the fraction toward white, and its time in seconds.
+const _PACE_DROP_BRIGHTEN: float = 0.4
+const _PACE_DROP_BRIGHTEN_TIME: float = 0.08
 
 var _current_cols: int       = 10
 var _current_rows: int       = 10
@@ -116,59 +135,41 @@ var _active_encounter_id: String = ""
 # V2-VOICE-002: last bark line shown — prevents back-to-back identical lines across echoes.
 var _last_bark_line: String = ""
 var _presentation_board_size: Vector2i = Vector2i.ZERO
-# Cached actor projection from the latest snapshot — used by the recenter-on-party helper.
+# Cached actor projection from the latest snapshot — board-tap hit test and camera follow read it.
 var _last_actors: Array = []
 var _layout: Dictionary = {}
+# Stop-short step state: actor, report, held bark, and rows that switch word at settle.
+var _step_actor_id: String = ""
+var _step_stop_short: Dictionary = {}
+var _held_barks: Array = []
+var _pending_row: Dictionary = {}
 
-# V2-STAGE-004 P3b: PURSUE camera follow (manual board repositioning — avoids Camera2D UI-pan issue).
-# Camera controls are now available on ALL combat boards. In PURSUE the board auto-follows the
-# quarry (pan/zoom temporarily overrides, then resumes after _PAN_RESUME_DELAY). In every other
-# mode there is no auto-follow: the board rests at _base_board_pos + _pan_offset and the player
-# pans/zooms freely; the recenter button clears _pan_offset back to the centred position.
-var _pursue_mode: bool            = false
-var _quarry_local_pos: Vector2    = Vector2.ZERO
-var _pan_offset: Vector2          = Vector2.ZERO
-var _pan_active: bool             = false
-var _pan_resume_timer: float      = 0.0
-# Centred board position computed by _center_board — the neutral camera origin for non-PURSUE modes.
-var _base_board_pos: Vector2      = Vector2.ZERO
-# Current uniform board zoom (kept in sync with _board.scale.x); shared by all modes.
-var _board_zoom: float            = 1.0
-# True unscaled isometric board extents (pixels), measured from map_to_local corners in
-# _center_board. Used by _clamp_board_pos so BOTH axes clamp against the real rendered span
-# — the old cols*128 / rows*64 rectangle mis-measured the vertical span on wide-short boards,
-# which is why vertical panning felt locked ("sideways-only").
+# Camera zoom (decisions.md #70, #71). min_zoom derives from the real board span so the whole board
+# fits at full zoom-out on any board shape.
+const _ZOOM_FIT_FACTOR: float     = 0.90
+const _ZOOM_MIN_FLOOR: float      = 0.05
+const _ZOOM_MIN_CEILING: float    = 0.35
+const _ZOOM_MAX: float            = 2.2
+const _ZOOM_DEFAULT: float        = 1.3
+# Unscaled isometric board extent in pixels, from map_to_local corners plus one tile.
 var _board_span_px: Vector2       = Vector2(1280.0, 640.0)
-const _PAN_RESUME_DELAY: float    = 3.0
-const _PURSUE_FOLLOW_SPEED: float = 5.0
-const _ZOOM_MIN: float            = 0.4
-const _ZOOM_MAX: float            = 2.0
-# Panning clamp: keep at least this many pixels of the board within the viewport on every side,
-# so the board can never be flung fully off-screen.
-const _PAN_MARGIN: float          = 120.0
+# A new encounter (or board size) resets zoom, position and selection on the next _center_board.
+var _camera_needs_reset: bool     = true
+# Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
+var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
-# Single-pointer drag panning (mouse-button / touch). Works in every mode and in all
-# directions. A press records the origin; motion beyond _DRAG_THRESHOLD begins a drag and
-# from then on the full 2D delta pans the board. Below threshold the press is left alone so
-# button/CTA taps still register (buttons are Control nodes and consume their own events
-# before _unhandled_input ever sees them, so chrome is never blocked).
-var _drag_pointer_down: bool  = false
-var _drag_active: bool        = false
-var _drag_last_pos: Vector2   = Vector2.ZERO
-# Source-exclusivity lock: "" (idle), "mouse", or "touch". project.godot enables
-# input_devices/pointing/emulate_touch_from_mouse, so ONE physical mouse drag delivers BOTH
-# real InputEventMouseButton/MouseMotion AND synthesized InputEventScreenTouch/ScreenDrag.
-# Without this lock both branches would feed _update_pointer_drag and the pan delta would
-# apply twice (double-speed panning on desktop). Whichever source presses first owns the
-# drag; begin/update/end events from the other source are ignored until release clears it.
-var _drag_source: String      = ""
-const _DRAG_THRESHOLD: float  = 8.0
+# Tells a board tap from a drag from a pinch. A tap selects the actor under it or, on empty board,
+# releases the camera to FREE. A drag pans the camera 1:1.
+var _pointer := BoardPointerTracker.new()
 
 # -------------------------
 # Lifecycle
 # -------------------------
 
 func _ready() -> void:
+	_pointer.tap.connect(_on_pointer_tap)
+	_token_layer.actor_settled.connect(_on_actor_settled)
+	_pointer.drag_pan.connect(camera.drag_pan)
 	_back_button.visible = false
 	_back_button.pressed.connect(_on_back_pressed)
 
@@ -201,10 +202,18 @@ func _ready() -> void:
 	_recenter_button.visible = false
 	_recenter_button.pressed.connect(_on_recenter_pressed)
 
+	# CanvasLayer visibility and Camera2D.enabled do not follow this Control. A hidden screen must
+	# neither draw its board nor drive the viewport canvas transform.
+	visibility_changed.connect(_sync_world_visibility)
+	_sync_world_visibility()
+
 	# V2-STAGE-004 P5: cache the authored banner StyleBox and derive the urgent variant.
 	# _normal is the .tscn-authored base; _urgent duplicates it and re-tints bg + border red
 	# for the PROTECT "STOLEN" state (distinct chrome, not just a modulate).
 	_objective_banner.visible = false
+	_round_label_color     = _round_label.get_theme_color("font_color")
+	_banner_glyph_color    = _banner_glyph.get_theme_color("font_color")
+	_banner_progress_color = _banner_progress.get_theme_color("font_color")
 	# get_theme_stylebox() returns the effective stylebox (the .tscn-authored override here) —
 	# Control has no get_theme_stylebox_override() getter, only has_/add_/remove_.
 	_normal_banner_style = _objective_banner.get_theme_stylebox("panel") as StyleBoxFlat
@@ -237,12 +246,27 @@ func set_layout(layout: Dictionary) -> void:
 	_layout = layout.duplicate(true)
 	_apply_responsive_layout()
 	if _current_cols > 0 and _current_rows > 0:
-		var previous_pos := _board.position
 		_center_board(_current_cols, _current_rows)
-		if not _pursue_mode:
-			var clamped := _clamp_board_pos(previous_pos)
-			_pan_offset = clamped - _base_board_pos
-			_apply_board_transform(clamped)
+		# The viewport may have changed, and min_zoom depends on it. Keep the player's zoom.
+		var min_zoom := _min_zoom_for_span(_board_span_px)
+		camera.configure_zoom_range(min_zoom, _ZOOM_MAX, clampf(camera.zoom.x, min_zoom, _ZOOM_MAX))
+		camera.reclamp()
+
+
+func _sync_world_visibility() -> void:
+	var shown := is_visible_in_tree()
+	_world_layer.visible = shown
+	camera.enabled = shown
+	if not shown:
+		_pointer.reset()
+
+
+# A release lost to a focus change would leave a finger counted or a drag owned, and board pan and
+# tap would stay dead. Both notifications are handled; the reset is idempotent.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_pointer.reset()
+
 
 func _reset_transient_ui() -> void:
 	_step_timer.stop()
@@ -281,16 +305,14 @@ func _reset_presentation_state() -> void:
 	if _bark_popup_layer != null:
 		_bark_popup_layer.clear_all()
 	_last_bark_line = ""
-	# Fresh encounter → neutral camera: clear pan, reset zoom to 1× on every layer.
-	_pan_offset  = Vector2.ZERO
-	_pan_active  = false
-	_board_zoom  = 1.0
-	_board.scale               = Vector2.ONE
-	_token_layer.scale         = Vector2.ONE
-	_move_telegraph_layer.scale = Vector2.ONE
-	_distance_layer.scale      = Vector2.ONE
-	if _bark_popup_layer != null:
-		_bark_popup_layer.scale = Vector2.ONE
+	_held_barks.clear()
+	_pending_row.clear()
+	# Fresh encounter → the first pace colour shows with no blend.
+	_kill_pace_tween()
+	_last_pace_state = ""
+	# Fresh encounter → FREE camera at default zoom, nothing selected (ANSWERS.md #76).
+	_camera_needs_reset = true
+	_pointer.reset()
 
 
 func _should_reset_presentation(data: Dictionary) -> bool:
@@ -306,6 +328,7 @@ func _should_reset_presentation(data: Dictionary) -> bool:
 	return next_board_size != _presentation_board_size
 
 func _render(data: Dictionary, actions: Dictionary) -> void:
+	_flush_held_barks()
 	_current_cols = int(data.get("board_cols", 10))
 	_current_rows = int(data.get("board_rows", 10))
 	var terrain_v: Variant = data.get("terrain", {})
@@ -335,31 +358,10 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	var obj_type: String = str(obj_state.get("type", ""))
 	_objective_label.visible = false
 	_render_objective_banner(obj_state, obj_type)
+	_apply_pace_color(str(obj_state.get("pace_state", "")))
 
-	# V2-STAGE-004 P3b: PURSUE camera — update quarry follow target each snapshot.
-	if obj_type == "pursue":
-		if not _pursue_mode:
-			_pursue_mode = true
-			_pan_offset  = Vector2.ZERO
-			_board_zoom  = 1.0
-			_board.scale = Vector2.ONE
-		for actor_v in actors:
-			if actor_v is Dictionary and bool(actor_v.get("is_quarry", false)):
-				var gp_q: Dictionary = actor_v.get("grid_pos", {})
-				_quarry_local_pos = _board.map_to_local(
-					Vector2i(int(gp_q.get("col", 0)), int(gp_q.get("row", 0))))
-				_apply_board_transform(get_viewport_rect().size / 2.0 - _quarry_local_pos + _pan_offset)
-				break
-	elif _pursue_mode:
-		_pursue_mode = false
-		_pan_offset   = Vector2.ZERO
-		_board_zoom   = 1.0
-		_board.scale  = Vector2.ONE
-		_token_layer.scale          = Vector2.ONE
-		_move_telegraph_layer.scale = Vector2.ONE
-		_distance_layer.scale       = Vector2.ONE
-		if _bark_popup_layer != null:
-			_bark_popup_layer.scale = Vector2.ONE
+	# Selection-lock works the same in every objective type — no per-mode camera.
+	_push_camera_follow_target()
 
 	# COMBAT-SEQ: CTA and auto-dispatch depend on round_phase.
 	var round_phase: String  = str(data.get("round_phase", "pre_combat"))
@@ -514,6 +516,71 @@ func _render_objective_banner(obj_state: Dictionary, obj_type: String) -> void:
 	_objective_banner.visible = true
 
 
+## Pace modes only (design §6, decisions.md D-12): colour the round label and the banner's
+## glyph and progress line by pace_state. No text is added. No-pace fights keep the authored colour.
+## D-28: a change between two pace states blends over the move duration of the current speed.
+## A drop (full → partial, partial → none) first brightens the colour once. This runs on every
+## actor step, so an unchanged state never restarts the blend.
+func _apply_pace_color(pace_state: String) -> void:
+	if not PacePresentation.has_pace(pace_state):
+		_kill_pace_tween()
+		_last_pace_state = ""
+		_round_label.add_theme_color_override("font_color", _round_label_color)
+		_banner_glyph.add_theme_color_override("font_color", _banner_glyph_color)
+		_banner_progress.add_theme_color_override("font_color", _banner_progress_color)
+		return
+	var target := PacePresentation.color(pace_state, false)
+	var previous := _last_pace_state
+	_last_pace_state = pace_state
+	if pace_state == previous:
+		if not is_pace_blend_running():
+			_set_pace_label_color(target)
+		return
+	_kill_pace_tween()
+	if previous.is_empty():
+		_set_pace_label_color(target)
+		return
+	var from := _round_label.get_theme_color("font_color")
+	_pace_tween = create_tween().set_trans(Tween.TRANS_SINE)
+	if PacePresentation.STATES.find(pace_state) > PacePresentation.STATES.find(previous):
+		_pace_tween.tween_method(_set_pace_label_color, from,
+			from.lerp(Color.WHITE, _PACE_DROP_BRIGHTEN), _PACE_DROP_BRIGHTEN_TIME).set_ease(Tween.EASE_OUT)
+		from = from.lerp(Color.WHITE, _PACE_DROP_BRIGHTEN)
+	_pace_tween.tween_method(_set_pace_label_color, from, target, _pace_blend_duration()).set_ease(Tween.EASE_IN_OUT)
+
+
+## True while the pace colour blend runs.
+func is_pace_blend_running() -> bool:
+	return _pace_tween != null and _pace_tween.is_valid() and _pace_tween.is_running()
+
+
+## Advances the pace colour blend by `seconds`. Headless tests use this; the game never calls it.
+func step_pace_blend(seconds: float) -> void:
+	if is_pace_blend_running():
+		_pace_tween.custom_step(seconds)
+
+
+func _set_pace_label_color(c: Color) -> void:
+	_round_label.add_theme_color_override("font_color", c)
+	_banner_glyph.add_theme_color_override("font_color", c)
+	_banner_progress.add_theme_color_override("font_color", c)
+
+
+func _kill_pace_tween() -> void:
+	if _pace_tween != null and _pace_tween.is_valid():
+		_pace_tween.kill()
+	_pace_tween = null
+
+
+## The blend uses the token move duration of the current playback speed.
+func _pace_blend_duration() -> float:
+	if is_equal_approx(_step_delay, _SPEED_SLOW):
+		return _MOVE_DURATION_SLOW
+	if is_equal_approx(_step_delay, _SPEED_FAST):
+		return _MOVE_DURATION_FAST
+	return _MOVE_DURATION_NORMAL
+
+
 ## Fills the pre-authored diamond pips by quarry proximity to the exit edge.
 ## Closer to exit (smaller distance) = more urgent = more filled pips + text hint.
 ## dist is quarry_distance_to_exit (chebyshev-to-edge, 0 = at the exit).
@@ -600,13 +667,22 @@ func _center_board(cols: int, rows: int) -> void:
 		maxf(max_x - min_x, 1.0) + 128.0,
 		maxf(max_y - min_y, 1.0) + 64.0
 	)
+	_board_root.position = -grid_center
+	camera.configure_bounds(_board_span_px)
 
-	var viewport_center: Vector2 = get_viewport_rect().size / 2.0
-	# Neutral centred origin — the camera rest position for non-PURSUE modes.
-	_base_board_pos = viewport_center - grid_center
-	# In PURSUE the _process follow loop drives position; elsewhere apply the current pan offset.
-	if not _pursue_mode:
-		_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
+	if _camera_needs_reset:
+		_camera_needs_reset = false
+		camera.deselect()
+		camera.position = Vector2.ZERO
+		camera.configure_zoom_range(_min_zoom_for_span(_board_span_px), _ZOOM_MAX, _ZOOM_DEFAULT)
+	camera.reclamp()
+
+
+## decisions.md #70: the whole board fits the shorter viewport side, with a 10% margin.
+func _min_zoom_for_span(span: Vector2) -> float:
+	var view := get_viewport_rect().size
+	var fit := minf(view.x, view.y) / maxf(maxf(span.x, span.y), 1.0)
+	return clampf(fit * _ZOOM_FIT_FACTOR, _ZOOM_MIN_FLOOR, _ZOOM_MIN_CEILING)
 
 
 func _on_back_pressed() -> void:
@@ -673,17 +749,22 @@ func _on_speed_pressed(delay: float) -> void:
 func _apply_visual_playback_for_delay(delay: float) -> void:
 	var move_duration: float = _MOVE_DURATION_NORMAL
 	var telegraph_duration: float = _TELEGRAPH_DURATION_NORMAL
+	var settle: Vector2 = Vector2(1.0, 0.10)  # stop-short motion scale, badge delay
 
 	if is_equal_approx(delay, _SPEED_SLOW):
 		move_duration = _MOVE_DURATION_SLOW
 		telegraph_duration = _TELEGRAPH_DURATION_SLOW
+		settle = Vector2(1.6, 0.20)
 	elif is_equal_approx(delay, _SPEED_FAST):
 		move_duration = _MOVE_DURATION_FAST
 		telegraph_duration = _TELEGRAPH_DURATION_FAST
+		settle = Vector2(0.0, 0.05)
 
 	if _token_layer != null and _token_layer.visual_config != null:
 		_token_layer.visual_config.move_duration = move_duration
 		_token_layer.visual_config.telegraph_lead_time = telegraph_duration
+		_token_layer.visual_config.motion_scale = settle.x
+		_token_layer.visual_config.badge_delay = settle.y
 	if _move_telegraph_layer != null and _move_telegraph_layer.get("visual_config") != null:
 		var telegraph_cfg: Variant = _move_telegraph_layer.get("visual_config")
 		if telegraph_cfg != null:
@@ -728,6 +809,15 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			if not tid.is_empty() and dmg > 0:
 				damage_by_id[tid] = "-%d" % dmg
 
+	var last_actor_action: Dictionary = data.get("last_actor_action", {})
+	_step_actor_id = str(last_actor_action.get("source_id", ""))
+	_step_stop_short = last_actor_action.get("stop_short", {}) as Dictionary
+	var step_shown: bool = bool(_step_stop_short.get("performed", false))
+	var hop_lift: float = stop_short_hop_lift(
+		str(_step_stop_short.get("benefit", "")),
+		is_actor_selected(camera.mode, camera.target_id, _step_actor_id), step_shown,
+		camera.zoom.x, _token_layer.visual_config.motion_scale)
+
 	var tokens: Array[Dictionary] = []
 	for actor in actors:
 		var gp: Dictionary = actor.get("grid_pos", {})
@@ -756,9 +846,13 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"hp_ratio":           hp_ratio,
 			"damage_text":        damage_by_id.get(actor_id, ""),
 			"emotional_status":   str(actor.get("emotional_status", "")),
+			"status":             str(actor.get("status", "")),
+			"mark_kind":          str(actor.get("mark_kind", "")),
+			"hop_lift":           hop_lift if step_shown and actor_id == _step_actor_id else 0.0,
+			"cause_badge":        stop_short_badge(_step_stop_short) if step_shown and actor_id == _step_actor_id else "",
+			"observe_target":     str(_step_stop_short.get("subject_actor_id", "")) if step_shown and actor_id == _step_actor_id and str(_step_stop_short.get("benefit", "")) == "observe" else "",
 		})
 
-	var last_actor_action: Dictionary = data.get("last_actor_action", {})
 	var telegraph_event: Dictionary = _token_layer.apply_snapshot(
 		tokens,
 		current_actor_id,
@@ -787,12 +881,6 @@ func _move_path_cell_positions(last_actor_action: Dictionary) -> Array[Vector2]:
 				_board.map_to_local(Vector2i(int(cell.get("col", 0)), int(cell.get("row", 0))))
 			)
 	return cell_positions
-
-
-## The legacy raw emotion overlay is unavailable from player-facing snapshots.
-## Called from AppRoot when the "combat_emotion" debug command fires.
-func set_emotion_debug(enabled: bool) -> void:
-	_token_layer.set_emotion_debug(enabled)
 
 
 # V2-VOICE-002: Assembles new bark events for this snapshot and passes them to
@@ -858,7 +946,11 @@ func _show_bark_popups(actors: Array, _data: Dictionary) -> void:
 			prev_line = line
 	if not deduped.is_empty():
 		_last_bark_line = str(deduped.back().get("bark_line", ""))
-		_bark_popup_layer.show_barks(deduped)
+		# The stop-short Echo's own bark waits for the settle; a settled token shows it now.
+		var held: Array = deduped.filter(func(ev: Dictionary) -> bool:
+			return bool(_step_stop_short.get("performed", false)) and str(ev.get("actor_id", "")) == _step_actor_id and not _token_layer.is_settled(_step_actor_id))
+		_held_barks.append_array(held)
+		_bark_popup_layer.show_barks(deduped.filter(func(ev: Dictionary) -> bool: return not held.has(ev)))
 
 
 # V2-VOICE-002: Pushes current actor positions to BarkPopupLayer so speech bubbles
@@ -877,13 +969,13 @@ func _update_bark_positions(actors: Array) -> void:
 	_bark_popup_layer.update_actor_positions(positions)
 
 
-# Converts an actor's grid_pos to BarkPopupLayer local space.
-# Control has no to_local(); use get_global_transform().affine_inverse() instead.
+# Converts an actor's grid_pos to BarkPopupLayer local space. The bark layer does not follow the
+# camera, so bubbles keep a readable size at any zoom; the path goes through viewport space.
 func _actor_screen_pos(actor: Dictionary) -> Vector2:
 	var gp: Dictionary = actor.get("grid_pos", {})
 	var cell_pos: Vector2 = _board.map_to_local(Vector2i(gp.get("col", 0), gp.get("row", 0)))
-	var world_pos: Vector2 = _board.to_global(cell_pos)
-	return _bark_popup_layer.get_global_transform().affine_inverse() * world_pos
+	var viewport_pos: Vector2 = _board.get_global_transform_with_canvas() * cell_pos
+	return _bark_popup_layer.get_global_transform_with_canvas().affine_inverse() * viewport_pos
 
 
 # -------------------------
@@ -913,11 +1005,15 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 
 	# Build action-text lookup from action_results resolved so far this round.
 	var action_by_id: Dictionary = {}
+	var stop_row_ids: Dictionary = {}
+	_pending_row.clear()
 	for result_v in data.get("action_results", []):
 		if result_v is Dictionary:
 			var sid: String = str(result_v.get("source_id", ""))
 			if not sid.is_empty():
 				action_by_id[sid] = _format_action(result_v)
+				if bool((result_v.get("stop_short", {}) as Dictionary).get("performed", false)):
+					stop_row_ids[sid] = true
 
 	# V2-EMOTION-001: build actor lookup for emotion fields.
 	var actor_by_id: Dictionary = {}
@@ -936,29 +1032,107 @@ func _draw_initiative_panel(data: Dictionary) -> void:
 		var action_text: String = action_by_id.get(actor_id, "")
 		var row: Node = InitiativeRowScene.instantiate()
 		_initiative_list.add_child(row)
+		# Stop-short step still settling: plain move word now, benefit word at actor_settled.
+		var shown_text: String = action_text
+		if actor_id == _step_actor_id and stop_row_ids.has(actor_id) and not _token_layer.is_settled(actor_id):
+			shown_text = "Moves"
+			_pending_row[actor_id] = { "row": row, "args": [actor_name, action_text, i == active_idx, is_dead, _action_color_for_text(action_text)] }
 		row.call(
 			"setup_row",
 			actor_name,
-			action_text,
+			shown_text,
 			i == active_idx,
 			is_dead,
-			_action_color_for_text(action_text)
+			_action_color_for_text(shown_text)
 		)
+		row.call("set_actor_id", actor_id)
+		row.connect("row_pressed", select_board_target)
 		# V2-EMOTION-002: set unified emotional status per actor row.
 		var actor_d: Dictionary = actor_by_id.get(actor_id, {})
 		var emotion_str: String = str(actor_d.get("emotional_status", ""))
 		var emotion_label := row.get_node("%EmotionLabel") as Label
 		emotion_label.text = EmotionPresentation.display_name(emotion_str)
 		emotion_label.theme_type_variation = EmotionPresentation.text_theme(emotion_str)
-		emotion_label.visible = not emotion_str.is_empty()
+		emotion_label.visible = not emotion_str.is_empty() and not stop_row_ids.has(actor_id)
 
 	_initiative_panel.visible = true
+
+
+
+func _on_actor_settled(actor_id: String) -> void:
+	if actor_id != _step_actor_id or not bool(_step_stop_short.get("performed", false)):
+		return
+	var pending: Dictionary = _pending_row.get(actor_id, {})
+	_pending_row.erase(actor_id)
+	var stopped: Dictionary = _find_actor(actor_id)
+	if not stopped.is_empty():
+		_move_telegraph_layer.show_settle_diamond(_board.map_to_local(_actor_cell(stopped)), _step_stop_short)
+	if not pending.is_empty() and is_instance_valid(pending["row"]):
+		(pending["row"] as Node).callv("setup_row", pending["args"])
+	# Selected: the bubble replaces the bark. Unselected: the held bark shows.
+	if is_actor_selected(camera.mode, camera.target_id, actor_id):
+		_held_barks.clear()
+		_show_stop_short_bubble(actor_id)
+	else:
+		_flush_held_barks()
+
+
+func _flush_held_barks() -> void:
+	if _bark_popup_layer != null:
+		for ev: Dictionary in _held_barks:
+			var actor: Dictionary = _find_actor(str(ev.get("actor_id", "")))
+			if not actor.is_empty():
+				ev["screen_pos"] = _actor_screen_pos(actor)
+				_bark_popup_layer.show_barks([ev])
+	_held_barks.clear()
+
+
+func _show_stop_short_bubble(actor_id: String) -> void:
+	var actor: Dictionary = _find_actor(actor_id)
+	if _bark_popup_layer == null or actor.is_empty():
+		return
+	_bark_popup_layer.show_barks([{
+		"actor_id": actor_id, "bark_line": stop_short_reason(_step_stop_short),
+		"bark_context": "stop_short_reason", "bark_tier": "", "bark_target_id": "",
+		"bark_priority": 1, "is_response": false, "screen_pos": _actor_screen_pos(actor),
+	}])
+
+
+## Selected = the camera is locked on this actor (read at the moment of use, never stored).
+static func is_actor_selected(camera_mode: int, camera_target_id: String, actor_id: String) -> bool:
+	return camera_mode == BoardCameraController.Mode.FOLLOW_ACTOR and camera_target_id == actor_id
+
+
+## World-unit lift of the notice hop: none when selected, not performed, or at Fast (motion scale 0).
+## The marker and the rest pose still show then.
+static func stop_short_hop_lift(benefit: String, selected: bool, performed: bool, zoom_x: float, motion_scale: float) -> float:
+	if selected or not performed or motion_scale <= 0.0:
+		return 0.0
+	return StopShortMotion.hop_lift(benefit, zoom_x)
+
+
+static func stop_short_badge(stop_short: Dictionary) -> String:
+	var args: Dictionary = (stop_short.get("trace", {}) as Dictionary).get("message_args", {})
+	match str(args.get("source", "")):
+		"emotion":
+			return "fear"
+		"calling", "vector":
+			return "identity"
+	return ""
+
+
+static func stop_short_reason(stop_short: Dictionary) -> String:
+	var args: Dictionary = (stop_short.get("trace", {}) as Dictionary).get("message_args", {})
+	return StopShortText.reason_line(str(stop_short.get("benefit", "")), str(args.get("code", "")))
 
 
 ## Formats an action_result entry into a short display string for the initiative panel.
 func _format_action(result: Dictionary) -> String:
 	var atype: String = str(result.get("action_type", ""))
 	var tname: String = str(result.get("target_name", ""))
+	var stop_short: Dictionary = result.get("stop_short", {}) as Dictionary
+	if bool(stop_short.get("performed", false)):
+		return StopShortText.row_word(str(stop_short.get("benefit", "")))
 	match atype:
 		"melee_attack":
 			var target: String = tname if not tname.is_empty() else "?"
@@ -975,6 +1149,8 @@ func _format_action(result: Dictionary) -> String:
 			return "Idle"
 		"actor.refuse":
 			return "Refuses"
+		"actor.observe":
+			return StopShortText.row_word("observe")
 		"actor.dead":
 			return ""
 	return atype
@@ -986,7 +1162,7 @@ func _action_color_for_text(action_text: String) -> Color:
 		return Color.RED
 	if action_text.begins_with("Attacks"):
 		return Color.ORANGE
-	if action_text == "Guards":
+	if action_text == "Guards" or action_text in [StopShortText.row_word("guard"), StopShortText.row_word("hold")]:
 		return Color.CYAN
 	if action_text.begins_with("Move →") or action_text == "Moves":
 		return Color(0.6, 0.9, 0.6)
@@ -1101,217 +1277,155 @@ static func _objective_instruction_text(obj_type: String, obj_state: Dictionary)
 
 
 # -------------------------
-# V2-STAGE-004 P3b: PURSUE camera follow
+# Board camera (ANSWERS.md #74-79, decisions.md #70-72): real Camera2D, universal selection-lock
 # -------------------------
 
-func _process(delta: float) -> void:
-	# PURSUE is the only mode with an auto-follow loop. Other modes rest at their
-	# static panned position (set on gesture / recenter), so _process is a no-op there.
-	if not _pursue_mode:
+func _process(_delta: float) -> void:
+	# A locked actor's token animates between cells, so the target follows the drawn token each frame.
+	if camera.mode == BoardCameraController.Mode.FOLLOW_ACTOR and is_visible_in_tree():
+		_push_camera_follow_target()
+	# Bark bubbles are screen-space, so they follow their tokens only if re-anchored on camera moves.
+	if _bark_popup_layer == null or _last_actors.is_empty() or not is_visible_in_tree():
 		return
-	if _pan_active:
-		_pan_resume_timer -= delta
-		if _pan_resume_timer <= 0.0:
-			_pan_active = false
-			_pan_offset = Vector2.ZERO
-	var target: Vector2 = get_viewport_rect().size / 2.0 - _quarry_local_pos + _pan_offset
-	var new_pos: Vector2 = _board.position.lerp(target, clampf(_PURSUE_FOLLOW_SPEED * delta, 0.0, 1.0))
-	_apply_board_transform(new_pos)
-
-
-# Single-pointer drag panning (mouse button + touch), all directions.
-#
-# ROUTING NOTE: this MUST live in _gui_input, not _unhandled_input. The screen root is a
-# full-rect Control with the default mouse_filter = STOP, so it consumes button/touch/motion
-# events as GUI input before they ever reach _unhandled_input — which is why the previous
-# _unhandled_input drag handler never fired (the halo + gesture pan worked because gesture
-# events are NOT consumed by mouse_filter and DO fall through to _unhandled_input).
-#
-# Because this fires as GUI input on the ROOT, child Buttons/CTAs (higher in the pick order,
-# also STOP) still consume their own clicks first — _gui_input here only sees presses on empty
-# board space. accept_event() is called while a drag is ACTIVE so a genuine pan doesn't leak
-# further, while a below-threshold press is left un-accepted so plain taps behave normally.
-func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed:
-				_begin_pointer_drag(mb.position, "mouse")
-			else:
-				var was_dragging := _drag_active and _drag_source == "mouse"
-				_end_pointer_drag("mouse")
-				if was_dragging:
-					accept_event()
+	var xform := get_viewport().get_canvas_transform()
+	if xform == _last_canvas_xform:
 		return
-	elif event is InputEventScreenTouch:
-		var st := event as InputEventScreenTouch
-		if st.pressed:
-			_begin_pointer_drag(st.position, "touch")
-		else:
-			var was_dragging := _drag_active and _drag_source == "touch"
-			_end_pointer_drag("touch")
-			if was_dragging:
-				accept_event()
+	_last_canvas_xform = xform
+	_update_bark_positions(_last_actors)
+
+
+## Locks the camera onto one actors-array entry. Echoes, enemies, spirits and structures are all
+## entries in that array, so one path covers every target type in every objective mode.
+## Public: RealmShell forwards echo-card taps here.
+func select_board_target(actor_id: String) -> void:
+	var actor := _find_actor(actor_id)
+	if actor.is_empty() or _actor_is_dead(actor):
 		return
-	elif event is InputEventMouseMotion:
-		var mm := event as InputEventMouseMotion
-		# Only pan while the left button is held down over the board.
-		if _drag_pointer_down and (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
-			_update_pointer_drag(mm.position, "mouse")
-			if _drag_active and _drag_source == "mouse":
-				accept_event()
-		return
-	elif event is InputEventScreenDrag:
-		var sd := event as InputEventScreenDrag
-		if _drag_pointer_down:
-			_update_pointer_drag(sd.position, "touch")
-			if _drag_active and _drag_source == "touch":
-				accept_event()
-		return
+	camera.select(actor_id)
+	_push_camera_follow_target()
+	if actor_id == _step_actor_id and bool(_step_stop_short.get("performed", false)) and _token_layer.is_settled(actor_id):
+		_show_stop_short_bubble(actor_id)
 
 
-# Two-finger gesture pan + pinch zoom. These stay in _unhandled_input: gesture events are
-# NOT consumed by Control mouse_filter, so they reach here reliably (and always did — the
-# gesture pan was the one part of the camera that worked before this fix).
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventPanGesture:
-		_pan_offset -= (event as InputEventPanGesture).delta * 1.5
-		_pan_active = true
-		_pan_resume_timer = _PAN_RESUME_DELAY
-		# Non-PURSUE modes have no follow loop — apply the pan immediately (clamped).
-		if not _pursue_mode:
-			_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
-	elif event is InputEventMagnifyGesture:
-		var factor: float = (event as InputEventMagnifyGesture).factor
-		_board_zoom = clampf(_board_zoom * factor, _ZOOM_MIN, _ZOOM_MAX)
-		var all_zoom := Vector2(_board_zoom, _board_zoom)
-		_board.scale               = all_zoom
-		_token_layer.scale         = all_zoom
-		_move_telegraph_layer.scale = all_zoom
-		_distance_layer.scale      = all_zoom
-		if _bark_popup_layer != null:
-			_bark_popup_layer.scale = all_zoom
-		_pan_active = true
-		_pan_resume_timer = _PAN_RESUME_DELAY
-		if not _pursue_mode:
-			_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
+## Pushes the lock target for the current camera mode. Called on select and on every snapshot, so
+## a locked camera starts moving at once even in Manual mode, where snapshots can be far apart.
+func _push_camera_follow_target() -> void:
+	match camera.mode:
+		BoardCameraController.Mode.FOLLOW_ACTOR:
+			var actor := _find_actor(camera.target_id)
+			if actor.is_empty() or _actor_is_dead(actor):
+				# ANSWERS.md #78: when the locked actor dies or leaves, the camera follows the party.
+				camera.follow_party()
+				camera.set_follow_target_local(_party_centroid_world())
+				return
+			camera.set_follow_target_local(_actor_follow_world_pos(actor))
+		BoardCameraController.Mode.FOLLOW_PARTY:
+			camera.set_follow_target_local(_party_centroid_world())
 
 
-## Records a potential drag origin. Does NOT pan yet — panning only begins once the
-## pointer moves past _DRAG_THRESHOLD, so a stationary press is still a plain tap.
-## source ("mouse"/"touch") claims the drag: with emulate_touch_from_mouse a physical press
-## arrives twice (real mouse + synthesized touch); only the FIRST source takes ownership and
-## the duplicate begin from the other source is ignored while the pointer is down.
-func _begin_pointer_drag(pos: Vector2, source: String) -> void:
-	if _drag_pointer_down and _drag_source != source:
-		return
-	_drag_source       = source
-	_drag_pointer_down = true
-	_drag_active       = false
-	_drag_last_pos     = pos
+func _find_actor(actor_id: String) -> Dictionary:
+	for actor_v in _last_actors:
+		if actor_v is Dictionary and str(actor_v.get("id", "")) == actor_id:
+			return actor_v
+	return {}
 
 
-## Applies pointer motion. Waits for the threshold before treating the gesture as a drag,
-## then pans by the FULL 2D delta (x AND y) so every direction works. Counts as a manual
-## camera override in every mode — in PURSUE it pauses auto-follow exactly like the gesture pan.
-## Ignores motion from the source that does NOT own the drag — with emulate_touch_from_mouse
-## every physical mouse motion is duplicated as a ScreenDrag; applying both would pan at 2×.
-func _update_pointer_drag(pos: Vector2, source: String) -> void:
-	if not _drag_pointer_down:
-		return
-	if _drag_source != source:
-		return
-	if not _drag_active:
-		if _drag_last_pos.distance_to(pos) < _DRAG_THRESHOLD:
-			return
-		_drag_active = true
-	var delta: Vector2 = pos - _drag_last_pos
-	_drag_last_pos = pos
-	_pan_offset += delta
-	_pan_active = true
-	_pan_resume_timer = _PAN_RESUME_DELAY
-	# PURSUE has a follow loop that consumes _pan_offset each frame; other modes apply now.
-	if not _pursue_mode:
-		_apply_board_transform(_clamp_board_pos(_base_board_pos + _pan_offset))
+static func _actor_cell(actor: Dictionary) -> Vector2i:
+	var gp: Dictionary = actor.get("grid_pos", {})
+	return Vector2i(int(gp.get("col", 0)), int(gp.get("row", 0)))
 
 
-## Ends the current pointer interaction. No state is committed on release beyond clearing
-## the down flag — the board keeps its panned position. Only the source that OWNS the drag
-## may end it; the duplicated release from the emulated source is ignored (the owning
-## source's release always arrives too, so the lock is always cleared).
-func _end_pointer_drag(source: String) -> void:
-	if _drag_pointer_down and _drag_source != source:
-		return
-	_drag_pointer_down = false
-	_drag_active       = false
-	_drag_source       = ""
+static func _actor_is_dead(actor: Dictionary) -> bool:
+	return str(actor.get("status", "")) == "dead" or bool(actor.get("is_dead", false))
 
 
-## Clamps a proposed board position so at least _PAN_MARGIN pixels of the viewport-space
-## board region remain on screen on every side — the board can never be flung fully away.
-## Only used by the non-PURSUE static camera; PURSUE follow keeps the quarry centred.
-func _clamp_board_pos(pos: Vector2) -> Vector2:
-	var vp: Vector2 = _layout.get("logical_size", get_viewport_rect().size)
-	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
-	var chrome_bottom := 88.0 + insets.w + 8.0
-	# True isometric board extents (measured in _center_board) → scale by current zoom for a
-	# viewport-space span. Using the real span on BOTH axes is what unlocks vertical panning:
-	# the previous rows*64 approximation badly under-measured height on wide-short boards,
-	# collapsing the allowed vertical range to near zero.
-	var span_x: float = _board_span_px.x * _board_zoom
-	var span_y: float = _board_span_px.y * _board_zoom
-	var clamped := pos
-	# Keep the board's left edge from passing the right margin, and vice-versa.
-	clamped.x = clampf(pos.x, _PAN_MARGIN + insets.x - span_x, vp.x - insets.z - _PAN_MARGIN)
-	clamped.y = clampf(pos.y, _PAN_MARGIN + insets.y - span_y, vp.y - chrome_bottom - _PAN_MARGIN)
-	return clamped
+# In the camera's parent space (WorldLayer), which is where camera.position lives.
+func _actor_world_pos(actor: Dictionary) -> Vector2:
+	return _board.to_global(_board.map_to_local(_actor_cell(actor)))
 
 
-## Recenter-on-party button. In PURSUE, resume quarry auto-follow immediately (clears the
-## manual-override hold). In every other mode, snap the camera back to the living-echo centroid.
-func _on_recenter_pressed() -> void:
-	if _pursue_mode:
-		_pan_active = false
-		_pan_offset = Vector2.ZERO
-		_pan_resume_timer = 0.0
-		return
-	_recenter_on_party()
+## Where the locked actor's token is drawn now, in world space. At rest it is the cell centre. While the
+## token animates (a move, or the telegraph delay before it) it is the drawn position, so the camera
+## never gets ahead of the token.
+func _actor_follow_world_pos(actor: Dictionary) -> Vector2:
+	var drawn := _token_layer.display_cell_position(str(actor.get("id", "")))
+	if drawn == Vector2.INF:
+		return _actor_world_pos(actor)
+	return _board.to_global(drawn)
 
 
-## Centres the (non-PURSUE) camera on the centroid of living faction=="echo" tokens.
-## Falls back to the neutral centred board position when no living echo is present.
-func _recenter_on_party() -> void:
+## Centroid of the living party. With no living echo, the board centre (world origin).
+func _party_centroid_world() -> Vector2:
 	var sum := Vector2.ZERO
 	var count: int = 0
 	for actor_v in _last_actors:
 		if not (actor_v is Dictionary):
 			continue
 		var actor: Dictionary = actor_v
-		if str(actor.get("faction", "")) != "echo":
+		if str(actor.get("faction", "")) != "echo" or _actor_is_dead(actor):
 			continue
-		if str(actor.get("status", "")) == "dead":
-			continue
-		var gp: Dictionary = actor.get("grid_pos", {})
-		sum += _board.map_to_local(Vector2i(int(gp.get("col", 0)), int(gp.get("row", 0))))
+		sum += _actor_world_pos(actor)
 		count += 1
-	if count == 0:
-		_pan_offset = Vector2.ZERO
-		_apply_board_transform(_clamp_board_pos(_base_board_pos))
-		return
-	var centroid: Vector2 = (sum / float(count)) * _board_zoom
-	# Desired board position that places the party centroid at viewport centre.
-	var desired: Vector2 = get_viewport_rect().size / 2.0 - centroid
-	_pan_offset = desired - _base_board_pos
-	_apply_board_transform(_clamp_board_pos(desired))
+	return sum / float(count) if count > 0 else Vector2.ZERO
 
 
-func _apply_board_transform(pos: Vector2) -> void:
-	_board.position              = pos
-	_token_layer.position        = pos
-	_move_telegraph_layer.position = pos
-	_distance_layer.position     = pos
-	if _bark_popup_layer != null:
-		_bark_popup_layer.position = pos
+func _cell_at_viewport_point(viewport_point: Vector2) -> Vector2i:
+	return _board.local_to_map(_board.get_global_transform_with_canvas().affine_inverse() * viewport_point)
+
+
+## The actors on a cell, living first. A dead actor cannot be locked, so a living one always wins.
+func _actors_on_cell(cell: Vector2i) -> Array:
+	var living: Array = []
+	var dead: Array = []
+	for actor_v in _last_actors:
+		if not (actor_v is Dictionary) or str(actor_v.get("id", "")).is_empty():
+			continue
+		if _actor_cell(actor_v) != cell:
+			continue
+		if _actor_is_dead(actor_v):
+			dead.append(actor_v)
+		else:
+			living.append(actor_v)
+	return living + dead
+
+
+# Empty board releases the camera to FREE (ANSWERS.md #76), not to a party follow. A cell that
+# holds only dead actors changes nothing: a dead actor cannot be locked (ANSWERS.md #78).
+func _on_board_tap(viewport_point: Vector2) -> void:
+	var on_cell := _actors_on_cell(_cell_at_viewport_point(viewport_point))
+	if on_cell.is_empty():
+		camera.deselect()
+	elif not _actor_is_dead(on_cell[0]):
+		select_board_target(str(on_cell[0].get("id", "")))
+
+
+# Board tap and drag (mouse button + touch), tracked by BoardPointerTracker.
+#
+# ROUTING NOTE: this MUST live in _gui_input, not _unhandled_input. The screen root is a
+# full-rect Control with the default mouse_filter = STOP, so it consumes button/touch/motion
+# events as GUI input before they ever reach _unhandled_input. Child Buttons, panels and
+# initiative rows sit above it in the pick order and consume their own presses first, so this
+# only sees presses on open board. Pinch and two-finger pan are not handled here; they reach
+# BoardCameraController._unhandled_input.
+func _gui_input(event: InputEvent) -> void:
+	if _pointer.handle_event(event):
+		accept_event()
+
+
+## Counts fingers for the pinch rule. Never marks the event handled, so rows, cards and buttons
+## still get their taps.
+func _input(event: InputEvent) -> void:
+	_pointer.note_touch(event)
+
+
+func _on_pointer_tap(pos: Vector2) -> void:
+	_on_board_tap(get_global_transform_with_canvas() * pos)
+
+
+## Recenter button: follow the living party's centroid until the player selects or taps away.
+func _on_recenter_pressed() -> void:
+	camera.follow_party()
+	_push_camera_follow_target()
 
 func _apply_responsive_layout() -> void:
 	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)

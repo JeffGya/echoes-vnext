@@ -381,7 +381,7 @@ static func _t_origin_required_and_empty_path() -> Dictionary:
 		"goal.combat.hold.baseline.c1r1",
 		"option.combat.hold.baseline.c1r1.direct.d1r1.pstay",
 		"hold", {"col": 1, "row": 1}, [],
-		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 0.0,
+		0, 0, 0, 2, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 0.0, 0,
 		{"type": "actor.guard", "target_id": "", "payload": {}}, {}
 	)
 	var stationary_result: Dictionary = OptionContract.validate(stationary, {"col": 1, "row": 1})
@@ -482,7 +482,7 @@ static func _t_capacity_bands_and_cap() -> Dictionary:
 		"goal.combat.hold.baseline.c1r1",
 		"option.combat.hold.baseline.c1r1.direct.d1r1.pstay",
 		"hold", {"col": 1, "row": 1}, [],
-		0, 0, 0, 0, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 0.0,
+		0, 0, 0, 0, 0, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 0.0, 0,
 		{"type": "actor.guard", "target_id": "", "payload": {}}, {}
 	)
 	var structure_option_result: Dictionary = OptionContract.validate(structure_option, {"col": 1, "row": 1})
@@ -492,7 +492,7 @@ static func _t_capacity_bands_and_cap() -> Dictionary:
 		"goal.guide_spirit.advance.spirit.c2r1",
 		"option.guide_spirit.advance.spirit.c2r1.direct.d2r1.pc2r1",
 		"advance", {"col": 2, "row": 1}, [{"col": 2, "row": 1}],
-		1, 1, 0, 1, 1, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 1.0,
+		1, 1, 0, 1, 1, 0.0, 0.0, 1.0, [], {"known_count": 0, "known_ids": []}, 1.0, 1,
 		{"type": "actor.move", "target_id": "objective.guide", "payload": {}}, {}
 	)
 	var guide_option_result: Dictionary = OptionContract.validate(guide_option, {"col": 1, "row": 1})
@@ -596,7 +596,7 @@ static func _t_source_arrays_canonical() -> Dictionary:
 		str(option["goal_id"]), str(option["option_id"]), str(option["purpose"]),
 		option["destination"] as Dictionary, option["path"] as Array, 2, 2, 0, 3, 2,
 		0.2, 0.0, 1.0, ["enemy.z", "enemy.a", "enemy.z"],
-		{"known_count": 0, "known_ids": []}, 1.0,
+		{"known_count": 0, "known_ids": []}, 1.0, 2,
 		{"type": "actor.guard", "target_id": "", "payload": {}},
 		{"type": "actor.idle", "target_id": "", "payload": {}}
 	)
@@ -843,7 +843,7 @@ static func _t_required_fields_exact_tables() -> Dictionary:
 		{
 			"name": "MovementOption",
 			"actual": OptionContract.REQUIRED_FIELDS,
-			"expected": ["goal_id", "option_id", "purpose", "destination", "path", "route_cost", "shortest_cost", "slack", "capacity", "commitment", "exposure", "congestion", "cohesion", "hostile_control_sources", "hazard_summary", "objective_progress", "planned_action", "fallback"],
+			"expected": ["goal_id", "option_id", "purpose", "destination", "path", "route_cost", "shortest_cost", "slack", "capacity", "commitment", "exposure", "congestion", "cohesion", "hostile_control_sources", "hazard_summary", "objective_progress", "progress_origin_distance", "planned_action", "fallback"],
 			"value": _valid_option(),
 			"validator": Callable(OptionContract, "validate"),
 			"origin": {"col": 1, "row": 1},
@@ -851,7 +851,7 @@ static func _t_required_fields_exact_tables() -> Dictionary:
 		{
 			"name": "MovementIntent",
 			"actual": IntentContract.REQUIRED_FIELDS,
-			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "path", "capacity", "commitment", "planned_action", "fallback", "pressure_sources"],
+			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "path", "capacity", "commitment", "planned_action", "fallback", "pressure_sources", "movement_style"],
 			"value": _valid_intent(),
 			"validator": Callable(IntentContract, "validate"),
 			"origin": {"col": 1, "row": 1},
@@ -866,7 +866,7 @@ static func _t_required_fields_exact_tables() -> Dictionary:
 		{
 			"name": "MovementResult",
 			"actual": ResultContract.REQUIRED_FIELDS,
-			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "purpose", "origin", "final_destination", "planned_path", "actual_traversed_cells", "voluntary_cost", "forced_steps", "remaining_capacity", "stop_reason", "events", "planned_action", "resolved_action", "fallback", "hazards", "objective_progress", "hostile_constraints"],
+			"expected": ["mover_id", "activation_id", "goal_id", "option_id", "purpose", "origin", "final_destination", "planned_path", "actual_traversed_cells", "voluntary_cost", "forced_steps", "remaining_capacity", "stop_reason", "events", "planned_action", "resolved_action", "fallback", "hazards", "objective_progress", "hostile_constraints", "movement_style"],
 			"value": _valid_result(),
 			"validator": Callable(ResultContract, "validate"),
 		},
@@ -962,7 +962,7 @@ static func _t_all_mutable_inputs_deep_copied() -> Dictionary:
 	var option_fallback := {"type": "actor.idle", "target_id": "", "payload": {"v": 1}}
 	var option: Dictionary = OptionContract.build(
 		"goal.1", "option.1", "hold", option_destination, option_path, 2, 2, 0, 3, 2,
-		0.0, 0.0, 1.0, hostile_sources, hazard_summary, 0.0, option_action, option_fallback
+		0.0, 0.0, 1.0, hostile_sources, hazard_summary, 0.0, 2, option_action, option_fallback
 	)
 	var expected_option: Dictionary = option.duplicate(true)
 	option_destination["col"] = 9
@@ -1116,7 +1116,7 @@ static func _valid_option(path: Array = [{"col": 2, "row": 1}, {"col": 3, "row":
 		"option.recover.hold.holder.c3r1.direct.d3r1.pc2r1-c3r1",
 		"hold", {"col": 3, "row": 1},
 		path, 2, 2, 0, 3, 2, 0.2, 0.0, 1.0, ["enemy.1"],
-		{"known_count": 0, "known_ids": []}, 1.0,
+		{"known_count": 0, "known_ids": []}, 1.0, 2,
 		{"type": "actor.guard", "target_id": "", "payload": {}},
 		{"type": "actor.idle", "target_id": "", "payload": {}}
 	)

@@ -32,11 +32,16 @@ static func register(runner: CoreTestRunner) -> void:
 	# V2-STAGE-004 Phase 4 (S16b): all_echoes_dead exclusion — is_ally must not keep a wiped party "alive"
 	runner.register_test("combat/all_echoes_dead_excludes_ally", Callable(CombatStateTests, "_t_all_echoes_dead_excludes_ally"))
 	runner.register_test("combat/all_echoes_dead_living_normal_echo_prevents", Callable(CombatStateTests, "_t_all_echoes_dead_living_normal_echo_prevents"))
-	# V2-COMBAT-003 follow-up: GUIDE_SPIRIT escort mode must be exempt from the no-progress
-	# stalemate check, same as PURIFY_SHRINE and for the same reason — its own clock is
-	# invisible to the detector.
-	runner.register_test("combat/no_progress_exempts_guide_spirit_escort", Callable(CombatStateTests, "_t_no_progress_exempts_guide_spirit_escort"))
+	# V2-COMBAT-003.5: no objective is exempt from the stalemate check by name any more —
+	# CombatState.get_progress_watch() supplies a genuine per-objective signal instead.
+	runner.register_test("combat/no_progress_no_longer_exempt_by_name", Callable(CombatStateTests, "_t_no_progress_no_longer_exempt_by_name"))
 	runner.register_test("combat/no_progress_still_applies_to_guide_spirit_protect", Callable(CombatStateTests, "_t_no_progress_still_applies_to_guide_spirit_protect"))
+	runner.register_test("combat/progress_watch_tracks_shrine_hp", Callable(CombatStateTests, "_t_progress_watch_tracks_shrine_hp"))
+	runner.register_test("combat/progress_watch_tracks_spirit_distance", Callable(CombatStateTests, "_t_progress_watch_tracks_spirit_distance"))
+	runner.register_test("combat/progress_watch_stable_when_nothing_changes", Callable(CombatStateTests, "_t_progress_watch_stable_when_nothing_changes"))
+	runner.register_test("combat/progress_watch_board_sees_actor_movement", Callable(CombatStateTests, "_t_progress_watch_board_sees_actor_movement"))
+	runner.register_test("combat/progress_watch_endure_and_pursue_countdown", Callable(CombatStateTests, "_t_progress_watch_endure_and_pursue_countdown"))
+	runner.register_test("combat/record_progress_watch_rejects_repeats", Callable(CombatStateTests, "_t_record_progress_watch_rejects_repeats"))
 
 
 # -------------------------
@@ -300,16 +305,15 @@ static func _t_all_echoes_dead_living_normal_echo_prevents() -> Dictionary:
 
 
 # -------------------------
-# V2-COMBAT-003 follow-up: no-progress stalemate must exempt GUIDE_SPIRIT escort mode only.
+# V2-COMBAT-003.5: the by-name exemption list is gone. CombatState.check_end_condition() now
+# force-retreats ANY objective once no_progress_streak reaches the limit — it is
+# FlowRuntime._end_round() that keeps the streak from ever reaching the limit while an
+# objective's own clock (shrine HP, spirit distance, the four counters) is genuinely moving, via
+# CombatState.get_progress_watch(). These tests cover both halves: check_end_condition() no
+# longer special-cases any objective (this file), and get_progress_watch() actually sees each
+# objective's clock (below).
 #
-# The detector sums protect_counter + guide_protect_counter + contain_counter + hold_counter as
-# "progress". guide_protect_counter advances only in protect mode (CombatRoundGuideSpiritService,
-# guarded on guide_mode == "protect"). Escort mode's real progress is distance to the destination,
-# which is not in that sum, so a long, damage-free crossing looks identical to a true stall and
-# the detector would end a still-winnable fight. Protect mode is not exempt: guide_protect_counter
-# IS in the sum there, so the detector is correct and useful.
-#
-# guide_mode is set directly via objective_params — no seeded roll — so both tests are fully
+# guide_mode is set directly via objective_params — no seeded roll — so all tests are
 # deterministic.
 # -------------------------
 
@@ -321,23 +325,40 @@ static func _guide_spirit_actors() -> Array:
 	]
 
 
-static func _t_no_progress_exempts_guide_spirit_escort() -> Dictionary:
-	var actors: Array = _guide_spirit_actors()
-	var combat_state: Dictionary = CombatState.create(
-		actors, EncounterResolutionModes.GUIDE_SPIRIT, 0, {}, { "guide_mode": "escort" },
-		{ "no_progress_round_limit": 15 })
-	# No damage, no counter rose — the streak reached the limit with nothing else to end the fight.
-	combat_state["no_progress_streak"] = 15
+static func _shrine_actors(shrine_hp: int) -> Array:
+	return [
+		{ "id": "echo_1",  "faction": "echo",  "is_dead": false },
+		{ "id": "enemy_1", "faction": "enemy", "is_dead": false },
+		{ "id": "shrine_1", "faction": "neutral", "is_dead": false, "is_structure": true, "current_hp": shrine_hp },
+	]
 
-	var result: Dictionary = CombatState.check_end_condition(actors, EncounterResolutionModes.GUIDE_SPIRIT, combat_state)
-	if bool(result.get("over", false)):
-		return {
-			"ok": false,
-			"error": "Expected GUIDE_SPIRIT escort to be exempt from the stalemate check, got over=true reason='%s'" % str(result.get("reason", ""))
-		}
+
+## check_end_condition() must force-retreat PURIFY_SHRINE and GUIDE_SPIRIT escort at the limit
+## exactly like every other objective — proving the by-name exemption at this layer is gone. A
+## future objective type is covered the same way with no code change here.
+static func _t_no_progress_no_longer_exempt_by_name() -> Dictionary:
+	var cases: Array = [
+		{ "objective": EncounterResolutionModes.PURIFY_SHRINE, "actors": _shrine_actors(100), "params": {} },
+		{ "objective": EncounterResolutionModes.GUIDE_SPIRIT,  "actors": _guide_spirit_actors(), "params": { "guide_mode": "escort" } },
+	]
+	for c_v in cases:
+		var c: Dictionary = c_v
+		var actors: Array = c["actors"]
+		var combat_state: Dictionary = CombatState.create(
+			actors, c["objective"], 0, {}, c["params"], { "no_progress_round_limit": 15 })
+		combat_state["no_progress_streak"] = 15
+		var result: Dictionary = CombatState.check_end_condition(actors, c["objective"], combat_state)
+		if not bool(result.get("over", false)):
+			return { "ok": false, "error": "Expected %s to hit the stalemate check at the limit (no by-name exemption), got over=false" % str(c["objective"]) }
+		if str(result.get("reason", "")) != "no_progress_forced_retreat":
+			return { "ok": false, "error": "Expected reason='no_progress_forced_retreat' for %s, got '%s'" % [str(c["objective"]), str(result.get("reason", ""))] }
 	return { "ok": true }
 
 
+## HONEST LABEL: branch 10 has no objective term left, so at this layer this asserts exactly what
+## the escort case above asserts — it discriminates nothing between guide modes any more. It is
+## kept as a regression guard against anyone reintroducing a protect-mode exemption here. The
+## real per-objective discrimination lives in the get_progress_watch() tests below.
 static func _t_no_progress_still_applies_to_guide_spirit_protect() -> Dictionary:
 	var actors: Array = _guide_spirit_actors()
 	var combat_state: Dictionary = CombatState.create(
@@ -350,4 +371,159 @@ static func _t_no_progress_still_applies_to_guide_spirit_protect() -> Dictionary
 		return { "ok": false, "error": "Expected GUIDE_SPIRIT protect to still hit the stalemate check, got over=false" }
 	if str(result.get("reason", "")) != "no_progress_forced_retreat":
 		return { "ok": false, "error": "Expected reason='no_progress_forced_retreat', got '%s'" % str(result.get("reason", "")) }
+	return { "ok": true }
+
+
+## get_progress_watch() must reflect shrine HP for PURIFY_SHRINE, and differ once the shrine
+## drains — this is what stops no_progress_streak from ever reaching the limit in a real fight.
+static func _t_progress_watch_tracks_shrine_hp() -> Dictionary:
+	var actors: Array = _shrine_actors(100)
+	var combat_state: Dictionary = CombatState.create(
+		actors, EncounterResolutionModes.PURIFY_SHRINE, 0, {}, {}, { "no_progress_round_limit": 15 })
+	var watch_a: Dictionary = CombatState.get_progress_watch(actors, EncounterResolutionModes.PURIFY_SHRINE, combat_state)
+	if int(watch_a.get("shrine_hp", -1)) != 100:
+		return { "ok": false, "error": "Expected shrine_hp=100 in the watch, got %s" % str(watch_a.get("shrine_hp")) }
+
+	var drained_actors: Array = _shrine_actors(95)
+	var watch_b: Dictionary = CombatState.get_progress_watch(drained_actors, EncounterResolutionModes.PURIFY_SHRINE, combat_state)
+	if watch_a == watch_b:
+		return { "ok": false, "error": "Expected the watch to change when shrine HP drains from 100 to 95" }
+	return { "ok": true }
+
+
+## get_progress_watch() must reflect spirit-to-destination distance for GUIDE_SPIRIT escort, and
+## differ once the spirit steps closer.
+static func _t_progress_watch_tracks_spirit_distance() -> Dictionary:
+	var params: Dictionary = { "guide_mode": "escort", "destination_col": 9, "destination_row": 9 }
+	var combat_state: Dictionary = CombatState.create(
+		_guide_spirit_actors(), EncounterResolutionModes.GUIDE_SPIRIT, 0, {}, params,
+		{ "no_progress_round_limit": 15 })
+
+	var actors_far: Array = _guide_spirit_actors()
+	for a_v in actors_far:
+		var a: Dictionary = a_v
+		if a.get("is_spirit", false):
+			a["grid_pos"] = { "col": 0, "row": 0 }
+	var watch_a: Dictionary = CombatState.get_progress_watch(actors_far, EncounterResolutionModes.GUIDE_SPIRIT, combat_state)
+	if int(watch_a.get("spirit_distance", -1)) != 9:
+		return { "ok": false, "error": "Expected spirit_distance=9 (Chebyshev from (0,0) to (9,9)), got %s" % str(watch_a.get("spirit_distance")) }
+
+	var actors_near: Array = _guide_spirit_actors()
+	for a_v in actors_near:
+		var a: Dictionary = a_v
+		if a.get("is_spirit", false):
+			a["grid_pos"] = { "col": 1, "row": 1 }
+	var watch_b: Dictionary = CombatState.get_progress_watch(actors_near, EncounterResolutionModes.GUIDE_SPIRIT, combat_state)
+	if watch_a == watch_b:
+		return { "ok": false, "error": "Expected the watch to change when the spirit steps one cell closer to the destination" }
+	if int(watch_b.get("spirit_distance", -1)) != 8:
+		return { "ok": false, "error": "Expected spirit_distance=8 after the step, got %s" % str(watch_b.get("spirit_distance")) }
+	return { "ok": true }
+
+
+## When nothing objective-relevant changes — same shrine HP, same spirit position, same
+## counters — the watch must be identical, so a genuine stall (nothing moving for
+## no_progress_round_limit rounds) still reaches the limit and force-retreats. This is the other
+## half of "no false negatives": the generic signal must not manufacture progress that isn't there.
+static func _t_progress_watch_stable_when_nothing_changes() -> Dictionary:
+	var shrine_actors: Array = _shrine_actors(100)
+	var shrine_state: Dictionary = CombatState.create(
+		shrine_actors, EncounterResolutionModes.PURIFY_SHRINE, 0, {}, {}, { "no_progress_round_limit": 15 })
+	var w1: Dictionary = CombatState.get_progress_watch(shrine_actors, EncounterResolutionModes.PURIFY_SHRINE, shrine_state)
+	var w2: Dictionary = CombatState.get_progress_watch(shrine_actors, EncounterResolutionModes.PURIFY_SHRINE, shrine_state)
+	if w1 != w2:
+		return { "ok": false, "error": "Expected an identical watch across two calls with unchanged shrine HP" }
+
+	var params: Dictionary = { "guide_mode": "escort", "destination_col": 9, "destination_row": 9 }
+	var spirit_actors: Array = _guide_spirit_actors()
+	for a_v in spirit_actors:
+		var a: Dictionary = a_v
+		if a.get("is_spirit", false):
+			a["grid_pos"] = { "col": 0, "row": 0 }
+	var spirit_state: Dictionary = CombatState.create(
+		spirit_actors, EncounterResolutionModes.GUIDE_SPIRIT, 0, {}, params, { "no_progress_round_limit": 15 })
+	var w3: Dictionary = CombatState.get_progress_watch(spirit_actors, EncounterResolutionModes.GUIDE_SPIRIT, spirit_state)
+	var w4: Dictionary = CombatState.get_progress_watch(spirit_actors, EncounterResolutionModes.GUIDE_SPIRIT, spirit_state)
+	if w3 != w4:
+		return { "ok": false, "error": "Expected an identical watch across two calls with an unmoved spirit" }
+	return { "ok": true }
+
+
+## The generic activity term, and the fix for the escort approach phase: an Echo walking toward a
+## spirit it has not reached yet moves no counter and no objective clock — the spirit is
+## movement-gated until escort_started latches — but the board changed, so the round is activity.
+static func _t_progress_watch_board_sees_actor_movement() -> Dictionary:
+	var params: Dictionary = { "guide_mode": "escort", "destination_col": 9, "destination_row": 9 }
+	var before: Array = _guide_spirit_actors()
+	for a_v in before:
+		var a: Dictionary = a_v
+		a["grid_pos"] = { "col": 0, "row": 0 } if a.get("is_spirit", false) else { "col": 6, "row": 6 }
+	var state: Dictionary = CombatState.create(
+		before, EncounterResolutionModes.GUIDE_SPIRIT, 0, {}, params, { "no_progress_round_limit": 15 })
+	var w_before: Dictionary = CombatState.get_progress_watch(before, EncounterResolutionModes.GUIDE_SPIRIT, state)
+
+	# Only the echo steps; the spirit has not moved, so spirit_distance is unchanged.
+	var after: Array = _guide_spirit_actors()
+	for a_v in after:
+		var a: Dictionary = a_v
+		a["grid_pos"] = { "col": 0, "row": 0 } if a.get("is_spirit", false) else { "col": 5, "row": 5 }
+	var w_after: Dictionary = CombatState.get_progress_watch(after, EncounterResolutionModes.GUIDE_SPIRIT, state)
+
+	if int(w_before.get("spirit_distance", -1)) != int(w_after.get("spirit_distance", -2)):
+		return { "ok": false, "error": "setup wrong — spirit_distance should be unchanged, got %s then %s" % [str(w_before.get("spirit_distance")), str(w_after.get("spirit_distance"))] }
+	if w_before == w_after:
+		return { "ok": false, "error": "Expected the watch to change when an echo moves toward the spirit — the approach phase must not read as a stall" }
+	if not CombatState.record_progress_watch(state, w_after):
+		return { "ok": false, "error": "Expected the moved board to be a state this fight has not been in" }
+	return { "ok": true }
+
+
+## ENDURE and PURSUE win or lose on round_counter alone, so their countdown to that guaranteed
+## end is their progress signal. It must fall every round and clamp at 0, which re-arms the
+## detector if the objective ever stops ending on its own.
+static func _t_progress_watch_endure_and_pursue_countdown() -> Dictionary:
+	var cases: Array = [
+		{ "objective": EncounterResolutionModes.ENDURE, "params": { "duration_turns": 5 }, "limit": 5 },
+		{ "objective": EncounterResolutionModes.PURSUE, "params": { "window_turns": 8 },   "limit": 8 },
+	]
+	for c_v in cases:
+		var c: Dictionary = c_v
+		var actors: Array = _guide_spirit_actors()
+		var state: Dictionary = CombatState.create(
+			actors, c["objective"], 0, {}, c["params"], { "no_progress_round_limit": 15 })
+		var expected: Array = [int(c["limit"]), int(c["limit"]) - 1, 0, 0]
+		var rounds: Array = [0, 1, int(c["limit"]), int(c["limit"]) + 4]
+		for i in range(rounds.size()):
+			state["round_counter"] = int(rounds[i])
+			var watch: Dictionary = CombatState.get_progress_watch(actors, c["objective"], state)
+			if int(watch.get("objective_countdown", -1)) != int(expected[i]):
+				return { "ok": false, "error": "%s: expected objective_countdown=%d at round %d, got %s" % [str(c["objective"]), int(expected[i]), int(rounds[i]), str(watch.get("objective_countdown"))] }
+	return { "ok": true }
+
+
+## Progress is a board state the fight has NEVER been in. A repeat is not progress, and neither
+## is an oscillation between two states — which is what a plain "differs from last round" test
+## would wrongly accept, leaving a blocked party pacing forever.
+static func _t_record_progress_watch_rejects_repeats() -> Dictionary:
+	var actors: Array = _shrine_actors(100)
+	var state: Dictionary = CombatState.create(
+		actors, EncounterResolutionModes.PURIFY_SHRINE, 0, {}, {}, { "no_progress_round_limit": 15 })
+	var a: Dictionary = CombatState.get_progress_watch(actors, EncounterResolutionModes.PURIFY_SHRINE, state)
+	# create() already recorded the start-of-combat state, so an unchanged round 1 is a repeat.
+	if CombatState.record_progress_watch(state, a):
+		return { "ok": false, "error": "Expected the start-of-combat state, seen again unchanged, to be a repeat" }
+
+	var moved: Array = _shrine_actors(100)
+	for m_v in moved:
+		var m: Dictionary = m_v
+		if str(m.get("id", "")) == "echo_1":
+			m["grid_pos"] = { "col": 3, "row": 3 }
+	var b: Dictionary = CombatState.get_progress_watch(moved, EncounterResolutionModes.PURIFY_SHRINE, state)
+	if not CombatState.record_progress_watch(state, b):
+		return { "ok": false, "error": "Expected a board with the echo on a new cell to be a new state" }
+	# Back to where it started: an oscillation, not progress.
+	if CombatState.record_progress_watch(state, a):
+		return { "ok": false, "error": "Expected the return to a previously visited board to be a repeat, not progress" }
+	if CombatState.record_progress_watch(state, b):
+		return { "ok": false, "error": "Expected the second half of the oscillation to be a repeat too" }
 	return { "ok": true }

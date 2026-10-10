@@ -40,3 +40,13 @@ extends Resource
 @export var hp_bar_offset_y: float = 10.0
 @export var hp_bar_height: float = 4.0
 @export var hp_bar_background_color: Color = Color(0.15, 0.15, 0.15, 1.0)
+
+# Stop-short: cream stance cue, never red; Mist Blue / Akan Gold badges.
+@export var stance_color: Color = Color(1.0, 0.9725, 0.8627, 1.0)
+@export var cause_fear_badge_color: Color = Color(0.4784314, 0.70980394, 0.78431373, 1.0)
+@export var cause_identity_badge_color: Color = Color(0.83137256, 0.6862745, 0.21568628, 1.0)
+@export var stance_edge_color: Color = Color(0.1647, 0.1647, 0.2275, 1.0)
+@export var motion_scale: float = 1.0  # stop-short motion time: 1 Normal, 1.6 Slow, 0 Fast (marker and pose still show)
+@export var badge_delay: float = 0.10
+@export var chip_min_zoom: float = 0.8
+@export var settle_diamond_enabled: bool = false

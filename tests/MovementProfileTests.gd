@@ -22,6 +22,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/profile/skill_bonus_and_excluded", Callable(MovementProfileTests, "_t_skill_bonus_and_excluded"))
 	runner.register_test("movement/profile/structure_zero", Callable(MovementProfileTests, "_t_structure_zero"))
 	runner.register_test("movement/profile/authored_override_one", Callable(MovementProfileTests, "_t_authored_override_one"))
+	runner.register_test("movement/profile/authored_override_beats_structure", Callable(MovementProfileTests, "_t_authored_override_beats_structure"))
 	runner.register_test("movement/profile/bare_spirit_derives_normally", Callable(MovementProfileTests, "_t_bare_spirit_derives_normally"))
 	runner.register_test("movement/profile/source_terms_transparency", Callable(MovementProfileTests, "_t_source_terms_transparency"))
 	runner.register_test("movement/profile/no_input_mutation", Callable(MovementProfileTests, "_t_no_input_mutation"))
@@ -214,6 +215,29 @@ static func _t_authored_override_one() -> Dictionary:
 		return _fail("authored-override source_terms mismatch: %s" % str(profile["source_terms"]))
 	if bool(profile["controlling_state"]):
 		return _fail("non-joining authored-override mover should not project control")
+	return _pass()
+
+
+## The live non-joining spirit is built by StructureActor (is_structure == true).
+## The authored override must still win, or the spirit can never move.
+static func _t_authored_override_beats_structure() -> Dictionary:
+	var actor: Dictionary = StructureActor.from_definition(
+		{"id": "guide_spirit_01", "name": "Spirit", "max_hp": 60}, 0)
+	actor["is_spirit"] = true
+	var options: Dictionary = {"authored_override": {"source": "guide_spirit_nonjoining", "capacity": 1}}
+	var profile: Dictionary = ProfileService.derive_profile(actor, _cfg(), options)
+	var validity: Dictionary = ProfileContract.validate(profile)
+	if not bool(validity["valid"]):
+		return _fail("structure-built override profile rejected: %s" % str(validity))
+	if int(profile["capacity"]) != 1:
+		return _fail("override on a structure-built spirit should give capacity 1, got %d" % int(profile["capacity"]))
+	if str(profile["actor_kind"]) == "structure":
+		return _fail("override mover must not be modeled as a structure")
+	if (profile["authored_override"] as Dictionary).is_empty():
+		return _fail("override must be carried on the profile")
+	# Without the override the same actor is still an immobile structure.
+	if int(ProfileService.derive_profile(actor, _cfg())["capacity"]) != 0:
+		return _fail("structure without an override must keep capacity 0")
 	return _pass()
 
 

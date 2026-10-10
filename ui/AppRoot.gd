@@ -20,6 +20,7 @@ const ProtectCustodyTestsScript := preload("res://tests/ProtectCustodyTests.gd")
 const SpatialModeGoalTestsScript := preload("res://tests/SpatialModeGoalTests.gd")
 const StagePartyMovementTestsScript := preload("res://tests/StagePartyMovementTests.gd")
 const CombatObjectiveLabelTestsScript := preload("res://tests/CombatObjectiveLabelTests.gd")
+const PaceUITestsScript := preload("res://tests/PaceUITests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -299,11 +300,8 @@ func _on_debug_command(command: String) -> void:
 		_run_combat_objective_command(parts)
 		return
 
-	# -------------------------
-	# combat_emotion debug overlay toggle
-	# -------------------------
-	if head == "combat_emotion" or head == "combat_em":
-		_run_combat_emotion_command()
+	if head == "stopshort":
+		_run_stop_short_command(parts)
 		return
 
 	# -------------------------
@@ -373,7 +371,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | combat_emotion | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
 	
 	_flush_logs_to_console()
 	
@@ -546,6 +544,7 @@ func _run_tests(parts: Array) -> void:
 	CombatSnapshotTests.register(runner) # COMBAT-007
 	CombatTokenPresentationTests.register(runner)
 	CombatObjectiveLabelTestsScript.register(runner)
+	PaceUITestsScript.register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 	MaturityExpressionTests.register(runner)  # V2-PROG-006
@@ -564,6 +563,10 @@ func _run_tests(parts: Array) -> void:
 	CooldownTests.register(runner)          # PROG-009
 	PassiveIdentityTests.register(runner)   # PROG-009
 	SkillLoadoutTests.register(runner)      # PROG-009
+	SkillReachTests.register(runner)        # follow-up #6 PR0
+	StopShortServiceTests.register(runner)
+	StopShortWiringTests.register(runner)
+	StopShortSearchTests.register(runner)
 	SocialGraphTests.register(runner)  # BOND-001
 	BondTriggerTests.register(runner)  # BOND-002
 	VowServiceTests.register(runner)  # VOW-001
@@ -578,6 +581,11 @@ func _run_tests(parts: Array) -> void:
 	VoiceTests.register(runner)           # V2-VOICE-001
 	InstitutionTests.register(runner)     # V2-SANCTUM-002
 	SanctumLayoutTests.register(runner)  # V2-SANCTUM-002: layout + occupant placement
+	BoardCameraInputTests.register(runner)  # V2-COMBAT-003.5 camera unification: input routing
+	CombatCameraSelectTests.register(runner)  # follow-up #15: combat selection-lock camera
+	BoardCameraPointerTests.register(runner)  # Story 3 phase C: Sanctum tap versus drag
+	StageCameraSelectTests.register(runner)  # Story 3 phase D: Stage Exploration camera
+	BoardPointerTrackerTests.register(runner)  # Story 3 phase A: shared board pointer tracker
 	ContinuityTests.register(runner)     # V2-CONTINUITY-001
 	SkillUnlockTests.register(runner)    # V2-PROG-009
 	ContactModelTests.register(runner)  # V2-STAGE-003
@@ -602,6 +610,8 @@ func _run_tests(parts: Array) -> void:
 	Stage004SeamTests.register(runner)
 	DivergenceDetectorTests.register(runner)  # V2-PROG-012 Phase 4: divergence detection
 	DecisionTraceTests.register(runner)  # V2-COMBAT-003 phase 8a: causal Decision Trace + player-safe projection
+	MovementStyleServiceTests.register(runner)  # V2-COMBAT-003.5 Phase 3b: movement_style selection
+	LiveMovementStyleTests.register(runner)  # V2-COMBAT-003.5 Phase 3c: live per-turn option producer
 	GuidanceResponseTests.register(runner)  # V2-COMBAT-003 phase 8b: the five guidance responses
 	CombatDivergenceBarkTests.register(runner)  # V2-PROG-012 Phase 5: divergence bark content + wiring
 	GuidanceBarkTests.register(runner)  # V2-COMBAT-003 phase 9: TEMPORARY bark surface for the Echo's answer to guidance (V2-COMBAT-004 removes it)
@@ -626,9 +636,23 @@ func _run_tests(parts: Array) -> void:
 	# the same grouping used for the "✅ suite — N passed" lines below) case-insensitively,
 	# substring match, so "tests snapshot" catches snapshot_purity, snapshot_contract, and
 	# snapshot_fingerprint together.
+	#
+	# "tests =<a>,<b>,..." is an exact-match mode, additive: a leading "=" switches from
+	# substring containment to case-insensitive suite-name EQUALITY, comma-separated, so a
+	# caller (scripted/sharded runs) can select suites whose names collide as substrings of
+	# each other (e.g. "combat_roundtrip" vs. sibling suites containing "combat") without
+	# pulling those siblings in. Ordinary "tests <filter>" behaviour is unchanged.
 	var suite_filter := ""
 	if parts.size() > 1:
 		suite_filter = str(parts[1]).strip_edges().to_lower()
+
+	var exact_mode := suite_filter.begins_with("=")
+	var exact_names: Array = []
+	if exact_mode:
+		for n in suite_filter.substr(1).split(","):
+			var trimmed := str(n).strip_edges()
+			if not trimmed.is_empty():
+				exact_names.append(trimmed)
 
 	if not suite_filter.is_empty():
 		var known_suites: Array = []
@@ -640,7 +664,8 @@ func _run_tests(parts: Array) -> void:
 			var suite_name := rname.substr(0, slash_idx) if slash_idx >= 0 else rname
 			if not known_suites.has(suite_name):
 				known_suites.append(suite_name)
-			if suite_name.to_lower().find(suite_filter) >= 0:
+			var is_match := exact_names.has(suite_name.to_lower()) if exact_mode else suite_name.to_lower().find(suite_filter) >= 0
+			if is_match:
 				matched_tests.append(t)
 				if not matched_suites.has(suite_name):
 					matched_suites.append(suite_name)
@@ -652,6 +677,26 @@ func _run_tests(parts: Array) -> void:
 				_debug_print("  " + str(s))
 			_flush_logs_to_console()
 			return
+
+		# Exact mode requests a list of specific suite names (scripted/sharded callers). If ANY
+		# requested name matched zero tests — a typo or a stale name after a suite rename — that
+		# suite's tests silently vanish from the total with no error otherwise. Fail loudly, same
+		# severity as the "no suite matches" case above, rather than let one bad name pass silently.
+		if exact_mode:
+			var matched_suites_lower: Array = []
+			for s in matched_suites:
+				matched_suites_lower.append(str(s).to_lower())
+			var unmatched_names: Array = []
+			for requested in exact_names:
+				if not matched_suites_lower.has(requested):
+					unmatched_names.append(requested)
+			if not unmatched_names.is_empty():
+				known_suites.sort()
+				_debug_print("Exact-match filter requested suite name(s) that matched NOTHING: %s. Available suites:" % ", ".join(unmatched_names))
+				for s in known_suites:
+					_debug_print("  " + str(s))
+				_flush_logs_to_console()
+				return
 
 		runner._tests = matched_tests
 		matched_suites.sort()
@@ -837,6 +882,9 @@ func _run_summon_command(parts: Array) -> void:
 #   emotion          — print emotion block for all roster echoes
 #   emotion <echo_id> — print emotion block for a specific echo by id
 func _run_emotion_command(parts: Array) -> void:
+	if parts.size() >= 2 and str(parts[1]) == "set":
+		_run_emotion_set_command(parts)
+		return
 	var save_ref: Dictionary = runtime.get_save_data()
 	var sanctum: Dictionary = (save_ref.get("sanctum", {}) as Dictionary)
 	var roster: Array = sanctum.get("roster", []) as Array
@@ -999,29 +1047,6 @@ func _run_combat_objective_command(parts: Array) -> void:
 	_flush_logs_to_console()
 
 
-# Toggle the emotion debug overlay on the active CombatBoardScreen.
-# Shows F:<fear> and M:<morale> above each actor token.
-# No-ops gracefully when CombatBoardScreen is not active.
-func _run_combat_emotion_command() -> void:
-	# CombatBoardScreen now lives inside RealmShell — access it via the active overlay.
-	var combat_screen: CombatBoardScreen = null
-	if _realm_shell != null and _realm_shell.visible:
-		var overlay: Control = _realm_shell._active_overlay
-		if overlay is CombatBoardScreen:
-			combat_screen = overlay as CombatBoardScreen
-
-	if combat_screen == null:
-		_debug_print("combat_emotion: CombatBoardScreen not active — command ignored")
-		_flush_logs_to_console()
-		return
-	# Toggle the flag. Read current state from the token layer directly.
-	var currently_on: bool = combat_screen._token_layer._emotion_debug
-	combat_screen.set_emotion_debug(not currently_on)
-	var state_label: String = "ON" if not currently_on else "OFF"
-	_debug_print("Emotion debug: %s" % state_label)
-	_flush_logs_to_console()
-
-
 # ────────────────────────────────────────────────────────────────────────────
 # V2-STAGE-004 Phase 4 dev commands — manual testing aids for the conversation-RNG-
 # gated combat seams. Dev-only; each command guards the "must be exploring a stage"
@@ -1076,6 +1101,34 @@ func _run_force_charge_pressure_command(parts: Array) -> void:
 		_debug_print("Charge pressure ON — next protect/endure objective combat is harder.")
 	else:
 		_debug_print("Charge pressure OFF.")
+	_flush_logs_to_console()
+
+
+func _run_emotion_set_command(parts: Array) -> void:
+	if parts.size() < 5 or not ["fear", "fear_base", "morale"].has(str(parts[3])) or not str(parts[4]).is_valid_int():
+		_debug_print("Usage: emotion set <echo_id> <fear|fear_base|morale> <0-100>")
+		_flush_logs_to_console()
+		return
+	var snap := runtime.dispatch({
+		"type": "debug.emotion.set", "echo_id": str(parts[2]), "field": str(parts[3]), "value": int(str(parts[4])),
+	})
+	_render_snapshot(snap)
+	_flush_logs_to_console()
+
+
+# stopshort         — status: the override, balance.json, and the running encounter
+# stopshort on|off  — override data.actor.stop_short.enabled from the NEXT encounter start
+func _run_stop_short_command(parts: Array) -> void:
+	if parts.size() == 1:
+		_debug_print(runtime.stop_short_status_line())
+		return
+	var mode: String = str(parts[1]).to_lower()
+	if parts.size() > 2 or not (mode == "on" or mode == "off"):
+		_debug_print("Usage: stopshort [on|off]  (no argument = status; takes effect at the next encounter start)")
+		return
+	var snap := runtime.dispatch({ "type": "debug.stop_short.set", "mode": mode })
+	_render_snapshot(snap)
+	_debug_print("stopshort: %s from the next encounter start" % mode)
 	_flush_logs_to_console()
 
 
@@ -1338,14 +1391,11 @@ func _show_screen(screen: Control) -> void:
 	snapshot_view.visible = false
 	actions_container.visible = false
 
-	if _sanctum_shell != null:
-		_sanctum_shell.visible = false
-	if _realm_shell != null:
-		_realm_shell.visible = false
-	if _active_onboarding_screen != null:
-		_active_onboarding_screen.visible = false
-	if _save_error_screen != null:
-		_save_error_screen.visible = false
+	# Hide only the other screens. Hiding the shown one and showing it again would fire
+	# visibility_changed on every snapshot, and screens reset state on that signal.
+	for other in [_sanctum_shell, _realm_shell, _active_onboarding_screen, _save_error_screen]:
+		if other != null and other != screen:
+			(other as Control).visible = false
 
 	screen.visible = true
 

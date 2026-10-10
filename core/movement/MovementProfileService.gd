@@ -29,11 +29,11 @@
 #                                        is intentionally NOT a key → not counted)
 #   final              = clamp(max(standing_capacity, aptitude_capacity), floor, cap)
 #
-# Special actor kinds:
+# Special actor kinds (checked in this order):
+#   authored override (options.authored_override) -> MOVER with the given
+#                                         authored pace. Non-controlling. Never a
+#                                         structure, even when is_structure == true.
 #   structure (is_structure == true)   -> capacity 0, actor_kind "structure".
-#   authored override (options.authored_override) -> capacity 1 MOVER with the
-#                                         given authored one-cell/round pace.
-#                                         Non-controlling. Never a structure.
 #
 # Actor field sources (verified against ActorSchema/EchoActor/ProgressionService):
 #   Standing        : actor["standing"] (V2), fallback actor["rank"] (V1 alias).
@@ -48,20 +48,10 @@ const ProfileContract = preload("res://core/movement/contracts/MovementProfile.g
 
 
 static func derive_profile(actor: Dictionary, capacity_cfg: Dictionary, options: Dictionary = {}) -> Dictionary:
-	# --- Structures never move: capacity 0, actor_kind "structure". Intrinsic. ---
-	if bool(actor.get("is_structure", false)):
-		return ProfileContract.build(
-			0,
-			[{"source": "structure", "capacity": 0}],
-			false,
-			"structure",
-			{}
-		)
-
 	# --- Caller-driven authored override (e.g. non-joining GUIDE spirit). ---
-	# The join/no-join distinction is a pressure-context decision the caller owns
-	# at slice-6 wiring; it is NOT inferrable from the actor dict. Modeled as a
-	# 1-capacity MOVER (never a structure), non-controlling.
+	# MUST precede the structure rule: the live non-joining spirit is built by
+	# StructureActor, so it carries is_structure == true. The join/no-join
+	# distinction is the caller's; it is NOT inferrable from the actor dict.
 	if options.has("authored_override"):
 		var authored: Dictionary = options["authored_override"] as Dictionary
 		var authored_capacity: int = int(authored.get("capacity", 1))
@@ -74,6 +64,16 @@ static func derive_profile(actor: Dictionary, capacity_cfg: Dictionary, options:
 			false,
 			mover_kind,
 			{"source": str(authored.get("source", "authored_override")), "capacity": authored_capacity}
+		)
+
+	# --- Structures never move on their own: capacity 0, actor_kind "structure". ---
+	if bool(actor.get("is_structure", false)):
+		return ProfileContract.build(
+			0,
+			[{"source": "structure", "capacity": 0}],
+			false,
+			"structure",
+			{}
 		)
 
 	# --- Ordinary derivation (bare is_spirit actors derive normally here). ---

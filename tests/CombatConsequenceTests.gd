@@ -13,6 +13,13 @@
 #  11. consequence/near_death_fires_at_quarter_hp
 #  12. consequence/near_death_silent_above_quarter_hp
 #  13. consequence/near_death_fires_once_per_actor
+#  14. consequence/resist_fear_reduces_hit_fear
+#  15. consequence/resist_fear_reduces_near_death_fear
+#  16. consequence/resist_fear_inert_at_nascent
+#  17. consequence/resist_fear_hit_voices_combat_resilient_next_turn
+#  18. consequence/resist_fear_reduces_ally_death_knock
+#  19. consequence/combat_resilient_bark_has_cooldown
+#  20. consequence/resist_fear_reduces_ally_ko_spread_fear
 #
 # All tests are pure unit tests — no runtime or save file needed.
 # Run via Debug Panel: tests
@@ -47,6 +54,22 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatConsequenceTests, "_t_near_death_silent_above_quarter_hp"))
 	runner.register_test("consequence/near_death_fires_once_per_actor",
 		Callable(CombatConsequenceTests, "_t_near_death_fires_once_per_actor"))
+	runner.register_test("consequence/resist_fear_reduces_hit_fear",
+		Callable(CombatConsequenceTests, "_t_resist_fear_reduces_hit_fear"))
+	runner.register_test("consequence/resist_fear_reduces_near_death_fear",
+		Callable(CombatConsequenceTests, "_t_resist_fear_reduces_near_death_fear"))
+	runner.register_test("consequence/resist_fear_inert_at_nascent",
+		Callable(CombatConsequenceTests, "_t_resist_fear_inert_at_nascent"))
+	runner.register_test("consequence/resist_fear_hit_voices_combat_resilient_next_turn",
+		Callable(CombatConsequenceTests, "_t_resist_fear_hit_voices_combat_resilient_next_turn"))
+	runner.register_test("consequence/resist_fear_reduces_ally_death_knock",
+		Callable(CombatConsequenceTests, "_t_resist_fear_reduces_ally_death_knock"))
+	runner.register_test("consequence/combat_resilient_bark_has_cooldown",
+		Callable(CombatConsequenceTests, "_t_combat_resilient_bark_has_cooldown"))
+	runner.register_test("consequence/combat_resilient_cooldown_yields_to_fear_rising",
+		Callable(CombatConsequenceTests, "_t_combat_resilient_cooldown_yields_to_fear_rising"))
+	runner.register_test("consequence/resist_fear_reduces_ally_ko_spread_fear",
+		Callable(CombatConsequenceTests, "_t_resist_fear_reduces_ally_ko_spread_fear"))
 
 
 # -------------------------
@@ -326,4 +349,279 @@ static func _t_near_death_fires_once_per_actor() -> Dictionary:
 		return { "ok": false, "error": "near-death morale paid twice: %d" % int(target.get("morale", 0)) }
 	if int(target.get("fear", 0)) != (fear_per_hit * 2) + nd_fear:
 		return { "ok": false, "error": "expected fear %d, got %d" % [(fear_per_hit * 2) + nd_fear, int(target.get("fear", 0))] }
+	return { "ok": true }
+
+
+# -------------------------
+# Tests 14–16: resist_fear on the per-hit and near-death paths
+#
+# Two identical targets take the same hit; only resilience_traits differs. Rank 3 is the first
+# band past nascent in data.maturity_expression.band_by_standing, where the trait may fire.
+# -------------------------
+
+static func _rf_target(id: String, rank: int, current_hp: int, resist: bool) -> Dictionary:
+	var target := _nd_actor(id, "enemy", 0, current_hp)
+	target["rank"] = rank
+	target["resilience_traits"] = ["resist_fear"] if resist else []
+	return target
+
+
+# Test 14: 36 − 10 = 26 stays above the near-death boundary, so only per-hit fear lands.
+static func _t_resist_fear_reduces_hit_fear() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var fear_per_hit: int = int(bdata.get("combat", {}).get("emotion", {}).get("fear_per_hit", 0))
+	var plain := _rf_target("rf_plain", 3, 36, false)
+	var steady := _rf_target("rf_steady", 3, 36, true)
+	_nd_activate(_nd_actor("rf_atk_a", "echo", 10, 100), plain, bdata)
+	_nd_activate(_nd_actor("rf_atk_b", "echo", 10, 100), steady, bdata)
+	var plain_fear := int(plain.get("fear", 0))
+	var steady_fear := int(steady.get("fear", 0))
+	if plain_fear != fear_per_hit:
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [fear_per_hit, plain_fear] }
+	if steady_fear >= plain_fear:
+		return { "ok": false, "error": "resist_fear did not reduce hit fear: %d vs %d" % [steady_fear, plain_fear] }
+	if steady_fear != roundi(float(fear_per_hit) * 0.6):
+		return { "ok": false, "error": "expected 40%% reduction to %d, got %d" % [roundi(float(fear_per_hit) * 0.6), steady_fear] }
+	return { "ok": true }
+
+
+# Test 15: 35 − 10 = 25 crosses the boundary; both the hit and the near-death payment shrink.
+static func _t_resist_fear_reduces_near_death_fear() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var emo: Dictionary = bdata.get("combat", {}).get("emotion", {})
+	var fear_per_hit: int = int(emo.get("fear_per_hit", 0))
+	var nd_fear: int = int(emo.get("fear_on_near_death", 0))
+	var plain := _rf_target("rf_nd_plain", 3, 35, false)
+	var steady := _rf_target("rf_nd_steady", 3, 35, true)
+	_nd_activate(_nd_actor("rf_nd_atk_a", "echo", 10, 100), plain, bdata)
+	_nd_activate(_nd_actor("rf_nd_atk_b", "echo", 10, 100), steady, bdata)
+	if not bool(steady.get("_near_death_morale_fired", false)):
+		return { "ok": false, "error": "fixture drift: near-death did not fire" }
+	if int(plain.get("fear", 0)) != fear_per_hit + nd_fear:
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [fear_per_hit + nd_fear, int(plain.get("fear", 0))] }
+	var expected := roundi(float(fear_per_hit) * 0.6) + roundi(float(nd_fear) * 0.6)
+	if int(steady.get("fear", 0)) != expected:
+		return { "ok": false, "error": "expected fear %d with resist_fear, got %d" % [expected, int(steady.get("fear", 0))] }
+	return { "ok": true }
+
+
+# Test 16: at a nascent rank the trait stays dormant, matching EmotionService.apply_fear_delta.
+static func _t_resist_fear_inert_at_nascent() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var plain := _rf_target("rf_n_plain", 1, 36, false)
+	var steady := _rf_target("rf_n_steady", 1, 36, true)
+	_nd_activate(_nd_actor("rf_n_atk_a", "echo", 10, 100), plain, bdata)
+	_nd_activate(_nd_actor("rf_n_atk_b", "echo", 10, 100), steady, bdata)
+	if int(steady.get("fear", 0)) != int(plain.get("fear", 0)):
+		return { "ok": false, "error": "resist_fear fired at nascent: %d vs %d" % [int(steady.get("fear", 0)), int(plain.get("fear", 0))] }
+	return { "ok": true }
+
+
+# -------------------------
+# Test 17: a resist_fear hit is voiced as combat_resilient on the target's own next turn.
+# A second living echo keeps combat_last_stand (priority 1) out of the way. The flag must be
+# consumed by that turn, so the turn after it does not voice resilience again.
+# -------------------------
+
+static func _rf_bark_context(target: Dictionary, bdata: Dictionary) -> Dictionary:
+	target["faction"] = "echo"
+	var buddy := _nd_actor("rf_bark_buddy", "echo", 10, 100)
+	var enemy := _nd_actor("rf_bark_enemy", "enemy", 10, 100)
+	enemy["actor_type"] = "enemy"
+	enemy["grid_pos"] = { "col": 3, "row": 0 }
+	_nd_activate(enemy, target, bdata)
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var context := { "actor": target, "all_actors": [target, buddy, enemy], "cfg": _nd_balance(), "t": 2 }
+	var asm := ActorStateMachine.new(target)
+	asm.advance_turn(context, logger, 2)
+	var first := str(target.get("_bark_context", ""))
+	var flag_left := target.has("_resist_fear_fired")
+	context["t"] = 3
+	ActorStateMachine.new(target).advance_turn(context, logger, 3)
+	return { "first": first, "second": str(target.get("_bark_context", "")), "flag_left": flag_left }
+
+
+static func _t_resist_fear_hit_voices_combat_resilient_next_turn() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var steady := _rf_target("rf_bark_steady", 3, 100, true)
+	var plain := _rf_target("rf_bark_plain", 3, 100, false)
+	var got := _rf_bark_context(steady, bdata)
+	var control := _rf_bark_context(plain, bdata)
+	if str(control["first"]) == "combat_resilient":
+		return { "ok": false, "error": "control echo without resist_fear voiced combat_resilient" }
+	if str(got["first"]) != "combat_resilient":
+		return { "ok": false, "error": "expected combat_resilient on the next turn, got '%s'" % got["first"] }
+	if bool(got["flag_left"]):
+		return { "ok": false, "error": "_resist_fear_fired was not consumed by the target's turn" }
+	if str(got["second"]) == "combat_resilient":
+		return { "ok": false, "error": "combat_resilient repeated on a turn with no new resisted fear" }
+	return { "ok": true }
+
+
+# -------------------------
+# Test 18: the joined-ally death knock in FlowEncounterState.build_final_snapshot() pays
+# resist_fear's reduced amount, and nothing extra for a rank-1 (nascent) echo.
+# -------------------------
+
+static func _t_resist_fear_reduces_ally_death_knock() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var knock := int(cs.get_balance().get("data", {}).get("contact", {}).get("ally", {}).get("death_fear_knock", 0))
+	if knock <= 0:
+		return { "ok": false, "error": "balance.json must authorise contact.ally.death_fear_knock" }
+	var plain := _rf_target("rf_ak_plain", 3, 100, false)
+	var steady := _rf_target("rf_ak_steady", 3, 100, true)
+	var nascent := _rf_target("rf_ak_nascent", 1, 100, true)
+	var ally := _nd_actor("rf_ak_ally", "echo", 10, 0)
+	ally["is_ally"] = true
+	ally["is_dead"] = true
+	for a in [plain, steady, nascent]:
+		a["faction"] = "echo"
+	var ectx := EncounterContext.new()
+	ectx.encounter_id = "rf_ak_enc"
+	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
+	ectx.combat_state = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 2 }
+	ectx.actors = [plain, steady, nascent, ally]
+	var ctx := FlowContext.new()
+	ctx.config_service = cs
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	ctx.logger = logger
+	ctx.encounter_ctx = ectx
+	FlowEncounterState.build_final_snapshot(ctx, 1)
+	if int(plain.get("fear", 0)) != knock:
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [knock, int(plain.get("fear", 0))] }
+	if int(steady.get("fear", 0)) != roundi(float(knock) * 0.6):
+		return { "ok": false, "error": "expected resist_fear knock %d, got %d" % [roundi(float(knock) * 0.6), int(steady.get("fear", 0))] }
+	if int(nascent.get("fear", 0)) != knock:
+		return { "ok": false, "error": "resist_fear fired at nascent: expected %d, got %d" % [knock, int(nascent.get("fear", 0))] }
+	return { "ok": true }
+
+
+# -------------------------
+# Test 19 (V2-COMBAT-003.5 Phase 5 decision #47): combat_resilient has its own cooldown
+# (data.maturity_expression.combat_resilient.bark_cooldown_ticks), so a resist_fear echo
+# resisting fear on two consecutive eligible turns only barks it on the first. Unlike test 17
+# above, both turns here genuinely earn resilience_fired — this proves the cooldown gate, not
+# just the absence of a second trigger.
+# -------------------------
+
+static func _t_combat_resilient_bark_has_cooldown() -> Dictionary:
+	var bdata: Dictionary = _nd_balance().get("data", {})
+	var steady := _rf_target("rf_cd_steady", 3, 100, true)
+	steady["faction"] = "echo"
+	var buddy := _nd_actor("rf_cd_buddy", "echo", 10, 100)
+	var enemy := _nd_actor("rf_cd_enemy", "enemy", 10, 100)
+	enemy["actor_type"] = "enemy"
+	enemy["grid_pos"] = { "col": 3, "row": 0 }
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var context := { "actor": steady, "all_actors": [steady, buddy, enemy], "cfg": _nd_balance(), "t": 2 }
+
+	_nd_activate(enemy, steady, bdata)
+	if not bool(steady.get("_resist_fear_fired", false)):
+		return { "ok": false, "error": "fixture drift: first hit did not set _resist_fear_fired" }
+	ActorStateMachine.new(steady).advance_turn(context, logger, 2)
+	var first := str(steady.get("_bark_context", ""))
+	if first != "combat_resilient":
+		return { "ok": false, "error": "expected combat_resilient on the first eligible turn, got '%s'" % first }
+
+	# Second consecutive eligible turn: resist_fear fires again, but the cooldown set by
+	# turn 2 (t + bark_cooldown_ticks) must still be active at t=3.
+	_nd_activate(enemy, steady, bdata)
+	if not bool(steady.get("_resist_fear_fired", false)):
+		return { "ok": false, "error": "fixture drift: second hit did not set _resist_fear_fired" }
+	context["t"] = 3
+	ActorStateMachine.new(steady).advance_turn(context, logger, 3)
+	var second := str(steady.get("_bark_context", ""))
+	if second == "combat_resilient":
+		return { "ok": false, "error": "combat_resilient repeated on a consecutive eligible turn — cooldown not applied" }
+	return { "ok": true }
+
+
+# -------------------------
+# Test 19b (V2-COMBAT-003.5 Phase 5 decision #47, follow-up): the cooldown above only
+# proves combat_resilient stays silent on its own. This proves WHY it exists — a
+# genuinely higher-priority bark must win the slot instead of being crowded out. Calls
+# _select_bark directly (established pattern: CombatDivergenceBarkTests._t_cooldown_gated_not_high_priority),
+# so the fear crossing is asserted without routing ~40 melee hits through resist_fear's
+# ~1-fear-per-hit reduction to reach the threshold.
+# -------------------------
+
+static func _t_combat_resilient_cooldown_yields_to_fear_rising() -> Dictionary:
+	var actor: Dictionary = { "id": "rf_yield_steady", "fear": 0, "morale": 50 }
+	var asm := ActorStateMachine.new(actor, null, {})
+
+	# Turn 1 (t=2): resilience fires and wins the slot, setting the cooldown
+	# (_resilient_bark_next_t = t + resilient_cooldown_ticks, default 10 → 12).
+	asm._select_bark("stoic", "", "melee_attack", 0, 0, "steady", "steady", false, true, "", 0, 2)
+	if asm._bark_context != "combat_resilient":
+		return { "ok": false, "error": "expected combat_resilient to win turn 1, got '%s'" % asm._bark_context }
+
+	# Turn 2 (t=3, inside the cooldown window that runs through t=12): resilience is
+	# still firing AND fear crosses both the 40 and 60 combat_fear_rising thresholds.
+	# The crowd-out fix requires combat_fear_rising to win this slot, not silence.
+	asm._bark_line = ""
+	asm._bark_context = ""
+	asm._select_bark("stoic", "", "melee_attack", 39, 65, "steady", "steady", false, true, "", 1, 3)
+	if asm._bark_context == "combat_resilient":
+		return { "ok": false, "error": "combat_resilient crowded out combat_fear_rising during its own cooldown" }
+	if asm._bark_context != "combat_fear_rising":
+		return { "ok": false, "error": "expected combat_fear_rising to win the slot during the cooldown, got '%s'" % asm._bark_context }
+	return { "ok": true }
+
+
+## One round of CombatRoundEmotionService.apply_round_emotion_tick(), isolated to term A:
+## a fallen echo ally spreads fear to one living survivor and one living enemy (equal echo/enemy
+## counts keeps term D silent; the KO result's action_type is not "melee_attack" so term F stays
+## silent; no refuse results so term E stays silent). Returns the survivor's resulting fear.
+static func _ako_run_survivor(cs: ConfigService, expr_cfg: Dictionary, resist: bool) -> int:
+	var fallen := _rf_target("ako_fallen", 3, 0, false)
+	fallen["faction"] = "echo"
+	fallen["is_dead"] = true
+	var survivor := _rf_target("ako_survivor", 3, 100, resist)
+	survivor["faction"] = "echo"
+	var enemy := _rf_target("ako_enemy", 3, 100, false)
+	enemy["faction"] = "enemy"
+	var ectx := EncounterContext.new()
+	ectx.actors = [fallen, survivor, enemy]
+	ectx.last_round_results = [{ "action_type": "other", "target_id": "ako_fallen", "defender_hp_after": 0 }]
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var svc := CombatRoundEmotionService.new(FlowContext.new(), cs, logger)
+	svc.apply_round_emotion_tick(ectx, 1, expr_cfg, 1)
+	return int(survivor.get("fear", 0))
+
+
+# -------------------------
+# Test 20 (V2-COMBAT-003.5 Phase 5 decision #48): the ally-KO fear spread
+# (CombatRoundEmotionService.apply_round_emotion_tick, term A) now goes through the same
+# _resist_fear() wrapper as the per-hit/near-death paths. Isolates term A by zeroing
+# fear_per_round on a duplicated balance dict — every other term in the tick either does not
+# apply here (no refuse/overwhelm results, equal echo/enemy counts) or does not touch fear
+# (morale decay, no-damage streak).
+# -------------------------
+
+static func _t_resist_fear_reduces_ally_ko_spread_fear() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bal: Dictionary = cs.get_balance()
+	var emo_cfg: Dictionary = bal.get("data", {}).get("combat", {}).get("emotion", {})
+	var fear_per_ally_ko: int = int(emo_cfg.get("fear_per_ally_ko", 0))
+	if fear_per_ally_ko <= 0:
+		return { "ok": false, "error": "balance.json must authorise combat.emotion.fear_per_ally_ko" }
+	# Isolate term A: no other term in the tick may add or remove fear this round.
+	(bal["data"]["combat"]["emotion"] as Dictionary)["fear_per_round"] = 0
+	cs._balance = bal
+
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var plain_fear := _ako_run_survivor(cs, expr_cfg, false)
+	var steady_fear := _ako_run_survivor(cs, expr_cfg, true)
+	if plain_fear != fear_per_ally_ko:
+		return { "ok": false, "error": "control drift: expected fear %d, got %d" % [fear_per_ally_ko, plain_fear] }
+	if steady_fear >= plain_fear:
+		return { "ok": false, "error": "resist_fear did not reduce ally-KO spread fear: %d vs %d" % [steady_fear, plain_fear] }
+	if steady_fear != roundi(float(fear_per_ally_ko) * 0.6):
+		return { "ok": false, "error": "expected 40%% reduction to %d, got %d" % [roundi(float(fear_per_ally_ko) * 0.6), steady_fear] }
 	return { "ok": true }

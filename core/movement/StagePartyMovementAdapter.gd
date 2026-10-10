@@ -613,7 +613,8 @@ static func build_result(
 		(intent.get("fallback", {}) as Dictionary),
 		hazards,
 		float(goal.get("objective_progress", 0.0)),
-		{}
+		{},
+		str(intent.get("movement_style", ""))
 	)
 
 

@@ -57,6 +57,36 @@
 | 48 | move-then-attack-was-impossible | An actor that closed to melee range could not attack; 80% of enemy activations produced no action at all | 2026-08-11 |
 | 49 | fear-40-target-retired | The COMBAT-001 "stay below fear 40" target is retired; the band boundaries stay, and the economy rises to use them | 2026-08-11 |
 | 50 | probe-must-mirror-the-summon-path | A probe that calls EchoFactory.generate() without init_vectors builds a party that cannot exist in play | 2026-08-11 |
+| 51 | combat-003.5-scope-is-everything | All five item groups (movement style, board variety+size, stalemate signal, doc/debug fixes, scattered defects) ship under one story, built in sequential phases, one PR at the end | 2026-09-13 |
+| 52 | combat-003.5-board-variety-in-scope | Board variety is in scope for V2-COMBAT-003.5 even though it's absent from the live Notion page — it moved late from V2-COMBAT-003 and the page was never updated | 2026-09-13 |
+| 53 | combat-003.5-board-cosmetic-hazard-deferred | Cosmetic terrain variance (island shape) and hazard/obstacle variance are explicitly out of scope for 003.5, deferred to V2-COMBAT-004; the encounter-identity change must not block that later work | 2026-09-13 |
+| 54 | combat-003.5-board-size-measure-then-choose | Board size (the 12x12-22x22 growth formula) stays in scope; measure the three recorded options on production-generated boards and bring the numbers to Jeff before choosing | 2026-09-13 |
+| 55 | combat-emotion-command-deleted | The dead combat_emotion debug command is deleted, not repaired; `emotion` is unaffected | 2026-09-13 |
+| 56 | balance-json-tiebreak-comments-deleted | Both stale, mutually-contradicting vector tie-break comments in balance.json (near lines 1476, 1768) are deleted rather than reconciled, since neither is read by any code | 2026-09-13 |
+| 57 | ui-agents-md-reworded-to-screens | ui/AGENTS.md's dispatch ban is reworded to name screens specifically; AppRoot.gd remains the sanctioned dispatcher for debug/system commands | 2026-09-13 |
+| 58 | stationary-rounds-counter-removed | The dead `_stationary_rounds` counter is removed; the soft-taunt eligibility feature it was meant to gate is not built in this story | 2026-09-13 |
+| 59 | raw-floats-removed-from-snapshot | `_judgment`/`_composure`/`_legibility`/`_presence` are removed from EncounterSnapshotBuilder's player-facing whitelist, closing the live §6.6 no-raw-values violation | 2026-09-13 |
+| 60 | dominant-key-unified | The three copies of `_dominant_key` (GridService, CombatState, ShrineService) are unified into one shared helper rather than left duplicated with a drift-detection test | 2026-09-13 |
+| 61 | shrine-hp-ratio-deleted | The dead `shrine_hp_ratio` field (computed, never read) is deleted rather than kept for a hypothetical future consumer | 2026-09-13 |
+| 62 | armor-mitigation-curve-and-guard | Armor mitigation moves to a percentage curve (def / (def + K)); Guard doubles def before the curve, with a flat-bonus fallback | 2026-09-22 |
+| 63 | pace-rule-readable-by-player | No per-mode number the player must learn; a formula over each mode's own existing values is allowed if the player can state the rule in one sentence | 2026-09-25 |
+| 64 | autobattler-reward-legibility | Rewards and grades follow autobattler conventions: the goal is visible before/during the fight and the result states its cause | 2026-09-25 |
+| 65 | screenshot-script-in-repo | The headless screenshot script lives in `scripts/` and is committed, for every later UI story | 2026-09-25 |
+| 66 | emotion-display-ten-statuses | The player sees the ten `emotional_status` values; morale tiers are simulation data. Docs follow the code | 2026-10-02 |
+| 67 | responsive-values-central-controller | `ui/` scripts may set responsive layout values; the values come from `ResponsiveLayoutController` | 2026-10-02 |
+| 68 | design-system-canonical-file | `docs/Living_Grove_Design_System.md` is the canonical design-system file; it is still in progress | 2026-10-02 |
+| 69 | backlog-superseded-rows-stay | Superseded backlog rows stay; the CSV gets no Done status; filter `Status != Superseded` for current stories | 2026-10-02 |
+| 70 | touch-target-48-logical-units | The minimum touch target is 48×48 logical units | 2026-10-02 |
+| 71 | approot-dispatch-host | `AppRoot.gd` is the only `ui/` file that calls `dispatch()`; screens emit `action_requested` | 2026-10-02 |
+| 72 | skills-home-in-repo | Agent knowledge lives in `docs/skills/`; global skills are thin triggers; routing text uses the Akan calling names | 2026-10-02 |
+| 73 | renderer-gl-compatibility | The renderer is GL Compatibility, for wide mobile and desktop reach; `project.godot` now says so | 2026-10-01 |
+| 74 | camera-unify-on-real-camera2d | Combat and Stage Exploration move from a faked node-transform camera to a real `Camera2D`, matching Sanctum, via one shared controller | 2026-09-29 |
+| 75 | camera-universal-selection-lock | Tapping any selectable thing (echo, spirit, enemy, shrine/objective, or a card) locks the camera onto it, in Combat, Stage, and Sanctum alike | 2026-09-29 |
+| 76 | camera-default-is-free | With nothing selected, or after tapping empty board space, the camera is `FREE` (manual pan/zoom only) — not an auto-follow default | 2026-09-29 |
+| 77 | camera-card-select-scope | Echo-card tap-to-select applies to both Combat and Stage (shared `RealmShell` echo bar); Sanctum has no card UI and keeps its existing floor-tap selection | 2026-09-29 |
+| 78 | camera-locked-actor-death-follows-party | When a locked camera target dies, the camera follows the party (`follow_party()`), not `FREE`. A dead actor cannot be locked (Jeff confirmed 2026-10-03; decisions.md #84) | 2026-10-02 |
+| 79 | board-wheel-zoom-rule | Board wheel zoom works only over open board. Scrolling panels keep the wheel. A wheel factor of 0 or less is one notch. One notch is 1.1x and the zoom eases over frames (Jeff confirmed 2026-10-03; decisions.md #85) | 2026-10-02 |
+| 80 | board-drag-pans-one-to-one | Mouse drag, finger drag and Space+drag pan 1:1 on every board camera (Sanctum, Combat, Stage). Trackpad two-finger pan keeps 2.5x | 2026-10-03 |
 
 ---
 
@@ -510,5 +540,277 @@
 **A:** **No — that builds a party that cannot exist in play.** `generate()` deliberately leaves `emotion` and `dominant_vector` unpopulated and relies on `EmotionService.init_echo()` and `VectorService.init_vectors()`, which the real summon path calls immediately afterwards (`FlowRuntime` ~:1370). A probe that skips them gives every Echo `dominant_vector = ""`, which silently disables the vector half of the identity-fear-spike gate **and** every vector term in BehaviorArbiter scoring. This invalidated a headline finding: the identity fear spike was reported as "never fires at any rank in any scenario", with the cause named as `uncalled` Echoes failing the calling gate. **Both were wrong.** The `uncalled` weight row already exists and already clears the 30-point threshold; the spike was blocked by the empty vector the probe itself created. With a production-shaped party the spike fires normally, peak fear rose 18 → 45 on the same encounter, and the fight resolved in 9 rounds instead of 13. This is [[reachability-not-just-execution]] applied to the fixture rather than the assertion: production-shaped data means *built by the production path*, not merely *non-empty*.
 **Source:** measured probe, 2026-08-11
 **Date:** 2026-08-11
+
+---
+
+### 51. combat-003.5-scope-is-everything
+
+**Q:** Which of the five item groups found in V2-COMBAT-003.5's scoping pass (movement style, board variety+size, stalemate signal, doc/debug fixes, scattered small defects) should ship under this story?
+**A:** All five. Rather than trimming the bucket per the brief's "final size rule," Jeff chose to ship everything as one story, built in sequential phases with a per-phase review gate, landing as one PR at the end — see the story plan for the phase sequence and rollback conditions per phase.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 52. combat-003.5-board-variety-in-scope
+
+**Q:** The live Notion page for V2-COMBAT-003.5 has 13 numbered items and none of them describe board variety, but the story brief and docs/MEMORY.md both say board-variety work was filed there — which is correct?
+**A:** Board variety is in scope. Jeff confirmed it moved late from V2-COMBAT-003 to 003.5 and the Notion page was never updated to show it — the page is stale on this one point, not the brief. Goal: deterministic random combat boards keyed to realm characteristics, replacing the current stage-identity seed (`encounter_id` = realm+stage) with encounter-identity.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 53. combat-003.5-board-cosmetic-hazard-deferred
+
+**Q:** Does board-variety work in V2-COMBAT-003.5 include cosmetic terrain variance (island shape) or hazard/obstacle variance?
+**A:** No. Both are explicitly deferred to V2-COMBAT-004. This story only changes which seed identity boards are generated from (per-encounter, not per-stage) and board size; the encounter-identity change is meant to be the foundation COMBAT-004 builds cosmetic/hazard variance on, without a second seed-path rework.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 54. combat-003.5-board-size-measure-then-choose
+
+**Q:** Should V2-COMBAT-003.5 fix the board-size formula (12x12 growing to 22x22 only with completed realms, currently capped at 14x14 since only two realms are live)?
+**A:** Yes, sizing is in scope, but the fix isn't chosen yet. Measure what each of the three recorded options produces (raise base_cols/rows; scale island size to board area; accept plain early boards) on production-generated Courage and Wisdom boards, then bring the numbers to Jeff — do not pick on his behalf.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 55. combat-emotion-command-deleted
+
+**Q:** The combat_emotion debug command throws because it reads a field CombatTokenLayer no longer has (raw fear/morale were deliberately removed from player-facing snapshots) — repair it or delete it?
+**A:** Delete it. The feature it debugged was deliberately gutted; keep `emotion` (the working command) untouched.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 56. balance-json-tiebreak-comments-deleted
+
+**Q:** data/balance.json documents two different vector tie-break orders (near lines 1476 and 1768) that disagree with each other and with the code — reconcile into one correct comment, or delete both?
+**A:** Delete both. Neither is read by any code, no production path can produce a tied maximum today, and reconciling two orders nothing uses isn't worth the upkeep.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 57. ui-agents-md-reworded-to-screens
+
+**Q:** ui/AGENTS.md bans `FlowRuntime.dispatch()` in "any ui/ file," but AppRoot.gd (itself in ui/) already dispatches directly for six shipped debug commands — is AppRoot's dispatching the sanctioned exception, or should it change?
+**A:** AppRoot's dispatching is sanctioned and correct, matching the screen contract's `action_requested` → shell → AppRoot → FlowRuntime path. Fix is wording only: reword the ban to name screens specifically, not "any ui/ file."
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 58. stationary-rounds-counter-removed
+
+**Q:** Onyamesu's `_stationary_rounds` counter grows unbounded with no reader — it was meant to gate an unbuilt "soft-taunt eligibility" feature. Build that feature, or remove the dead counter?
+**A:** Remove the dead counter only. Soft-taunt eligibility isn't specced anywhere; don't invent a new mechanic inside a robustness/cleanup story.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 59. raw-floats-removed-from-snapshot
+
+**Q:** Four raw derived floats (`_judgment`, `_composure`, `_legibility`, `_presence`) reach the player-facing snapshot via a whitelist in `EncounterSnapshotBuilder`, violating the §6.6 no-raw-values boundary, but nothing reads them — remove from the whitelist, or leave for a hypothetical future UI?
+**A:** Remove them from the whitelist now. Nothing consumes them, so nothing breaks; re-add deliberately if a future story needs them player-facing.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 60. dominant-key-unified
+
+**Q:** Three copies of `_dominant_key` (`GridService.gd:652`, `CombatState.gd:344`, `ShrineService.gd:158`) behave identically today but could drift silently — unify into one shared implementation, or leave three copies with a regression test guarding against drift?
+**A:** Unify into one shared static helper. Each call site's existing tiebreak-list argument is unchanged — same lists, same order, now evaluated once instead of three times.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 61. shrine-hp-ratio-deleted
+
+**Q:** `shrine_hp_ratio` is computed and published by `CombatTurnContextService` but nothing in `core/` reads it — delete it, or leave it as a future input?
+**A:** Delete the dead field. No consumer exists and none is planned in this story.
+**Source:** Jeff, 2026-09-13
+**Date:** 2026-09-13
+
+---
+
+### 62. armor-mitigation-curve-and-guard
+
+**Q:** Should Echoes vNext adopt a percentage-based armor mitigation formula (`mitigation% = def / (def + K)`, the shape common to Diablo II, League of Legends, and World of Warcraft), and if so how does Guard interact with it?
+**A:** **Yes.** Current combat damage (`CombatService._melee_damage`) is flat subtraction — `base = atk − eff_def`, clamped at 0 — which already has the exact problem the percentage curve exists to solve: once `def ≥ atk`, armor becomes 100% damage immunity and further def is dead weight. The `%` curve keeps every point of def useful and never reaches full immunity, fitting the GDD §19.4 instruction that armor stay light-touch rather than a heavy sim (it's one tuning constant, `K`, not a new system).
+**Guard:** decided **A** — double the def value *before* the curve (`eff_def = def × 2`, then run the curve). This is the option that automatically inherits the curve's "never 100%" guarantee, and it's self-limiting (doubling a low def swings the % a lot; doubling a high def barely moves it). **C** — a flat def bonus instead of a multiplier — is the fallback if A proves too swingy against high-armor endgame builds. **Ruled out:** doubling the resulting percentage, which can push an already-high-mitigation Echo to 100% on guard and reintroduce the exact immunity problem the curve was adopted to avoid.
+**Open, must settle before K is tuned:** `docs/calling-visual-equipment-bible.md` §4.4 gives conduit weapons (bell/gong, talking-drum, thread-bead, story spindle) a separate "story damage" channel (sound, Thread tension, emotion) distinct from physical melee damage — whether the armor curve mitigates story damage too, or story damage needs its own path, is undecided and blocks conduit/skill combat resolution. Separately, §4.7 Calling weapon-family bias (Preferred/Disliked) is explicitly non-numeric today; if skills/blasts/sound-based combat later attaches real modifiers to that bias, it becomes a second multiplier stacking against armor mitigation, and that should be a deliberate call, not a side effect of landing the curve. Recorded on the V2-ITEM-003 Notion story (2026-09-22) so scope isn't lost before implementation.
+**Source:** Jeff, design discussion, 2026-09-22
+**Date:** 2026-09-22
+
+---
+
+### 63. pace-rule-readable-by-player
+
+**Q:** Jeff ruled out "a number per mode, too difficult to understand for a user" — does "user" mean the player or the designer tuning config?
+**A:** The player. The player must be able to state the pace rule in one sentence and never has to learn a separate number per mode. A formula that derives each mode's target from values the mode already has (e.g. PURSUE's window, start distance and movement range) is allowed.
+**Source:** Jeff, 2026-09-25
+**Date:** 2026-09-25
+
+---
+
+### 64. autobattler-reward-legibility
+
+**Q:** Should the reward and grade follow autobattler conventions, as game-feel-developer advised?
+**A:** Yes. The player acts before the fight (party, directives, limited guidance); the fight runs by itself (GDD line 50, "You do not command heroes"). So a reward goal must be visible before or during the fight, and the result screen must state what earned or lost it. Today neither holds: no screen shows the pace goal, and the "Speed bonus" line appears only when earned (`EconomyService.gd:161`).
+**Source:** Jeff, agreeing with game-feel-developer's report, 2026-09-25
+**Date:** 2026-09-25
+
+---
+
+### 65. screenshot-script-in-repo
+
+**Q:** UI work in the cloud container cannot be seen in play. Where does the screenshot script live?
+**A:** In `scripts/`, committed to the repo, so every later UI story can use it. The script runs Godot on a virtual screen (`xvfb-run`, `--rendering-driver opengl3`) and saves a PNG of a screen. The ui-ux-designer builds it in the pace-reward story, phase 4.
+**Source:** Jeff, 2026-09-25 (option A)
+**Date:** 2026-09-25
+
+---
+
+### 66. emotion-display-ten-statuses
+
+**Q:** Which emotion vocabulary does the player see?
+**A:** The ten `emotional_status` values: radiant, whole, grounded, uncertain, hesitant, burdened, pressed, strained, fraying, hollow (`ui/components/EmotionPresentation.gd`). The morale tiers (inspired, steady, shaken, broken) are simulation data and are not shown. The docs follow the code.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 67. responsive-values-central-controller
+
+**Q:** May `ui/` scripts set responsive layout values?
+**A:** Yes. A script may set profile values such as columns, margins, wrap widths and sizes. The values come from `ui/components/ResponsiveLayoutController.gd`, so the calculation stays in one place.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 68. design-system-canonical-file
+
+**Q:** Which file is the canonical design-system document?
+**A:** `docs/Living_Grove_Design_System.md`. It is still in progress and may change. Docs link to this file, not to the "Complete Guide" file.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 69. backlog-superseded-rows-stay
+
+**Q:** What happens to Superseded rows in the backlog CSV, and does the CSV get a Done status?
+**A:** Superseded rows stay, because they hold relevant information. The CSV gets no Done status. A reader filters `Status != Superseded` for the current story and checks Notion when status matters.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 70. touch-target-48-logical-units
+
+**Q:** What is the minimum touch target size?
+**A:** 48×48 logical units. `docs/art-direction.md` is corrected to match `AGENTS.md`.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 71. approot-dispatch-host
+
+**Q:** May `AppRoot.gd` call `FlowRuntime.dispatch()`?
+**A:** Yes. `AppRoot.gd` is the UI host. Screens emit `action_requested`, and `AppRoot.gd` dispatches it. No other file in `ui/` calls `dispatch()`. The code boundaries in `AGENTS.md` now say so.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 72. skills-home-in-repo
+
+**Q:** Where does agent knowledge live, and which calling names do routing docs use?
+**A:** The docs in `docs/skills/` are the home. Global skills in `~/.claude` and `~/.codex` are thin triggers that link to them. Routing text uses the Akan calling names only: Okofor, Aduro, Onyamesu, Okomfo, Kra-Soro, Sum-Okwanfo.
+**Source:** Jeff, 2026-10-02
+**Date:** 2026-10-02
+
+---
+
+### 73. renderer-gl-compatibility
+
+**Q:** Which renderer does Echoes vNext use, given that it ships on mobile and desktop?
+**A:** GL Compatibility. Godot's docs describe it as the renderer with the widest hardware reach, and as usually good enough for 2D. The Mobile renderer needs Vulkan, Direct3D 12 or Metal. `project.godot` said `mobile` while `config/features`, `CLAUDE.md`, the `technical-artist` agent and `scripts/screenshot.gd` all assumed Compatibility; it now says `gl_compatibility`.
+**Source:** Jeff, 2026-10-01
+**Date:** 2026-10-01
+
+---
+
+### 74. camera-unify-on-real-camera2d
+
+**Q:** Follow-up #15 (camera doesn't handle large GUIDE_SPIRIT/PURSUE boards) grew into "camera should be similar across Combat, Stage Exploration, and Sanctum" — build one shared camera component, or keep three separately-tuned implementations?
+**A:** One shared `Camera2D`-based controller (`ui/shared/BoardCamera.gd`) all three screens wire into. Sanctum already has a real `Camera2D`; Combat and Stage currently fake a camera by moving board nodes directly — both migrate onto the shared real-`Camera2D` approach. "Faking it is probably what got us drifting."
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 75. camera-universal-selection-lock
+
+**Q:** Should camera follow stay tied to objective-specific flags (`is_quarry` for PURSUE, `is_spirit` for GUIDE_SPIRIT), or become a general player-driven mechanism?
+**A:** General: tapping any selectable thing — echo, spirit, enemy, shrine/objective structure, or an echo's card — zooms and locks the camera onto it, across Combat, Stage, and Sanctum, in every Combat objective mode (no mode-gating). Sanctum already implements the pattern (`SanctumShell._try_open_echo_detail_at_viewport_point_from_hit` → `set_featured_occupant` → camera focus-zoom, which can also open the echo-detail menu) and is the reference precedent. Opening a detail menu on selection is a Sanctum-only behavior for now — may extend to Combat/Stage later, out of scope for this pass. Echoes/enemies/spirits/structures are already unified in the same `actors` array with a `grid_pos` (`is_structure`/`is_spirit`/`is_quarry` flags), so one tap-to-select mechanism covers every selectable type without special-casing.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 76. camera-default-is-free
+
+**Q:** When nothing is selected (fresh encounter/screen entry, or after tapping empty board space), what should the camera default to — follow the party centroid, or sit free?
+**A:** `FREE` (manual pan/zoom only, no auto-follow) is the default in both cases. Party-centroid follow (`FOLLOW_PARTY`) still exists as a mode (e.g. Combat's recenter button, Stage's always-on travel-follow) but is never the passive default when nothing is selected.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 77. camera-card-select-scope
+
+**Q:** The only tappable echo-card component (`EchoCardItem`) lives in `RealmShell.gd`'s shared echo bar, used by both Combat and Stage (Sanctum has no card UI). Should card-tap-to-select apply to both screens, or Combat only, given Stage's board shows just one party token?
+**A:** Both Combat and Stage. On Stage this resolves to the same single-party-token position `FOLLOW_PARTY` would give, but the lock semantics (and any future feel treatment) should exist there too, not just where there's a visually distinct target to follow.
+**Source:** Jeff, 2026-09-29
+**Date:** 2026-09-29
+
+---
+
+### 78. camera-locked-actor-death-follows-party
+
+**Q:** What does a locked camera do when its target dies?
+**A:** It follows the party centroid (`follow_party()`). It does not go `FREE` and does not stay on the dead actor. This applies to every screen that uses the shared `BoardCamera`. A dead actor cannot be locked: a board tap, an echo card or an initiative row for it does nothing (Jeff confirmed 2026-10-03; decisions.md #84).
+**Source:** Jeff, 2026-10-02 (fallback); assumption by the orchestrator
+**Date:** 2026-10-02
+
+---
+
+### 79. board-wheel-zoom-rule
+
+**Q:** When does a mouse wheel zoom a board camera?
+**A:** Only when the pointer is over open board. A scrolling panel keeps the wheel. A wheel event's `factor` scales the step (pow(step, factor)). A `factor` of 0 or less counts as one ordinary notch. One notch is 1.1x. The zoom eases toward a target over frames; a pinch is immediate (Jeff confirmed 2026-10-03; decisions.md #85).
+**Source:** Jeff, 2026-10-02 (wheel zoom approved for Combat); design by the orchestrator
+**Date:** 2026-10-02
+
+---
+
+### 80. board-drag-pans-one-to-one
+
+**Q:** How fast does a drag pan a board camera?
+**A:** 1:1 on every board camera: Sanctum, Combat and Stage. This covers mouse drag, finger drag and Space+drag. The world point under the pointer stays under the pointer. A trackpad two-finger pan (`InputEventPanGesture`) keeps the faster `_PAN_SPEED` of 2.5x.
+**Source:** Jeff, 2026-10-03
+**Date:** 2026-10-03
 
 ---

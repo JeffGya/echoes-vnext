@@ -18,7 +18,8 @@ func enter(ctx: RefCounted, t: int) -> void:
 		ectx.placement_seed,
 		ectx.initiative_cfg,
 		ectx.objective_params,
-		ectx.stalemate_cfg
+		ectx.stalemate_cfg,
+		ectx.pace_cfg
 	)
 
 	# Minimal phase_snapshot — FlowEncounterState.build_snapshot() drives the real UI snapshot.

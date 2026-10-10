@@ -2,8 +2,7 @@
 # Node2D that draws a small situation marker on the exploration map via _draw().
 # Shape varies by situation type so the player can distinguish encounter kinds at a glance.
 # Color varies by state: grey unknown, blue revealed, gold resolved-objective, grey resolved.
-# Lives as a child of SituationLayer whose position tracks the board — marker.position
-# is therefore in board-local pixels and moves correctly during the travel tween.
+# Lives as a child of SituationLayer under BoardRoot, so marker.position is in board-local pixels.
 
 class_name SituationMarkerDraw
 extends Node2D
