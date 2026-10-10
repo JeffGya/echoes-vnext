@@ -75,6 +75,24 @@ are woken when they finish and can collect the results. **A subagent may never b
 parallelise; it dispatches in the foreground, sequentially. When work genuinely wants fan-out, run it
 from here rather than delegating the fan-out itself.
 
+### Long runs: you run them (Jeff, 2026-10-07)
+
+Any command that can run longer than 2 minutes, and any background run, is run by you. This covers
+measurement cells, probe slices, the sharded or full suite, and anything the tool would move to the
+background. A subagent builds the probe or script, then ends its turn with a RUN REQUEST (the five
+items are in root `AGENTS.md`). The subagent `game-orchestrator` follows the same rule: it cannot
+run these either, so it hands you the request.
+
+1. Run the command in the background with the `timeout` and `alarm` that `AGENTS.md` gives.
+2. When it finishes, read the raw output. Do not rely on a summary.
+3. Check that every file the run edits is back to its original (`cmp` against a saved copy).
+4. Send the result to the subagent (`SendMessage`) so it can continue, or use it yourself.
+5. Do not dispatch a subagent only to wait. A waiting subagent can lose its work when the session
+   limit stops it, and it can leave an edited file behind.
+
+*Why: on follow-up #6 two `opus` agents stopped on the session limit in the middle of long runs and
+left `data/balance.json` changed. Judgement stays with the agent; the waiting stays with you.*
+
 ---
 
 ## Model tiers
@@ -86,10 +104,24 @@ overrides frontmatter. Never `fable`.
 a moved recorded value needing attribution · diagnosing an unknown mechanism · a green suite that
 proves nothing · combined-tree verification where either agent could mask the other.
 
-**Use `haiku`** for text-only work that cannot change behaviour — copy rewrites, label text, doc
-reflow, mechanical renames. *Measured limit: on a 23-line bark rewrite haiku produced clean
-vocabulary substitution but missed the creative brief, and personas flattened toward each other.
-Mechanical and checkable: haiku. "Make this feel different": expect a second pass.*
+**Use `haiku`** for clear, straightforward work that has a fixed procedure and a checkable
+result — running a given script or command list and copying what it prints, log triage, copy
+rewrites, label text, doc reflow, mechanical renames. Jeff widened this on 2026-10-07 (long
+measurement runs were wasting `opus` budget). It is allowed only with these guardrails:
+
+1. A stronger model writes the procedure first. Any file the run edits is restored by a `trap`
+   or an equivalent step inside the script, so a killed run cannot leave it changed.
+2. `haiku` judges nothing: no design choice, no attribution, no pass or fail verdict beyond what
+   the command itself prints.
+3. The main chat reads the raw output before it trusts a number, and checks that every edited
+   file is back to its original.
+4. New logic, design numbers, determinism, save schema and the analysis of results stay with
+   `sonnet` or `opus`.
+
+*Measured limit (older Haiku): on a 23-line bark rewrite haiku produced clean vocabulary
+substitution but missed the creative brief, and personas flattened toward each other.
+Mechanical and checkable: haiku. "Make this feel different": expect a second pass. Re-check this
+limit when a newer Haiku becomes available to the chat.*
 
 If unsure, run sonnet first. A sonnet pass that surfaces the real question costs less than an opus
 pass that confirms there was none.

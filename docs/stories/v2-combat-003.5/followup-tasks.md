@@ -119,7 +119,9 @@ the exact failure, restored, reconfirmed green. Full suite (both fixes combined)
 
 ---
 
-## 6. Design a real "stop and hold" movement behavior
+## 6. ~~Design a real "stop and hold" movement behavior~~ — CLOSED 2026-10-10
+
+**Resolution (2026-10-10, decisions.md #107, #108, #109):** Built in three PRs. PR0 (#99) fixed skill mark and reveal reach. PR1 (#100) added the stop-short mechanism: an Echo that takes the half-capacity route plays one benefit (Guard, Observe or Hold) at the stop cell, with a cause (fear or low morale; identity), plus the visible tell (marker outside the Echo, word chip, hop, rest pose). PR2 (#101) added the stop-cell search (window capacity minus 1) and shipped both flags on; it moved the COMBAT, PURIFY_SHRINE, RECOVER, PROTECT and GUIDE_SPIRIT fingerprints and two emotion traces (cause: `stop_short.enabled`), and the PURIFY_SHRINE fingerprint and trace (cause: `cell_search.enabled`). Not built, by Jeff: the Return route benefit and its marker, Hold links, and a dotted route remainder; these are parked in the combat visual language story (V2-COMBAT-005, draft). Range is deferred to the weapons story (V2-ITEM-003). Later causes (directive, Keeper guidance, bond, vow) plug into the cause registry in their own stories.
 
 **task_id:** `task_afaaec2e`
 
@@ -383,6 +385,8 @@ not just Claimant fights. The underlying duplication itself (`DebugController` r
 
 **Opening prompt:**
 > In the Echoes vNext Godot/GDScript repo: Redesign the Combat initiative panel (`InitiativeRowItem`) for phone screens. Measured problems: (1) rows are 21 px high with 4 px gaps, and the minimum touch target is 48 px; (2) at 844x390 the panel overlaps the echo cards, so rows 7 and 8 are hidden and cannot be tapped; (3) the action text is clipped at every size; (4) the emotion label is small (font 11) and may fail contrast. Screenshots exist: render the fixture `combat_initiative_full` (8 initiative rows) with `scripts/screenshot.gd`. On macOS, run it from a real window (see the header of that script). Rows must stay tappable, because they lock the camera on an actor. Do not change `core/`. Load the `game-ui-ux-echoes` skill first.
+
+**Note (2026-10-10, from follow-up #6, stop-short):** Measured during that work: a tap selects the Echo by the cell under the finger, not by the token circle; at zoom 0.35 a cell is about 45 by 22 px, below the 48 px target; board tokens are not keyboard-focusable; the left initiative list and the bottom Echo cards cover Echoes (a camera safe area is missing). This subject also belongs to the combat visual language story (V2-COMBAT-005, draft).
 
 ---
 

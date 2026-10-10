@@ -32,6 +32,16 @@ The player runs a Sanctum, summons Echoes (returning fragments of stolen stories
 > woken when the work finishes and can collect the result. **A SUBAGENT may never background
 > anything** — not a Bash command, not another agent. Nothing wakes it. Where work wants parallel
 > fan-out, a subagent recommends the fan-out and the main conversation runs it.
+>
+> **Long runs belong to the main conversation.** A subagent does not run a command that can take
+> longer than 2 minutes, and it does not wait on one. This covers every measurement cell, probe
+> slice, sharded or full suite run, and any command the tool would move to the background. The
+> subagent builds the probe or script, then ends its turn with a RUN REQUEST. The main conversation
+> runs it, checks the result, and sends the output back to the subagent or uses it to continue.
+> Short filtered runs (`tests <filter>`, the compile check, `--import`) stay with the subagent.
+> A RUN REQUEST states: (1) the exact command, with the `timeout` and `alarm` to pass; (2) the
+> expected duration; (3) every file the run edits, and the step inside the script that restores it
+> (a `trap`); (4) how to verify the restore; (5) which output to read back.
 
 ### Compile check (no editor needed)
 ```bash
@@ -411,7 +421,7 @@ Set the model explicitly on every delegated call. Omitting it silently inherits 
 
 | Tier | Use it for |
 |---|---|
-| `haiku` | Mechanical bulk work: renames from an approved table, boilerplate, format conversion, log triage |
+| `haiku` | Clear, mechanical work with a checkable result: renames from an approved table, boilerplate, format conversion, log triage, running a given script and copying its output (guardrails in `CLAUDE.md`, Model tiers) |
 | `sonnet` | The default. Well-specified implementation with clear acceptance criteria |
 | `opus` | Genuinely tricky work: concurrency, subtle algorithms, adversarial verification, gnarly debugging |
 
