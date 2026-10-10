@@ -15,6 +15,7 @@ Reference documents for all AI agents working on this project. Each file is self
 | `echoes-sankofa-gdd.md` | V2 design knowledge base | Design decisions, lore, callings, virtue domains, Weave/Threads, V2 terminology |
 | `echoes-backlog.md` | V2 story backlog (168 stories) | Story lookup, pickup order, wave/status, dependencies |
 | `game-ui-ux-echoes.md` | Mobile-first UI/UX patterns | New screens, layout, snapshot-to-screen mapping, emotion display, West African aesthetic |
+| `echoes-visual-plan/` | HTML visual planning skill folder | UX/game-feel HTML prototypes with player journeys, wireframes, friction notes, improvement prompts, and playtest checks |
 
 ## Design & UX Reference
 
@@ -31,6 +32,7 @@ Reference documents for all AI agents working on this project. Each file is self
 | What flow state ID should I use? | `godot-echoes-dev.md` |
 | What does `snapshot.actions` look like? | `godot-echoes-dev.md` |
 | How do I add a new service / flow state / test? | `godot-echoes-dev.md` |
+| How do I export the implemented player journey as a visual prototype? | `echoes-visual-plan/` |
 | What is a Calling? A Thread? Storyweight? | `echoes-sankofa-gdd.md` |
 | What are the 10 virtue domains? | `echoes-sankofa-gdd.md` |
 | What story is next in the backlog? | `echoes-backlog.md` |

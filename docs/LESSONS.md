@@ -13,6 +13,27 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### Emotion changes need an actor beat; barks need spoken timing
+
+**Rule:** Pair visible support or self-regulation outcomes with readable actor movement as well as the emotion chip; reveal barks progressively in the moment.
+**Why:** Jeffrey found Feel Section C too dependent on emotion-bar options and asked for more visible Echo movement/action and typewriter speech.
+**How to apply:** Give supplied source actions anticipation and commitment, and changed recipients a visible settle without inventing passive actions or healing. Keep unchanged outcomes quiet; drive progressive speech from the shared playback clock and show full text in rest/reduced motion.
+**Mistake count:** 1
+
+### Emotion feedback uses the shared Sanctum palette
+
+**Rule:** Flash an emotion change in the matching shared emotion colour, not a generic gold highlight.
+**Why:** Jeffrey directed the combat Feel mockup to reuse the Sanctum emotion colours.
+**How to apply:** Trace Sanctum's `EmotionPresentation.text_theme()` to `EmotionStatus*/colors/font_color` in `LivingTreeSystem.tres`; use that colour for the transient flash and preserve readable text contrast.
+**Mistake count:** 1
+
+### Prototype tokens still need expressive game feel
+
+**Rule:** Combat mockups must show anticipation, commitment, impact and recovery, even while actors remain simple tokens. Keep cards, screens and the board regular, and preserve the requester-selected graphic iteration.
+**Why:** Jeffrey found direct token motion and subtle chip changes stiff and emotionally unreadable. Extending organic shapes into cards, screens and the board exceeded the assignment; after reviewing the internal cue changes, he requested restoration of the previous rigid-line iteration.
+**How to apply:** Preserve the restored rigid graphic baseline until another visual change is requested. Keep expressive motion and clear damage/recovery feedback; a request for storybook feeling does not make a new silhouette treatment approved.
+**Mistake count:** 3
+
 ### 21 — Price the sum, not the item
 
 **From V2-COMBAT-003, 2026-09-06.** The story is named "one deterministic behavior-arbitration and
@@ -104,6 +125,123 @@ builds them.
 
 ---
 
+
+---
+
+### 28 — Isometric art needs one projection contract and uniform sprite scale
+
+**Rule:** Define the tile basis, footprint, foot anchor, and asset camera angle once.
+Never make an isometric asset fit the world through nonuniform destination scaling or
+screen-space occupancy offsets.
+**Why:** The Sanctum prototype used a mathematically 2:1 coordinate transform but
+then squeezed square character atlas cells into tall narrow rectangles. The map was
+also built mainly from flat polygons and upright primitives, so the character art
+and village did not share one believable plane.
+**How to apply:** Use a 2:1 tile top, transform every ground and occupancy coordinate
+through the same basis, preserve each sprite cell's aspect ratio, anchor characters
+at their feet, and depth-sort buildings, foliage, places, and Echoes by their ground
+anchor. Validate the generated asset angle against the tile diamond before producing
+the full set.
+**Mistake count:** 1
+
+---
+
+### 27 — Optional card fields must not reserve empty layout space
+
+**Rule:** Let contextual cards size themselves from the fields they actually show. Hide empty labels and rows, and do not impose a tall minimum height intended for the fullest card variant.
+**Why:** Echo Recent cards reused the full village-history card height even though first-person memories omit most metadata. This produced large blank gaps, while wrapped memory text could appear clipped or incomplete.
+**How to apply:** Author compact reusable structure in `.tscn`, give wrapped text a real available width, hide absent fields in the renderer, and test both sparse and dense variants with long text at all supported layout profiles.
+**Mistake count:** 1
+
+---
+
+### 26 — Seeing an incident does not grant the Keeper permission to intervene
+
+**Rule:** Treat incident visibility and intervention authority as separate simulation states. A warning may be observable while mechanically private; `can_join` must come from authoritative access state, and rejected intervention commands must not mutate the incident.
+**Why:** The Sanctum prototype made every warning eventually actionable. Even though ignored incidents resolved autonomously, this still positioned every disagreement as the Keeper's business and made village autonomy feel cosmetic.
+**How to apply:** Give social incidents explicit private, open, or appeal access at creation. Show the premise before any decision. Private incidents expose no intervention action and reject direct or stale join commands; open incidents allow optional help; appeals name who asks. All three may resolve without the Keeper and leave consequences the player deals with later.
+**Mistake count:** 1
+
+---
+
+### 25 — Realm continuity must be designed as geography, not implied by palette
+
+**Rule:** When a Realm is physically connected to an established location, show the complete entry, traversal, objective, and return geography in the environment itself. Preserve the project's exaggerated storybook proportions at the silhouette stage instead of letting realistic terrain return beneath watercolor rendering.
+**Why:** The first starter-Realm pass introduced an unrelated forest, and the improved floating-island pass still began drifting toward realistic cliff proportions and surface density. Jeff clarified that the opening uses an ordinary Sanctum gate, a bridge to a first battle island, a second bound-ember island, and bridge traversal back to the Sanctum so the ember can relight the Ase Flame.
+**How to apply:** Before generating a connected Realm, diagram the physical sequence in words and require every transition to appear in the wide shot. Match the established location's architecture, ecology, and floating-island logic; exaggerate plateaus, bridges, structures, trees, and focal objects before adding watercolor and gouache; reject forest or terrestrial-biome substitutions, realistic geology, and micro-stone texture.
+**Mistake count:** 2
+
+---
+
+### 24 — The starting Sanctum is dormant, not broken
+
+**Rule:** Communicate the starting Sanctum's inactivity through intact spaces at rest, not through ruins, collapse, or structural damage.
+**Why:** The structurally stylized pass still framed the Sanctum as a broken village through missing roofs, lost plaster, a collapsed shelter, shattered pottery, and a snapped tree limb. Jeff clarified that dormancy is the intended state.
+**How to apply:** Keep buildings, tree, hearth, vessels, and work structures whole. Use cold ash, closed shutters, covered or stored tools, settled dust, still air, sparse edge growth, and empty gathering space to show a sacred house waiting to wake. The player should anticipate activation and habitation, not reconstruction from destruction.
+**Mistake count:** 1
+
+---
+
+### 23 — Environment stylization must change geometry, not only rendering
+
+**Rule:** Stylize buildings, trees, objects, terrain, and perspective at the shape-design stage. A realistic world with flatter paint, ink lines, or paper grain is still a realistic world.
+**Why:** The first Dormant Sanctum revision changed the visual layer but kept ordinary house proportions, botanical tree anatomy, natural perspective, and realistic environmental density. It therefore remained outside the approved storybook language despite the new surface treatment.
+**How to apply:** Redraw from silhouette outward: exaggerate roof-to-wall ratios, compress and taper structures, group foliage into large masses, simplify roots and branches into calligraphic forms, enlarge focal objects, reduce micro-detail, and stage depth in a few designed layers before applying painterly finish.
+**Mistake count:** 1
+
+---
+
+### 22 — Echo settlement reads through coverage and fraying; mood reads through hue
+
+**Rule:** Keep Story-colour coverage, loose-thread count, and patch hue as separate visual channels. Coverage and fraying decrease from Unsettled through Settled; hue may shift with mood; Mythical Echoes have neither patches nor loose Threads.
+**Why:** The first identity progression treated colour and woven pattern as a vague transformation effect. It did not communicate the required physical rule: large solid skin-replacement patches whose boundaries unravel, then diminish and settle as the Echo gains Weavings, Storyweight, and Standing.
+**How to apply:** Use one solid hue per Echo at a time; allow non-contiguous skin patches; place loose Threads around every unresolved patch boundary; never colour clothing; enforce the coverage bands in `docs/art-direction.md`; and treat Mythical as a rare, separately governed older state rather than an automatic visual rank-up.
+**Mistake count:** 1
+
+---
+
+### 21 — North-star art must inherit approved character style and documented material culture
+
+**Rule:** Treat approved character ledgers as hard style constraints in every later concept board, and derive Ghanaian textiles from documented weave and garment construction rather than decorative approximation. Every supporting vignette must also communicate a clear game-world function.
+**Why:** The first north-star pass drifted back toward realistic Echoes, invented textile swatches, an ambiguous face-to-face scene, a tree/building hybrid, and generic covered gates that did not express the Sanctum, unresolved identity, or Anansi-web world clearly.
+**How to apply:** Before filing a moodboard, check each character against the locked face/body sheets; keep sacred trees and village architecture physically distinct; source kente and fugu through real strip-weave, seam, stripe, and garment structures; and replace generic fantasy portals with world-specific web ruptures or Realm fragments. Preserve successful studies without inheriting rejected panels.
+**Mistake count:** 1
+
+---
+
+### 20 — A weapon is defined by combat function, not ceremonial silhouette
+
+**Rule:** Keep regalia, state weapons, office objects, and passive ritual objects out of the ordinary weapon catalogue unless a distinct item definition gives them a concrete combat action. Bells, drums, beads, vessels, and similar forms may be weapons only as explicit spiritual or story-power conduits with targeting, effects, timing, telegraphing, and counterplay.
+**Why:** The Calling equipment study blurred ceremonial or state objects into usable weapons, even though the current game has little combat purpose for them. This made the weapon set staff-heavy and visually evocative without establishing how the objects fight.
+**How to apply:** Research both an object’s form and documented use. Classify historical regalia separately from combat equipment. Run every proposed weapon through a combat admission test; if it cannot describe its action profile, place it under relic, charm, consumable, regalia, or story item instead.
+**Mistake count:** 1
+
+---
+
+### 19 — Calling identity and weapon identity are independent axes
+
+**Rule:** Never assign a canonical or exclusive weapon set to a Calling. Every Calling can equip every weapon; Calling-and-weapon fit is a soft bias that changes fluency, behavior, and expression rather than eligibility.
+**Why:** A Calling is a way an Echo becomes and acts, while a weapon changes action profile and tactical opportunity. Treating a resonant concept-art pairing as ownership silently turns soft fit into a class lock and makes Calling diversity depend on equipment.
+**How to apply:** Define Calling through posture, decision grammar, garment silhouette, and gear distribution. Define weapon families separately. Test the same weapon across all Callings, showing different grips, timing, stance, and intent. Use resonant/adaptive/tension internally and preferred/disliked in player-facing summaries; never “allowed,” “required,” or “signature weapon.”
+**Mistake count:** 1
+
+---
+
+### 18 — Visual plans are UX/game-feel artifacts, not code evidence
+
+**Rule:** Do not include code evidence, route tables, raw scan output, file inventories, or implementation proof in visual-plan prototypes unless Jeff explicitly asks for an engineering audit.
+**Why:** Jeff clarified that the visual plan exists to improve game feel, UX, and UI; code evidence is not the desired output.
+**How to apply:** Use scans only as internal grounding. The exported artifact should show player journey, wireframes, decision weight, feedback, friction, improvement opportunities, and playtest prompts.
+**Mistake count:** 1
+
+---
+
+### 17 — Visual planning must be prototype-first, not code-inventory-first
+
+**Rule:** Visual planning artifacts must lead with user flows, screen wireframes, decisions, feedback, and game-feel questions. Code scan output belongs in collapsed supporting evidence, not the main experience.
+**Why:** Jeff rejected the first Echoes visual-plan export because it was a collection of services/code examples rather than a useful prototype, wireframe, or user flow.
+**How to apply:** When exporting HTML visual plans, make the first viewport a journey board or screen mockup. Use scanned files, services, routes, and snapshot builders only to ground labels and verify implementation reality.
+**Mistake count:** 1
 
 ---
 
