@@ -87,6 +87,8 @@
 | 78 | camera-locked-actor-death-follows-party | When a locked camera target dies, the camera follows the party (`follow_party()`), not `FREE`. A dead actor cannot be locked (Jeff confirmed 2026-10-03; decisions.md #84) | 2026-10-02 |
 | 79 | board-wheel-zoom-rule | Board wheel zoom works only over open board. Scrolling panels keep the wheel. A wheel factor of 0 or less is one notch. One notch is 1.1x and the zoom eases over frames (Jeff confirmed 2026-10-03; decisions.md #85) | 2026-10-02 |
 | 80 | board-drag-pans-one-to-one | Mouse drag, finger drag and Space+drag pan 1:1 on every board camera (Sanctum, Combat, Stage). Trackpad two-finger pan keeps 2.5x | 2026-10-03 |
+| 81 | directive-is-data-only-to-add | A new Directive is added as a data entry plus tests, with no logic change. No Directive id literal or substring match in `core/` logic. Unlock stays `unlock_condition: always` until V2-DIRECTIVE-003 | 2026-10-10 |
+| 82 | directive-profile-inputs | Profile inputs that may bend a Directive: Calling family, virtue domains (through the identity state only), Standing/Judgment, fear, morale. Bonds are an interrupt only. Vows and equipment wait for their own stories | 2026-10-10 |
 
 ---
 
@@ -812,5 +814,23 @@
 **A:** 1:1 on every board camera: Sanctum, Combat and Stage. This covers mouse drag, finger drag and Space+drag. The world point under the pointer stays under the pointer. A trackpad two-finger pan (`InputEventPanGesture`) keeps the faster `_PAN_SPEED` of 2.5x.
 **Source:** Jeff, 2026-10-03
 **Date:** 2026-10-03
+
+---
+
+### 81. directive-is-data-only-to-add
+
+**Q:** How must a future Directive (a third stance) be added?
+**A:** As one data entry plus tests, with no change to `core/` logic. No Directive id literal and no substring match on a Directive id may appear in `core/` logic, the picker lists or the save repair. Every list reads the registry (`DirectiveService.available_ids(directives_cfg)`; the instance method `get_available_directives()` delegates to it). A test-only synthetic third Directive must pass through every consumer, and a grep test blocks id literals. Unlock stays `unlock_condition: "always"`; unlock rules are designed with the first new Directive in V2-DIRECTIVE-003. Press the Path and Hold the Circle need more design and are not part of V2-DIRECTIVE-002.
+**Source:** Jeff, 2026-10-10 (V2-DIRECTIVE-002 planning; decisions.md D-06, D-14)
+**Date:** 2026-10-10
+
+---
+
+### 82. directive-profile-inputs
+
+**Q:** Which Echo inputs may change how a Directive plays out?
+**A:** Calling family, the ten virtue domains (only through the implemented identity state, never as a new direct multiplier layer), Standing/maturity band and Judgment, fear and morale. Bonds act as an interrupt only (rescue or abandon). Vows wait for V2-VOW-002. Equipment waits for V2-ITEM-003. Contrast is required at every Standing; higher Standing widens reinterpretation, never obedience.
+**Source:** Jeff, 2026-10-10 (V2-DIRECTIVE-002 planning; decisions.md D-03, D-08)
+**Date:** 2026-10-10
 
 ---

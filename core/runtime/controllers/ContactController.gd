@@ -187,9 +187,7 @@ func handle_consult_echoes(action: Dictionary, t: int) -> FlowActionOutcome:
 	var contact_cfg: Dictionary = contact_cfg_v if contact_cfg_v is Dictionary else {}
 	var response_data := ContactResponseService.load_responses()
 
-	# Read active directive
-	var dir_id := str(flow_ctx.save_data.get("flow", {}).get("active_directive", "directive.scout_carefully") \
-		if flow_ctx.save_data.get("flow", null) is Dictionary else "directive.scout_carefully")
+	var dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
 
 	# Build selected echo dicts
 	var all_party := SanctumService.get_active_party_echoes(flow_ctx.save_data)
@@ -200,7 +198,7 @@ func handle_consult_echoes(action: Dictionary, t: int) -> FlowActionOutcome:
 			selected_echoes.append(echo)
 
 	# Track ignored bids
-	var bid_state := ConversationService.compute_bids(all_party, contact, dir_id, contact_cfg)
+	var bid_state := ConversationService.compute_bids(all_party, contact, dir_fx)
 	var ignored_counts_v: Variant = contact.get("ignored_bid_counts", {})
 	var ignored_counts: Dictionary = ignored_counts_v if ignored_counts_v is Dictionary else {}
 	for eid in bid_state:
@@ -422,9 +420,8 @@ func handle_speak_response(action: Dictionary, t: int) -> FlowActionOutcome:
 	# Auto-regenerate responses for the next turn when party ≤ 3 (mirrors the initial engagement path).
 	# For party > 3, responses stay empty so the picker fires via cta.consult_echoes.
 	if _next_party.size() <= 3:
-		var _next_dir_id := str(flow_ctx.save_data.get("flow", {}).get("active_directive", "directive.scout_carefully") \
-			if flow_ctx.save_data.get("flow", null) is Dictionary else "directive.scout_carefully")
-		var _next_bids := ConversationService.compute_bids(_next_party, contact, _next_dir_id, contact_cfg)
+		var _next_dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
+		var _next_bids := ConversationService.compute_bids(_next_party, contact, _next_dir_fx)
 		_next_responses = ConversationService.generate_responses(
 			_next_party, contact, contact_cfg, _next_resp_data, t, _next_bids
 		)
@@ -549,13 +546,8 @@ func apply_contact_outcome(
 		"guide":
 			if outcome in ["good", "partial"]:
 				var reveal_n := 2 if outcome == "good" else 1
-				# Directive: seek_signs adds +1 reveal — persisted at stage_context.active_directive_id
-				var _dir_id2 := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "") \
-					if flow_ctx.save_data.get("stage_context", null) is Dictionary else "")
-				if "seek_signs" in _dir_id2:
-					var dir_fx_v: Variant = contact_cfg.get("directive_effects", {}).get("seek_signs", {})
-					var dir_fx: Dictionary = dir_fx_v if dir_fx_v is Dictionary else {}
-					reveal_n += int(dir_fx.get("guide_reveal_bonus", 0))
+				var _guide_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
+				reveal_n += int(_guide_fx.get("guide_reveal_bonus", 0))
 				# Reveal nearest unrevealed situations
 				var revealed_count := 0
 				for _gi in range(map_situations.size()):

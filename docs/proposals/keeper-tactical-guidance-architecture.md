@@ -920,7 +920,7 @@ Completed July 12, 2026:
 
 Open before the relevant implementation slice:
 
-1. Decide whether `Press the Path` and `Hold the Circle` become canonical Directives, unlock through `V2-DIRECTIVE-002`, or remain playtest-only content.
+1. Decide whether `Press the Path` and `Hold the Circle` become canonical Directives, unlock through `V2-DIRECTIVE-002`, or remain playtest-only content. *(Note 2026-10-10: Jeff decided V2-DIRECTIVE-002 does not add them. They need more design; further stances belong to V2-DIRECTIVE-003. See `docs/stories/v2-directive-002/decisions.md` D-06.)*
 2. Define the mode-specific tactical-field and guidance requirements for all seven currently authored combat modes.
 3. Approve the encounter briefing/deployment subphase inside `flow.encounter`; this remains a major UX-flow decision.
 4. Lock the implementation/tuning contract for canonical `PROTECT` carryability—holder burden and the existing class/state mitigation sources—without reopening the authored 60% mechanic unless the GDD and `docs/combat-modes.md` are explicitly amended.

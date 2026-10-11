@@ -133,6 +133,8 @@ Preparation does not allow exact queued actions, skill targets, movement paths, 
 
 `Scout Carefully` and `Seek Signs` are established production-aligned Directives. `Press the Path` and `Hold the Circle` remain promotion candidates until controlled comparison shows that they are distinct from the production pair and neither dominates across objectives and boards.
 
+> **Note 2026-10-10 (Jeff, V2-DIRECTIVE-002 decision D-06):** `Press the Path` and `Hold the Circle` are not part of V2-DIRECTIVE-002. They need more design first. Further stances belong to V2-DIRECTIVE-003.
+
 Exactly one Directive is active for the full battle. It biases intent and never specifies a recipient, tile, route, skill, target, or exact action. A ping layers a temporary tactical emphasis over the Directive; it does not replace it.
 
 ## 7. Round-Based Charge, Continuous Pings

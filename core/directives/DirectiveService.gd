@@ -31,6 +31,29 @@ extends RefCounted
 ## and could silently diverge. Both now read this.
 const DEFAULT_STEP_BUDGET: int = 3
 
+## Fallback Directive when the stored id is missing or not in the registry.
+const DEFAULT_DIRECTIVE_ID: String = "directive.scout_carefully"
+
+## The only unlock_condition values the integrity guard accepts.
+const KNOWN_UNLOCK_CONDITIONS: Array = ["always"]
+
+## Directive entry schema: key -> value kind. Every key is required except those in OPTIONAL_KEYS.
+const ENTRY_SCHEMA: Dictionary = {
+	"id": "string", "label": "string", "description": "string",
+	"intent_weights": "dict", "unlock_condition": "string", "pros": "array", "cons": "array",
+	"step_budget": "number", "reveal_radius": "number", "passive_reveal": "bool",
+	"passive_reveal_radius": "number", "target_preference": "dict", "precise_intel_bias": "number",
+	"exposure_tolerance": "number", "escape_bonus": "number", "intel_retention": "bool",
+	"intel_retention_bonus": "number", "contact_effects": "dict",
+}
+const OPTIONAL_KEYS: Array = ["contact_effects"]
+
+## contact_effects key -> value kind. A new effect kind needs a reader in code, so it is listed here.
+const CONTACT_EFFECT_KEYS: Dictionary = {
+	"bid_suppression": "array", "bid_boost": "array",
+	"witness_resonance_bonus": "number", "guide_reveal_bonus": "number",
+}
+
 const _REGISTRY: Dictionary = {
 	"directive.scout_carefully": {
 		"id":          "directive.scout_carefully",
@@ -164,30 +187,50 @@ func set_active_directive(id: String, logger: StructuredLogger, t: int) -> void:
 	logger.info(t, "directive.selected", "Directive selected", { "directive_id": id, "t": t })
 
 
+# Stored active Directive id, or the default when missing or not a String.
+# Reads stage_context only: flow.active_directive is a dead legacy key.
+static func active_id(save: Dictionary) -> String:
+	var sc_v: Variant = save.get("stage_context", {})
+	var sc: Dictionary = sc_v if sc_v is Dictionary else {}
+	var id_v: Variant = sc.get("active_directive_id", DEFAULT_DIRECTIVE_ID)
+	return id_v if id_v is String and not (id_v as String).is_empty() else DEFAULT_DIRECTIVE_ID
+
+
+# Active Directive entry from the given data.directives dict.
+# An unknown id resolves to the default Directive. Pure read: builds nothing that writes the save.
+static func resolve(save: Dictionary, directives_cfg: Dictionary) -> Dictionary:
+	var reg: Dictionary = registry_of(directives_cfg)
+	var entry_v: Variant = reg.get(active_id(save), reg.get(DEFAULT_DIRECTIVE_ID, _REGISTRY[DEFAULT_DIRECTIVE_ID]))
+	var entry: Dictionary = entry_v if entry_v is Dictionary else _REGISTRY[DEFAULT_DIRECTIVE_ID]
+	return entry.duplicate(true)
+
+
+# The config registry, or the built-in fallback when the config has none.
+static func registry_of(directives_cfg: Dictionary) -> Dictionary:
+	return directives_cfg if not directives_cfg.is_empty() else _REGISTRY
+
+
+# Ids of Directives with unlock_condition "always", in registry order.
+static func available_ids(directives_cfg: Dictionary) -> Array:
+	var reg: Dictionary = registry_of(directives_cfg)
+	var result: Array = []
+	for id in reg:
+		var entry: Variant = reg[id]
+		if entry is Dictionary and str((entry as Dictionary).get("unlock_condition", "")) == "always":
+			result.append(id)
+	return result
+
+
 # Returns the full definition of the currently active directive.
-# Falls back to directive.scout_carefully if the stored ID is missing or unknown.
 func get_active_directive() -> Dictionary:
-	var sc: Dictionary = _save_ref.get("stage_context", {})
-	var id := str(sc.get("active_directive_id", "directive.scout_carefully"))
-	var defn: Dictionary = get_directive(id)
-	if defn.is_empty():
-		return get_directive("directive.scout_carefully")
-	return defn
+	_ensure_loaded()
+	return DirectiveService.resolve(_save_ref, _active_registry())
 
 
 # Returns the IDs of all directives with unlock_condition == "always".
-# DIRECTIVE-002 will extend this with dynamic unlock logic.
 func get_available_directives() -> Array:
 	_ensure_loaded()
-	var result: Array = []
-	var reg: Dictionary = _active_registry()
-	for id in reg:
-		var entry: Variant = reg[id]
-		if entry is Dictionary:
-			var defn: Dictionary = entry as Dictionary
-			if str(defn.get("unlock_condition", "")) == "always":
-				result.append(id)
-	return result
+	return DirectiveService.available_ids(_active_registry())
 
 
 ## V2-PROG-012 Phase 6 Item 3(c) — config-integrity guard, same precedent as
@@ -271,3 +314,71 @@ static func validate_config_integrity(directives_cfg: Dictionary, actor_cfg: Dic
 			all_valid = false
 
 	return all_valid
+
+
+## Rejects any Directive entry with a missing required key, an unknown key, a wrong value type,
+## an id that differs from its registry key, or an unlock_condition outside KNOWN_UNLOCK_CONDITIONS.
+## Kept apart from validate_config_integrity (intent_weights health) so each fixture stays minimal.
+static func validate_entry_schema(directives_cfg: Dictionary, logger, t: int) -> bool:
+	var all_valid := true
+	for did_v in directives_cfg:
+		var did: String = str(did_v)
+		if did.begins_with("_comment"):
+			continue
+		var problems: Array = []
+		var entry_v: Variant = directives_cfg[did_v]
+		if not (entry_v is Dictionary):
+			problems.append("entry is not a Dictionary")
+		else:
+			var entry: Dictionary = entry_v
+			for key in ENTRY_SCHEMA:
+				if not entry.has(key):
+					if key not in OPTIONAL_KEYS:
+						problems.append("missing key '%s'" % key)
+				elif not _kind_matches(entry[key], str(ENTRY_SCHEMA[key])):
+					problems.append("key '%s' is not a %s" % [key, ENTRY_SCHEMA[key]])
+			# The picker has two fixed slots per list and reads indices 0 and 1 (bounds-checked, blank when absent).
+			for key in ["pros", "cons"]:
+				if entry.get(key) is Array and not _is_picker_list(entry[key]):
+					problems.append("key '%s' must hold 2 or more non-empty strings" % key)
+			for key in entry:
+				if not ENTRY_SCHEMA.has(key) and not str(key).begins_with("_comment"):
+					problems.append("unknown key '%s'" % key)
+			if entry.get("contact_effects") is Dictionary:
+				var fx: Dictionary = entry["contact_effects"]
+				for key in fx:
+					if str(key).begins_with("_comment"):
+						continue
+					if not CONTACT_EFFECT_KEYS.has(key):
+						problems.append("unknown contact_effects key '%s'" % key)
+					elif not _kind_matches(fx[key], str(CONTACT_EFFECT_KEYS[key])):
+						problems.append("contact_effects key '%s' is not a %s" % [key, CONTACT_EFFECT_KEYS[key]])
+			if str(entry.get("id", "")) != did:
+				problems.append("id '%s' does not match registry key" % str(entry.get("id", "")))
+			if str(entry.get("unlock_condition", "")) not in KNOWN_UNLOCK_CONDITIONS:
+				problems.append("unknown unlock_condition '%s'" % str(entry.get("unlock_condition", "")))
+		if not problems.is_empty():
+			all_valid = false
+			if logger != null:
+				logger.info(t, "directive.config.warn", "Directive '%s' is malformed: %s" % [did, "; ".join(problems)],
+					{"directive_id": did, "problems": problems})
+	return all_valid
+
+
+static func _is_picker_list(list: Array) -> bool:
+	if list.size() < 2:
+		return false
+	for v in list:
+		if not (v is String) or (v as String).is_empty():
+			return false
+	return true
+
+
+static func _kind_matches(v: Variant, kind: String) -> bool:
+	match kind:
+		"string": return v is String
+		"number": return v is int or v is float
+		"bool": return v is bool
+		"dict": return v is Dictionary
+		"array": return v is Array
+	return false

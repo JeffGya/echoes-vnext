@@ -156,7 +156,6 @@ static func _make_save_with_contact_situation(contact: Dictionary, storyweight: 
 		"flow": {
 			"state":            FlowStateIds.STAGE_EXPLORE,
 			"context":          {},
-			"active_directive": "directive.scout_carefully",
 		},
 		"economy": { "ase": 100, "last_settled_unix": 0 },
 		"sanctum": {

@@ -116,11 +116,12 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var map_situations: Array = []
 
 	# V2-DIRECTIVE-001: directive selection payload for the blocking overlay
-	var sc_dir := str(flow_ctx.save_data.get("stage_context", {}).get("active_directive_id", "directive.scout_carefully"))
-	var dir_svc := DirectiveService.new(flow_ctx.save_data)
+	var sc_dir := DirectiveService.active_id(flow_ctx.save_data)
+	var dir_cfg: Dictionary = ConfigService.get_directives_cfg(flow_ctx.config_service) \
+		if flow_ctx.config_service != null else {}
 	var dir_list: Array = []
-	for dir_id in ["directive.scout_carefully", "directive.seek_signs"]:
-		var d := dir_svc.get_directive(dir_id)
+	for dir_id in DirectiveService.available_ids(dir_cfg):
+		var d: Dictionary = DirectiveService.registry_of(dir_cfg).get(dir_id, {})
 		dir_list.append({
 			"id":          d.get("id",          dir_id),
 			"label":       d.get("label",       dir_id),

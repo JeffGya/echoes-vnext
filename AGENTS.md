@@ -63,12 +63,12 @@ believe any fingerprint failure.
 Tests run inside Godot via the Debug Panel (`F1` → `tests`) or headlessly. There is no
 standalone CLI runner — Godot must execute them.
 
-Full suite — **pass `timeout: 1200000`**, never 300000 or 600000, and the `alarm` below. Its
+Full suite — **pass `timeout: 3700000`**, never 300000 or 600000, and the `alarm` below. Its
 duration grows with the test count and swings with machine load, so no figure is recorded here:
 this file has carried three in turn and each went stale. A too-high timeout costs nothing; a
 too-low one loses the whole run:
 ```bash
-/usr/bin/perl -e 'alarm shift; exec @ARGV' 1500 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
+/usr/bin/perl -e 'alarm shift; exec @ARGV' 3600 /opt/homebrew/bin/godot --headless --quit --path <checkout> -- tests
 ```
 **One suite only (~5s)** — use this while working, and the full suite once at the end:
 ```bash
@@ -84,14 +84,14 @@ it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are 
 ```bash
 <godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 128 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring` and `stop_short_search` added since; post-`fingerprint`-suite split — see below.
+The 129 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring`, `stop_short_search` and `directive_char` added since; post-`fingerprint`-suite split — see below.
 A `seam`-suite split was also tried, measured to give no speedup, and reverted — `seam` remains
 one suite):
 ```
 actor arbiter archetype bark_popup behavior behavior_arbiter behavior_char bond_trigger
 bridge calling calling_behavior combat combat_baseline combat_initiative
 combat_roundtrip combat_terrain combat_ui consequence contact contact_actor continuity
-conversation_repair cooldown derived directive directive_cfg divergence divergence_bark
+conversation_repair cooldown derived directive directive_cfg directive_char divergence divergence_bark
 echo_party echofactory economy emotion exclusive_action explore explore_p5 expr
 fingerprint_combat fingerprint_determinism_combat fingerprint_determinism_endure
 fingerprint_determinism_guide_spirit fingerprint_determinism_protect
@@ -237,7 +237,7 @@ though the wall-clock is shorter — do not run it alongside anything else that 
 `/tmp/echoes-vnext-*`.
 
 **Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
-`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 128
+`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 129
 live registered suites (regenerated 2026-09-20, updated same day after
 `fingerprint_determinism_self_check` was split into 7 per-mode `fingerprint_determinism_<mode>`
 suites, one shared suite name becoming 7) are split into 9 disjoint sets — every suite appears in
@@ -647,7 +647,8 @@ V1 aliases still exist in save data as compatibility fields — do not delete th
 | V2-PROG-005 — Skill family foundation | Done |
 | V2-PROG-006 — Maturity-expression seam | Done |
 | V2-WEAVE-001 — Thread recovery model | Done |
-| V2-DIRECTIVE-001 — Directive rewrite | **Next up** |
+| V2-DIRECTIVE-001 — Directive rewrite | Done |
+| V2-DIRECTIVE-002 — Profile-sensitive Directives | Phase A Done (accessor, legacy-key fix, data-only Directives); B+C and D pending |
 
 Read `docs/v2-migration-map.md` before starting any Alignment story.
 

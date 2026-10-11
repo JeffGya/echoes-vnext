@@ -155,7 +155,6 @@ static func _make_save_with_sit(sit_type: String, sit_id: String = "sit.t1") -> 
 		"flow":           {
 			"state":            FlowStateIds_.STAGE_EXPLORE,
 			"context":          {},
-			"active_directive": "directive.scout_carefully",
 		},
 		"economy":        { "ase": 100, "last_settled_unix": 0 },
 		"sanctum": {

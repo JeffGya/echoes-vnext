@@ -408,20 +408,9 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# V2-STAGE-004-P2: resolve directive fields for snapshot projection.
 	# Reads active_directive_id from save_data → looks up directive dict from balance config.
-	# Mirrors DirectiveService.get_active_directive() without needing the service instance.
-	var _sc_snap_v: Variant = flow_ctx.save_data.get("stage_context", {})
-	var _sc_snap: Dictionary = _sc_snap_v if _sc_snap_v is Dictionary else {}
-	var _dir_id_snap := str(_sc_snap.get("active_directive_id", "directive.scout_carefully"))
-	var _dir_snap: Dictionary = {}
-	if flow_ctx.config_service != null:
-		var _bal_snap_v: Variant = flow_ctx.config_service.get_balance()
-		var _bal_snap: Dictionary = _bal_snap_v if _bal_snap_v is Dictionary else {}
-		var _bsd_v: Variant = _bal_snap.get("data", {})
-		var _bsd: Dictionary = _bsd_v if _bsd_v is Dictionary else {}
-		var _bdd_v: Variant = _bsd.get("directives", {})
-		var _bdd: Dictionary = _bdd_v if _bdd_v is Dictionary else {}
-		var _de_v: Variant = _bdd.get(_dir_id_snap, {})
-		_dir_snap = _de_v if _de_v is Dictionary else {}
+	var _dir_snap: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(flow_ctx.config_service)) \
+		if flow_ctx.config_service != null else {}
+	var _dir_id_snap := str(_dir_snap.get("id", DirectiveService.active_id(flow_ctx.save_data)))
 	var _step_budget_snap := int(_dir_snap.get("step_budget", DirectiveService.DEFAULT_STEP_BUDGET))
 
 	# V2-STAGE-004 Phase 5: composite directive field — bundles the active directive's

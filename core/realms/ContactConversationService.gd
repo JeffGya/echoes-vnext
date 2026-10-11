@@ -84,16 +84,14 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 	var contact_cfg_bal_v: Variant = _sit_bal.get("contact", {})
 	var contact_cfg_bal: Dictionary = contact_cfg_bal_v if contact_cfg_bal_v is Dictionary else {}
 
-	# Read active directive
-	var _dir_id := str(flow_ctx.save_data.get("flow", {}).get("active_directive", "directive.scout_carefully") \
-		if flow_ctx.save_data.get("flow", null) is Dictionary else "directive.scout_carefully")
+	var _dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
 
 	# Build party echoes (active party only)
 	var _party_echoes := SanctumService.get_active_party_echoes(flow_ctx.save_data)
 
 	# Compute initial bids
 	var bid_state := ConversationService.compute_bids(
-		_party_echoes, contact_work, _dir_id, contact_cfg_bal
+		_party_echoes, contact_work, _dir_fx
 	)
 
 	# Set NPC opening line from burden_variant (authored in contact_responses.json), when available.

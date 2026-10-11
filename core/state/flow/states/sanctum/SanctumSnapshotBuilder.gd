@@ -458,13 +458,10 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 	data["party_slots"] = party_slots
 
 	# DIRECTIVE-001: surface active directive in Sanctum snapshot (debug/snapshot visibility)
-	# DIRECTIVE-002 will replace the static available_directives list with a dynamic call.
-	var stage_ctx_dir: Dictionary = {}
-	if flow_ctx.save_data != null and flow_ctx.save_data.has("stage_context") \
-			and typeof(flow_ctx.save_data["stage_context"]) == TYPE_DICTIONARY:
-		stage_ctx_dir = flow_ctx.save_data["stage_context"]
-	data["active_directive_id"] = str(stage_ctx_dir.get("active_directive_id", "directive.scout_carefully"))
-	data["available_directives"] = ["directive.scout_carefully", "directive.seek_signs"]
+	var dir_cfg: Dictionary = ConfigService.get_directives_cfg(flow_ctx.config_service) \
+		if flow_ctx.config_service != null else {}
+	data["active_directive_id"] = DirectiveService.active_id(flow_ctx.save_data if flow_ctx.save_data != null else {})
+	data["available_directives"] = DirectiveService.available_ids(dir_cfg)
 
 	return {
 		"type": FlowStateIds.SANCTUM,
