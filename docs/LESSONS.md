@@ -13,6 +13,15 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 35 — After you change a shared function signature, find every test fixture that calls it by duck typing
+
+**Rule:** When a shared function gets a typed parameter, grep `tests/` for fixtures that fake the argument (a `Mock...` class, an inner class with no `extends`, a plain object with the same method). A typed parameter rejects a duck-typed fake. Then run the suite of every test file that references the changed symbol or the fixture. Choose the filters from that grep, not from memory.
+**Why:** V2-DIRECTIVE-002, PR #106, 2026-10-11. A review fix made `ConfigService.get_directives_cfg(config_service: ConfigService)` typed, like its sibling. `MockStageConfig` in `StageObjectiveTests.gd` was a plain `RefCounted` with a `get_balance()` method. 13 filtered runs passed, because none included the `objective` suite. The full suite then showed 7 failures. Production was never affected; only the fixture was wrong.
+**How to apply:** Fix the fixture so it mirrors production (`extends ConfigService`). Do not loosen the production type to suit a test. A full run lists every failure at once, so after one full run, re-run only the failing suites and their neighbours to prove the fix.
+**Mistake count:** 1
+
+---
+
 ### 34 — Run one full test mode, not two; when the serial run hits its alarm, raise the alarm and run it again
 
 **Rule:** For the end-of-phase gate, run the full serial suite once. Do not switch to the sharded runner, and do not run both. If the serial run is killed by its alarm (exit code 142, no `Tests:` line), raise the alarm and run the same serial command again. Raising an alarm is allowed; lowering one is not.

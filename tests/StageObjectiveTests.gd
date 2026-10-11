@@ -37,7 +37,7 @@ static func _make_logger() -> StructuredLogger:
 	return l
 
 
-class MockStageConfig extends RefCounted:
+class MockStageConfig extends ConfigService:
 	func get_balance() -> Dictionary:
 		return {
 			"data": {
