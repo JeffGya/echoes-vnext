@@ -28,6 +28,7 @@ Background: the session first planned V2-COMBAT-004. Its dependencies V2-DIRECTI
 | D-20 | one-full-run-serial-alarm-3600 | Phase gate = ONE full serial run. No sharded run on top of it. When the serial run hits its alarm, raise the alarm and run it again. AGENTS.md alarm raised 1500 to 3600 s and timeout hint to 3700000. Phase A serial result: 2043 tests, 2042 passed, 1 failed (the known red test), 53 minutes. | 2026-10-11 |
 | D-21 | contract-edits-and-follow-ups | Approved by Jeff: AGENTS.md alarm change, `directive_char` added to the shard map in `scripts/run-tests-sharded.sh` (shard5), suite count 128 to 129 in AGENTS.md, and the four contact-window findings filed in `follow-ups.md` (not fixed). | 2026-10-11 |
 | D-22 | contact-window-issues-separate-story | The four contact-window findings (raw calling ids on Echo cards, fourth card below the fold, colour-only bid badge, weak contrast on "Hear Them Out") are a separate story for later. They are not part of V2-DIRECTIVE-002. They are filed in `follow-ups.md`. No Notion story is created until Jeff asks. | 2026-10-11 |
+| D-23 | pr106-review-fixes | PR #106 review (Codex): (P1) the `data.directives` subtree is read by `ConfigService.get_directives_cfg`, not by `DirectiveService`; `directives_cfg_of` and `resolve_active` are removed and all callers migrated (AGENTS.md owner rule). (P2) the entry guard requires `pros` and `cons` to hold 2 or more non-empty strings, because the picker has two fixed slots per list. Both fixed under the Auto-fix authorization. | 2026-10-11 |
 
 ---
 
@@ -124,3 +125,7 @@ Background: the session first planned V2-COMBAT-004. Its dependencies V2-DIRECTI
 ### D-22. contact-window-issues-separate-story
 **Q:** Where do the contact-window findings go?
 **A:** A separate story, later. Jeff: "The conversation UI issues can be a different story for later; note it and we can pick that up another time."
+
+### D-23. pr106-review-fixes
+**Q:** Codex flagged two items on PR #106. What was done?
+**A:** Both were valid and fixed. P1: a balance subtree getter belongs on `ConfigService` (AGENTS.md lines 479-484); the new `ConfigService.get_directives_cfg` has the same shape as `get_bond_thresholds_cfg`. P2: `validate_entry_schema` now rejects a `pros` or `cons` list with fewer than two entries or any non-string or empty element. No recorded value moved.

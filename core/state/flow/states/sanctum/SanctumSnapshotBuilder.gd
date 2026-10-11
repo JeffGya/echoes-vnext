@@ -458,7 +458,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 	data["party_slots"] = party_slots
 
 	# DIRECTIVE-001: surface active directive in Sanctum snapshot (debug/snapshot visibility)
-	var dir_cfg: Dictionary = DirectiveService.directives_cfg_of(flow_ctx.config_service.get_balance()) \
+	var dir_cfg: Dictionary = ConfigService.get_directives_cfg(flow_ctx.config_service) \
 		if flow_ctx.config_service != null else {}
 	data["active_directive_id"] = DirectiveService.active_id(flow_ctx.save_data if flow_ctx.save_data != null else {})
 	data["available_directives"] = DirectiveService.available_ids(dir_cfg)

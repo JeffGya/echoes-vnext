@@ -84,7 +84,7 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 	var contact_cfg_bal_v: Variant = _sit_bal.get("contact", {})
 	var contact_cfg_bal: Dictionary = contact_cfg_bal_v if contact_cfg_bal_v is Dictionary else {}
 
-	var _dir_fx: Dictionary = DirectiveService.resolve_active(flow_ctx.save_data, config_service.get_balance()).get("contact_effects", {})
+	var _dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
 
 	# Build party echoes (active party only)
 	var _party_echoes := SanctumService.get_active_party_echoes(flow_ctx.save_data)

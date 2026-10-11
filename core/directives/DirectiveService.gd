@@ -210,18 +210,6 @@ static func registry_of(directives_cfg: Dictionary) -> Dictionary:
 	return directives_cfg if not directives_cfg.is_empty() else _REGISTRY
 
 
-# data.directives out of a balance root, {} when absent.
-static func directives_cfg_of(balance: Dictionary) -> Dictionary:
-	var data_v: Variant = balance.get("data", {})
-	var dir_v: Variant = (data_v as Dictionary).get("directives", {}) if data_v is Dictionary else {}
-	return dir_v if dir_v is Dictionary else {}
-
-
-# resolve() over the data.directives of a balance root (config_service.get_balance()).
-static func resolve_active(save: Dictionary, balance: Dictionary) -> Dictionary:
-	return resolve(save, directives_cfg_of(balance))
-
-
 # Ids of Directives with unlock_condition "always", in registry order.
 static func available_ids(directives_cfg: Dictionary) -> Array:
 	var reg: Dictionary = registry_of(directives_cfg)
@@ -349,6 +337,10 @@ static func validate_entry_schema(directives_cfg: Dictionary, logger, t: int) ->
 						problems.append("missing key '%s'" % key)
 				elif not _kind_matches(entry[key], str(ENTRY_SCHEMA[key])):
 					problems.append("key '%s' is not a %s" % [key, ENTRY_SCHEMA[key]])
+			# The picker has two fixed slots per list and reads indices 0 and 1 (bounds-checked, blank when absent).
+			for key in ["pros", "cons"]:
+				if entry.get(key) is Array and not _is_picker_list(entry[key]):
+					problems.append("key '%s' must hold 2 or more non-empty strings" % key)
 			for key in entry:
 				if not ENTRY_SCHEMA.has(key) and not str(key).begins_with("_comment"):
 					problems.append("unknown key '%s'" % key)
@@ -371,6 +363,15 @@ static func validate_entry_schema(directives_cfg: Dictionary, logger, t: int) ->
 				logger.info(t, "directive.config.warn", "Directive '%s' is malformed: %s" % [did, "; ".join(problems)],
 					{"directive_id": did, "problems": problems})
 	return all_valid
+
+
+static func _is_picker_list(list: Array) -> bool:
+	if list.size() < 2:
+		return false
+	for v in list:
+		if not (v is String) or (v as String).is_empty():
+			return false
+	return true
 
 
 static func _kind_matches(v: Variant, kind: String) -> bool:

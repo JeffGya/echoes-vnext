@@ -8,9 +8,9 @@ Project-wide answers: ANSWERS.md #81 (a Directive is data-only to add), #82 (pro
 
 | File | Change |
 |---|---|
-| `core/directives/DirectiveService.gd` | Static accessors `active_id`, `resolve`, `resolve_active`, `registry_of`, `directives_cfg_of`, `available_ids`. Constants `DEFAULT_DIRECTIVE_ID`, `KNOWN_UNLOCK_CONDITIONS`, `ENTRY_SCHEMA`, `OPTIONAL_KEYS`, `CONTACT_EFFECT_KEYS`. `validate_entry_schema()`. Instance `get_active_directive` and `get_available_directives` delegate. |
+| `core/directives/DirectiveService.gd` | Static accessors `active_id`, `resolve`, `registry_of`, `available_ids`. The `data.directives` subtree is read by `ConfigService.get_directives_cfg` (the owner of balance subtrees). Constants `DEFAULT_DIRECTIVE_ID`, `KNOWN_UNLOCK_CONDITIONS`, `ENTRY_SCHEMA`, `OPTIONAL_KEYS`, `CONTACT_EFFECT_KEYS`. `validate_entry_schema()`. Instance `get_active_directive` and `get_available_directives` delegate. |
 | `core/config/ConfigService.gd` | `directives_block_is_loadable()`. A malformed entry aborts `load_balance` (`config.balance.directives_invalid`). Degenerate `intent_weights` stays warn-only. |
-| `ContactController`, `ContactConversationService`, `SituationEngagementService` | Read the Directive through `resolve_active`. `SituationEngagementService` now writes the right `encounter_approach.directive_id`. |
+| `ContactController`, `ContactConversationService`, `SituationEngagementService` | Read the Directive through `DirectiveService.resolve(save, ConfigService.get_directives_cfg(config_service))`. `SituationEngagementService` now writes the right `encounter_approach.directive_id`. |
 | `FlowStageExploreState`, `FlowStageState`, `StageExploreSnapshotBuilder`, `SanctumSnapshotBuilder` | Use the canonical accessor. Picker and Sanctum lists read the registry. Substring matches removed. |
 | `core/realms/ConversationService.gd` | `compute_bids` takes the resolved `contact_effects` dict. |
 | `core/save/SaveService.gd`, `SaveSchema.gd`, `core/runtime/FlowRuntime.gd` | Load repair keeps any registry-known id (new optional `directives_cfg` parameter; `FlowRuntime.boot` passes `data.directives`). Legacy-id map kept. Unknown id resets with a note. Both files use `DEFAULT_DIRECTIVE_ID`. |
@@ -62,6 +62,7 @@ Seek Signs now reaches contact bids (before, bids always read as Scout Carefully
 | D-20 | One full serial run per phase gate. Alarm raised to 3600 s. |
 | D-21 | Approved: alarm change, shard map entry, suite count 129, contact-window findings filed. |
 | D-22 | The four contact-window findings are a separate later story, not part of this story. No Notion story until Jeff asks. |
+| D-23 | PR #106 review: `ConfigService.get_directives_cfg` owns the `data.directives` read; the guard checks `pros` and `cons` (2 or more non-empty strings). |
 
 ## Open items
 
@@ -70,7 +71,7 @@ picker wording (D-18), `witness_resonance_bonus` value (D-16), UI per-id label a
 
 ## Phase B+C starts from
 
-- One accessor: use `DirectiveService.resolve_active(save, balance)`. Do not read the save key directly.
+- One accessor: use `DirectiveService.resolve(save, ConfigService.get_directives_cfg(config_service))`. Do not read the save key directly.
 - Contact effects sit in `data.directives.<id>.contact_effects`. D-11 and D-16 add Judgment/fear scaling and the resonance bonus there. They move conversation tests.
 - The entry schema guard is in `validate_entry_schema()`. B+C edits it and must fix the QA nits first.
 - Stage traversal fields (`step_budget`, `reveal_radius`, `exposure_tolerance`, and the rest) are already in `ENTRY_SCHEMA`. `exposure_tolerance` has no reader yet (D-05).

@@ -187,7 +187,7 @@ func handle_consult_echoes(action: Dictionary, t: int) -> FlowActionOutcome:
 	var contact_cfg: Dictionary = contact_cfg_v if contact_cfg_v is Dictionary else {}
 	var response_data := ContactResponseService.load_responses()
 
-	var dir_fx: Dictionary = DirectiveService.resolve_active(flow_ctx.save_data, config_service.get_balance()).get("contact_effects", {})
+	var dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
 
 	# Build selected echo dicts
 	var all_party := SanctumService.get_active_party_echoes(flow_ctx.save_data)
@@ -420,7 +420,7 @@ func handle_speak_response(action: Dictionary, t: int) -> FlowActionOutcome:
 	# Auto-regenerate responses for the next turn when party ≤ 3 (mirrors the initial engagement path).
 	# For party > 3, responses stay empty so the picker fires via cta.consult_echoes.
 	if _next_party.size() <= 3:
-		var _next_dir_fx: Dictionary = DirectiveService.resolve_active(flow_ctx.save_data, config_service.get_balance()).get("contact_effects", {})
+		var _next_dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
 		var _next_bids := ConversationService.compute_bids(_next_party, contact, _next_dir_fx)
 		_next_responses = ConversationService.generate_responses(
 			_next_party, contact, contact_cfg, _next_resp_data, t, _next_bids
@@ -546,7 +546,7 @@ func apply_contact_outcome(
 		"guide":
 			if outcome in ["good", "partial"]:
 				var reveal_n := 2 if outcome == "good" else 1
-				var _guide_fx: Dictionary = DirectiveService.resolve_active(flow_ctx.save_data, config_service.get_balance()).get("contact_effects", {})
+				var _guide_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
 				reveal_n += int(_guide_fx.get("guide_reveal_bonus", 0))
 				# Reveal nearest unrevealed situations
 				var revealed_count := 0

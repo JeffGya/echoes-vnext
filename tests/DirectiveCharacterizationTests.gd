@@ -97,7 +97,7 @@ static func _cfg_with_third() -> Dictionary:
 	var cs := ConfigService.new()
 	if not cs.load_balance():
 		return {}
-	var cfg := DirectiveService.directives_cfg_of(cs.get_balance())
+	var cfg := ConfigService.get_directives_cfg(cs)
 	cfg[THIRD] = _third_entry(cfg)
 	return cfg
 
@@ -226,7 +226,7 @@ static func _t_accessor() -> Dictionary:
 	var cs := ConfigService.new()
 	if not cs.load_balance():
 		return { "ok": false, "error": "could not load balance.json" }
-	var cfg := DirectiveService.directives_cfg_of(cs.get_balance())
+	var cfg := ConfigService.get_directives_cfg(cs)
 	cfg[THIRD] = _third_entry(cfg)
 	if DirectiveService.active_id({}) != SCOUT:
 		return { "ok": false, "error": "missing stage_context must give the default id" }
@@ -250,7 +250,7 @@ static func _t_entry_schema_guard() -> Dictionary:
 	var cs := ConfigService.new()
 	if not cs.load_balance():
 		return { "ok": false, "error": "could not load balance.json (shipped Directives must pass the guard)" }
-	var cfg: Dictionary = DirectiveService.directives_cfg_of(cs.get_balance())
+	var cfg: Dictionary = ConfigService.get_directives_cfg(cs)
 	if not DirectiveService.validate_entry_schema(cfg, null, 0):
 		return { "ok": false, "error": "shipped Directives failed the entry schema guard" }
 	cfg[THIRD] = _third_entry(cfg)
@@ -262,6 +262,9 @@ static func _t_entry_schema_guard() -> Dictionary:
 		"bad unlock_condition": func(e): e["unlock_condition"] = "never",
 		"wrong type": func(e): e["step_budget"] = "3",
 		"id mismatch": func(e): e["id"] = "directive.other",
+		"pros with 1 entry": func(e): e["pros"] = ["only one"],
+		"cons with a non-string": func(e): e["cons"] = ["fine", 7],
+		"pros with an empty string": func(e): e["pros"] = ["fine", ""],
 	}
 	for name in bad:
 		var e: Dictionary = _third_entry(cfg)
@@ -292,7 +295,7 @@ static func _t_degenerate_weights_warn_only() -> Dictionary:
 	if not cs.load_balance():
 		return { "ok": false, "error": "could not load balance.json" }
 	var bal := cs.get_balance()
-	var cfg: Dictionary = DirectiveService.directives_cfg_of(bal)
+	var cfg: Dictionary = ConfigService.get_directives_cfg(cs)
 	var actor_cfg: Dictionary = bal.get("data", {}).get("actor", {})
 	if not ConfigService.directives_block_is_loadable(cfg, actor_cfg, null, 0):
 		return { "ok": false, "error": "shipped Directives must be loadable" }
@@ -316,7 +319,7 @@ static func _t_picker_description() -> Dictionary:
 	var bak := ConversationRepairTests._capture_save()
 	var env := _make_env(SCOUT, "npc")
 	var runtime: FlowRuntime = env["runtime"]
-	var cfg: Dictionary = DirectiveService.directives_cfg_of(runtime.config_service.get_balance())
+	var cfg: Dictionary = ConfigService.get_directives_cfg(runtime.config_service)
 	var picker: Array = FlowStageState.build_snapshot(runtime.flow_ctx, 0).get("data", {}).get("directive", {}).get("directives", [])
 	ConversationRepairTests._restore_save(bak)
 	if picker.size() != cfg.size() or picker.is_empty():

@@ -408,7 +408,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# V2-STAGE-004-P2: resolve directive fields for snapshot projection.
 	# Reads active_directive_id from save_data → looks up directive dict from balance config.
-	var _dir_snap: Dictionary = DirectiveService.resolve_active(flow_ctx.save_data, flow_ctx.config_service.get_balance()) \
+	var _dir_snap: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(flow_ctx.config_service)) \
 		if flow_ctx.config_service != null else {}
 	var _dir_id_snap := str(_dir_snap.get("id", DirectiveService.active_id(flow_ctx.save_data)))
 	var _step_budget_snap := int(_dir_snap.get("step_budget", DirectiveService.DEFAULT_STEP_BUDGET))

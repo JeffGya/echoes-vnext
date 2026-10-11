@@ -63,7 +63,7 @@ func boot() -> Dictionary:
 
 	# Save load/create. Only a genuinely absent save may create a new campaign.
 	var load_result := SaveService.load_from_file(
-		save_path, logger, _next_tick(), DirectiveService.directives_cfg_of(config_service.get_balance())
+		save_path, logger, _next_tick(), ConfigService.get_directives_cfg(config_service)
 	)
 	var load_status := str(load_result.get("status", SaveService.LOAD_ERROR))
 	var save: Dictionary = {}

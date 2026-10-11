@@ -210,7 +210,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 			_ea_count += 1
 		var _ea_avg_fear   := (_ea_fear_sum   / _ea_count) if _ea_count > 0 else 0
 		var _ea_avg_morale := (_ea_morale_sum / _ea_count) if _ea_count > 0 else 0
-		var _ea_directive := str(DirectiveService.resolve_active(flow_ctx.save_data, config_service.get_balance()).get("id", ""))
+		var _ea_directive := str(DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("id", ""))
 		var _stage_ctx_v: Variant = flow_ctx.save_data.get("stage_context", {})
 		var _stage_ctx: Dictionary = _stage_ctx_v if _stage_ctx_v is Dictionary else {}
 		_stage_ctx["encounter_approach"] = {

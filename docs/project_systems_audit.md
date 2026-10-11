@@ -485,7 +485,7 @@ Why it matters:
 
 > **Note 2026-10-10 (V2-DIRECTIVE-002 recon):** The legacy `flow.active_directive` readers are not in `FlowRuntime.gd`. They are in `core/runtime/controllers/ContactController.gd` (2), `core/realms/ContactConversationService.gd` (1) and `core/realms/SituationEngagementService.gd` (1). Nothing writes that key, so they always see `directive.scout_carefully`. V2-DIRECTIVE-002 phase A fixes this.
 
-> **Update 2026-10-11 (V2-DIRECTIVE-002 phase A done):** The legacy readers are removed. All readers now use `DirectiveService.active_id` / `resolve` / `resolve_active` over `stage_context.active_directive_id`. Phases B+C (profile sensitivity, stage expression) and D (combat expression) are pending. The hazard input stays a seam only (D-02).
+> **Update 2026-10-11 (V2-DIRECTIVE-002 phase A done):** The legacy readers are removed. All readers now use `DirectiveService.active_id` / `resolve` (with `ConfigService.get_directives_cfg`) over `stage_context.active_directive_id`. Phases B+C (profile sensitivity, stage expression) and D (combat expression) are pending. The hazard input stays a seam only (D-02).
 
 ### C. Emotion Has Two Live Models
 

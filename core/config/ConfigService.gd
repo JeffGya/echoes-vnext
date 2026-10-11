@@ -130,6 +130,15 @@ static func get_bond_thresholds_cfg(config_service: ConfigService) -> Dictionary
 	return thresholds_v if thresholds_v is Dictionary else {}
 
 
+## data.directives — the Directive registry; {} when absent. Feeds DirectiveService.resolve()/available_ids().
+static func get_directives_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
+	var data_v: Variant = config_service.get_balance().get("data", {})
+	var dir_v: Variant = (data_v as Dictionary).get("directives", {}) if data_v is Dictionary else {}
+	return dir_v if dir_v is Dictionary else {}
+
+
 ## data.sanctum.party_max_size — the party slot cap.
 ## PR #61 review: this was read longhand at two sites with identical guards and the same
 ## default of 5 — SanctumController._get_party_max_size and
