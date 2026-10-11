@@ -90,7 +90,8 @@ static func save_to_file(path: String, data: Dictionary, logger: StructuredLogge
 	})
 	return true
 
-static func load_from_file(path: String, logger: StructuredLogger = null, t: int = -1) -> Dictionary:
+## directives_cfg: data.directives from config. Empty means the built-in registry (the shipped ids).
+static func load_from_file(path: String, logger: StructuredLogger = null, t: int = -1, directives_cfg: Dictionary = {}) -> Dictionary:
 	var artifacts := _artifact_paths(path)
 	var valid_candidates: Array = []
 	var diagnostics: Array = []
@@ -101,7 +102,8 @@ static func load_from_file(path: String, logger: StructuredLogger = null, t: int
 		var candidate := _read_candidate(
 			str(artifact.get("path", "")),
 			str(artifact.get("source", "")),
-			int(artifact.get("priority", 0))
+			int(artifact.get("priority", 0)),
+			directives_cfg
 		)
 		if bool(candidate.get("exists", false)):
 			any_exists = true
@@ -136,7 +138,7 @@ static func load_from_file(path: String, logger: StructuredLogger = null, t: int
 	var selected_data: Dictionary = (selected.get("data", {}) as Dictionary).duplicate(true)
 	var source := str(selected.get("source", ""))
 	var recovered := source != "primary"
-	var repaired := _apply_additive_defaults_and_repairs(selected_data, logger, t)
+	var repaired := _apply_additive_defaults_and_repairs(selected_data, logger, t, directives_cfg)
 	repaired = repaired or bool(selected.get("repaired", false))
 	var persist_ok := true
 	if recovered or repaired:
@@ -192,7 +194,7 @@ static func _select_pending_write_path(path: String) -> String:
 		return path + ".pending_a"
 	return path + ".pending_b"
 
-static func _read_candidate(path: String, source: String, priority: int) -> Dictionary:
+static func _read_candidate(path: String, source: String, priority: int, directives_cfg: Dictionary = {}) -> Dictionary:
 	var result := {
 		"path": path,
 		"source": source,
@@ -234,7 +236,7 @@ static func _read_candidate(path: String, source: String, priority: int) -> Dict
 	var repaired_candidate: Dictionary = parsed_dict.duplicate(true)
 	var repair_logger := StructuredLogger.new()
 	repair_logger.set_level("off")
-	var repaired := _apply_additive_defaults_and_repairs(repaired_candidate, repair_logger)
+	var repaired := _apply_additive_defaults_and_repairs(repaired_candidate, repair_logger, -1, directives_cfg)
 	if not validate(repaired_candidate, false):
 		result["reason"] = "schema_invalid"
 		return result
@@ -362,7 +364,7 @@ static func _starter_occupants_need_repair(sanctum: Dictionary) -> bool:
 		found_ids[occupant_id] = true
 	return found_ids.size() != expected_ids.size()
 		
-static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:
+static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: StructuredLogger = null, t: int = -1, directives_cfg: Dictionary = {}) -> bool:
 	if save == null or save.is_empty():
 		return false
 		
@@ -1135,22 +1137,22 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 
 	# ---- stage_context repairs (DIRECTIVE-001 / V2-DIRECTIVE-001) ----
 	if not save.has("stage_context") or typeof(save["stage_context"]) != TYPE_DICTIONARY:
-		save["stage_context"] = { "active_directive_id": "directive.scout_carefully" }
+		save["stage_context"] = { "active_directive_id": DirectiveService.DEFAULT_DIRECTIVE_ID }
 		repaired = true
 		repaired_notes.append("stage_context added with default active_directive_id")
 	else:
 		var sc: Dictionary = save["stage_context"]
 		if not sc.has("active_directive_id") or typeof(sc["active_directive_id"]) != TYPE_STRING:
-			sc["active_directive_id"] = "directive.scout_carefully"
+			sc["active_directive_id"] = DirectiveService.DEFAULT_DIRECTIVE_ID
 			repaired = true
-			repaired_notes.append("stage_context.active_directive_id set to 'directive.scout_carefully' default")
+			repaired_notes.append("stage_context.active_directive_id set to default '%s'" % DirectiveService.DEFAULT_DIRECTIVE_ID)
 		# V2-DIRECTIVE-001: migrate V1 directive IDs to V2 canonical IDs
 		var _v1_dir_map: Dictionary = {
-			"directive.scout":    "directive.scout_carefully",
-			"directive.protect":  "directive.scout_carefully",
-			"directive.push":     "directive.scout_carefully",
-			"directive.preserve": "directive.scout_carefully",
-			"directive.focus":    "directive.scout_carefully"
+			"directive.scout":    DirectiveService.DEFAULT_DIRECTIVE_ID,
+			"directive.protect":  DirectiveService.DEFAULT_DIRECTIVE_ID,
+			"directive.push":     DirectiveService.DEFAULT_DIRECTIVE_ID,
+			"directive.preserve": DirectiveService.DEFAULT_DIRECTIVE_ID,
+			"directive.focus":    DirectiveService.DEFAULT_DIRECTIVE_ID
 		}
 		var cur_dir_id := str(sc.get("active_directive_id", ""))
 		if _v1_dir_map.has(cur_dir_id):
@@ -1158,8 +1160,8 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			sc["active_directive_id"] = migrated
 			repaired = true
 			repaired_notes.append("directive V1→V2: %s → %s" % [cur_dir_id, migrated])
-		elif cur_dir_id not in ["directive.scout_carefully", "directive.seek_signs"]:
-			sc["active_directive_id"] = "directive.scout_carefully"
+		elif not DirectiveService.registry_of(directives_cfg).has(cur_dir_id):
+			sc["active_directive_id"] = DirectiveService.DEFAULT_DIRECTIVE_ID
 			repaired = true
 			repaired_notes.append("unknown directive '%s' reset to scout_carefully" % cur_dir_id)
 		# V2-MIG-002: stage-intel persistence stub

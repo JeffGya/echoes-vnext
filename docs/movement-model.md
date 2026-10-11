@@ -1051,6 +1051,8 @@ The vocabulary should stay small enough to learn and broad enough to serve both 
 | `reposition` | Pre-positioning and mid-battle Keeper guidance; directive stances | V2-COMBAT-004, V2-DIRECTIVE-002 |
 | `regroup` | Keeper guidance; bond rescue, screening and regrouping events | V2-COMBAT-004 (bond triggers from V2-BOND-002) |
 
+> **Note 2026-10-10 (Jeff, V2-DIRECTIVE-002 decision D-07):** V2-DIRECTIVE-002 does not create `reposition` goals from directive stances. V2-COMBAT-004 owns both goal sources. V2-BOND-002 is Done.
+
 Movement styles describe how the intent is expressed:
 
 - direct;

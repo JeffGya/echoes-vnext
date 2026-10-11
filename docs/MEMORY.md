@@ -115,7 +115,7 @@ Four project-specific skills are installed. Use them proactively — they are au
 | CombatService | `core/combat/CombatService.gd` | `resolve_action(type, attacker, defender, round)` → result dict. Melee: guard doubles eff_def. |
 | ShrineService | `core/combat/ShrineService.gd` | `select_purifier()`, `apply_drain()`, `apply_purify_stack()`. |
 | RetreatService | `core/combat/RetreatService.gd` | `can_attempt()` (speed gate), `get_chance_tier()` (agi tiers), `roll_retreat()` (seeded RNG). |
-| DirectiveService | `core/directives/DirectiveService.gd` | Directives: none, scout, protect, push, preserve. `set_active_directive()` writes to save. |
+| DirectiveService | `core/directives/DirectiveService.gd` | Directives: `directive.scout_carefully` (default) and `directive.seek_signs`, loaded from `data.directives`. `set_active_directive()` writes to save. **V2-DIRECTIVE-002 A:** static accessors `active_id(save)`, `resolve(save, directives_cfg)`, `resolve_active(save, balance)`, `registry_of`, `directives_cfg_of`, `available_ids` (registry-driven picker and Sanctum lists); `validate_entry_schema()` guard (`ENTRY_SCHEMA`, `OPTIONAL_KEYS`, `CONTACT_EFFECT_KEYS`) aborts config load on a malformed entry. |
 | AppRoot | `ui/AppRoot.gd` + `ui/Approot.tscn` | Application composition root. Runtime boot/dispatch, shell/onboarding routing, bank timer, recovery/debug/test surfaces, responsive layout forwarding, full-rect ScreenHost, and the single app-wide layer-40 ModalHost. |
 | ResponsiveLayoutController | `ui/components/ResponsiveLayoutController.gd` | Emits `{profile, logical_size, safe_insets, ui_scale, is_mobile}`. Applies desktop/phone/tablet scale caps, detects mobile profile, converts physical safe areas to logical insets, and updates `Window.content_scale_size` on live resize. |
 | ModalHost | `ui/components/ModalHost.gd` + `.tscn` | One blocking modal at a time. Full-viewport dim/input root above chrome; forwards modal actions, contains focus, and restores prior focus on dismissal. |
@@ -359,3 +359,12 @@ opening prompt for a fresh session. Full decision trail (64 entries) in
 every build got an independent `qa-verifier` review (builder never self-verifies); killed-agent
 tree audits (rate limits hit repeatedly) always found the actual code edits complete —
 only the agent's own final report was cut off, never the work itself.
+
+**Status 2026-10-11:** **V2-DIRECTIVE-002 PHASE A is done. The story is NOT done: phases B+C and D are pending.**
+Phase A gives one Directive accessor and makes a Directive addable as data only (ANSWERS #81).
+- `DirectiveService` static accessors read `stage_context.active_directive_id`. The 4 legacy `flow.active_directive` readers (ContactController, ContactConversationService, SituationEngagementService) now use it. Seek Signs now reaches contact bids (before: always read as Scout). `encounter_approach.directive_id` is now correct.
+- Picker and Sanctum lists read the registry. Substring matches on Directive ids are removed. Contact effects moved from `data.contact.directive_effects` to `data.directives.<id>.contact_effects`.
+- A malformed Directive entry aborts `load_balance` (`config.balance.directives_invalid`). Save load repair keeps any registry-known id.
+- New suite `directive_char` (14 tests, `tests/DirectiveCharacterizationTests.gd`).
+- Verification: compile clean. Full serial suite 2043 total, 2042 passed, 1 failed (the known red `movement_arbiter/avoid_overcommit_stays_proportionate`, pace-reward follow-up #11). No fingerprint or baseline moved. Two qa-verifier reviews. Jeff tested in game.
+- Record: `docs/stories/v2-directive-002/` (`decisions.md` D-00 to D-22, `follow-ups.md`, `handoff.md`). Pending: profile interpretation and stage expression (B+C), combat expression (D).

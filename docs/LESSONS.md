@@ -13,6 +13,15 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 34 — Run one full test mode, not two; when the serial run hits its alarm, raise the alarm and run it again
+
+**Rule:** For the end-of-phase gate, run the full serial suite once. Do not switch to the sharded runner, and do not run both. If the serial run is killed by its alarm (exit code 142, no `Tests:` line), raise the alarm and run the same serial command again. Raising an alarm is allowed; lowering one is not.
+**Why:** Jeff, 2026-10-11, on V2-DIRECTIVE-002 phase A. The serial run died at the 1500 s alarm because the suite now takes about 53 minutes. The orchestrator then started a sharded run as a "diagnostic" and proposed to run the serial suite after it. Jeff: both modes run the same suites, so running both repeats the work. The right move was one serial run with a higher alarm. The AGENTS.md alarm was stale (1500 s) and is now 3600 s.
+**How to apply:** Check exit code and the `Tests:` line in the log file. Exit 142 means the alarm fired, not a failure and not a pass. Choose one full mode before you start. Sharded is a speed choice for iteration, not a second check. Only the serial run fully validates `movement_fallback`. A killed run leaves no result; do not read it as a hang without evidence (compare start and end times).
+**Mistake count:** 1
+
+---
+
 ### 33 — Emotion changes need an actor beat; barks need spoken timing
 
 **Rule:** Pair visible support or self-regulation outcomes with readable actor movement as well as the emotion chip; reveal barks progressively in the moment.

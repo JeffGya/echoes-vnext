@@ -133,20 +133,8 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 	# first snapshot already shows the party's immediate surroundings unfogged.
 	# Only runs when explored_cells is empty (first-ever entry); idempotent otherwise.
 	# Resolve directive reveal_radius + precise_intel_bias from config (same pattern as build_snapshot).
-	var _rss_dir_id := "directive.scout_carefully"  # fallback
-	var _rss_sc_v: Variant = flow_ctx.save_data.get("stage_context", {})
-	if _rss_sc_v is Dictionary:
-		_rss_dir_id = str((_rss_sc_v as Dictionary).get("active_directive_id", _rss_dir_id))
-	var _rss_dir: Dictionary = {}
-	if flow_ctx.config_service != null:
-		var _rss_bal_v: Variant = flow_ctx.config_service.get_balance()
-		var _rss_bal: Dictionary = _rss_bal_v if _rss_bal_v is Dictionary else {}
-		var _rss_bsd_v: Variant = _rss_bal.get("data", {})
-		var _rss_bsd: Dictionary = _rss_bsd_v if _rss_bsd_v is Dictionary else {}
-		var _rss_dirs_v: Variant = _rss_bsd.get("directives", {})
-		var _rss_dirs: Dictionary = _rss_dirs_v if _rss_dirs_v is Dictionary else {}
-		var _rss_de_v: Variant = _rss_dirs.get(_rss_dir_id, {})
-		_rss_dir = _rss_de_v if _rss_de_v is Dictionary else {}
+	var _rss_dir: Dictionary = DirectiveService.resolve_active(flow_ctx.save_data, flow_ctx.config_service.get_balance()) \
+		if flow_ctx.config_service != null else {}
 	var _rss_reveal_radius    := int(_rss_dir.get("reveal_radius", _rss_dir.get("passive_reveal_radius", 2)))
 	var _rss_precise_bias     := int(_rss_dir.get("precise_intel_bias", 0))
 	var _rss_realm_seed       := int(flow_ctx.save_data.get("realms", {}).get(flow_ctx.realm_id, {}).get("seed", 0))

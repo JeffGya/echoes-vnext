@@ -455,21 +455,9 @@ static func get_social_effects(
 # Returns Dict keyed by echo_id -> bid_type ("alignment" / "reactive" / "")
 # "alignment" = calling/vector naturally fits this NPC role
 # "reactive"  = high-fear echo reacting emotionally
-static func compute_bids(party_echoes: Array, contact: Dictionary, directive_id: String, cfg: Dictionary) -> Dictionary:
+static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dictionary) -> Dictionary:
 	var bids: Dictionary = {}
 	var contact_role := str(contact.get("role", ""))
-	var directive_effects_v: Variant = cfg.get("directive_effects", {})
-	var directive_effects: Dictionary = directive_effects_v if directive_effects_v is Dictionary else {}
-
-	# Map directive.scout_carefully / directive.seek_signs to short key
-	var dir_key := ""
-	if "seek_signs" in directive_id:
-		dir_key = "seek_signs"
-	elif "scout_carefully" in directive_id:
-		dir_key = "scout_carefully"
-
-	var dir_fx_v: Variant = directive_effects.get(dir_key, {})
-	var dir_fx: Dictionary = dir_fx_v if dir_fx_v is Dictionary else {}
 	var suppressed_callings_v: Variant = dir_fx.get("bid_suppression", [])
 	var suppressed_callings: Array = suppressed_callings_v if suppressed_callings_v is Array else []
 	var boosted_callings_v: Variant = dir_fx.get("bid_boost", [])

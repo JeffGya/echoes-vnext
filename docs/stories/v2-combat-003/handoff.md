@@ -1808,6 +1808,8 @@ exactly like "this weight changes nothing".
 
 ## 23. FINDING — the Keeper's Directive may reach hostile actors (2026-09-06, NOT verified)
 
+> **Note 2026-10-10 (V2-DIRECTIVE-002 recon):** This is fixed. `core/combat/CombatTurnContextService.gd:188-192` now gates the Directive on `faction == "echo"`. Enemies no longer read it.
+
 Raised by the phase 10 tuning agent. **Recorded, not fixed, and not proven.** Jeff's rule stands: no
 further scope without approval.
 

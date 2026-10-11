@@ -22,15 +22,14 @@ func load_balance(logger: StructuredLogger= null, t: int = -1) -> bool:
 	var calling_cfg: Dictionary = calling_cfg_v if calling_cfg_v is Dictionary else {}
 	CallingService.validate_config_integrity(calling_cfg, logger, t)
 	CallingService.validate_count_integrity(calling_cfg, logger, t)
-	# V2-PROG-012 Phase 6 Item 3(c): flags a directive whose intent_weights can
-	# never produce a nonzero directive_bonus (empty / all non-positive / no
-	# translated semantic key) — see DirectiveService.validate_config_integrity()'s
-	# doc comment. Warns only; does not fail the load.
 	var directives_cfg_v: Variant = bal_data.get("directives", {})
 	var directives_cfg: Dictionary = directives_cfg_v if directives_cfg_v is Dictionary else {}
 	var actor_cfg_v: Variant = bal_data.get("actor", {})
 	var actor_cfg: Dictionary = actor_cfg_v if actor_cfg_v is Dictionary else {}
-	DirectiveService.validate_config_integrity(directives_cfg, actor_cfg, logger, t)
+	if not directives_block_is_loadable(directives_cfg, actor_cfg, logger, t):
+		if logger != null:
+			logger.info(t, "config.balance.directives_invalid", "balance.json data.directives failed validation; load aborted", {})
+		return false
 	# V2-PROG-012 Phase 9: same precedent — validates the three canonical
 	# vector/virtue/calling identity tables under data.contact (see
 	# IdentityIntegrity.validate()'s doc comment). Warns only; does not fail the load.
@@ -38,6 +37,11 @@ func load_balance(logger: StructuredLogger= null, t: int = -1) -> bool:
 	EncounterSetupService.validate_stretch_fill_config(bal_data, logger, t)
 	_balance = root
 	return true
+
+## Only a malformed entry shape aborts the load. Degenerate intent_weights only warn (return value ignored).
+static func directives_block_is_loadable(directives_cfg: Dictionary, actor_cfg: Dictionary, logger, t: int) -> bool:
+	DirectiveService.validate_config_integrity(directives_cfg, actor_cfg, logger, t)
+	return DirectiveService.validate_entry_schema(directives_cfg, logger, t)
 
 func load_actors(logger: StructuredLogger= null, t: int = -1) -> bool:
 	var root := JsonFileLoader.load_dict(PATH_ACTORS, logger, t)

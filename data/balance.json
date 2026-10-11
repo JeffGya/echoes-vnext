@@ -5,7 +5,7 @@
 			"directive.scout_carefully": {
 				"id": "directive.scout_carefully",
 				"label": "Scout Carefully",
-				"description": "Moves carefully, scouts widely, withdraws safely, keeps intel.",
+				"description": "The land will speak if you give it time. Move with patience. Do not give more than the run asks of you.",
 				"intent_weights": {
 					"survival_bias":       0.40,
 					"avoid_overcommit":    0.30,
@@ -30,12 +30,16 @@
 				"exposure_tolerance": 0.3,
 				"escape_bonus": 20,
 				"intel_retention": true,
-				"intel_retention_bonus": 1.5
+				"intel_retention_bonus": 1.5,
+				"contact_effects": {
+					"bid_suppression": ["aduro", "sum_okwanfo"],
+					"bid_boost": ["onyamesu", "okomfo"]
+				}
 			},
 			"directive.seek_signs": {
 				"id": "directive.seek_signs",
 				"label": "Seek Signs",
-				"description": "Presses forward, deals with whatever it runs into.",
+				"description": "Something in this realm is waiting to be found. Push deeper. Stay alert. What is hidden will cost something to reach.",
 				"intent_weights": {
 					"clue_seeking_priority": 0.40,
 					"reporting_priority":    0.30,
@@ -60,7 +64,11 @@
 				"exposure_tolerance": 0.8,
 				"escape_bonus": 0,
 				"intel_retention": false,
-				"intel_retention_bonus": 1.0
+				"intel_retention_bonus": 1.0,
+				"contact_effects": {
+					"witness_resonance_bonus": 0.1,
+					"guide_reveal_bonus": 1
+				}
 			}
 		},
 
@@ -3379,16 +3387,6 @@
 			"storyweight_speak_partial_step": 1,
 			"storyweight_speak_threshold": 0.5,
 			"continuity_temporary_ally_good": 5,
-			"directive_effects": {
-				"seek_signs": {
-					"witness_resonance_bonus": 0.1,
-					"guide_reveal_bonus": 1
-				},
-				"scout_carefully": {
-					"bid_suppression": ["aduro", "sum_okwanfo"],
-					"bid_boost": ["onyamesu", "okomfo"]
-				}
-			},
 			"disposition_pool_by_role": {
 				"witness":        ["reflective", "wary", "reflective", "grieving"],
 				"guide":          ["reflective", "bold", "protective"],
