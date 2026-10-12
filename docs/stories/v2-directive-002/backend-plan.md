@@ -246,6 +246,8 @@ Status: BUILT 2026-10-12, not committed, not verified by qa-verifier. Filters se
 
 ### S2e. Counterfactual naming
 
+Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired into `advance_turn` (S3 wires it). Filters traversal, movement, seam, explore, objective, snapshot_fingerprint, directive, venture_char run; only the known red failed. No recorded value moved. Cost smoke on real stages (5-Echo party): 63 to 122 ms mean per naming call, 334 ms max, about 6 dry runs.
+
 | Item | Plan |
 |---|---|
 | Files | new `core/realms/StageCounterfactualService.gd` (RefCounted, same constructor family as the siblings: `(flow_ctx, config_service, logger)`); `core/realms/ActiveStageService.gd` (optional shared `region_costs` argument on `find_explore_target`) |

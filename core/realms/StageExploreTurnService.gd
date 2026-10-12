@@ -107,16 +107,7 @@ func read_party_echoes() -> Array:
 	if config_service != null:
 		var data_v: Variant = config_service.get_balance().get("data", {})
 		cfg_data = data_v if data_v is Dictionary else {}
-	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
-	var bonds_v: Variant = (sanctum_v as Dictionary).get("bonds", []) if sanctum_v is Dictionary else []
-	var actors := SanctumService.get_party_actors_static(flow_ctx.save_data)
-	var living: Dictionary = {}
-	for a in actors:
-		living[str(a.get("id", ""))] = true
-	var echoes: Array = []
-	for a in actors:
-		echoes.append(StagePartyStanceScript.read_echo(a, bonds_v if bonds_v is Array else [], living, cfg_data))
-	return echoes
+	return StagePartyStanceScript.read_party(flow_ctx.save_data, cfg_data)
 
 
 func get_last_result() -> Dictionary:

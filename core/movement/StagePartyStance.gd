@@ -26,6 +26,23 @@ static func read_echo(actor: Dictionary, bonds: Array, living_ids: Dictionary, c
 	}
 
 
+## The saved party as `read_echo` dicts, with the real save bonds (D-26). `exclude_id` drops one
+## Echo and, through the living set, the bond edges that Echo gives the others.
+static func read_party(save_data: Dictionary, cfg_data: Dictionary, exclude_id: String = "") -> Array:
+	var sanctum_v: Variant = save_data.get("sanctum", {})
+	var bonds_v: Variant = (sanctum_v as Dictionary).get("bonds", []) if sanctum_v is Dictionary else []
+	var actors: Array = []
+	var living: Dictionary = {}
+	for a in SanctumService.get_party_actors_static(save_data):
+		if str(a.get("id", "")) != exclude_id:
+			actors.append(a)
+			living[str(a.get("id", ""))] = true
+	var echoes: Array = []
+	for a in actors:
+		echoes.append(read_echo(a, bonds_v if bonds_v is Array else [], living, cfg_data))
+	return echoes
+
+
 ## One Echo's signed lean on one dial, in dial units (coefficient x bound x strength).
 ## `category` selects one coefficient set inside a category dial (`category_weight`).
 static func echo_lean(echo: Dictionary, dial: String, stance_cfg: Dictionary, category: String = "") -> float:

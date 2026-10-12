@@ -97,6 +97,9 @@ static func register(runner: CoreTestRunner) -> void:
 	for n in ["bend_never_inverts_ranking", "bend_breaks_tie_only", "select_signature_backward_compatible", "frontier_tie_break_salt_unchanged", "category_bend_clamped_and_sight_leans_intel"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
+	# V2-DIRECTIVE-002 B+C slice S2e: shared reachable region (D-46).
+	runner.register_test("movement/stage_party/find_explore_target_region_arg_same_result", Callable(StagePartyMovementTests, "_t_find_explore_target_region_arg_same_result"))
+
 # ---------------------------------------------------------------------------
 # Profile — capacity is the DIRECTIVE step_budget
 # ---------------------------------------------------------------------------
@@ -2237,4 +2240,34 @@ static func _t_category_bend_clamped_and_sight_leans_intel() -> Dictionary:
 	var edge: Dictionary = _stance_of([_stance_actor("e", "aduro", 1, 0, 70)], env["seek"], env)["category_bend"]
 	if float(sight.get("intel", 0.0)) <= 0.0 or float(edge.get("intel", 0.0)) != 0.0 or float(edge.get("combat", 0.0)) <= 0.0:
 		return _fail("Sight must lean intel, Edge must lean combat only: %s %s" % [sight, edge])
+	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 B+C slice S2e — a shared region gives the same pick as no region
+# ---------------------------------------------------------------------------
+
+static func _t_find_explore_target_region_arg_same_result() -> Dictionary:
+	var cs := _real_config()
+	var ctx := FlowContext.new()
+	ctx.realm_id = "realm.01"
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var session := ActiveStageService.new(ctx, cs, logger)
+	var directive: Dictionary = _shipped_directives(cs)[SCOUT_ID]
+	var walkable: Dictionary = {}
+	for c in 12:
+		for r in 9:
+			walkable["%d,%d" % [c, r]] = true
+	var find: Dictionary = SituationModel.make("find", SituationModel.TYPE_NPC, 6, 4, 900, false)
+	find["revealed"] = true
+	var stage := { "index": 0 }
+	for sits in [[], [find]]:
+		var em := { "situations": sits, "party_pos": { "col": 1, "row": 4 }, "last_traveled_origin": { "col": 0, "row": 4 } }
+		var explored := { "0,4": true, "1,4": true, "2,4": true }
+		var region := ActiveStageService.stage_reachable_costs(em["party_pos"], walkable)
+		var plain := session.find_explore_target(em, directive, walkable, explored, stage)
+		var shared := session.find_explore_target(em, directive, walkable, explored, stage, {}, region)
+		if plain.is_empty() or var_to_str(plain) != var_to_str(shared):
+			return _fail("a shared region changed the pick: %s vs %s" % [plain, shared])
 	return _pass()

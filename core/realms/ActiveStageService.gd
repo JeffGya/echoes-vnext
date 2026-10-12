@@ -403,13 +403,15 @@ func find_explore_target(
 	walkable: Dictionary,
 	explored_cells: Dictionary,
 	stage: Dictionary,
-	bend: Dictionary = {}
+	bend: Dictionary = {},
+	region_costs: Dictionary = {}
 ) -> Dictionary:
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
 	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
 	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
-	var dist_from_party: Dictionary = stage_reachable_costs(party_pos, walkable)
+	# `region_costs`: stage_reachable_costs(party_pos, walkable), shared by a caller that picks many times from one cell.
+	var dist_from_party: Dictionary = region_costs if not region_costs.is_empty() else stage_reachable_costs(party_pos, walkable)
 	var category_map := ConfigService.get_situation_category_cfg(config_service)
 	var slack_config := ConfigService.get_movement_slack_cfg(config_service)
 

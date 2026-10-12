@@ -39,3 +39,9 @@ Owner: phase B+C, which edits the same guard.
 - `core/realms/ConversationService.gd:297`: NPC morale `<= 20` in the emotional fit, plus bonuses 0.2 and 0.1 at `:291` and `:299`. These are hard-coded tunables next to the ones moved for ANSWERS #83. Not in design 10.1. Decide: join the config sweep or stay a follow-up.
 - `DirectiveService._REGISTRY` fallback (`DirectiveService.gd:61,81`) still holds the OLD picker text. It shows only when the config registry is empty.
 - `stages.party_return_fear_threshold` (60) and `stages.cautious_advance_fear_threshold` (50) already sit in config. They were not touched.
+
+## Found in slice S2e (2026-10-13), for the designer and Jeff
+- Under Scout, a calm party cannot change the first plan with today's numbers (opus, S2e). Commitment depth is always 2 (D-50). Scout's weights have no tie that a category bend breaks. The exposure price rounds per cell; the Scout tolerance stays between 0.18 and 0.42, so a cell with exposure 0.67 always costs 3 (rounding boundary at tolerance 0.4375). So Scout naming can name only fear or morale. Design contrasts S1 and P1 cannot occur under Scout. Question for `mid-game-designer` and Jeff: change the `exposure_tolerance` bound or the price rounding so that a Scout lean can change a route? Test P1 was built on Seek.
+- `StagePartyStance.build` raises the `builds` counter. When S3 calls naming inside `advance_turn`, `traversal/one_stance_per_advance` counts the dry runs too. S3 must separate Advance builds from dry-run builds.
+- A frontier target pays the reachable region twice (`select_frontier` builds its own region; D-51 gives it no new argument). Cost is small (15 to 22 ms).
+- Stale rows in `backend-plan.md`: the S2c "Files" row names `select_frontier`; the "Fingerprints that move" row mentions `route_character` (deferred, D-51).

@@ -408,6 +408,19 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/pool_o2_seek_objective_first",      Callable(TraversalModelTests, "_t_pool_o2_seek_objective_first"))
 	runner.register_test("traversal/pool_o3_seek_close_find_then_objective", Callable(TraversalModelTests, "_t_pool_o3_seek_close_find_then_objective"))
 	runner.register_test("traversal/pool_only_objective_revealed",      Callable(TraversalModelTests, "_t_pool_only_objective_revealed"))
+	# V2-DIRECTIVE-002 S2e: counterfactual naming, first plan only
+	runner.register_test("traversal/counterfactual_n1_terrain", Callable(TraversalModelTests, "_t_cf_n1_terrain"))
+	runner.register_test("traversal/counterfactual_n2_objective", Callable(TraversalModelTests, "_t_cf_n2_objective"))
+	runner.register_test("traversal/counterfactual_n3_directive", Callable(TraversalModelTests, "_t_cf_n3_directive"))
+	runner.register_test("traversal/counterfactual_n4_party_order_shuffle", Callable(TraversalModelTests, "_t_cf_n4_party_order_shuffle"))
+	runner.register_test("traversal/counterfactual_n5_hidden_content_moved", Callable(TraversalModelTests, "_t_cf_n5_hidden_content_moved"))
+	runner.register_test("traversal/counterfactual_n6_empty_exposure_plain_route", Callable(TraversalModelTests, "_t_cf_n6_empty_exposure_plain_route"))
+	runner.register_test("traversal/counterfactual_s3_fear_names_frightened", Callable(TraversalModelTests, "_t_cf_s3_fear_names_frightened"))
+	runner.register_test("traversal/counterfactual_p1_named_echo_changes_plan", Callable(TraversalModelTests, "_t_cf_p1_named_echo_changes_plan"))
+	runner.register_test("traversal/counterfactual_tie_pin_lowest_id", Callable(TraversalModelTests, "_t_cf_tie_pin_lowest_id"))
+	runner.register_test("traversal/counterfactual_cap_respected", Callable(TraversalModelTests, "_t_cf_cap_respected"))
+	runner.register_test("traversal/counterfactual_no_state_written", Callable(TraversalModelTests, "_t_cf_no_state_written"))
+	runner.register_test("traversal/counterfactual_name_matches_cause", Callable(TraversalModelTests, "_t_cf_name_matches_cause"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2454,4 +2467,238 @@ static func _t_k2_sight_vs_edge_tie() -> Dictionary:
 		return { "ok": false, "error": "a Sight party must break the tie to intel, got '%s'" % sight }
 	if edge != "reward":
 		return { "ok": false, "error": "an Edge party must keep the nearest (reward), got '%s'" % edge }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S2e: counterfactual naming, first plan only (design 4, 7d, D-46) ──
+
+const CF_SCOUT := "directive.scout_carefully"
+const CF_SEEK := "directive.seek_signs"
+
+
+# members: [id, calling, rank, fear, morale, summon_index]. Real factory Echoes; every pair bonded
+# through SocialGraphService so Judgment carries the bond term (design 2 rule 5).
+static func _cf_runtime(directive: String, members: Array, terrain: Dictionary, sits: Array) -> FlowRuntime:
+	var runtime := _make_runtime(directive)
+	var data: Dictionary = runtime.config_service.get_balance()["data"]
+	var roster: Array = []
+	var ids: Array = []
+	for m: Array in members:
+		var echo: Dictionary = EchoFactory.generate("cf-test", "campaign.summon.%d" % int(m[5]), int(m[5]), "summon", data["summoning"])
+		echo["id"] = m[0]
+		echo["calling"] = m[1]
+		echo["calling_origin"] = m[1]
+		echo["rank"] = m[2]
+		echo["xp_total"] = 100 * int(m[2])
+		echo["emotion"] = { "morale_current": m[4], "fear_current": m[3], "fear_base": 15 }
+		roster.append(echo)
+		ids.append(m[0])
+	var bonds: Array = []
+	for i in ids.size():
+		for j in range(i + 1, ids.size()):
+			bonds = SocialGraphService.apply_score_delta(bonds, ids[i], ids[j], 40, data["sanctum"]["bond_thresholds"], runtime.logger, 0)
+	runtime.flow_ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids, "bonds": bonds }
+	_inject_stage_with_terrain(runtime, terrain, sits, { "col": 0, "row": 5 }, 900, 0)
+	return runtime
+
+
+static func _cf_svc(runtime: FlowRuntime) -> StageCounterfactualService:
+	return StageCounterfactualService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+
+
+static func _cf_name(runtime: FlowRuntime) -> Dictionary:
+	return _cf_svc(runtime).name_deciders(runtime.directive_service.get_active_directive(), 0)
+
+
+# Independent plan for a given party: full target pick, no shared region, no fixed target.
+static func _cf_plan(runtime: FlowRuntime, echoes: Array) -> Dictionary:
+	var stage: Dictionary = (runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0] as Dictionary).duplicate(true)
+	var em: Dictionary = stage["explore_map"]
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var walkable := ActiveStageService.explore_walkable(em)
+	var explored: Dictionary = em["explored_cells"]
+	ActiveStageService.lift_fog_at_cell(em["party_pos"], int(directive["reveal_radius"]), walkable, explored)
+	var stance := StagePartyStanceScript.build(echoes, directive, ConfigService.get_party_stance_cfg(runtime.config_service))
+	return _cf_svc(runtime).plan_first_leg(em, directive, stance, walkable, explored, stage)
+
+
+static func _cf_party(runtime: FlowRuntime, exclude: String = "") -> Array:
+	return StagePartyStanceScript.read_party(runtime.flow_ctx.save_data, runtime.config_service.get_balance()["data"], exclude)
+
+
+static func _cf_neutral(runtime: FlowRuntime, id: String, field: String, value: Variant) -> Array:
+	var party := _cf_party(runtime)
+	for e: Dictionary in party:
+		if str(e["id"]) == id:
+			e[field] = value
+	return party
+
+
+static func _cf_expect(out: Dictionary, named: String, reason: String, cause: String) -> String:
+	if str(out["decisive_contributor_id"]) != named or str(out["reason_class"]) != reason or str(out["cause"]) != cause:
+		return "expected named '%s' reason '%s' cause '%s', got %s" % [named, reason, cause, out]
+	return ""
+
+
+static func _cf_goal_sits() -> Array:
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 9, 5, 901, true)
+	goal["revealed"] = true
+	return [goal]
+
+
+# N1: a one-cell corridor. No Echo can change the route; terrain decided.
+static func _t_cf_n1_terrain() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "okomfo", 3, 0, 50, 1]], _corridor_terrain(30, 11, 5), [])
+	var err := _cf_expect(_cf_name(runtime), "", "", "terrain")
+	return { "ok": err.is_empty(), "error": err }
+
+
+# N2: only the objective is revealed and every Echo gives the same plan.
+static func _t_cf_n2_objective() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "aduro", 3, 0, 50, 1]], _full_rect_terrain(14, 11), _cf_goal_sits())
+	var out := _cf_name(runtime)
+	var err := _cf_expect(out, "", "", "objective")
+	if err.is_empty() and str(out["plan"]["target_id"]) != "goal":
+		err = "the plan must target the objective: %s" % [out["plan"]]
+	return { "ok": err.is_empty(), "error": err }
+
+
+# N3: identical Echoes; the plan differs between Scout and Seek, and the Directive is the cause.
+static func _t_cf_n3_directive() -> Dictionary:
+	var plans: Array = []
+	for d in [CF_SCOUT, CF_SEEK]:
+		var runtime := _cf_runtime(d, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "okofor", 3, 0, 50, 0]], _full_rect_terrain(30, 11), [])
+		var out := _cf_name(runtime)
+		var err := _cf_expect(out, "", "", "directive")
+		if not err.is_empty():
+			return { "ok": false, "error": "%s: %s" % [d, err] }
+		plans.append(out["plan"])
+	if not _cf_svc(_make_runtime()).plans_differ(plans[0], plans[1]):
+		return { "ok": false, "error": "Scout and Seek must give different first plans: %s" % [plans] }
+	return { "ok": true }
+
+
+# Tie case: two equally frightened Echoes each decide (the party mean falls from shaken to uneasy
+# without either); the calm one does not. Lowest id wins the tie (D-47 J3).
+static func _cf_tie_members() -> Array:
+	return [["e_z", "okofor", 3, 0, 50, 2], ["e_y", "aduro", 3, 90, 50, 1], ["e_x", "aduro", 3, 90, 50, 1]]
+
+
+static func _t_cf_n4_party_order_shuffle() -> Dictionary:
+	var a := _cf_name(_cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(30, 11), []))
+	var m := _cf_tie_members()
+	m.reverse()
+	var b := _cf_name(_cf_runtime(CF_SCOUT, m, _full_rect_terrain(30, 11), []))
+	if var_to_str(a) != var_to_str(b):
+		return { "ok": false, "error": "party order changed the naming:\n%s\n%s" % [a, b] }
+	return { "ok": true }
+
+
+# N5: a hidden hostile on the route or far away gives the same plan and the same name.
+static func _t_cf_n5_hidden_content_moved() -> Dictionary:
+	var outs: Array = []
+	for pos in [[1, 5], [12, 9]]:
+		var sits := _cf_goal_sits()
+		sits.append(SituationModelScript.make("hidden", SituationModelScript.TYPE_COMBAT, pos[0], pos[1], 902, false))
+		outs.append(var_to_str(_cf_name(_cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(14, 11), sits))))
+	if outs[0] != outs[1]:
+		return { "ok": false, "error": "hidden content changed the first plan or the name:\n%s\n%s" % outs }
+	return { "ok": true }
+
+
+# N6: no exposure source gives the plain shortest route.
+static func _t_cf_n6_empty_exposure_plain_route() -> Dictionary:
+	var runtime := _cf_runtime(CF_SEEK, [["e_a", "aduro", 3, 0, 50, 0]], _full_rect_terrain(14, 11), _cf_goal_sits())
+	var plan: Dictionary = _cf_name(runtime)["plan"]
+	var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+	var plain: Array = MovementPathService.shortest_path({ "col": 0, "row": 5 }, { "col": 9, "row": 5 }, ActiveStageService.explore_walkable(em)).get("path", [])
+	if plan["path"] != plain.slice(0, plan["path"].size()) or plan["path"].is_empty():
+		return { "ok": false, "error": "expected the plain route %s, got %s" % [plain, plan["path"]] }
+	return { "ok": true }
+
+
+# S3: the same Echo calm and frightened. Frightened: fewer steps; named, reason fear. Calm: not named.
+static func _t_cf_s3_fear_names_frightened() -> Dictionary:
+	var calm := _cf_name(_cf_runtime(CF_SCOUT, [["e_a", "okomfo", 3, 0, 50, 0]], _full_rect_terrain(30, 11), []))
+	var afraid := _cf_name(_cf_runtime(CF_SCOUT, [["e_a", "okomfo", 3, 80, 50, 0]], _full_rect_terrain(30, 11), []))
+	if not str(calm["decisive_contributor_id"]).is_empty():
+		return { "ok": false, "error": "a calm Echo that changes nothing must not be named: %s" % [calm] }
+	if int(afraid["plan"]["commitment_depth"]) >= int(calm["plan"]["commitment_depth"]):
+		return { "ok": false, "error": "fear must shorten the first plan: calm %s afraid %s" % [calm["plan"], afraid["plan"]] }
+	var err := _cf_expect(afraid, "e_a", "fear", "echo")
+	return { "ok": err.is_empty(), "error": err }
+
+
+# P1 (on Seek, see the S2e report): Edge at high morale commits deeper than Anchor and Sight;
+# the Edge Echo is named, and removing it changes the plan.
+static func _t_cf_p1_named_echo_changes_plan() -> Dictionary:
+	var party_a := _cf_runtime(CF_SEEK, [["e_a", "okofor", 1, 0, 50, 0], ["e_s", "okomfo", 1, 0, 50, 1]], _full_rect_terrain(30, 11), [])
+	var party_b := _cf_runtime(CF_SEEK, [["e_e", "aduro", 1, 0, 100, 2]], _full_rect_terrain(30, 11), [])
+	var a := _cf_name(party_a)
+	var b := _cf_name(party_b)
+	if not _cf_svc(party_a).plans_differ(a["plan"], b["plan"]):
+		return { "ok": false, "error": "the two parties must give different plans: %s / %s" % [a["plan"], b["plan"]] }
+	var err := _cf_expect(b, "e_e", "morale", "echo")
+	if err.is_empty() and not _cf_svc(party_b).plans_differ(b["plan"], _cf_plan(party_b, _cf_party(party_b, "e_e"))):
+		err = "removing the named Echo must change the plan"
+	return { "ok": err.is_empty(), "error": err }
+
+
+static func _t_cf_tie_pin_lowest_id() -> Dictionary:
+	var out := _cf_name(_cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(30, 11), []))
+	if out["contributor_ids"] != ["e_x", "e_y"]:
+		return { "ok": false, "error": "both frightened Echoes decide, the calm one does not: %s" % [out] }
+	var err := _cf_expect(out, "e_x", "fear", "echo")
+	return { "ok": err.is_empty(), "error": err }
+
+
+# Five candidates plus four reason classes: exactly the cap (party size + 1 x 4 classes).
+static func _t_cf_cap_respected() -> Dictionary:
+	var members := [["e_1", "okofor", 3, 70, 50, 0], ["e_2", "aduro", 3, 70, 50, 1], ["e_3", "okomfo", 3, 70, 50, 2],
+		["e_4", "okofor", 3, 70, 50, 3], ["e_5", "aduro", 3, 0, 50, 4]]
+	var runtime := _cf_runtime(CF_SCOUT, members, _full_rect_terrain(30, 11), [])
+	var cf: Dictionary = ConfigService.get_party_stance_cfg(runtime.config_service)["counterfactual"]
+	var cap: int = members.size() + int(cf["extra_replans_per_reason_class"]) * (cf["reason_classes"] as Array).size()
+	var out := _cf_name(runtime)
+	if str(out["cause"]) != "echo" or int(out["dry_runs"]) != 9 or int(out["dry_runs"]) > cap:
+		return { "ok": false, "error": "expected a named Echo after 9 dry runs (cap %d), got %s" % [cap, out] }
+	return { "ok": true }
+
+
+static func _t_cf_no_state_written() -> Dictionary:
+	var sits := _cf_goal_sits()
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 5, 7, 903, false)
+	hostile["revealed"] = true
+	sits.append(hostile)
+	var runtime := _cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(14, 11), sits)
+	var before := var_to_str(runtime.flow_ctx.save_data)
+	var em_before := var_to_str(runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"])
+	var out := _cf_name(runtime)
+	if str(out["cause"]) != "echo":
+		return { "ok": false, "error": "fixture must name an Echo so every dry run kind runs: %s" % [out] }
+	if var_to_str(runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]) != em_before:
+		return { "ok": false, "error": "naming wrote to explore_map" }
+	if var_to_str(runtime.flow_ctx.save_data) != before or runtime.flow_ctx.save_request:
+		return { "ok": false, "error": "naming wrote to the save or requested a save" }
+	return { "ok": true }
+
+
+# N7: every named Echo is a true decider, every other candidate is not, the reason class alone
+# changes the plan, and a wrong class (calling) does not. A wrong reason fails here.
+static func _t_cf_name_matches_cause() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(30, 11), [])
+	var svc := _cf_svc(runtime)
+	var out := _cf_name(runtime)
+	var real := _cf_plan(runtime, _cf_party(runtime))
+	if var_to_str(real) != var_to_str(out["plan"]):
+		return { "ok": false, "error": "the shared-region plan differs from an independent plan:\n%s\n%s" % [real, out["plan"]] }
+	for id in ["e_x", "e_y", "e_z"]:
+		var changed := svc.plans_differ(real, _cf_plan(runtime, _cf_party(runtime, id)))
+		if changed != (out["contributor_ids"] as Array).has(id):
+			return { "ok": false, "error": "%s: removal changes the plan = %s, named = %s" % [id, changed, out["contributor_ids"]] }
+	var named := str(out["decisive_contributor_id"])
+	if str(out["reason_class"]) != "fear" or not svc.plans_differ(real, _cf_plan(runtime, _cf_neutral(runtime, named, "fear", 0.0))):
+		return { "ok": false, "error": "the reason must be fear and neutralising fear must change the plan: %s" % [out] }
+	if svc.plans_differ(real, _cf_plan(runtime, _cf_neutral(runtime, named, "family", ""))):
+		return { "ok": false, "error": "calling alone must not change this plan" }
 	return { "ok": true }
