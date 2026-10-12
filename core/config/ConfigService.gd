@@ -139,6 +139,57 @@ static func get_directives_cfg(config_service: ConfigService) -> Dictionary:
 	return dir_v if dir_v is Dictionary else {}
 
 
+## Walks `data.<path...>`; returns {} when the service is null or any step is missing or not a Dictionary.
+static func _data_subtree(config_service: ConfigService, path: Array) -> Dictionary:
+	if config_service == null:
+		return {}
+	var node: Variant = config_service.get_balance().get("data", {})
+	for key in path:
+		if not node is Dictionary:
+			return {}
+		node = (node as Dictionary).get(key, {})
+	return node if node is Dictionary else {}
+
+
+## data.stages.party_stance — V2-DIRECTIVE-002 party-stance numbers; {} when absent (neutral stance).
+static func get_party_stance_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["stages", "party_stance"])
+
+
+## data.stages.party_stance.directive_profile.<directive_id>. {} for an id with no entry: the neutral stance.
+static func get_party_stance_profile(config_service: ConfigService, directive_id: String) -> Dictionary:
+	var profiles_v: Variant = get_party_stance_cfg(config_service).get("directive_profile", {})
+	var entry_v: Variant = (profiles_v as Dictionary).get(directive_id, {}) if profiles_v is Dictionary else {}
+	return entry_v if entry_v is Dictionary else {}
+
+
+## data.stages.presentation — stage screen timings in seconds; {} when absent.
+static func get_stage_presentation_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["stages", "presentation"])
+
+
+## data.contact.bid — contact bid thresholds and Judgment/fear weights; {} when absent.
+static func get_contact_bid_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["contact", "bid"])
+
+
+## data.contact.turn_count_modifiers — NPC fear and morale limits for the contact turn count; {} when absent.
+static func get_contact_turn_count_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["contact", "turn_count_modifiers"])
+
+
+## data.contact.emotional_fit_modifiers — emotional-fit and NPC turn-score numbers; {} when absent.
+static func get_contact_emotional_fit_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["contact", "emotional_fit_modifiers"])
+
+
+## data.contact.max_voices_per_turn — most Echoes that speak in one contact turn.
+static func get_contact_max_voices_per_turn(config_service: ConfigService, fallback: int = 3) -> int:
+	if config_service == null:
+		return fallback
+	return int(_data_subtree(config_service, ["contact"]).get("max_voices_per_turn", fallback))
+
+
 ## data.sanctum.party_max_size — the party slot cap.
 ## PR #61 review: this was read longhand at two sites with identical guards and the same
 ## default of 5 — SanctumController._get_party_max_size and

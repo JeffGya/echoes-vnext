@@ -47,7 +47,7 @@ Status: OK = matches the design. MISMATCH = the design or brief is wrong. GAP = 
 | 20 | `ConfigService` getter pattern | `get_movement_slack_cfg` `:429`; `get_directives_cfg` `:134`; `get_party_max_size` `:146`; load abort `:29` | OK |
 | 21 | Party-stance data location | `data.stages.party_stance` (`balance.json:3104`). `directive_profile` keys are Directive ids, so no id literal in code. | OK (D-44). The `_comment` at `:3210` says "move later". It is stale after D-44. |
 | 22 | `compute_bids` | `ConversationService.gd:458`; suppression `:475`; reactive `:483`; alignment `:489`; boost `:494`. Takes `(party_echoes, contact, dir_fx)`. No config, no Judgment. Callers: `ContactController.gd:201`, `:424`; `ContactConversationService.gd:93`. No test calls it. | OK |
-| 23 | Turn score | `ConversationService.gd:162` (`compute_turn_score_from_virtue`); clamp `:184`; NPC fear gate `:287`; also `:290-294` literal `0.2`; `:297` morale `<= 20`, literal `0.1` | OK. Two more literals than design 10.1 lists (see section 3, S4a). |
+| 23 | Turn score | `ConversationService.gd:162` (`compute_turn_score_from_virtue`); clamp `:184`; NPC fear gate `:287`; also `:292` literal `0.2`; `:297` morale `<= 20`, `:299` literal `0.1` | OK. Two more literals than design 10.1 lists (see section 3, S4a). |
 | 24 | `generate_responses` calls the turn score | `ConversationService.gd:108`. The Echo dict is the save Echo. No Directive reaches this function. | GAP: the resonance bonus needs a new argument (S4c). |
 | 25 | Contact turn-count literals | `ContactConversationService.gd:74` (fear `> 60`), `:76` (morale `< 30`) | OK |
 | 26 | Snapshot builder second bid copy | `StageExploreSnapshotBuilder.gd:187-201`. It also ignores Directive suppression and boost. | MISMATCH (F5): bigger than "a second literal" |
@@ -93,7 +93,7 @@ Global rules for every slice:
 
 | Slice | Subject | Moves recorded values | Builder tier |
 |---|---|---|---|
-| S0 | Config getters and integrity test | No | sonnet |
+| S0 | Config getters and integrity test (DONE 2026-10-12, uncommitted) | No | sonnet |
 | S1a | One result per Advance | No | sonnet |
 | S1b | Exposure map live | Yes (small) | sonnet; opus attributes |
 | S1c | Objective joins the pool | Yes (largest) | sonnet; opus attributes |
@@ -109,6 +109,8 @@ Global rules for every slice:
 | S5 | Saved journey entry and `stop` | Save schema | opus |
 
 ### S0. Config getters and integrity test
+
+**Status: DONE (2026-10-12).** Getters are in `ConfigService.gd` (`get_party_stance_cfg`, `get_party_stance_profile`, `get_stage_presentation_cfg`, `get_contact_bid_cfg`, `get_contact_turn_count_cfg`, `get_contact_emotional_fit_cfg`, `get_contact_max_voices_per_turn`). Seven tests are in suite `movement`, group `movement/stage_party/`. No reader exists yet. Test names differ from the table below: `party_stance_covers_every_directive`, `party_stance_missing_entry_is_neutral`, `party_stance_bounds_under_half_gap`, `party_stance_reason_classes_count`, `stage_presentation_keys_numeric`, `contact_cfg_getters_match_shipped_values`, `stance_cfg_getters_null_service_empty`.
 
 | Item | Plan |
 |---|---|
@@ -265,7 +267,7 @@ Global rules for every slice:
 | Item | Plan |
 |---|---|
 | Files | `core/realms/ConversationService.gd` (`:287` reads `contact.emotional_fit_modifiers.high_fear_npc_min`; the reactive `:483` reads `contact.bid.reactive_fear_min`); `core/realms/ContactConversationService.gd` (`:74,:76` read `contact.turn_count_modifiers`); `core/state/flow/states/venture/StageExploreSnapshotBuilder.gd` (`:187-201`: replace the second bid rule with the output of the one shared bid function from S4b, or in S4a read the same key) |
-| New functions | `ConversationService.compute_bids` gains an optional trailing `bid_cfg: Dictionary = {}`; `0.2` (`:290-294`) and `0.1` (`:297-299`) turn-score literals are NOT in design 10.1: list them in the report; move them only if Jeff agrees (J6). |
+| New functions | `ConversationService.compute_bids` gains an optional trailing `bid_cfg: Dictionary = {}`; the turn-score literals `0.2` (`:292`) and `0.1` (`:299`) and the morale limit `20` (`:297`) move to `contact.emotional_fit_modifiers` (`high_fear_broken_charge_bonus`, `low_morale_broken_bonus`, `low_morale_npc_max`), same values (D-47 J6). The three "3" voice literals move to `contact.max_voices_per_turn` (D-47 J5). |
 | Config keys | `contact.bid.reactive_fear_min` (60, `>=`), `contact.emotional_fit_modifiers.high_fear_npc_min` (60, `>=`), `contact.turn_count_modifiers.npc_fear_above` (60, `>`), `.npc_morale_below` (30, `<`). A missing key falls back to the old value, so old fixtures pass. |
 | Tests | Suite `conversation_repair`: `conversation_repair/reactive_threshold_from_config` (both copies agree; change the key in a fixture and both move); `conversation_repair/turn_count_modifiers_from_config`; `conversation_repair/literals_same_result` (default config gives the old result on 6 Echoes). |
 | Fingerprints that move | None. |
@@ -349,8 +351,8 @@ No agent runs R4, R9 or R10. The main chat runs them and checks that every edite
 | J2 | Does a pause end the Advance? (BLOCKED B1) If yes, the cap of 2 never binds. If no, a pause is a beat inside a longer walk and the loop needs a different design. | Pause ends the Advance (A1). |
 | J3 | Fix the lowest-id pin? (feasibility 5) Option: name index `turn_count % tied_count`. | Ship the lowest id as designed. |
 | J4 | Timing path to the UI: copy of `stages.presentation` in the snapshot (`data.presentation`). | Use the snapshot copy; no UI file reads config. |
-| J5 | New config key `data.contact.max_voices_per_turn` = 3 for the three "3" literals and the snapshot `>= 5` read of `party_max_size` (feasibility 8). `mid-game-designer` authors it. | Leave the literals, list them. |
-| J6 | The turn-score literals `0.2` (`ConversationService.gd:294`) and `0.1` (`:299`) are outside design 10.1. Move to config? | Leave, list in report. |
+| J5 | New config key `data.contact.max_voices_per_turn` = 3 for the three "3" literals and the snapshot `>= 5` read of `party_max_size` (feasibility 8). `mid-game-designer` authors it. | DECIDED (D-47): move them to config, same values. |
+| J6 | The turn-score literals `0.2` (`ConversationService.gd:292`) and `0.1` (`:299`) are outside design 10.1. Move to config? | DECIDED (D-47): move to config, same values (`:292`, `:297`, `:299`). |
 | J7 | Scope: share the reachable region inside `find_explore_target` (S2e) overlaps V2-INFRA-010. Keep it in B+C as a minimal optional argument, or wait for INFRA-010? | Minimal optional argument in S2e. |
 
 Not Jeff's: F4 (`numbers.md` section 7 still says 3; data says 2) is a doc fix for `mid-game-designer`.

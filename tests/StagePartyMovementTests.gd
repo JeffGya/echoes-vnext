@@ -74,6 +74,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/stage_party/objective_tie_break_is_numeric_not_lexicographic", Callable(StagePartyMovementTests, "_t_objective_tie_break_is_numeric_not_lexicographic"))
 	runner.register_test("movement/stage_party/frontier_diagonal_not_deprioritised_by_manhattan", Callable(StagePartyMovementTests, "_t_frontier_diagonal_not_deprioritised_by_manhattan"))
 
+	# V2-DIRECTIVE-002 B+C slice S0: config getters and the missing-entry rule.
+	for n in ["party_stance_covers_every_directive", "party_stance_missing_entry_is_neutral", "party_stance_bounds_under_half_gap", "party_stance_reason_classes_count", "stage_presentation_keys_numeric", "contact_cfg_getters_match_shipped_values", "stance_cfg_getters_null_service_empty"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 # ---------------------------------------------------------------------------
 # Profile — capacity is the DIRECTIVE step_budget
@@ -1663,3 +1666,144 @@ static func _pass() -> Dictionary:
 
 static func _fail(message: String) -> Dictionary:
 	return {"ok": false, "error": message}
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 B+C slice S0 — stance and contact config getters
+# ---------------------------------------------------------------------------
+
+static func _real_config() -> ConfigService:
+	var cs := ConfigService.new()
+	return cs if cs.load_balance() else null
+
+
+static func _shipped_directives(cs: ConfigService) -> Dictionary:
+	var out: Dictionary = {}
+	var reg: Dictionary = ConfigService.get_directives_cfg(cs)
+	for id: Variant in reg:
+		if reg[id] is Dictionary:
+			out[id] = reg[id]
+	return out
+
+
+## A shipped Directive with no directive_profile entry would silently get the neutral stance.
+## This test makes that a loud failure instead (A5).
+static func _t_party_stance_covers_every_directive() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var dirs: Dictionary = _shipped_directives(cs)
+	if dirs.is_empty():
+		return _fail("no shipped Directives found")
+	for id: Variant in dirs:
+		var entry: Dictionary = ConfigService.get_party_stance_profile(cs, str(id))
+		for key: String in ["commitment_fraction", "stop_willingness", "reveal_stop_kinds"]:
+			if not entry.has(key):
+				return _fail("%s has no party_stance.directive_profile.%s" % [id, key])
+	return _pass()
+
+
+static func _t_party_stance_missing_entry_is_neutral() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	if not ConfigService.get_party_stance_profile(cs, "directive.no_such_thing").is_empty():
+		return _fail("unknown Directive id must give the empty neutral profile")
+	return _pass()
+
+
+static func _t_party_stance_bounds_under_half_gap() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var bounds: Dictionary = ConfigService.get_party_stance_cfg(cs).get("bounds", {})
+	var dirs: Dictionary = _shipped_directives(cs)
+	for key: String in ["exposure_tolerance", "escape_bonus"]:
+		var spread: float = _spread(dirs.values().map(func(d: Dictionary) -> float: return float(d.get(key, 0.0))))
+		if float(bounds.get(key, 0.0)) >= spread / 2.0:
+			return _fail("bound %s must stay under half the Directive gap %s" % [key, spread])
+	var steps: Array = dirs.values().map(func(d: Dictionary) -> float: return float(d.get("step_budget", 0.0)))
+	if float(bounds.get("readiness_steps", 0.0)) >= _spread(steps) / 2.0:
+		return _fail("readiness_steps bound must stay under half the step_budget gap")
+	for key: String in ["commitment_fraction", "stop_willingness"]:
+		var vals: Array = []
+		for id: Variant in dirs:
+			vals.append(float(ConfigService.get_party_stance_profile(cs, str(id)).get(key, 0.0)))
+		if float(bounds.get(key, 0.0)) >= _spread(vals) / 2.0:
+			return _fail("bound %s must stay under half the Directive gap" % key)
+	# category_weight: under half the smallest non-zero gap between two categories in one Directive.
+	var min_gap: float = INF
+	for id: Variant in dirs:
+		var pref: Dictionary = (dirs[id] as Dictionary).get("target_preference", {})
+		var w: Array = pref.values()
+		for i in w.size():
+			for j in range(i + 1, w.size()):
+				var gap: float = absf(float(w[i]) - float(w[j]))
+				if gap > 0.0001:
+					min_gap = minf(min_gap, gap)
+	if float(bounds.get("category_weight", 0.0)) >= min_gap / 2.0:
+		return _fail("category_weight bound must stay under half the smallest category gap %s" % min_gap)
+	return _pass()
+
+
+static func _spread(values: Array) -> float:
+	return float(values.max()) - float(values.min()) if not values.is_empty() else 0.0
+
+
+static func _t_party_stance_reason_classes_count() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var classes: Variant = ConfigService.get_party_stance_cfg(cs).get("counterfactual", {}).get("reason_classes", [])
+	if not classes is Array or (classes as Array).size() != 4:
+		return _fail("reason_classes must list 4 classes, got %s" % str(classes))
+	return _pass()
+
+
+static func _t_stage_presentation_keys_numeric() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var pres: Dictionary = ConfigService.get_stage_presentation_cfg(cs)
+	var seen: int = 0
+	for key: Variant in pres:
+		if str(key).begins_with("_"):
+			continue
+		seen += 1
+		if not (pres[key] is float or pres[key] is int) or float(pres[key]) <= 0.0:
+			return _fail("presentation.%s must be a positive number" % key)
+	if seen == 0:
+		return _fail("presentation block is empty")
+	return _pass()
+
+
+static func _t_contact_cfg_getters_match_shipped_values() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var bid: Dictionary = ConfigService.get_contact_bid_cfg(cs)
+	if int(bid.get("reactive_fear_min", -1)) != 60 or not bid.has("suppression") or not bid.has("boost"):
+		return _fail("contact.bid does not read back the shipped block")
+	var tc: Dictionary = ConfigService.get_contact_turn_count_cfg(cs)
+	if int(tc.get("npc_fear_above", -1)) != 60 or int(tc.get("npc_morale_below", -1)) != 30:
+		return _fail("contact.turn_count_modifiers does not read back the shipped values")
+	if int(ConfigService.get_contact_emotional_fit_cfg(cs).get("low_morale_npc_max", -1)) != 20:
+		return _fail("contact.emotional_fit_modifiers does not read back the shipped values")
+	if ConfigService.get_contact_max_voices_per_turn(cs, 99) != 3:
+		return _fail("contact.max_voices_per_turn must read 3")
+	return _pass()
+
+
+static func _t_stance_cfg_getters_null_service_empty() -> Dictionary:
+	var empty := ConfigService.new()
+	for d: Dictionary in [
+		ConfigService.get_party_stance_cfg(null), ConfigService.get_party_stance_profile(null, "x"),
+		ConfigService.get_stage_presentation_cfg(null), ConfigService.get_contact_bid_cfg(null),
+		ConfigService.get_contact_turn_count_cfg(null), ConfigService.get_contact_emotional_fit_cfg(null),
+		ConfigService.get_party_stance_cfg(empty), ConfigService.get_contact_bid_cfg(empty),
+	]:
+		if not d.is_empty():
+			return _fail("a getter on a null or unloaded service must return {}")
+	if ConfigService.get_contact_max_voices_per_turn(null) != 3 or ConfigService.get_contact_max_voices_per_turn(empty) != 3:
+		return _fail("max_voices_per_turn fallback must be 3 (today's literal)")
+	return _pass()
