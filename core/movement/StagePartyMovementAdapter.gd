@@ -938,6 +938,8 @@ static func _target_weight(
 	weights: Dictionary,
 	category_map: Dictionary
 ) -> float:
+	if bool(situation.get("is_objective", false)):
+		return float(weights.get("objective", DEFAULT_TARGET_WEIGHT))
 	var situation_type: String = str(situation.get("type", ""))
 	var category: String = str(category_map.get(situation_type, DEFAULT_SITUATION_CATEGORY))
 	return float(weights.get(category, DEFAULT_TARGET_WEIGHT))

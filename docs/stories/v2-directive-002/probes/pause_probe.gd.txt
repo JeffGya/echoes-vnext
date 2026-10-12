@@ -1,0 +1,297 @@
+extends SceneTree
+# V2-DIRECTIVE-002 B+C pause measurement. Read-only: edits no repo file.
+# Args after "--":  out_file  seeds_csv  realms_csv  directives_csv  max_stages  max_advances
+#   example: out.txt 101,202 realm.01,realm.02 scout,seek 0 80     (max_stages 0 = all)
+# Method: drive real stages with real Advances (every pending situation is ignored, so the
+# party walks the whole board). For each Advance, replay the real traveled path one step at a
+# time and apply the D-29 stop rules to it. The rules are NOT in core/ yet; they live here.
+
+# numbers.md section 7 and the Directive baselines (authored values, no party bend).
+const TOL := { "scout": 0.3, "seek": 0.8 }
+const WILL := { "scout": 0.7, "seek": 0.3 }
+const HOSTILE_RADIUS := 2
+const HOSTILE_PEAK := 1.0
+const PAUSE_TRIGGER := 0.25
+const DIRECTIVE_ID := { "scout": "directive.scout_carefully", "seek": "directive.seek_signs" }
+
+var SAVE_DIR := "/private/tmp/claude-501/probe-save-%d" % OS.get_process_id()   # per process, so slices can run side by side
+var _acc: Dictionary = {}
+var _stage_rows: Array = []
+var _cat_map: Dictionary = {}
+
+func _initialize() -> void:
+	call_deferred("_go")
+
+func _boot(seed_v: int, realm: String) -> FlowRuntime:
+	var save_path := SAVE_DIR + "/slot.json"
+	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
+	TestSaveHarness.remove_save_artifacts(save_path)
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), save_path)
+	runtime.boot()
+	var save: Dictionary = runtime.flow_ctx.save_data
+	if not (save.get("campaign", null) is Dictionary):
+		save["campaign"] = {}
+	save["campaign"]["root_seed"] = seed_v
+	runtime.flow_ctx.campaign_seed = CampaignSeed.new(seed_v)
+	var cfg: Dictionary = runtime.config_service.get_balance()
+	var options: Array = OnboardingService.build_fragment_options(save, cfg)
+	OnboardingService.select_fragment(save, cfg, str(options[0].get("virtue", "")))
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
+	var ob: Dictionary = runtime.get_save_data()["onboarding"]
+	ob["keeper_intro_complete"] = true
+	ob["keeper_intro_step"] = "complete"
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.sanctum" })
+	for e in runtime.get_save_data()["sanctum"]["roster"]:
+		runtime.dispatch({ "type": "sanctum.party.toggle", "payload": { "echo_id": str(e["id"]) } })
+	runtime.dispatch({ "type": "flow.select_realm", "realm_id": realm })
+	return runtime
+
+func _stage_ids(runtime: FlowRuntime, realm: String) -> Array:
+	var out: Array = []
+	var r: Variant = runtime.get_save_data().get("realms", {}).get(realm, {})
+	if r is Dictionary:
+		for s in (r as Dictionary).get("stages", []):
+			if s is Dictionary:
+				out.append("stage." + str(int((s as Dictionary).get("index", out.size()))))
+	return out
+
+func _pt(d: Variant) -> Dictionary:
+	var dd: Dictionary = d if d is Dictionary else {}
+	return { "col": int(dd.get("col", 0)), "row": int(dd.get("row", 0)) }
+
+func _key(c: Dictionary) -> String:
+	return "%d,%d" % [int(c["col"]), int(c["row"])]
+
+func _explore_map(runtime: FlowRuntime) -> Dictionary:
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(runtime.flow_ctx)
+	var m: Variant = stage.get("explore_map", {})
+	return m if m is Dictionary else {}
+
+func _exposure(cell: Dictionary, hostiles: Array) -> float:
+	var best := 0.0
+	for h in hostiles:
+		var d: int = maxi(absi(int(cell["col"]) - int(h["col"])), absi(int(cell["row"]) - int(h["row"])))
+		if d <= HOSTILE_RADIUS:
+			best = maxf(best, HOSTILE_PEAK * (1.0 - float(d) / float(HOSTILE_RADIUS + 1)))
+	return best
+
+func _cat(sit: Dictionary) -> String:
+	return str(_cat_map.get(str(sit.get("type", "")), "combat"))
+
+# One Advance. Returns the record for the aggregate, or {} if the Advance walked nothing.
+func _measure(dir_key: String, radius: int, walkable: Dictionary, pre_sits: Array, pre_explored: Dictionary, path_v: Variant, origin: Dictionary) -> Dictionary:
+	var path: Array = path_v if path_v is Array else []
+	var explored: Dictionary = pre_explored.duplicate()
+	var known: Dictionary = {}
+	for s in pre_sits:
+		if bool(s["revealed"]):
+			known[s["id"]] = true
+	var tol: float = TOL[dir_key]
+	var will: float = WILL[dir_key]
+	var scout: bool = dir_key == "scout"
+	var raw := 0            # counted trigger events
+	var raw_nonoise := 0
+	var moments: Dictionary = {}          # moment index -> true
+	var moments_nonoise: Dictionary = {}
+	var max_exposure := 0.0
+	var kinds: Dictionary = {}
+	for k in range(path.size()):
+		var cell: Dictionary = _pt(path[k])
+		var hostiles: Array = []
+		for s in pre_sits:
+			if known.has(s["id"]) and not bool(s["resolved"]) and not bool(s["passed"]) and _cat(s) == "combat":
+				hostiles.append(s["pos"])
+		var e := _exposure(cell, hostiles)
+		max_exposure = maxf(max_exposure, e)
+		if e * (1.0 - tol) * will >= PAUSE_TRIGGER:
+			raw += 1
+			raw_nonoise += 1
+			moments[k] = true
+			moments_nonoise[k] = true
+			kinds["exposed_ahead"] = int(kinds.get("exposed_ahead", 0)) + 1
+		var before: Dictionary = explored.duplicate()
+		ActiveStageService.lift_fog_at_cell(cell, radius, walkable, explored)
+		for s in pre_sits:
+			if known.has(s["id"]) or bool(s["resolved"]):
+				continue
+			var sk := _key(s["pos"])
+			if explored.has(sk) and not before.has(sk):
+				known[s["id"]] = true
+				var cat := _cat(s)
+				var kind := "paused_to_read"
+				if bool(s["is_objective"]) or cat == "combat":
+					kind = "spotted_ahead"
+				if kind == "paused_to_read" and not scout:
+					continue
+				raw += 1
+				moments[k + 1] = true
+				kinds[kind + ":" + cat] = int(kinds.get(kind + ":" + cat, 0)) + 1
+				if kind == "spotted_ahead" or cat != "reward":
+					raw_nonoise += 1
+					moments_nonoise[k + 1] = true
+	var first := 999
+	for m in moments:
+		first = mini(first, int(m))
+	var cut := 0
+	if first < path.size():
+		cut = path.size() - first
+	var mid := 0
+	for m in moments:
+		if int(m) < path.size():
+			mid += 1
+	return { "steps": path.size(), "raw": raw, "raw_nonoise": raw_nonoise, "moments": moments.size(), "moments_nonoise": moments_nonoise.size(), "mid": mid, "cut": cut, "exposed_path": max_exposure > 0.0, "kinds": kinds }
+
+func _add(group: String, rec: Dictionary, ended: String) -> void:
+	if not _acc.has(group):
+		_acc[group] = { "n": 0, "raw": [], "raw_nonoise": [], "moments": [], "moments_nonoise": [], "mid": [], "cut": [], "why": 0, "why_nonoise": 0, "exposed_path": 0, "ended": {}, "kinds": {}, "steps": [] }
+	var a: Dictionary = _acc[group]
+	a["n"] = int(a["n"]) + 1
+	for f in ["raw", "raw_nonoise", "moments", "moments_nonoise", "mid", "cut", "steps"]:
+		(a[f] as Array).append(int(rec[f]))
+	var met: bool = ended == "met"
+	if int(rec["moments"]) > 0 or met:
+		a["why"] = int(a["why"]) + 1
+	if int(rec["moments_nonoise"]) > 0 or met:
+		a["why_nonoise"] = int(a["why_nonoise"]) + 1
+	if bool(rec["exposed_path"]):
+		a["exposed_path"] = int(a["exposed_path"]) + 1
+	a["ended"][ended] = int((a["ended"] as Dictionary).get(ended, 0)) + 1
+	for kd in rec["kinds"]:
+		a["kinds"][kd] = int((a["kinds"] as Dictionary).get(kd, 0)) + int(rec["kinds"][kd])
+
+func _stats(arr: Array) -> String:
+	if arr.is_empty():
+		return "n/a"
+	var s: Array = arr.duplicate()
+	s.sort()
+	var total := 0
+	for v in s:
+		total += int(v)
+	var p95_idx: int = clampi(int(ceil(0.95 * s.size())) - 1, 0, s.size() - 1)
+	return "min %d  mean %.2f  p95 %d  max %d" % [int(s[0]), float(total) / float(s.size()), int(s[p95_idx]), int(s[s.size() - 1])]
+
+func _share(arr: Array, at_least: int) -> String:
+	var c := 0
+	for v in arr:
+		if int(v) >= at_least:
+			c += 1
+	return "%.1f%%" % (100.0 * float(c) / float(maxi(arr.size(), 1)))
+
+func _report() -> String:
+	var lines: Array = []
+	lines.append("PAUSE PROBE RESULT (rules from design.md 3a and numbers.md 7; authored baselines, no party bend)")
+	lines.append("'moments' = distinct places in one Advance where the party would pause (reveals in one step merge). 'raw' = trigger events before merging.")
+	lines.append("'mid' = pauses before the last step (they would cut the walk short). 'cut' = steps lost when the first pause ends the walk.")
+	lines.append("'why' = Advance with at least one pause, or ending on a situation (stop kind 'met something'). Echo naming is NOT measurable: the profile backend does not exist.")
+	var groups: Array = _acc.keys()
+	groups.sort()
+	for g in groups:
+		var a: Dictionary = _acc[g]
+		lines.append("")
+		lines.append("== %s  (Advances: %d)" % [g, int(a["n"])])
+		lines.append("  steps walked       : " + _stats(a["steps"]))
+		lines.append("  raw triggers       : " + _stats(a["raw"]))
+		lines.append("  pauses (moments)   : " + _stats(a["moments"]))
+		lines.append("  pauses, no noise   : " + _stats(a["moments_nonoise"]) + "   (Scout drops reward finds)")
+		lines.append("  mid-walk pauses    : " + _stats(a["mid"]))
+		lines.append("  steps cut by pause : " + _stats(a["cut"]))
+		lines.append("  share with >=1 / >=2 / >=3 / >=4 pauses: %s / %s / %s / %s" % [_share(a["moments"], 1), _share(a["moments"], 2), _share(a["moments"], 3), _share(a["moments"], 4)])
+		lines.append("  share with >=1 mid-walk pause: " + _share(a["mid"], 1))
+		lines.append("  why shows (>=1 pause or met)   : %.1f%%   no-noise: %.1f%%" % [100.0 * float(a["why"]) / float(maxi(int(a["n"]), 1)), 100.0 * float(a["why_nonoise"]) / float(maxi(int(a["n"]), 1))])
+		lines.append("  path touches an exposed cell   : %.1f%%" % (100.0 * float(a["exposed_path"]) / float(maxi(int(a["n"]), 1))))
+		lines.append("  Advance ended as: " + JSON.stringify(a["ended"]))
+		lines.append("  trigger kinds   : " + JSON.stringify(a["kinds"]))
+	lines.append("")
+	lines.append("PER STAGE (directive seed realm stage: advances, mean pauses, max pauses)")
+	for r in _stage_rows:
+		lines.append(str(r))
+	return "\n".join(lines)
+
+func _go() -> void:
+	var args := OS.get_cmdline_user_args()
+	var out_file: String = args[0]
+	var seeds: PackedStringArray = args[1].split(",")
+	var realms: PackedStringArray = args[2].split(",")
+	var dirs: PackedStringArray = args[3].split(",")
+	var max_stages: int = int(args[4])
+	var max_adv: int = int(args[5])
+	for sd in seeds:
+		for realm in realms:
+			var probe_rt := _boot(int(sd), realm)
+			var ids: Array = _stage_ids(probe_rt, realm)
+			if ids.is_empty():
+				print("SKIP no stages ", sd, " ", realm)
+				continue
+			if max_stages > 0 and ids.size() > max_stages:
+				ids = ids.slice(0, max_stages)
+			for stage_id in ids:
+				for dk in dirs:
+					_run_stage(int(sd), realm, str(stage_id), str(dk), max_adv)
+	TestSaveHarness.remove_save_artifacts(SAVE_DIR + "/slot.json")
+	var text := _report()
+	var f := FileAccess.open(out_file, FileAccess.WRITE)
+	f.store_string(text + "\n")
+	f.close()
+	print(text)
+	quit()
+
+func _run_stage(sd: int, realm: String, stage_id: String, dk: String, max_adv: int) -> void:
+	var runtime := _boot(sd, realm)
+	runtime.dispatch({ "type": "flow.select_stage", "stage_id": stage_id })
+	var snap: Dictionary = runtime.dispatch({ "type": "flow.go_state", "to": "flow.stage_explore" })
+	var d0: Dictionary = snap.get("data", {})
+	if snap.get("type", "") != "flow.stage_explore" or d0.has("error"):
+		print("SKIP stage ", sd, " ", realm, " ", stage_id, " ", snap.get("type", "?"), " ", d0.get("error", ""))
+		return
+	runtime.dispatch({ "type": "directive.select", "directive_id": DIRECTIVE_ID[dk] })
+	var balance: Dictionary = runtime.config_service.get_balance()
+	_cat_map = ConfigService.get_situation_category_cfg(runtime.config_service)
+	var dcfg: Dictionary = balance["data"]["directives"][DIRECTIVE_ID[dk]]
+	var radius: int = int(dcfg.get("reveal_radius", 2))
+	var budget: int = int(dcfg.get("step_budget", 3))
+	var counts: Array = []
+	var group_dir := dk
+	var group_realm := dk + " / " + realm
+	for _i in range(max_adv):
+		var em: Dictionary = _explore_map(runtime)
+		var walkable: Dictionary = ActiveStageService.explore_walkable(em)
+		var pre_sits: Array = []
+		for s in em.get("situations", []):
+			var sd_: Dictionary = s
+			pre_sits.append({ "id": str(sd_.get("id", "")), "pos": _pt(sd_.get("pos")), "type": str(sd_.get("type", "")), "is_objective": bool(sd_.get("is_objective", false)), "revealed": bool(sd_.get("revealed", false)), "resolved": bool(sd_.get("resolved", false)), "passed": bool(sd_.get("passed", false)) })
+		var pre_explored: Dictionary = {}
+		for k in em.get("explored_cells", {}):
+			pre_explored[str(k)] = true
+		var turn_before: int = int(em.get("turn_count", 0))
+		var s1: Dictionary = runtime.dispatch({ "type": "stage.advance_turn" })
+		var d1: Dictionary = s1.get("data", {})
+		var tp: Variant = d1.get("traveled_path", [])
+		var pending: bool = d1.get("situation_pending", null) is Dictionary and not (d1.get("situation_pending") as Dictionary).is_empty()
+		var turn_after: int = int(_explore_map(runtime).get("turn_count", 0))
+		if turn_after == turn_before:
+			break
+		var rec := _measure(dk, radius, walkable, pre_sits, pre_explored, tp, _pt(d1.get("traveled_origin")))
+		var ended := "ended_early"
+		if pending:
+			ended = "met"
+		elif int(rec["steps"]) >= budget:
+			ended = "spent"
+		if int(rec["steps"]) == 0:
+			break
+		_add(group_dir + " / ALL", rec, ended)
+		_add(group_realm, rec, ended)
+		counts.append(int(rec["moments"]))
+		if OS.get_environment("PROBE_TRACE") == "1":
+			print("ADV ", _i, " steps=", rec["steps"], " moments=", rec["moments"], " ", ended, " ", tp)
+		if pending:
+			runtime.dispatch({ "type": "stage.ignore_situation" })
+	var total := 0
+	var mx := 0
+	for c in counts:
+		total += int(c)
+		mx = maxi(mx, int(c))
+	var em_end: Dictionary = _explore_map(runtime)
+	var cover: float = 100.0 * float((em_end.get("explored_cells", {}) as Dictionary).size()) / float(maxi(ActiveStageService.explore_walkable(em_end).size(), 1))
+	_stage_rows.append("%s seed=%d %s %s: advances=%d mean=%.2f max=%d board_explored=%.0f%%" % [dk, sd, realm, stage_id, counts.size(), float(total) / float(maxi(counts.size(), 1)), mx, cover])

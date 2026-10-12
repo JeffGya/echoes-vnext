@@ -1,0 +1,210 @@
+extends SceneTree
+# V2-DIRECTIVE-002 S1c pool probe. Read-only: edits no repo file.
+# Args after "--":  out_file  seeds_csv  realms_csv  directives_csv  max_stages  max_advances
+#   example: out.txt 101,202,303 realm.01,realm.02 scout,seek 0 80     (max_stages 0 = all)
+# Method: drive real stages with real Advances under the S1c tree (every pending situation is
+# ignored). Before each Advance, read the target the live rule picks (find_explore_target) and the
+# target the pre-S1c rule would pick (Tier 1: nearest revealed, unresolved, unpassed, reachable
+# objective). Counted only when such an objective exists ("eligible"). The walk itself follows the
+# S1c rule, so later board states are S1c states: each count is a counterfactual at one decision.
+
+const DIRECTIVE_ID := { "scout": "directive.scout_carefully", "seek": "directive.seek_signs" }
+const AdapterScript := preload("res://core/movement/StagePartyMovementAdapter.gd")
+
+var SAVE_DIR := "/private/tmp/claude-501/pool-probe-save-%d" % OS.get_process_id()
+var _acc: Dictionary = {}
+var _stage_rows: Array = []
+
+func _initialize() -> void:
+	call_deferred("_go")
+
+func _boot(seed_v: int, realm: String) -> FlowRuntime:
+	var save_path := SAVE_DIR + "/slot.json"
+	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
+	TestSaveHarness.remove_save_artifacts(save_path)
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var runtime := FlowRuntime.new(logger, ConfigService.new(), save_path)
+	runtime.boot()
+	var save: Dictionary = runtime.flow_ctx.save_data
+	if not (save.get("campaign", null) is Dictionary):
+		save["campaign"] = {}
+	save["campaign"]["root_seed"] = seed_v
+	runtime.flow_ctx.campaign_seed = CampaignSeed.new(seed_v)
+	var cfg: Dictionary = runtime.config_service.get_balance()
+	var options: Array = OnboardingService.build_fragment_options(save, cfg)
+	OnboardingService.select_fragment(save, cfg, str(options[0].get("virtue", "")))
+	runtime.dispatch({ "type": "onboarding.fragment.confirm" })
+	var ob: Dictionary = runtime.get_save_data()["onboarding"]
+	ob["keeper_intro_complete"] = true
+	ob["keeper_intro_step"] = "complete"
+	runtime.dispatch({ "type": "flow.go_state", "to": "flow.sanctum" })
+	for e in runtime.get_save_data()["sanctum"]["roster"]:
+		runtime.dispatch({ "type": "sanctum.party.toggle", "payload": { "echo_id": str(e["id"]) } })
+	runtime.dispatch({ "type": "flow.select_realm", "realm_id": realm })
+	return runtime
+
+func _stage_ids(runtime: FlowRuntime, realm: String) -> Array:
+	var out: Array = []
+	var r: Variant = runtime.get_save_data().get("realms", {}).get(realm, {})
+	if r is Dictionary:
+		for s in (r as Dictionary).get("stages", []):
+			if s is Dictionary:
+				out.append("stage." + str(int((s as Dictionary).get("index", out.size()))))
+	return out
+
+func _key(c: Variant) -> String:
+	var d: Dictionary = c if c is Dictionary else {}
+	return "%d,%d" % [int(d.get("col", 0)), int(d.get("row", 0))]
+
+func _bump(group: String, field: String, n: int = 1) -> void:
+	if not _acc.has(group):
+		_acc[group] = {}
+	_acc[group][field] = int((_acc[group] as Dictionary).get(field, 0)) + n
+
+# One decision point. Returns a short tag for the trace.
+func _measure(runtime: FlowRuntime, cat_map: Dictionary, slack_cfg: Dictionary, groups: Array) -> String:
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(runtime.flow_ctx)
+	var em: Dictionary = stage.get("explore_map", {})
+	var walkable: Dictionary = ActiveStageService.explore_walkable(em)
+	var party_pos: Dictionary = em.get("party_pos", {})
+	var dist: Dictionary = ActiveStageService.stage_reachable_costs(party_pos, walkable)
+	var objectives: Array = []
+	for s_v in em.get("situations", []):
+		var s: Dictionary = s_v
+		if bool(s.get("is_objective", false)) and bool(s.get("revealed", false)) \
+				and not bool(s.get("resolved", false)) and not bool(s.get("passed", false)) \
+				and dist.has(_key(s.get("pos"))):
+			objectives.append(s)
+	if objectives.is_empty():
+		return "no_objective"
+	var old_pick := AdapterScript.select_objective_target(objectives, dist, {}, cat_map, slack_cfg)
+	var session := ActiveStageService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var new_pick := session.find_explore_target(em.duplicate(true), directive, walkable, (em.get("explored_cells", {}) as Dictionary).duplicate(), stage.duplicate(true))
+	for g in groups:
+		_bump(g, "eligible")
+	if bool(new_pick.get("is_objective", false)):
+		for g in groups:
+			_bump(g, "objective_kept")
+		return "kept"
+	var cat := str(cat_map.get(str(new_pick.get("type", "")), "intel"))
+	var d_pick := int(dist.get(_key(new_pick.get("pos")), -1))
+	var d_obj := int(dist.get(_key(old_pick.get("pos")), -1))
+	var env := d_pick + AdapterScript._slack_envelope(d_pick, slack_cfg)
+	var why := "outside_envelope" if d_obj > env else "outweighed"
+	for g in groups:
+		_bump(g, "diverted")
+		_bump(g, "diverted_cat:" + cat)
+		_bump(g, "diverted_" + why)
+		if cat == "combat":
+			_bump(g, "diverted_combat_" + why)
+		_bump(g, "sum_obj_dist", d_obj)
+		_bump(g, "sum_pick_dist", d_pick)
+	return "diverted %s %s d_pick=%d d_obj=%d" % [cat, why, d_pick, d_obj]
+
+func _pct(a: int, b: int) -> String:
+	return "%.1f%%" % (100.0 * float(a) / float(maxi(b, 1)))
+
+func _report() -> String:
+	var lines: Array = []
+	lines.append("S1C POOL PROBE (live tree; pre-S1c rule recomputed at the same decision point)")
+	lines.append("eligible = Advances that start with a revealed, unresolved, unpassed, reachable objective.")
+	lines.append("diverted = live pick is NOT an objective (pre-S1c Tier 1 would have picked the objective).")
+	lines.append("outside_envelope = objective farther than nearest candidate + slack; outweighed = inside, lost on weight.")
+	var groups: Array = _acc.keys()
+	groups.sort()
+	for g in groups:
+		var a: Dictionary = _acc[g]
+		var el := int(a.get("eligible", 0))
+		var dv := int(a.get("diverted", 0))
+		var cb := int(a.get("diverted_cat:combat", 0))
+		lines.append("")
+		lines.append("== %s  (Advances: %d, eligible: %d)" % [g, int(a.get("advances", 0)), el])
+		lines.append("  diverted to a non-objective : %d (%s of eligible)" % [dv, _pct(dv, el)])
+		lines.append("  of which hostile (combat)   : %d (%s of diverted, %s of eligible)" % [cb, _pct(cb, dv), _pct(cb, el)])
+		lines.append("  diverted by category        : intel %d, reward %d, combat %d" % [int(a.get("diverted_cat:intel", 0)), int(a.get("diverted_cat:reward", 0)), cb])
+		lines.append("  diverted cause              : outside_envelope %d, outweighed %d" % [int(a.get("diverted_outside_envelope", 0)), int(a.get("diverted_outweighed", 0))])
+		lines.append("  hostile cause               : outside_envelope %d, outweighed %d" % [int(a.get("diverted_combat_outside_envelope", 0)), int(a.get("diverted_combat_outweighed", 0))])
+		if dv > 0:
+			lines.append("  mean distance when diverted : pick %.1f, objective %.1f" % [float(a.get("sum_pick_dist", 0)) / dv, float(a.get("sum_obj_dist", 0)) / dv])
+	lines.append("")
+	lines.append("PER STAGE (directive seed realm stage: advances, eligible, diverted, diverted hostile)")
+	for r in _stage_rows:
+		lines.append(str(r))
+	return "\n".join(lines)
+
+func _go() -> void:
+	var args := OS.get_cmdline_user_args()
+	var out_file: String = args[0]
+	var seeds: PackedStringArray = args[1].split(",")
+	var realms: PackedStringArray = args[2].split(",")
+	var dirs: PackedStringArray = args[3].split(",")
+	var max_stages: int = int(args[4])
+	var max_adv: int = int(args[5])
+	for sd in seeds:
+		for realm in realms:
+			var probe_rt := _boot(int(sd), realm)
+			var ids: Array = _stage_ids(probe_rt, realm)
+			if ids.is_empty():
+				print("SKIP no stages ", sd, " ", realm)
+				continue
+			if max_stages > 0 and ids.size() > max_stages:
+				ids = ids.slice(0, max_stages)
+			for stage_id in ids:
+				for dk in dirs:
+					_run_stage(int(sd), realm, str(stage_id), str(dk), max_adv)
+	TestSaveHarness.remove_save_artifacts(SAVE_DIR + "/slot.json")
+	var text := _report()
+	var f := FileAccess.open(out_file, FileAccess.WRITE)
+	f.store_string(text + "\n")
+	f.close()
+	print(text)
+	quit()
+
+func _run_stage(sd: int, realm: String, stage_id: String, dk: String, max_adv: int) -> void:
+	var runtime := _boot(sd, realm)
+	runtime.dispatch({ "type": "flow.select_stage", "stage_id": stage_id })
+	var snap: Dictionary = runtime.dispatch({ "type": "flow.go_state", "to": "flow.stage_explore" })
+	var d0: Dictionary = snap.get("data", {})
+	if snap.get("type", "") != "flow.stage_explore" or d0.has("error"):
+		print("SKIP stage ", sd, " ", realm, " ", stage_id, " ", snap.get("type", "?"), " ", d0.get("error", ""))
+		return
+	runtime.dispatch({ "type": "directive.select", "directive_id": DIRECTIVE_ID[dk] })
+	var cat_map := ConfigService.get_situation_category_cfg(runtime.config_service)
+	var slack_cfg := ConfigService.get_movement_slack_cfg(runtime.config_service)
+	var groups: Array = [dk + " / ALL", dk + " / " + realm]
+	var adv := 0
+	var el := 0
+	var dv := 0
+	var hc := 0
+	for _i in range(max_adv):
+		var em: Dictionary = FlowStageExploreState._get_current_stage(runtime.flow_ctx).get("explore_map", {})
+		var turn_before: int = int(em.get("turn_count", 0))
+		var tag := _measure(runtime, cat_map, slack_cfg, groups)
+		var s1: Dictionary = runtime.dispatch({ "type": "stage.advance_turn" })
+		var d1: Dictionary = s1.get("data", {})
+		var turn_after: int = int(FlowStageExploreState._get_current_stage(runtime.flow_ctx).get("explore_map", {}).get("turn_count", 0))
+		if turn_after == turn_before:
+			# No Advance happened: undo the eligibility count taken for it.
+			if tag != "no_objective":
+				for g in groups:
+					_bump(g, "eligible", -1)
+					if tag == "kept":
+						_bump(g, "objective_kept", -1)
+			break
+		adv += 1
+		for g in groups:
+			_bump(g, "advances")
+		if tag != "no_objective":
+			el += 1
+		if tag.begins_with("diverted"):
+			dv += 1
+			if tag.begins_with("diverted combat"):
+				hc += 1
+		if OS.get_environment("PROBE_TRACE") == "1" and tag != "no_objective":
+			print("ADV ", _i, " ", dk, " ", tag)
+		var pending: bool = d1.get("situation_pending", null) is Dictionary and not (d1.get("situation_pending") as Dictionary).is_empty()
+		if pending:
+			runtime.dispatch({ "type": "stage.ignore_situation" })
+	_stage_rows.append("%s seed=%d %s %s: advances=%d eligible=%d diverted=%d hostile=%d" % [dk, sd, realm, stage_id, adv, el, dv, hc])

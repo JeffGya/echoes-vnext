@@ -85,6 +85,10 @@ static func register(runner: CoreTestRunner) -> void:
 	for n in ["exposure_empty_map_plain_route", "exposure_hidden_never_counts", "exposure_known_hazard_seam_counts", "exposure_scout_detours_seek_direct", "exposure_never_a_wall", "exposure_costs_are_int_ge_1"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
+	# V2-DIRECTIVE-002 B+C slice S1c: the objective weight in the pool.
+	for n in ["select_target_objective_weight", "select_target_missing_objective_key_neutral"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
 # ---------------------------------------------------------------------------
 # Profile — capacity is the DIRECTIVE step_budget
 # ---------------------------------------------------------------------------
@@ -1939,3 +1943,33 @@ static func _t_exposure_costs_are_int_ge_1() -> Dictionary:
 	if not ExposureMap.to_terrain_costs(exposure, 0.0, 0).is_empty():
 		return _fail("price_scale 0 must give no costs")
 	return _pass() if ExposureMap.to_terrain_costs(exposure, 1.0, 4).is_empty() else _fail("tolerance 1 must give no costs")
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 B+C slice S1c — objective weight joins the pool
+# ---------------------------------------------------------------------------
+
+static func _pool_pair() -> Array:
+	return [
+		{"id": "sit.goal", "pos": {"col": 4, "row": 0}, "type": "npc", "is_objective": true},
+		{"id": "sit.find", "pos": {"col": 3, "row": 0}, "type": "npc"},
+	]
+
+
+static func _t_select_target_objective_weight() -> Dictionary:
+	var field: Dictionary = {"3,0": 3, "4,0": 4}
+	var cat: Dictionary = {"npc": "intel"}
+	var high: String = str(Adapter.select_objective_target(_pool_pair(), field, {"intel": 0.9, "objective": 1.6}, cat).get("id", ""))
+	var low: String = str(Adapter.select_objective_target(_pool_pair(), field, {"intel": 1.4, "objective": 1.2}, cat).get("id", ""))
+	if high != "sit.goal" or low != "sit.find":
+		return _fail("objective weight must rank against the find weight: high=%s low=%s" % [high, low])
+	return _pass()
+
+
+# No `objective` key: the objective scores the neutral weight, so it ties a neutral find and the nearer one wins.
+static func _t_select_target_missing_objective_key_neutral() -> Dictionary:
+	var field: Dictionary = {"3,0": 3, "4,0": 4}
+	var pick: String = str(Adapter.select_objective_target(_pool_pair(), field, {"intel": 1.0}, {"npc": "intel"}).get("id", ""))
+	if pick != "sit.find":
+		return _fail("a missing objective key must act neutral (nearest wins the tie), got %s" % pick)
+	return _pass()

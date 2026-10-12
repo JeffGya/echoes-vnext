@@ -398,6 +398,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/one_result_per_advance_validates", Callable(TraversalModelTests, "_t_one_result_per_advance_validates"))
 	runner.register_test("traversal/result_cleared_without_move",          Callable(TraversalModelTests, "_t_result_cleared_without_move"))
 	runner.register_test("traversal/exposure_two_route_board_scout_vs_seek", Callable(TraversalModelTests, "_t_exposure_two_route_board_scout_vs_seek"))
+	# V2-DIRECTIVE-002 S1c: the objective joins the weighted pool (design 3.1 O1 to O3)
+	runner.register_test("traversal/pool_o1_scout_find_first",          Callable(TraversalModelTests, "_t_pool_o1_scout_find_first"))
+	runner.register_test("traversal/pool_o2_seek_objective_first",      Callable(TraversalModelTests, "_t_pool_o2_seek_objective_first"))
+	runner.register_test("traversal/pool_o3_seek_close_find_then_objective", Callable(TraversalModelTests, "_t_pool_o3_seek_close_find_then_objective"))
+	runner.register_test("traversal/pool_only_objective_revealed",      Callable(TraversalModelTests, "_t_pool_only_objective_revealed"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2296,20 +2301,22 @@ static func _t_result_cleared_without_move() -> Dictionary:
 # ─── V2-DIRECTIVE-002 S1b: exposure price on a two-route board ───────────────
 
 # Long corridor so the slack envelope (a fraction of the remaining distance) still admits the bypass at every step.
-# Row 4 corridor (cols 0..39) with a row-0 bypass with orthogonal ramps. Hostile at 6,4; objective at 39,4.
+# Row 4 corridor (cols 0..39) with a row-0 bypass with orthogonal ramps. Objective at 39,4.
+# The hostile at 6,5 is on a non-walkable cell beside the corridor: it prices the row but is not
+# reachable, so it never joins the target pool (D-28) and the objective stays the target.
 static func _exposure_terrain() -> Dictionary:
 	var cells: Array = []
 	for c in range(40):
 		cells.append([c, 4])
 	for k in [[2, 3], [2, 2], [2, 1], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0], [10, 1], [10, 2], [10, 3]]:
 		cells.append(k)
-	return { "bounds": { "w": 40, "h": 5 }, "plateaus": [{ "col": 0, "row": 0, "w": 40, "h": 5, "cells": cells }], "bridges": [], "islands": [] }
+	return { "bounds": { "w": 40, "h": 6 }, "plateaus": [{ "col": 0, "row": 0, "w": 40, "h": 6, "cells": cells }], "bridges": [], "islands": [] }
 
 
 # Walk up to `advances` Advances; return every entered cell key.
 static func _exposure_walk(directive: String, hostile_revealed: bool, advances: int = 10) -> Array:
 	var runtime := _make_runtime(directive)
-	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 6, 4, 900, false)
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 6, 5, 900, false)
 	hostile["revealed"] = hostile_revealed
 	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 39, 4, 901, true)
 	goal["revealed"] = true
@@ -2341,4 +2348,66 @@ static func _t_exposure_two_route_board_scout_vs_seek() -> Dictionary:
 	var seek := _exposure_walk("directive.seek_signs", true)
 	if seek.size() < 6 or seek.slice(0, 6) != straight.slice(0, 6):
 		return { "ok": false, "error": "Seek must go direct: %s" % [seek] }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S1c: objective in the weighted pool ────────────────────
+
+# Open 14x11 board, party at (0,5). Returns the target find_explore_target picks.
+static func _pool_pick(directive_id: String, sits: Array) -> Dictionary:
+	var runtime := _make_runtime(directive_id)
+	_inject_stage_with_terrain(runtime, _full_rect_terrain(14, 11), sits, { "col": 0, "row": 5 }, 900, 0)
+	var stage_v: Variant = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]
+	var stage: Dictionary = stage_v
+	var em: Dictionary = stage["explore_map"]
+	var session := ActiveStageService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+	return session.find_explore_target(
+		em, runtime.directive_service.get_active_directive(),
+		ActiveStageService.explore_walkable(em), em.get("explored_cells", {}), stage)
+
+
+static func _pool_sits(find_col: int, objective_col: int) -> Array:
+	var find: Dictionary = SituationModelScript.make("find", SituationModelScript.TYPE_NPC, find_col, 5, 900, false)
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, objective_col, 5, 901, true)
+	find["revealed"] = true
+	goal["revealed"] = true
+	return [find, goal]
+
+
+# O1: intel 1.4 beats objective 1.2, both inside the envelope (nearest 3, cutoff 5).
+static func _t_pool_o1_scout_find_first() -> Dictionary:
+	var t := _pool_pick("directive.scout_carefully", _pool_sits(3, 5))
+	if str(t.get("id", "")) != "find" or int(t.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_WEIGHTED:
+		return { "ok": false, "error": "Scout must take the find first as a weighted pick: %s" % [t] }
+	return { "ok": true }
+
+
+# O2: same board, Seek objective 1.6 beats intel 0.9.
+static func _t_pool_o2_seek_objective_first() -> Dictionary:
+	var t := _pool_pick("directive.seek_signs", _pool_sits(3, 5))
+	if str(t.get("id", "")) != "goal" or int(t.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_OBJECTIVE:
+		return { "ok": false, "error": "Seek must take the objective with the objective tier: %s" % [t] }
+	return { "ok": true }
+
+
+# O3: objective at 7 is outside the envelope (nearest 2, cutoff 4). The find goes first; the objective is delayed, then reached.
+static func _t_pool_o3_seek_close_find_then_objective() -> Dictionary:
+	var t := _pool_pick("directive.seek_signs", _pool_sits(2, 7))
+	if str(t.get("id", "")) != "find":
+		return { "ok": false, "error": "Seek must take the much closer find first: %s" % [t] }
+	var sits := _pool_sits(2, 7)
+	sits[0]["resolved"] = true
+	var after := _pool_pick("directive.seek_signs", sits)
+	if str(after.get("id", "")) != "goal" or int(after.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_OBJECTIVE:
+		return { "ok": false, "error": "the delayed objective must be reached once the find resolves: %s" % [after] }
+	return { "ok": true }
+
+
+static func _t_pool_only_objective_revealed() -> Dictionary:
+	var sits := _pool_sits(3, 9)
+	sits[0]["revealed"] = false
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		var t := _pool_pick(d, sits)
+		if str(t.get("id", "")) != "goal" or int(t.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_OBJECTIVE:
+			return { "ok": false, "error": "%s: a lone objective must be the target: %s" % [d, t] }
 	return { "ok": true }

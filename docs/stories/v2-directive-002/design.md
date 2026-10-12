@@ -98,6 +98,7 @@ Rules:
 - All internal names are PROPOSED. `mechanics-developer` may rename them. They never reach the player.
 - Scout can pause often on a board with many finds. A pause cap per Advance, or merging reveals made in one step into one pause, is decided from measurement: `game-feel-developer` builds the measurement. The main chat runs it (section 11, RUN REQUEST outline). Pauses per Advance and why frequency on the shipped boards are measured before the value is authored (D-40 item 5).
 - Combat stop-short and its Directive cause are phase D. Stage "paused to read" shares no code with `StopShortService`.
+- A detour refused for exceeding the slack limit is not a stop. It has no stop kind. It records the terrain cause (section 8, D-48).
 
 ### 3b. The exposure seam (D-02)
 Route scoring reads one **exposure map**: cell key to a non-negative exposure value, built from named sources.
@@ -268,7 +269,7 @@ The why line carries (content slots only; the wording is Jeff's):
 | Purpose | What the party was doing. | One of the Read, Advance, Reposition families (movement model 18.2). |
 | Route character | How they went. | cautious/low-exposure, direct, skirted a known danger, only way. |
 | Stop | Why they ended there. | The stop kinds of section 3a. |
-| Cause | Who decided. | Directive (shown as "Directive" when it alone decided), terrain, objective, a known situation, the party, or one named Echo. |
+| Cause | Who decided. | Directive (shown as "Directive" when it alone decided), terrain, objective, a known situation, the party, or one named Echo. Terrain also covers a detour refused for exceeding the slack limit. The ground forced the route, not the Directive. A refused detour never shows the Directive cause (D-48). Player wording: [Jeff's wording]. |
 | Echo name | Display name of the decisive Echo. | Only when section 4 names one. |
 | Echo reason class | What about them. | Calling, temperament, fear, morale. Found by the counterfactual. |
 
@@ -298,6 +299,7 @@ The journey entry survives save and load. The `stop` result also survives, so th
 | Schema | No field is removed or renamed. |
 | Review | An `opus` save-schema pass before the build merges. The pass covers the journey entry and `stop` together. |
 | Tests | Round trip (save, load, same entry, same `stop`, glyph returns). Old-save load (no field, empty entry, no glyph, no error). Sanitiser (no ID, no number). |
+| Leg-start length (C1, D-48) | One more saved number. It is the plain length from the leg start, and it fixes the detour limit for that leg. It is built in the same save pass as the journey entry. `mechanics-developer` (`opus`) sets its lifetime, its reset rules and its old-save repair rule. |
 
 ## 9. Failure modes
 
@@ -383,7 +385,7 @@ Scan: literal numbers in the files of the table above. Layout constants in the U
 | `movement` (`StagePartyMovementTests.gd`) | Profile inputs; bound and ordering invariants per dial; objective in the pool; exposure-map pricing with an empty map; replan cap; determinism with shuffled party order. |
 | `seam` (`Stage004SeamTests.gd`) | Stop kinds; return safety draw path unchanged. |
 | `directive` / `directive_char` | Exposure tolerance has a reader; guard nits; synthetic third Directive passes the new dials without a logic change (D-14); no hard-coded tunable left in the section 10.1 "move" rows. |
-| `explore`, `explore_p5` | The `stop`, `travel_why`, `step_budget` and `effective_steps` fields; N7 wrong-reason test; sanitiser test (no IDs, no numbers). |
+| `explore`, `explore_p5` | The `stop`, `travel_why`, `step_budget` and `effective_steps` fields; N7 wrong-reason test; sanitiser test (no IDs, no numbers). A refused detour records the terrain cause and the why never shows a Directive cause for it (D-48). |
 | Save (suite name set by `mechanics-developer`) | Journey entry and `stop` round trip; old-save load with a missing field; no field removed or renamed. |
 | Config text | A test checks that the picker text in `data/balance.json` equals the text in D-34. |
 | Screen check | The stage screen at 1280x720 and 1920x1080: tap targets, spacing, no overlap with the `EchoBar` or safe edges. Hit-area check: glyph, Echo card, party chip and token are each at least 48 x 48 units, 8 units apart. Safe-area check: all four inside the safe edges. The party chip covers no Echo card. |
@@ -445,6 +447,8 @@ Re-record rule (D-01, LESSONS):
 | No Echo named | A party chip beside the Echo cards holds the glyph. It exists only when no Echo is named. Tap opens the why. `ui-ux-designer` places it. | D-42 |
 | Step count label | Removed. The step row shows diamonds only; lost steps are crossed out. The build deletes the live count label (`StepFractionLabel`). | D-43 |
 | K2 bend and authored ranking | The ranking holds. A party bend only decides ties. K2 uses a tie case (reward and intel at 0.9 each in Seek). Per-Directive party numbers live in `data.stages.party_stance.directive_profile.<id>`. | D-44 |
+| Q1 Detour limit rule | Keep the per-step rule (option B, as committed in S1b). Option A (per Advance) is not built. Build C1 later: a limit fixed per leg from the plain length at the leg start. C1 needs one saved number and joins the journey-entry save pass (section 8a). | D-48 |
+| Q2 Refused-detour cause | Yes. A refused detour records the terrain cause. The why never shows a Directive cause for it. Wording is Jeff's. Work lands in S3 (cause value) and S5 (saved field). | D-48 |
 
 ### 12b. Still open
 
