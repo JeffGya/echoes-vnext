@@ -3207,9 +3207,9 @@
 						]
 					},
 					"directive_profile": {
-						"_comment": "PROPOSED DEFAULT. Per-Directive stage numbers keyed by Directive id. They belong inside data.directives.<id> (ANSWERS #81) but DirectiveService.ENTRY_SCHEMA rejects unknown entry keys and the load aborts. When mechanics-developer adds an optional 'party_stance' dict key to ENTRY_SCHEMA, move each block below to data.directives.<id>.party_stance unchanged. commitment_fraction = share of effective steps spent before reassessing (at least 1 step; rounding is a code choice). stop_willingness 0 to 1.",
+						"_comment": "PROPOSED DEFAULT. Scout commitment_fraction 0.6 by D-50 (range 0.5 to 0.7). Per-Directive stage numbers keyed by Directive id. They belong inside data.directives.<id> (ANSWERS #81) but DirectiveService.ENTRY_SCHEMA rejects unknown entry keys and the load aborts. When mechanics-developer adds an optional 'party_stance' dict key to ENTRY_SCHEMA, move each block below to data.directives.<id>.party_stance unchanged. commitment_fraction = share of effective steps spent before reassessing (at least 1 step; rounding is a code choice). stop_willingness 0 to 1.",
 						"directive.scout_carefully": {
-							"commitment_fraction": 0.5,
+							"commitment_fraction": 0.6,
 							"stop_willingness": 0.7,
 							"reveal_stop_kinds": [
 								"spotted_ahead",

@@ -89,6 +89,10 @@ static func register(runner: CoreTestRunner) -> void:
 	for n in ["select_target_objective_weight", "select_target_missing_objective_key_neutral"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
+	# V2-DIRECTIVE-002 B+C slice S2b: the party stance.
+	for n in ["stance_ordering_per_dial", "stance_party_order_shuffle_identical", "stance_standing_floor_leans_at_standing_1", "stance_judgment_never_adds_steps", "stance_readiness_lower_only", "stance_all_shaken_party_keeps_one_step", "stance_bond_rule_changes_width", "stance_commitment_never_exceeds_effective_steps", "stance_directive_without_profile_is_neutral"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
 # ---------------------------------------------------------------------------
 # Profile — capacity is the DIRECTIVE step_budget
 # ---------------------------------------------------------------------------
@@ -1972,4 +1976,177 @@ static func _t_select_target_missing_objective_key_neutral() -> Dictionary:
 	var pick: String = str(Adapter.select_objective_target(_pool_pair(), field, {"intel": 1.0}, {"npc": "intel"}).get("id", ""))
 	if pick != "sit.find":
 		return _fail("a missing objective key must act neutral (nearest wins the tie), got %s" % pick)
+	return _pass()
+
+
+# ─── V2-DIRECTIVE-002 S2b: party stance ──────────────────────────────────────
+
+const Stance = preload("res://core/movement/StagePartyStance.gd")
+const _STANCE_DIALS: Array = ["exposure_tolerance", "stop_willingness", "commitment_fraction", "escape_bonus"]
+
+
+static func _stance_env() -> Dictionary:
+	var cs := _real_config()
+	var dirs: Dictionary = _shipped_directives(cs)
+	var scout: Dictionary = (dirs[SCOUT_ID] as Dictionary).duplicate(true)
+	var seek: Dictionary = (dirs["directive.seek_signs"] as Dictionary).duplicate(true)
+	scout["id"] = SCOUT_ID
+	seek["id"] = "directive.seek_signs"
+	return { "data": cs.get_balance().get("data", {}), "cfg": ConfigService.get_party_stance_cfg(cs), "scout": scout, "seek": seek }
+
+
+static func _stance_actor(id: String, calling: String, rank: int, fear: int, morale: int) -> Dictionary:
+	var echo := ActorTests._make_test_echo(id, id)
+	echo["rank"] = rank
+	echo["calling"] = calling
+	echo["xp_total"] = 100 * rank
+	echo["emotion"] = { "morale_current": morale, "fear_current": fear, "fear_base": 15 }
+	return EchoActor.from_echo(echo)
+
+
+static func _stance_of(actors: Array, directive: Dictionary, env: Dictionary, bonds: Array = []) -> Dictionary:
+	var living: Dictionary = {}
+	for a in actors:
+		living[str(a["id"])] = true
+	var echoes: Array = []
+	for a in actors:
+		echoes.append(Stance.read_echo(a, bonds, living, env["data"]))
+	return Stance.build(echoes, directive, env["cfg"])
+
+
+# Parties from calm to shaken, every family and a spread of Standing.
+static func _stance_parties() -> Array:
+	var parties: Array = [[]]
+	for calling in ["okofor", "aduro", "okomfo"]:
+		for rank in [1, 6]:
+			for st in [[0, 70], [30, 50], [50, 40], [90, 5]]:
+				parties.append([_stance_actor("e_" + calling, calling, rank, st[0], st[1])])
+	parties.append([_stance_actor("a", "okofor", 1, 10, 60), _stance_actor("b", "aduro", 6, 60, 30), _stance_actor("c", "okomfo", 3, 90, 5)])
+	return parties
+
+
+static func _t_stance_ordering_per_dial() -> Dictionary:
+	var env := _stance_env()
+	var bounds: Dictionary = env["cfg"]["bounds"]
+	for party: Array in _stance_parties():
+		var sc := _stance_of(party, env["scout"], env)
+		var sk := _stance_of(party, env["seek"], env)
+		for dial in ["exposure_tolerance", "commitment_fraction"]:
+			if float(sk["dials"][dial]) < float(sc["dials"][dial]):
+				return _fail("Seek %s below Scout for a party of %d" % [dial, party.size()])
+		for dial in ["stop_willingness", "escape_bonus"]:
+			if float(sc["dials"][dial]) < float(sk["dials"][dial]):
+				return _fail("Scout %s below Seek for a party of %d" % [dial, party.size()])
+		if int(sk["effective_steps"]) < int(sc["effective_steps"]) or int(sk["commitment_depth"]) < int(sc["commitment_depth"]):
+			return _fail("Seek steps or depth below Scout for a party of %d" % party.size())
+		for st in [sc, sk]:
+			var base: Dictionary = (env["scout"] if st == sc else env["seek"])
+			var prof: Dictionary = env["cfg"]["directive_profile"][base["id"]]
+			var bases := { "exposure_tolerance": float(base["exposure_tolerance"]), "stop_willingness": float(prof["stop_willingness"]),
+				"commitment_fraction": float(prof["commitment_fraction"]), "escape_bonus": float(base["escape_bonus"]) }
+			for dial in _STANCE_DIALS:
+				if absf(float(st["dials"][dial]) - float(bases[dial])) > float(bounds[dial]) + 0.0001:
+					return _fail("%s of %s moved past its bound" % [dial, base["id"]])
+	return _pass()
+
+
+static func _t_stance_party_order_shuffle_identical() -> Dictionary:
+	var env := _stance_env()
+	var party := [_stance_actor("a", "okofor", 1, 10, 60), _stance_actor("b", "aduro", 6, 60, 30), _stance_actor("c", "okomfo", 3, 90, 5)]
+	var rev := party.duplicate()
+	rev.reverse()
+	var rot := [party[1], party[2], party[0]]
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var base := _stance_of(party, d, env)
+		if _stance_of(rev, d, env) != base or _stance_of(rot, d, env) != base:
+			return _fail("party order changed the stance for %s" % d["id"])
+	return _pass()
+
+
+# D-08: a Standing-1 Echo still leans; Standing 6 leans at least as hard and never past the bound.
+static func _t_stance_standing_floor_leans_at_standing_1() -> Dictionary:
+	var env := _stance_env()
+	var bound := float(env["cfg"]["bounds"]["commitment_fraction"])
+	var floor_ := float(env["cfg"]["lean_strength"]["dispositional_floor"])
+	var leans: Array = []
+	for rank in [1, 6]:
+		var e := Stance.read_echo(_stance_actor("e", "aduro", rank, 0, 50), [], {}, env["data"])
+		leans.append(Stance.echo_lean(e, "commitment_fraction", env["cfg"]))
+	if float(leans[0]) < floor_ * bound - 0.0001:
+		return _fail("Standing-1 Edge lean %s is below floor x bound %s" % [leans[0], floor_ * bound])
+	if float(leans[1]) < float(leans[0]) or float(leans[1]) > bound + 0.0001:
+		return _fail("Standing-6 lean %s must sit between Standing-1 lean %s and the bound %s" % [leans[1], leans[0], bound])
+	return _pass()
+
+
+static func _t_stance_judgment_never_adds_steps() -> Dictionary:
+	var env := _stance_env()
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		for rank in range(1, 10):
+			var st := _stance_of([_stance_actor("e", "okomfo", rank, 0, 70)], d, env)
+			if int(st["effective_steps"]) > int(d["step_budget"]):
+				return _fail("rank %d gave %d steps over budget %d" % [rank, st["effective_steps"], d["step_budget"]])
+	return _pass()
+
+
+static func _t_stance_readiness_lower_only() -> Dictionary:
+	var env := _stance_env()
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var calm := _stance_of([_stance_actor("e", "okofor", 3, 0, 80)], d, env)
+		if int(calm["effective_steps"]) != int(d["step_budget"]):
+			return _fail("a calm party must walk the Directive baseline for %s" % d["id"])
+		for party: Array in _stance_parties():
+			if int(_stance_of(party, d, env)["effective_steps"]) > int(d["step_budget"]):
+				return _fail("readiness raised steps above the baseline for %s" % d["id"])
+	return _pass()
+
+
+static func _t_stance_all_shaken_party_keeps_one_step() -> Dictionary:
+	var env := _stance_env()
+	var party := [_stance_actor("a", "okofor", 1, 95, 2), _stance_actor("b", "aduro", 1, 95, 2)]
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var st := _stance_of(party, d, env)
+		if int(st["effective_steps"]) < 1 or int(st["commitment_depth"]) < 1:
+			return _fail("a shaken party must keep one step under %s: %s" % [d["id"], st])
+		if int(st["effective_steps"]) != int(d["step_budget"]) - 1:
+			return _fail("a shaken party loses exactly one step under %s" % d["id"])
+	return _pass()
+
+
+static func _t_stance_bond_rule_changes_width() -> Dictionary:
+	var env := _stance_env()
+	var a := _stance_actor("a", "okofor", 3, 10, 60)
+	var b := _stance_actor("b", "aduro", 3, 10, 60)
+	var bonds := [{ "actor_a": "a", "actor_b": "b", "strength": 80 }]
+	var with_b := _stance_of([a, b], env["scout"], env, bonds)
+	var without := _stance_of([a, b], env["scout"], env, [])
+	var living := { "a": true, "b": true }
+	var w1 := float(Stance.read_echo(a, bonds, living, env["data"])["width"])
+	var w0 := float(Stance.read_echo(a, [], living, env["data"])["width"])
+	if w1 <= w0:
+		return _fail("a living bond must raise width: with %s without %s" % [w1, w0])
+	if with_b == without:
+		return _fail("bonds must reach the stance")
+	return _pass()
+
+
+static func _t_stance_commitment_never_exceeds_effective_steps() -> Dictionary:
+	var env := _stance_env()
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		for party: Array in _stance_parties():
+			var st := _stance_of(party, d, env)
+			if int(st["commitment_depth"]) > int(st["effective_steps"]) or int(st["commitment_depth"]) < 1:
+				return _fail("depth %s outside 1..%s" % [st["commitment_depth"], st["effective_steps"]])
+	return _pass()
+
+
+static func _t_stance_directive_without_profile_is_neutral() -> Dictionary:
+	var env := _stance_env()
+	var third: Dictionary = (env["seek"] as Dictionary).duplicate(true)
+	third["id"] = "directive.synthetic_third"
+	var st := _stance_of(_stance_parties()[-1], third, env)
+	if int(st["effective_steps"]) != int(third["step_budget"]) or int(st["commitment_depth"]) != int(third["step_budget"]):
+		return _fail("a Directive with no profile must keep its budget: %s" % st)
+	if float(st["dials"]["exposure_tolerance"]) != float(third["exposure_tolerance"]):
+		return _fail("a Directive with no profile must keep its tolerance")
 	return _pass()

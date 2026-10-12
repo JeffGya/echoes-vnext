@@ -19,7 +19,7 @@
 #   14. traversal/fog_projection_only_revealed     — snapshot data.situations has only revealed==true entries
 #   15. traversal/fog_explored_cells_seeded        — explored_cells non-empty after lock (entry vicinity seeded)
 #   16. traversal/fog_growth_per_advance           — explored_cells grows each Advance
-#   17. traversal/fog_scout_wider_than_seek        — Scout lifts more fog per advance than Seek (wide vs narrow radius)
+#   17. traversal/fog_scout_wider_than_seek        — Scout lifts more fog per step walked than Seek (wide vs narrow radius)
 #   18. traversal/fog_frontier_sweep               — repeated advances eventually bring objective cell into explored_cells (no permanently-fogged reachable node)
 #   19. traversal/fog_durability_return_home       — explored_cells + revealed + resolved persist across return_home re-entry
 #   20. traversal/fog_determinism                  — two identical runs produce identical explored_cells
@@ -398,6 +398,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/one_result_per_advance_validates", Callable(TraversalModelTests, "_t_one_result_per_advance_validates"))
 	runner.register_test("traversal/result_cleared_without_move",          Callable(TraversalModelTests, "_t_result_cleared_without_move"))
 	runner.register_test("traversal/exposure_two_route_board_scout_vs_seek", Callable(TraversalModelTests, "_t_exposure_two_route_board_scout_vs_seek"))
+	# V2-DIRECTIVE-002 S2b: one party stance per Advance; a shaken party still moves or names a stop
+	runner.register_test("traversal/one_stance_per_advance",                 Callable(TraversalModelTests, "_t_one_stance_per_advance"))
+	runner.register_test("traversal/all_shaken_party_still_moves_or_names_stop", Callable(TraversalModelTests, "_t_all_shaken_party_still_moves_or_names_stop"))
 	# V2-DIRECTIVE-002 S1c: the objective joins the weighted pool (design 3.1 O1 to O3)
 	runner.register_test("traversal/pool_o1_scout_find_first",          Callable(TraversalModelTests, "_t_pool_o1_scout_find_first"))
 	runner.register_test("traversal/pool_o2_seek_objective_first",      Callable(TraversalModelTests, "_t_pool_o2_seek_objective_first"))
@@ -1235,73 +1238,34 @@ static func _t_fog_growth_per_advance() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 17 — FOG SCOUT WIDER THAN SEEK: Scout lifts more fog per advance ───
+# ─── Test 17 — FOG SCOUT WIDER THAN SEEK: Scout lifts more fog per step walked ───
 # Scout reveal_radius=3, Seek reveal_radius=1. Both step the same terrain.
-# Over N advances from the same start, Scout must accumulate MORE explored cells.
+# D-50 A2: "wider" is PER STEP. Scout walks fewer steps per Advance, so raw totals say nothing.
 static func _t_fog_scout_wider_than_seek() -> Dictionary:
 	var realm_seed := 200
 	var sit_positions := [{ "col": 25, "row": 15 }]
-
-	# Run Scout for N advances, collect explored_cells size.
-	var runtime_scout := _make_runtime("directive.scout_carefully")
-	_inject_terrain_stage(runtime_scout, realm_seed, 0, sit_positions)
-	var scout_advances: int = 0
-	for _i in range(5):
-		var pv: Variant = _read_em(runtime_scout, "pending_situation_id")
-		if pv != null and str(pv) != "":
-			break
-		runtime_scout.dispatch({ "type": "stage.advance_turn" })
-		scout_advances += 1
-	var scout_ec_size := _read_explored_cells(runtime_scout).size()
-
-	# Run Seek for same N advances on identical terrain.
-	var runtime_seek := _make_runtime("directive.seek_signs")
-	_inject_terrain_stage(runtime_seek, realm_seed, 0, sit_positions)
-	var seek_advances: int = 0
-	for _i in range(5):
-		var pv2: Variant = _read_em(runtime_seek, "pending_situation_id")
-		if pv2 != null and str(pv2) != "":
-			break
-		runtime_seek.dispatch({ "type": "stage.advance_turn" })
-		seek_advances += 1
-	var seek_ec_size := _read_explored_cells(runtime_seek).size()
-
-	# Seek arrives faster (step_budget=6) so may cover more ground in raw cells walked,
-	# BUT Scout's wider radius (3 vs 1) should lift more fog per step.
-	# Robust assertion: Scout's explored_cells must be >= Seek's (wide radius covers nearby cells
-	# Seek misses). If Scout arrived first, it may have fewer advances — accept degenerate case.
-	if scout_ec_size == 0:
-		return { "ok": false, "error": "Scout explored_cells is 0 — fog lift not working at all" }
-	if seek_ec_size == 0:
-		return { "ok": false, "error": "Seek explored_cells is 0 — fog lift not working at all" }
-
-	# Strongest assertion: Scout should have discovered at least as many cells as Seek
-	# (wider radius per step outweighs Seek's extra steps within same N advances).
-	if scout_ec_size < seek_ec_size:
-		# Check if Seek arrived significantly faster (meaning it covered more of the map).
-		# If so, this is expected and we accept the degenerate case.
-		var scout_pending_v: Variant = _read_em(runtime_scout, "pending_situation_id")
-		var seek_pending_v:  Variant = _read_em(runtime_seek,  "pending_situation_id")
-		var seek_arrived := seek_pending_v != null and str(seek_pending_v) != ""
-		if seek_arrived:
-			# Seek arrived at the target — different path covered, not a radius bug.
-			return { "ok": true }
-		# The MIRROR of that case, which the comment above already described as acceptable
-		# but the code never implemented: Scout reached a situation first, so its loop broke
-		# early and it took FEWER advances than Seek. Comparing raw explored-cell totals
-		# across an unequal number of advances says nothing about reveal radius. Before
-		# V2-COMBAT-003 terrain commit 2 this branch was unreachable on the one hard-coded
-		# board (realm_seed 200); the shared-side connectivity change reshaped that board
-		# and Scout now stops first on it. The gap was in the test, not in the fog.
-		if scout_advances < seek_advances:
-			return { "ok": true }
+	var per_step := {}
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		var runtime := _make_runtime(d)
+		_inject_terrain_stage(runtime, realm_seed, 0, sit_positions)
+		var steps: int = 0
+		for _i in range(5):
+			var pv: Variant = _read_em(runtime, "pending_situation_id")
+			if pv != null and str(pv) != "":
+				break
+			runtime.dispatch({ "type": "stage.advance_turn" })
+			steps += _steps_taken(runtime)
+		var cells := _read_explored_cells(runtime).size()
+		if cells == 0 or steps == 0:
+			return { "ok": false, "error": "%s: no fog lifted or no steps walked (cells=%d, steps=%d)" % [d, cells, steps] }
+		per_step[d] = float(cells) / float(steps)
+	# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+	if per_step["directive.scout_carefully"] <= per_step["directive.seek_signs"]:
 		return {
 			"ok": false,
-			"error": "Scout explored_cells (%d) < Seek explored_cells (%d) — Scout should reveal wider per step (radius 3 vs 1)" % [
-				scout_ec_size, seek_ec_size
-			]
+			"error": "Scout cells per step (%.2f) must exceed Seek (%.2f) (radius 3 vs 1)" % [
+				per_step["directive.scout_carefully"], per_step["directive.seek_signs"]]
 		}
-
 	return { "ok": true }
 
 
@@ -1982,13 +1946,14 @@ static func _t_p5_chain_frontier_uses_full_budget() -> Dictionary:
 
 	runtime.dispatch({ "type": "stage.advance_turn" })
 
-	var step_budget := int(runtime.directive_service.get_active_directive().get("step_budget", 6))
+	# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+	var steps_expected := 5
 	var steps := _steps_taken(runtime)
 
-	if steps != step_budget:
+	if steps != steps_expected:
 		return {
 			"ok": false,
-			"error": "Expected chained frontier advance to spend the full step_budget (%d), got %d steps" % [step_budget, steps]
+			"error": "Expected chained frontier advance to spend the commitment depth (%d), got %d steps" % [steps_expected, steps]
 		}
 
 	var ec_after_v: Variant = _read_em(runtime, "explored_cells")
@@ -2109,8 +2074,9 @@ static func _t_p5_passed_situation_walked_through() -> Dictionary:
 		return { "ok": false, "error": "Party should have walked past the passed situation's cell (col 1), stopped at col=%d" % int(pos.get("col", -1)) }
 
 	var steps := _steps_taken(runtime)
-	if steps != 3:
-		return { "ok": false, "error": "Expected full step_budget (3) to be spent walking past the passed node, got %d steps" % steps }
+	# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+	if steps != 2:
+		return { "ok": false, "error": "Expected commitment depth (2) to be spent walking past the passed node, got %d steps" % steps }
 
 	# The passed situation itself must remain unresolved and still marked passed —
 	# walking through it must not silently resolve or un-pass it.
@@ -2137,49 +2103,51 @@ static func _t_p5_passed_situation_walked_through() -> Dictionary:
 # Advances through StageExploreTurnService directly.
 const ADV_COUNT := 6
 
-# Captured from the pre-S1a code. A moved value is a defect, not a re-record.
+# Captured from the pre-S1a code, then re-recorded once for S2b commitment depth.
+# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
 const ADV_EXPECTED := {
 	"gen42_scout": [
-		"advanced|capacity_spent|9,23>10,24>11,25|tc1|fog51:3511803370|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|12,24>13,23>14,22|tc2|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|15,21>16,20>17,20|tc3|fog72:71791107|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|18,20>19,19>20,18|tc4|fog91:911323763|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|21,17>22,16>23,15|tc5|fog113:2463783976|rev[sit.0]|pend:|tr:true|tgt:",
-		"advanced|interrupted|24,15>25,15|tc6|fog116:453466647|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+		"advanced|commitment_spent|9,23>10,24|tc1|fog41:273440436|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|11,25>12,24|tc2|fog53:79100363|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|13,23>14,22|tc3|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|15,21>16,20|tc4|fog67:2050432961|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|17,20>18,20|tc5|fog77:4285513962|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|19,19>20,18|tc6|fog91:911323763|rev[]|pend:|tr:true|tgt:",
 	],
 	"gen42_seek": [
-		"advanced|capacity_spent|8,23>8,24>9,25>10,26>11,27>12,28|tc1|fog23:1896906063|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|13,28>13,27>14,26>14,25>14,24>14,23|tc2|fog34:497347247|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|14,22>14,21>13,20>12,20>11,21>10,22|tc3|fog49:2004276599|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|11,23>12,24>11,25>10,26>9,27>10,26|tc4|fog56:3295238824|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|11,25>12,24>13,23>14,22>15,21>16,20|tc5|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|17,20>18,20>19,19>20,18>21,17>22,16|tc6|fog82:3670138503|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|8,23>8,24>9,25>10,26>11,27|tc1|fog21:1374295908|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|12,28>13,28>13,27>14,26>14,25|tc2|fog30:2470046059|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|14,24>14,23>14,22>14,21>13,20|tc3|fog42:2020617703|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|12,20>11,21>10,22>11,23>12,24|tc4|fog53:1151302778|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|11,25>10,26>9,27>10,26>11,25|tc5|fog56:3295238824|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|12,24>13,23>14,22>15,21>16,20|tc6|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
 	],
 	"gen100_scout": [
-		"advanced|capacity_spent|16,17>17,18>18,18|tc1|fog41:1455657212|rev[sit.0]|pend:|tr:true|tgt:",
-		"advanced|interrupted|19,17>20,16>20,15|tc2|fog55:656844878|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+		"advanced|commitment_spent|16,17>17,18|tc1|fog35:2796315600|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|18,17>19,16|tc2|fog51:402733931|rev[sit.0]|pend:|tr:true|tgt:sit.0",
+		"advanced|interrupted|20,15|tc3|fog54:1485271728|rev[sit.0]|pend:sit.0|tr:false|tgt:",
 	],
 	"gen100_seek": [
-		"advanced|capacity_spent|16,17>17,18>18,19>19,19>20,18>21,17|tc1|fog27:2429444447|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|21,16>21,15>21,14>21,13>20,13>19,13|tc2|fog41:2141085879|rev[sit.0]|pend:|tr:true|tgt:",
-		"advanced|interrupted|20,14>20,15|tc3|fog43:2174154824|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+		"advanced|commitment_spent|16,17>17,18>18,19>19,19>20,18|tc1|fog22:3442288560|rev[]|pend:|tr:true|tgt:",
+		"advanced|interrupted|21,19>22,18>22,17>21,16>20,15|tc2|fog36:2279614770|rev[sit.0]|pend:sit.0|tr:false|tgt:",
 	],
 	"corridor_seek": [
-		"advanced|capacity_spent|1,1>2,1>3,1>4,1>5,1>6,1|tc1|fog8:3871123613|rev[]|pend:|tr:true|tgt:",
-		"advanced|interrupted|7,1>8,1>9,1>10,1>11,1|tc2|fog13:814132961|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+		"advanced|commitment_spent|1,1>2,1>3,1>4,1>5,1|tc1|fog7:1122636189|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|6,1>7,1>8,1>9,1>10,1|tc2|fog12:4235945717|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|11,1|tc3|fog13:814132961|rev[sit.0]|pend:sit.0|tr:false|tgt:",
 	],
 	"open_scout": [
-		"advanced|capacity_spent|5,6>4,7>3,8|tc1|fog82:350397788|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|4,9>5,9>6,10|tc2|fog90:3316875472|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|7,10>8,9>9,8|tc3|fog106:1263099726|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|9,7>9,6>9,5|tc4|fog115:3724010565|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|9,4>9,3>8,2|tc5|fog129:2413698952|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|7,2>6,1>5,1|tc6|fog135:2535929773|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|5,6>4,7|tc1|fog69:1110254941|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|3,8>4,9|tc2|fog83:907695501|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|5,9>6,10|tc3|fog90:3316875472|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|7,10>8,9|tc4|fog103:642227979|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|9,8>9,7|tc5|fog109:2258858798|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|9,6>9,5|tc6|fog115:3724010565|rev[]|pend:|tr:true|tgt:",
 	],
 	"rect_seek": [
-		"advanced|capacity_spent|1,2>2,2>3,1>4,0>5,0>6,1|tc1|fog24:1741867109|rev[]|pend:|tr:true|tgt:",
-		"advanced|capacity_spent|7,1|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
-		"no_target||7,1|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|1,2>2,2>3,1>4,0>5,0|tc1|fog19:4224675366|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|6,0>7,1>6,2|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
+		"no_target||6,0>7,1>6,2|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
 	],
 }
 
@@ -2340,7 +2308,8 @@ static func _t_exposure_two_route_board_scout_vs_seek() -> Dictionary:
 	for d in ["directive.scout_carefully", "directive.seek_signs"]:
 		# One Advance only: the reveal sweep after it may reveal the hostile for the next one.
 		var hidden := _exposure_walk(d, false, 1)
-		if hidden != straight.slice(0, hidden.size()) or hidden.size() < 3:
+		# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+		if hidden != straight.slice(0, hidden.size()) or hidden.size() < 2:
 			return { "ok": false, "error": "%s: a hidden hostile must leave the plain route: %s" % [d, hidden] }
 	var scout := _exposure_walk("directive.scout_carefully", true)
 	if scout.has("6,4") or not scout.has("5,0"):
@@ -2410,4 +2379,44 @@ static func _t_pool_only_objective_revealed() -> Dictionary:
 		var t := _pool_pick(d, sits)
 		if str(t.get("id", "")) != "goal" or int(t.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_OBJECTIVE:
 			return { "ok": false, "error": "%s: a lone objective must be the target: %s" % [d, t] }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S2b: party stance on a real Advance ────────────────────
+
+const StagePartyStanceScript := preload("res://core/movement/StagePartyStance.gd")
+
+
+static func _stance_runtime(directive: String, fear: int, morale: int) -> FlowRuntime:
+	var runtime := _make_runtime(directive)
+	var roster: Array = []
+	var ids: Array = []
+	for i in 2:
+		var echo := ActorTests._make_test_echo("echo_st_%d" % i, "St %d" % i)
+		echo["calling"] = "okofor"
+		echo["emotion"] = { "morale_current": morale, "fear_current": fear, "fear_base": 15 }
+		roster.append(echo)
+		ids.append(echo["id"])
+	runtime.flow_ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids, "bonds": [] }
+	_inject_stage_with_terrain(runtime, _full_rect_terrain(30, 11), [], { "col": 0, "row": 5 }, 900, 0)
+	return runtime
+
+
+static func _t_one_stance_per_advance() -> Dictionary:
+	var runtime := _stance_runtime("directive.scout_carefully", 0, 70)
+	var svc := _adv_service(runtime)
+	var before := StagePartyStanceScript.builds
+	if svc.advance_turn(runtime.directive_service, 0) != "advanced":
+		return { "ok": false, "error": "the Advance did not move" }
+	if StagePartyStanceScript.builds - before != 1:
+		return { "ok": false, "error": "expected one stance for one Advance, got %d" % (StagePartyStanceScript.builds - before) }
+	return { "ok": true }
+
+
+static func _t_all_shaken_party_still_moves_or_names_stop() -> Dictionary:
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		var runtime := _stance_runtime(d, 95, 2)
+		var verdict := _adv_service(runtime).advance_turn(runtime.directive_service, 0)
+		if verdict != "advanced" or _steps_taken(runtime) < 1:
+			return { "ok": false, "error": "%s: a shaken party must still step once on an open board (%s, %d steps)" % [d, verdict, _steps_taken(runtime)] }
 	return { "ok": true }

@@ -69,7 +69,7 @@ Ordering check (Seek is at least Scout on tolerance, steps, commitment; Scout is
 
 | Key (under `stages.party_stance.directive_profile.<id>`) | Scout | Seek | Why | Consumer | Status |
 |---|---|---|---|---|---|
-| `commitment_fraction` | 0.5 | 0.85 | Scout reassesses halfway. Seek spends most of its steps (E6). | reader pending | PROPOSED DEFAULT |
+| `commitment_fraction` | 0.6 | 0.85 | D-50: Scout 0.6 (range 0.5 to 0.7) so Scout is 2 steps under every lean (0.5 sat on the 1-step/2-step rounding edge). Seek spends most of its steps (E6). | reader pending | PROPOSED DEFAULT |
 | `stop_willingness` | 0.7 | 0.3 | Scout stops readily. Seek passes through (E4). | reader pending | PROPOSED DEFAULT |
 | `reveal_stop_kinds` | spotted_ahead, paused_to_read | spotted_ahead | D-29. Scout stops for any new find. Seek stops for an objective or hostile only. Data, so no Directive id in code. | reader pending | PROPOSED DEFAULT |
 

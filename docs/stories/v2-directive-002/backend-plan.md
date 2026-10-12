@@ -194,6 +194,8 @@ Status: BUILT 2026-10-12, not committed, not attributed, not verified by qa-veri
 
 ### S2b. Party stance: dials, readiness, capacity, commitment
 
+**Status:** DONE (D-50). Scout commitment_fraction 0.6; 5 `traversal` tests re-recorded to commitment depth (Scout 2, Seek 5). Uncommitted.
+
 | Item | Plan |
 |---|---|
 | Files | new `core/movement/StagePartyStance.gd` (pure static); `core/realms/StageExploreTurnService.gd` (build one stance at the start of the Advance; effective steps; commitment depth; tolerance into S1b); `core/movement/StagePartyMovementAdapter.gd` (`build_profile` gains an optional `effective_steps` argument) |

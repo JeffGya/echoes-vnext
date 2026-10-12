@@ -291,8 +291,10 @@ const FNV_MASK_32: int = 0xffffffff
 ## inflated the party's pace and hid the bad config. It yields capacity 1 plus an
 ## authored_override naming `directive.step_budget` as its source, which is the
 ## seam MovementProfile.validate requires at capacity 1. The upper cap stays 6.
-static func build_profile(directive: Dictionary) -> Dictionary:
-	var step_budget: int = int(directive.get("step_budget", DEFAULT_STEP_BUDGET))
+## `effective_steps` >= 0 replaces the Directive's `step_budget` (the party stance lowers it).
+static func build_profile(directive: Dictionary, effective_steps: int = -1) -> Dictionary:
+	var step_budget: int = effective_steps if effective_steps >= 0 \
+		else int(directive.get("step_budget", DEFAULT_STEP_BUDGET))
 	var capacity: int = clampi(step_budget, MIN_EXPRESSIBLE_CAPACITY, MAX_EXPRESSIBLE_CAPACITY)
 	var source_terms: Array = [{
 		"source": CAPACITY_SOURCE,

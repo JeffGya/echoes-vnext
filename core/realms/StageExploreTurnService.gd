@@ -48,6 +48,7 @@ const FlowStageExploreStateScript      := preload("res://core/state/flow/states/
 const MovementPathServiceScript        := preload("res://core/movement/MovementPathService.gd")
 const StagePartyMovementAdapterScript  := preload("res://core/movement/StagePartyMovementAdapter.gd")
 const StageExposureMapScript           := preload("res://core/movement/StageExposureMap.gd")
+const StagePartyStanceScript           := preload("res://core/movement/StagePartyStance.gd")
 
 var flow_ctx: FlowContext
 var config_service: ConfigService
@@ -95,6 +96,25 @@ func _voice_service() -> NarrativeVoiceService:
 	return NarrativeVoiceService.new(flow_ctx, config_service, logger)
 
 
+## One stance per Advance. Echoes are the saved party views; bonds are the real save bonds (D-26).
+func _build_stance(directive: Dictionary) -> Dictionary:
+	var stance_cfg := ConfigService.get_party_stance_cfg(config_service)
+	var cfg_data: Dictionary = {}
+	if config_service != null:
+		var data_v: Variant = config_service.get_balance().get("data", {})
+		cfg_data = data_v if data_v is Dictionary else {}
+	var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var bonds_v: Variant = (sanctum_v as Dictionary).get("bonds", []) if sanctum_v is Dictionary else []
+	var actors := SanctumService.get_party_actors_static(flow_ctx.save_data)
+	var living: Dictionary = {}
+	for a in actors:
+		living[str(a.get("id", ""))] = true
+	var echoes: Array = []
+	for a in actors:
+		echoes.append(StagePartyStanceScript.read_echo(a, bonds_v if bonds_v is Array else [], living, cfg_data))
+	return StagePartyStanceScript.build(echoes, directive, stance_cfg)
+
+
 func get_last_result() -> Dictionary:
 	return last_result
 
@@ -133,7 +153,6 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 
 	# V2-STAGE-004-P2: resolve directive once for this turn
 	var directive := directive_service.get_active_directive()
-	var step_budget := int(directive.get("step_budget", DirectiveService.DEFAULT_STEP_BUDGET))
 	# V2-STAGE-004 Phase 2.5: reveal_radius replaces passive_reveal_radius as the primary fog lever.
 	# Both directives always reveal (radius is the differentiator — Scout wide, Seek narrow).
 	var reveal_radius := int(directive.get("reveal_radius", directive.get("passive_reveal_radius", 2)))
@@ -200,13 +219,16 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 
 	var stepped: Array = []
 	var steps := 0
-	var profile := StagePartyMovementAdapterScript.build_profile(directive)
+	var stance := _build_stance(directive)
+	var effective_steps := int(stance["effective_steps"])
+	var commitment_depth := int(stance["commitment_depth"])
+	var profile := StagePartyMovementAdapterScript.build_profile(directive, effective_steps)
 	# Exposure is constant inside one Advance: reveal, resolve and pass only change after the loop.
 	var exposure_cfg_v: Variant = ConfigService.get_party_stance_cfg(config_service).get("exposure", {})
 	var exposure_cfg: Dictionary = exposure_cfg_v if exposure_cfg_v is Dictionary else {}
 	var terrain_costs := StageExposureMapScript.to_terrain_costs(
 		StageExposureMapScript.build(explore_map, ConfigService.get_situation_category_cfg(config_service), exposure_cfg),
-		float(directive.get("exposure_tolerance", 1.0)),
+		float((stance["dials"] as Dictionary)["exposure_tolerance"]),
 		int(StageExposureMapScript.cfg_num(exposure_cfg, "price_scale"))
 	)
 	var first_goal: Dictionary = {}
@@ -214,7 +236,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var final_reason := ""
 	var _heading_origin_v: Variant = explore_map.get("last_traveled_origin", {})
 	var _heading_origin: Dictionary = _heading_origin_v if _heading_origin_v is Dictionary else {}
-	while steps < step_budget:
+	while steps < commitment_depth:
 		var here: Dictionary = ActiveStageService.stage_integer_cell(explore_map.get("party_pos", {}))
 		explore_map["party_pos"] = here.duplicate()
 		explore_map["last_traveled_origin"] = _heading_origin.duplicate(true)
@@ -280,7 +302,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		# frontier replan sees the updated explored set).
 		ActiveStageService.lift_fog_at_cell(nxt, reveal_radius, walkable, explored_cells)
 		var step_blocks := ActiveStageService.situation_blocks_step(explore_map, nxt, target_sit_id)
-		var stop_reason := "capacity_spent"
+		var stop_reason := "capacity_spent" if commitment_depth >= effective_steps else "commitment_spent"
 		if step_blocks:
 			stop_reason = "interrupted"
 		elif step_reaches_target:
