@@ -126,6 +126,8 @@ Global rules for every slice:
 
 ### S1a. One result per Advance (refactor, no value moves)
 
+Status: BUILT 2026-10-12, not committed, not verified by qa-verifier. Filters traversal, movement, seam run; only the known red failed. Tests renamed: `result_cleared_without_move` replaces `no_route_result_kept` (a real no_route is not reachable from the fixtures).
+
 | Item | Plan |
 |---|---|
 | Files | `core/realms/StageExploreTurnService.gd` |

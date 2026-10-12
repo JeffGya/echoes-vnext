@@ -393,6 +393,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/p5_tier1_hard_stops_on_arrival",         Callable(TraversalModelTests, "_t_p5_tier1_hard_stops_on_arrival"))
 	runner.register_test("traversal/p5_mid_path_situation_parks_party",      Callable(TraversalModelTests, "_t_p5_mid_path_situation_parks_party"))
 	runner.register_test("traversal/p5_passed_situation_walked_through",     Callable(TraversalModelTests, "_t_p5_passed_situation_walked_through"))
+	# V2-DIRECTIVE-002 S1a: one result per Advance, no value moves
+	runner.register_test("traversal/advance_state_identical",       Callable(TraversalModelTests, "_t_advance_state_identical"))
+	runner.register_test("traversal/one_result_per_advance_validates", Callable(TraversalModelTests, "_t_one_result_per_advance_validates"))
+	runner.register_test("traversal/result_cleared_without_move",          Callable(TraversalModelTests, "_t_result_cleared_without_move"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2118,4 +2122,171 @@ static func _t_p5_passed_situation_walked_through() -> Dictionary:
 	if not found_passed:
 		return { "ok": false, "error": "sit.0 missing from explore_map.situations after advance" }
 
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S1a: one result per Advance ────────────────────────────
+
+# Characterization replay: each scenario builds a stage, then replays up to ADV_COUNT
+# Advances through StageExploreTurnService directly.
+const ADV_COUNT := 6
+
+# Captured from the pre-S1a code. A moved value is a defect, not a re-record.
+const ADV_EXPECTED := {
+	"gen42_scout": [
+		"advanced|capacity_spent|9,23>10,24>11,25|tc1|fog51:3511803370|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|12,24>13,23>14,22|tc2|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|15,21>16,20>17,20|tc3|fog72:71791107|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|18,20>19,19>20,18|tc4|fog91:911323763|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|21,17>22,16>23,15|tc5|fog113:2463783976|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|24,15>25,15|tc6|fog116:453466647|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+	],
+	"gen42_seek": [
+		"advanced|capacity_spent|8,23>8,24>9,25>10,26>11,27>12,28|tc1|fog23:1896906063|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|13,28>13,27>14,26>14,25>14,24>14,23|tc2|fog34:497347247|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|14,22>14,21>13,20>12,20>11,21>10,22|tc3|fog49:2004276599|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|11,23>12,24>11,25>10,26>9,27>10,26|tc4|fog56:3295238824|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|11,25>12,24>13,23>14,22>15,21>16,20|tc5|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|17,20>18,20>19,19>20,18>21,17>22,16|tc6|fog82:3670138503|rev[]|pend:|tr:true|tgt:",
+	],
+	"gen100_scout": [
+		"advanced|capacity_spent|16,17>17,18>18,18|tc1|fog41:1455657212|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|19,17>20,16>20,15|tc2|fog55:656844878|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+	],
+	"gen100_seek": [
+		"advanced|capacity_spent|16,17>17,18>18,19>19,19>20,18>21,17|tc1|fog27:2429444447|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|21,16>21,15>21,14>21,13>20,13>19,13|tc2|fog41:2141085879|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|20,14>20,15|tc3|fog43:2174154824|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+	],
+	"corridor_seek": [
+		"advanced|capacity_spent|1,1>2,1>3,1>4,1>5,1>6,1|tc1|fog8:3871123613|rev[]|pend:|tr:true|tgt:",
+		"advanced|interrupted|7,1>8,1>9,1>10,1>11,1|tc2|fog13:814132961|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+	],
+	"open_scout": [
+		"advanced|capacity_spent|5,6>4,7>3,8|tc1|fog82:350397788|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|4,9>5,9>6,10|tc2|fog90:3316875472|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|7,10>8,9>9,8|tc3|fog106:1263099726|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|9,7>9,6>9,5|tc4|fog115:3724010565|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|9,4>9,3>8,2|tc5|fog129:2413698952|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|7,2>6,1>5,1|tc6|fog135:2535929773|rev[]|pend:|tr:true|tgt:",
+	],
+	"rect_seek": [
+		"advanced|capacity_spent|1,2>2,2>3,1>4,0>5,0>6,1|tc1|fog24:1741867109|rev[]|pend:|tr:true|tgt:",
+		"advanced|capacity_spent|7,1|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
+		"no_target||7,1|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
+	],
+}
+
+
+static func _build_adv_runtime(scenario: String) -> FlowRuntime:
+	var directive := "directive.seek_signs" if scenario.ends_with("_seek") else "directive.scout_carefully"
+	var runtime := _make_runtime(directive)
+	match scenario:
+		"gen42_scout", "gen42_seek":
+			_inject_terrain_stage(runtime, 42, 0, [{ "col": 25, "row": 15 }, { "col": 10, "row": 10 }])
+		"gen100_scout", "gen100_seek":
+			_inject_terrain_stage(runtime, 100, 1, [{ "col": 20, "row": 15 }, { "col": 5, "row": 5 }, { "col": 12, "row": 22 }])
+		"corridor_seek":
+			var sit: Dictionary = SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 11, 1, 900, true)
+			_inject_stage_with_terrain(runtime, _corridor_terrain(14, 3, 1), [sit], { "col": 0, "row": 1 }, 900, 0)
+		"rect_seek":
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(9, 3), [], { "col": 0, "row": 1 }, 500, 0)
+		_:
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(12, 12), [], { "col": 5, "row": 5 }, 500, 0)
+	return runtime
+
+
+static func _adv_service(runtime: FlowRuntime) -> StageExploreTurnService:
+	return StageExploreTurnService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+
+
+# One compact line per Advance: path, stop reason, turn count, fog, reveal order, flags.
+static func _adv_line(runtime: FlowRuntime, verdict: String, reason: String) -> String:
+	var path_parts: Array = []
+	for c_v in (_read_em(runtime, "last_traveled_path") as Array):
+		var c: Dictionary = c_v
+		path_parts.append("%d,%d" % [int(c["col"]), int(c["row"])])
+	var cells: Array = (_read_em(runtime, "explored_cells") as Dictionary).keys()
+	cells.sort()
+	var revealed: Array = []
+	for s_v in (_read_em(runtime, "situations") as Array):
+		var sd: Dictionary = s_v
+		if bool(sd.get("revealed", false)):
+			revealed.append(str(sd.get("id", "")))
+	return "%s|%s|%s|tc%d|fog%d:%d|rev[%s]|pend:%s|tr:%s|tgt:%s" % [
+		verdict, reason, ">".join(path_parts), int(_read_em(runtime, "turn_count")),
+		cells.size(), ",".join(cells).hash(), ",".join(revealed),
+		_em_str(runtime, "pending_situation_id"), _em_str(runtime, "in_transit"),
+		_em_str(runtime, "target_situation_id")]
+
+
+static func _em_str(runtime: FlowRuntime, field: String) -> String:
+	var v: Variant = _read_em(runtime, field)
+	return "" if v == null else str(v)
+
+
+static func _replay(scenario: String) -> Array:
+	var runtime := _build_adv_runtime(scenario)
+	var svc := _adv_service(runtime)
+	var lines: Array = []
+	for i in range(ADV_COUNT):
+		var verdict := svc.advance_turn(runtime.directive_service, i)
+		lines.append(_adv_line(runtime, verdict, str(svc.get_last_result().get("stop_reason", ""))))
+		if verdict != "advanced" or not _em_str(runtime, "pending_situation_id").is_empty():
+			break
+	return lines
+
+
+static func _t_advance_state_identical() -> Dictionary:
+	for sc in ADV_EXPECTED:
+		var got: Array = _replay(sc)
+		var want: Array = ADV_EXPECTED[sc]
+		if got.size() != want.size():
+			return { "ok": false, "error": "%s: %d Advances, expected %d" % [sc, got.size(), want.size()] }
+		for i in range(want.size()):
+			if got[i] != want[i]:
+				return { "ok": false, "error": "%s advance %d moved:\n got  %s\n want %s" % [sc, i, got[i], want[i]] }
+	return { "ok": true }
+
+
+# The kept result validates, and its traversal equals the walked path, for every
+# Advance of every scenario (chains of several frontier legs included).
+static func _t_one_result_per_advance_validates() -> Dictionary:
+	for sc in ADV_EXPECTED:
+		var runtime := _build_adv_runtime(sc)
+		var svc := _adv_service(runtime)
+		for i in range(ADV_COUNT):
+			var verdict := svc.advance_turn(runtime.directive_service, i)
+			var res: Dictionary = svc.get_last_result()
+			if verdict != "advanced":
+				if not res.is_empty():
+					return { "ok": false, "error": "%s: result kept for verdict %s" % [sc, verdict] }
+				break
+			if res.is_empty():
+				return { "ok": false, "error": "%s advance %d: no result kept" % [sc, i] }
+			var v: Dictionary = MovementResult.validate(res)
+			if not bool(v.get("valid", false)):
+				return { "ok": false, "error": "%s advance %d: result invalid: %s" % [sc, i, v] }
+			if res["actual_traversed_cells"] != _read_em(runtime, "last_traveled_path"):
+				return { "ok": false, "error": "%s advance %d: traversed cells differ from last_traveled_path" % [sc, i] }
+			if res["origin"] != _read_em(runtime, "last_traveled_origin"):
+				return { "ok": false, "error": "%s advance %d: origin differs from last_traveled_origin" % [sc, i] }
+			if not _em_str(runtime, "pending_situation_id").is_empty():
+				break
+	return { "ok": true }
+
+
+# A fresh service has no result; an Advance that moves nothing keeps none.
+static func _t_result_cleared_without_move() -> Dictionary:
+	var runtime := _build_adv_runtime("rect_seek")
+	var svc := _adv_service(runtime)
+	if not svc.get_last_result().is_empty():
+		return { "ok": false, "error": "fresh service holds a result" }
+	svc.advance_turn(runtime.directive_service, 0)
+	if svc.get_last_result().is_empty():
+		return { "ok": false, "error": "no result after a moving Advance" }
+	svc.advance_turn(runtime.directive_service, 1)
+	svc.advance_turn(runtime.directive_service, 2)
+	if not svc.get_last_result().is_empty():
+		return { "ok": false, "error": "stale result kept after a no_target Advance" }
 	return { "ok": true }

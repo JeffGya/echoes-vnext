@@ -51,6 +51,9 @@ const StagePartyMovementAdapterScript  := preload("res://core/movement/StagePart
 var flow_ctx: FlowContext
 var config_service: ConfigService
 var logger: StructuredLogger
+# The one MovementResult of the latest advance_turn. {} when no leg produced an intent.
+# Internal: not in the snapshot, not in the save.
+var last_result: Dictionary = {}
 
 
 func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _logger: StructuredLogger) -> void:
@@ -91,6 +94,10 @@ func _voice_service() -> NarrativeVoiceService:
 	return NarrativeVoiceService.new(flow_ctx, config_service, logger)
 
 
+func get_last_result() -> Dictionary:
+	return last_result
+
+
 ## The body of FlowRuntime._handle_stage_advance_turn(), moved verbatim minus its four
 ## snapshot tails. Returns a status the caller maps to an outcome:
 ##   "no_stage"      — no active stage           → rebuild + refresh
@@ -108,6 +115,7 @@ func _voice_service() -> NarrativeVoiceService:
 ## `directive_service` is a parameter rather than a constructor dependency so the directive is
 ## resolved at exactly the pre-extraction point: AFTER the no-stage and not-exploring guards.
 func advance_turn(directive_service: DirectiveService, t: int) -> String:
+	last_result = {}
 	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
 	if stage.is_empty():
 		logger.debug(t, "stage.advance.no_stage", "advance_turn: no active stage", {})
@@ -191,6 +199,10 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 
 	var stepped: Array = []
 	var steps := 0
+	var profile := StagePartyMovementAdapterScript.build_profile(directive)
+	var first_goal: Dictionary = {}
+	var first_intent: Dictionary = {}
+	var final_reason := ""
 	var _heading_origin_v: Variant = explore_map.get("last_traveled_origin", {})
 	var _heading_origin: Dictionary = _heading_origin_v if _heading_origin_v is Dictionary else {}
 	while steps < step_budget:
@@ -209,15 +221,16 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 				and int(here.get("row", 0)) == int(target_pos.get("row", 0)):
 			break
 
-		var profile := StagePartyMovementAdapterScript.build_profile(directive)
-		var goal := StagePartyMovementAdapterScript.build_goal(explore_map, target, target_tier, walkable)
+		var is_first_leg := first_intent.is_empty()
+		var goal := first_goal
+		if is_first_leg:
+			goal = StagePartyMovementAdapterScript.build_goal(explore_map, target, target_tier, walkable)
 		var route := MovementPathServiceScript.shortest_path(here, target_pos, walkable, {}, {}, {})
 		if not bool(route.get("reachable", false)):
-			var no_route_intent := StagePartyMovementAdapterScript.build_intent(profile, goal, [], here)
-			if not no_route_intent.is_empty():
-				StagePartyMovementAdapterScript.build_result(
-					here, [], "no_route", [], no_route_intent, goal, goal.get("declared_fallback", {}) as Dictionary
-				)
+			if is_first_leg:
+				first_goal = goal
+				first_intent = StagePartyMovementAdapterScript.build_intent(profile, goal, [], here)
+			final_reason = "no_route"
 			break
 
 		var route_path_v: Variant = route.get("path", [])
@@ -225,9 +238,11 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		if route_path.is_empty():
 			break
 
-		var intent := StagePartyMovementAdapterScript.build_intent(profile, goal, route_path, here)
-		if intent.is_empty():
-			break
+		if is_first_leg:
+			first_goal = goal
+			first_intent = StagePartyMovementAdapterScript.build_intent(profile, goal, route_path, here)
+			if first_intent.is_empty():
+				break
 
 		var nxt_v: Variant = route_path[0]
 		var nxt: Dictionary = nxt_v if nxt_v is Dictionary else {}
@@ -255,7 +270,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 			stop_reason = "interrupted"
 		elif step_reaches_target:
 			stop_reason = "reached_destination"
-		StagePartyMovementAdapterScript.build_result(here, [nxt], stop_reason, [], intent, goal)
+		final_reason = stop_reason
 		# V2-STAGE-004-P5 (mid-path stop): walking the party ONTO an unresolved, un-passed
 		# situation (revealed OR hidden — reveal-on-arrival) ends the advance there so the
 		# normal engagement popup fires. Passed nodes are walked through (no prompt) unless
@@ -263,6 +278,12 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		# The post-loop reveal sweep + arrival check set pending_situation_id.
 		if step_blocks:
 			break
+
+	if not first_intent.is_empty() and not final_reason.is_empty():
+		var fallback: Dictionary = first_goal.get("declared_fallback", {}) as Dictionary if final_reason == "no_route" else {}
+		last_result = StagePartyMovementAdapterScript.build_result(
+			_origin_cell, stepped, final_reason, [], first_intent, first_goal, fallback
+		)
 
 	# V2-STAGE-004-P2 / V2-COMBAT-002 slice 5: stash the path walked this turn for the UI
 	# chained-tween animation.
