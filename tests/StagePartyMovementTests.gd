@@ -34,6 +34,9 @@ const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 const IntentContract = preload("res://core/movement/contracts/MovementIntent.gd")
 const ResultContract = preload("res://core/movement/contracts/MovementResult.gd")
 
+const ExposureMap = preload("res://core/movement/StageExposureMap.gd")
+const PathService = preload("res://core/movement/MovementPathService.gd")
+
 const SCOUT_ID: String = "directive.scout_carefully"
 const SEEK_ID: String = "directive.seek_signs"
 
@@ -76,6 +79,10 @@ static func register(runner: CoreTestRunner) -> void:
 
 	# V2-DIRECTIVE-002 B+C slice S0: config getters and the missing-entry rule.
 	for n in ["party_stance_covers_every_directive", "party_stance_missing_entry_is_neutral", "party_stance_bounds_under_half_gap", "party_stance_reason_classes_count", "stage_presentation_keys_numeric", "contact_cfg_getters_match_shipped_values", "stance_cfg_getters_null_service_empty"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
+	# V2-DIRECTIVE-002 B+C slice S1b: exposure map and route price.
+	for n in ["exposure_empty_map_plain_route", "exposure_hidden_never_counts", "exposure_known_hazard_seam_counts", "exposure_scout_detours_seek_direct", "exposure_never_a_wall", "exposure_costs_are_int_ge_1"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 # ---------------------------------------------------------------------------
@@ -1807,3 +1814,128 @@ static func _t_stance_cfg_getters_null_service_empty() -> Dictionary:
 	if ConfigService.get_contact_max_voices_per_turn(null) != 3 or ConfigService.get_contact_max_voices_per_turn(empty) != 3:
 		return _fail("max_voices_per_turn fallback must be 3 (today's literal)")
 	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 S1b: exposure map and route price
+# ---------------------------------------------------------------------------
+
+static func _exposure_cfg(cs: ConfigService) -> Dictionary:
+	var v: Variant = ConfigService.get_party_stance_cfg(cs).get("exposure", {})
+	return v if v is Dictionary else {}
+
+
+static func _sit(type: String, col: int, row: int, revealed: bool = true, resolved: bool = false, passed: bool = false) -> Dictionary:
+	return {"id": "s", "type": type, "pos": {"col": col, "row": row}, "revealed": revealed, "resolved": resolved, "passed": passed}
+
+
+# Row 4 corridor, cols 0..39, plus a row-0 bypass with orthogonal ramps between cols 2 and 10.
+static func _exposure_board() -> Dictionary:
+	var w: Dictionary = {}
+	for c in range(40):
+		w["%d,4" % c] = true
+	for k in ["2,3", "2,2", "2,1", "2,0", "3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "9,0", "10,0", "10,1", "10,2", "10,3"]:
+		w[k] = true
+	return w
+
+
+static func _t_exposure_empty_map_plain_route() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var cat := ConfigService.get_situation_category_cfg(cs)
+	var cfg := _exposure_cfg(cs)
+	for em: Dictionary in [{}, {"situations": []}, {"situations": [_sit("npc", 6, 4), _sit("loot", 7, 4)]}]:
+		if not ExposureMap.build(em, cat, cfg).is_empty():
+			return _fail("a map with no known hostile must be empty")
+	if not ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, cat, {}).is_empty():
+		return _fail("an absent exposure config must give an empty map")
+	if not ExposureMap.to_terrain_costs({}, 0.3, 4).is_empty():
+		return _fail("an empty map must give no costs")
+	var from := {"col": 0, "row": 4}
+	var to := {"col": 39, "row": 4}
+	var plain: Dictionary = PathService.shortest_path(from, to, _exposure_board(), {}, {}, {})
+	var again: Dictionary = PathService.shortest_path(from, to, _exposure_board(), ExposureMap.to_terrain_costs({}, 0.3, 4), {}, {})
+	return _pass() if plain == again else _fail("empty costs changed the route")
+
+
+static func _t_exposure_hidden_never_counts() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var cat := ConfigService.get_situation_category_cfg(cs)
+	var cfg := _exposure_cfg(cs)
+	for sit: Dictionary in [_sit("combat", 6, 4, false), _sit("combat", 6, 4, true, true), _sit("combat", 6, 4, true, false, true)]:
+		if not ExposureMap.build({"situations": [sit]}, cat, cfg).is_empty():
+			return _fail("a hidden, resolved or passed hostile must not count: %s" % str(sit))
+	var live := ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, cat, cfg)
+	if absf(float(live.get("6,4", 0.0)) - float(cfg["hostile_peak"])) > 0.0001 or live.has("9,4") or not live.has("8,4"):
+		return _fail("a revealed hostile must peak at its cell and stop at hostile_radius: %s" % str(live))
+	return _pass()
+
+
+static func _t_exposure_known_hazard_seam_counts() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var got := ExposureMap.build({"known_hazards": [{"col": 3, "row": 3}, "junk"]}, {}, _exposure_cfg(cs))
+	return _pass() if got.has("3,3") and not got.has("junk") else _fail("a known hazard must count and a malformed one must be skipped")
+
+
+static func _t_exposure_scout_detours_seek_direct() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var cfg := _exposure_cfg(cs)
+	var dirs := _shipped_directives(cs)
+	var exposure := ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, ConfigService.get_situation_category_cfg(cs), cfg)
+	var from := {"col": 0, "row": 4}
+	var to := {"col": 39, "row": 4}
+	var walk := _exposure_board()
+	var plain_len: int = (PathService.shortest_path(from, to, walk, {}, {}, {})["path"] as Array).size()
+	var slack := ConfigService.get_movement_slack_cfg(cs)
+	var scout_len := -1
+	for id: String in [SCOUT_ID, SEEK_ID]:
+		var costs := ExposureMap.to_terrain_costs(exposure, float((dirs[id] as Dictionary)["exposure_tolerance"]), int(cfg["price_scale"]))
+		var path: Array = PathService.shortest_path(from, to, walk, costs, {}, {})["path"]
+		if not ExposureMap.detour_within_slack(path.size(), plain_len, slack):
+			return _fail("%s priced route is outside the slack envelope" % id)
+		var through := path.any(func(c: Dictionary) -> bool: return int(c["row"]) == 4 and int(c["col"]) == 6)
+		if id == SCOUT_ID and through:
+			return _fail("Scout must detour round the hostile")
+		if id == SEEK_ID and (not through or path.size() != plain_len):
+			return _fail("Seek must go direct")
+		if id == SCOUT_ID:
+			scout_len = path.size()
+	return _pass() if scout_len > plain_len else _fail("Scout detour must be longer than the plain route")
+
+
+static func _t_exposure_never_a_wall() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var exposure := ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, ConfigService.get_situation_category_cfg(cs), _exposure_cfg(cs))
+	var costs := ExposureMap.to_terrain_costs(exposure, 0.0, 1000)
+	var walk := {}
+	for c in range(18):
+		walk["%d,4" % c] = true
+	var r: Dictionary = PathService.shortest_path({"col": 0, "row": 4}, {"col": 17, "row": 4}, walk, costs, {}, {})
+	if not bool(r.get("reachable", false)):
+		return _fail("a heavily priced cell must stay reachable (single lane, no bypass): %s" % str(r.get("reason")))
+	var slack := ConfigService.get_movement_slack_cfg(cs)
+	var limit := 17 + Adapter._slack_envelope(17, slack)
+	if not ExposureMap.detour_within_slack(limit, 17, slack) or ExposureMap.detour_within_slack(limit + 1, 17, slack):
+		return _fail("the slack gate must accept plain + envelope and refuse one more")
+	return _pass()
+
+
+static func _t_exposure_costs_are_int_ge_1() -> Dictionary:
+	var exposure := {"a": 1.0, "b": 0.667, "c": 0.333, "d": 0.0}
+	for tol: float in [-1.0, 0.0, 0.3, 0.8, 1.0, 2.0]:
+		var costs := ExposureMap.to_terrain_costs(exposure, tol, 4)
+		for k: Variant in costs:
+			if not costs[k] is int or int(costs[k]) < 2:
+				return _fail("cost must be an int above 1 (cost-1 cells are omitted): %s at tolerance %s" % [str(costs[k]), tol])
+	if not ExposureMap.to_terrain_costs(exposure, 0.0, 0).is_empty():
+		return _fail("price_scale 0 must give no costs")
+	return _pass() if ExposureMap.to_terrain_costs(exposure, 1.0, 4).is_empty() else _fail("tolerance 1 must give no costs")

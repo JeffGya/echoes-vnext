@@ -397,6 +397,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/advance_state_identical",       Callable(TraversalModelTests, "_t_advance_state_identical"))
 	runner.register_test("traversal/one_result_per_advance_validates", Callable(TraversalModelTests, "_t_one_result_per_advance_validates"))
 	runner.register_test("traversal/result_cleared_without_move",          Callable(TraversalModelTests, "_t_result_cleared_without_move"))
+	runner.register_test("traversal/exposure_two_route_board_scout_vs_seek", Callable(TraversalModelTests, "_t_exposure_two_route_board_scout_vs_seek"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2289,4 +2290,55 @@ static func _t_result_cleared_without_move() -> Dictionary:
 	svc.advance_turn(runtime.directive_service, 2)
 	if not svc.get_last_result().is_empty():
 		return { "ok": false, "error": "stale result kept after a no_target Advance" }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S1b: exposure price on a two-route board ───────────────
+
+# Long corridor so the slack envelope (a fraction of the remaining distance) still admits the bypass at every step.
+# Row 4 corridor (cols 0..39) with a row-0 bypass with orthogonal ramps. Hostile at 6,4; objective at 39,4.
+static func _exposure_terrain() -> Dictionary:
+	var cells: Array = []
+	for c in range(40):
+		cells.append([c, 4])
+	for k in [[2, 3], [2, 2], [2, 1], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0], [10, 1], [10, 2], [10, 3]]:
+		cells.append(k)
+	return { "bounds": { "w": 40, "h": 5 }, "plateaus": [{ "col": 0, "row": 0, "w": 40, "h": 5, "cells": cells }], "bridges": [], "islands": [] }
+
+
+# Walk up to `advances` Advances; return every entered cell key.
+static func _exposure_walk(directive: String, hostile_revealed: bool, advances: int = 10) -> Array:
+	var runtime := _make_runtime(directive)
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 6, 4, 900, false)
+	hostile["revealed"] = hostile_revealed
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 39, 4, 901, true)
+	goal["revealed"] = true
+	_inject_stage_with_terrain(runtime, _exposure_terrain(), [hostile, goal], { "col": 0, "row": 4 }, 900, 0)
+	var svc := _adv_service(runtime)
+	var walked: Array = []
+	for i in range(advances):
+		if svc.advance_turn(runtime.directive_service, i) != "advanced":
+			break
+		for c_v in (_read_em(runtime, "last_traveled_path") as Array):
+			walked.append("%d,%d" % [int((c_v as Dictionary)["col"]), int((c_v as Dictionary)["row"])])
+		if not _em_str(runtime, "pending_situation_id").is_empty():
+			break
+	return walked
+
+
+static func _t_exposure_two_route_board_scout_vs_seek() -> Dictionary:
+	var straight: Array = []
+	for c in range(1, 40):
+		straight.append("%d,4" % c)
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		# One Advance only: the reveal sweep after it may reveal the hostile for the next one.
+		var hidden := _exposure_walk(d, false, 1)
+		if hidden != straight.slice(0, hidden.size()) or hidden.size() < 3:
+			return { "ok": false, "error": "%s: a hidden hostile must leave the plain route: %s" % [d, hidden] }
+	var scout := _exposure_walk("directive.scout_carefully", true)
+	if scout.has("6,4") or not scout.has("5,0"):
+		return { "ok": false, "error": "Scout must take the bypass: %s" % [scout] }
+	var seek := _exposure_walk("directive.seek_signs", true)
+	if seek.size() < 6 or seek.slice(0, 6) != straight.slice(0, 6):
+		return { "ok": false, "error": "Seek must go direct: %s" % [seek] }
 	return { "ok": true }

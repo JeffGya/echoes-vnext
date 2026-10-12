@@ -144,6 +144,8 @@ Status: BUILT 2026-10-12, not committed, not verified by qa-verifier. Filters tr
 
 ### S1b. Exposure map live (Directive baseline tolerance)
 
+Status: BUILT 2026-10-12, not committed, not verified by qa-verifier. Filters traversal, movement, seam, explore, snapshot_fingerprint run; only the known red failed. No recorded value moved. Tests live in group `movement/stage_party/exposure_*` and `traversal/exposure_two_route_board_scout_vs_seek`.
+
 | Item | Plan |
 |---|---|
 | Files | new `core/movement/StageExposureMap.gd`; `core/realms/StageExploreTurnService.gd` (`:214` call); `core/realms/ActiveStageService.gd` (none); `data` read only |

@@ -47,6 +47,7 @@ extends RefCounted
 const FlowStageExploreStateScript      := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")
 const MovementPathServiceScript        := preload("res://core/movement/MovementPathService.gd")
 const StagePartyMovementAdapterScript  := preload("res://core/movement/StagePartyMovementAdapter.gd")
+const StageExposureMapScript           := preload("res://core/movement/StageExposureMap.gd")
 
 var flow_ctx: FlowContext
 var config_service: ConfigService
@@ -200,6 +201,14 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var stepped: Array = []
 	var steps := 0
 	var profile := StagePartyMovementAdapterScript.build_profile(directive)
+	# Exposure is constant inside one Advance: reveal, resolve and pass only change after the loop.
+	var exposure_cfg_v: Variant = ConfigService.get_party_stance_cfg(config_service).get("exposure", {})
+	var exposure_cfg: Dictionary = exposure_cfg_v if exposure_cfg_v is Dictionary else {}
+	var terrain_costs := StageExposureMapScript.to_terrain_costs(
+		StageExposureMapScript.build(explore_map, ConfigService.get_situation_category_cfg(config_service), exposure_cfg),
+		float(directive.get("exposure_tolerance", 1.0)),
+		int(StageExposureMapScript.cfg_num(exposure_cfg, "price_scale"))
+	)
 	var first_goal: Dictionary = {}
 	var first_intent: Dictionary = {}
 	var final_reason := ""
@@ -225,7 +234,13 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		var goal := first_goal
 		if is_first_leg:
 			goal = StagePartyMovementAdapterScript.build_goal(explore_map, target, target_tier, walkable)
-		var route := MovementPathServiceScript.shortest_path(here, target_pos, walkable, {}, {}, {})
+		var route := MovementPathServiceScript.shortest_path(here, target_pos, walkable, terrain_costs, {}, {})
+		if not terrain_costs.is_empty() and bool(route.get("reachable", false)):
+			var plain := MovementPathServiceScript.shortest_path(here, target_pos, walkable, {}, {}, {})
+			if not StageExposureMapScript.detour_within_slack(
+					(route.get("path", []) as Array).size(), (plain.get("path", []) as Array).size(),
+					ConfigService.get_movement_slack_cfg(config_service)):
+				route = plain
 		if not bool(route.get("reachable", false)):
 			if is_first_leg:
 				first_goal = goal
