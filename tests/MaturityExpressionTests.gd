@@ -137,6 +137,7 @@ static func register(runner: CoreTestRunner) -> void:
 	# V2-PROG-012 Phase 0
 	runner.register_test("expr/config_defaults_reachable_and_consistent", Callable(MaturityExpressionTests, "_t_config_defaults_reachable_and_consistent"))
 	# V2-PROG-012 Phase 1 — derive_expression() autonomy outputs
+	runner.register_test("expr/build_ctx_inputs_matches_old_inline_reader",        Callable(MaturityExpressionTests, "_t_build_ctx_inputs_matches_old_inline_reader"))
 	runner.register_test("expr/derive_expression_is_pure",                        Callable(MaturityExpressionTests, "_t_derive_expression_is_pure"))
 	runner.register_test("expr/derive_expression_outputs_discriminate",           Callable(MaturityExpressionTests, "_t_derive_expression_outputs_discriminate"))
 	runner.register_test("expr/derive_expression_no_new_save_fields",             Callable(MaturityExpressionTests, "_t_derive_expression_no_new_save_fields"))
@@ -1624,4 +1625,87 @@ static func _t_absolute_fear_offset_clamps_to_valid_range() -> Dictionary:
 	if int(result_low["fear_threshold"]) != 0:
 		return { "ok": false, "error": "Nascent band + offset=-100 (raw=-35) should clamp to 0, got %d" % int(result_low["fear_threshold"]) }
 
+	return { "ok": true }
+
+
+## Oracle: the pre-S2a inline assembly from ActorStateMachine, copied verbatim. The shared
+## reader must give an identical ctx_inputs dict and an identical judgment.
+static func _old_inline_ctx(actor: Dictionary, context: Dictionary, cfg_data: Dictionary) -> Dictionary:
+	var calling_defs: Dictionary = cfg_data.get("calling", {}).get("definitions", {})
+	var cid: String = str(actor.get("calling", ""))
+	if cid.is_empty():
+		cid = str(actor.get("calling_origin", ""))
+	var family: String = str(MaturityExpressionService._as_dict(calling_defs.get(cid, {})).get("family", ""))
+	var actor_id: String = str(actor.get("id", ""))
+	var actor_bonds: Array = SocialGraphService.get_bonds_for_actor(
+		MaturityExpressionService._as_array(context.get("bonds", [])), actor_id)
+	var living: Dictionary = {}
+	for a_v in MaturityExpressionService._as_array(context.get("all_actors", [])):
+		if a_v is Dictionary:
+			var a: Dictionary = a_v
+			if str(a.get("faction", "")) == "echo" and not bool(a.get("is_dead", false)):
+				living[str(a.get("id", ""))] = true
+	var living_bonds: Array = []
+	for edge_v in actor_bonds:
+		if not (edge_v is Dictionary):
+			continue
+		var edge: Dictionary = edge_v
+		var other: String = str(edge.get("actor_b", "")) if str(edge.get("actor_a", "")) == actor_id else str(edge.get("actor_a", ""))
+		if living.has(other):
+			living_bonds.append(edge)
+	var drift_cfg: Dictionary = MaturityExpressionService._as_dict(
+		MaturityExpressionService._as_dict(cfg_data.get("emotion", {})).get("drift", {}))
+	return {
+		"bonds": living_bonds,
+		"bond_thresholds": context.get("bond_thresholds", {}),
+		"active_vow": context.get("active_vow", {}),
+		"calling_family": family,
+		"instability": float(context.get("instability", 0.0)),
+		"level_thresholds": MaturityExpressionService._as_dict(cfg_data.get("progression", {})).get("level_thresholds", []),
+		"fear_base_max": float(drift_cfg.get("fear_base_max", 40.0)),
+	}
+
+
+static func _t_build_ctx_inputs_matches_old_inline_reader() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var cfg_data: Dictionary = cs.get_balance().get("data", {})
+	var expr_cfg: Dictionary = cfg_data.get("maturity_expression", {})
+	var thresholds: Dictionary = { "rival_max": -30, "friend_min": 30 }
+	# [rank, fear, morale, with_bonds]
+	var cases: Array = [[1, 10, 70, false], [1, 80, 20, true], [6, 30, 55, true], [6, 60, 40, false], [9, 5, 90, true], [9, 95, 10, true]]
+	for i in cases.size():
+		var c: Array = cases[i]
+		var echo := ActorTests._make_test_echo("echo_s2a_%d" % i, "S2a Echo")
+		echo["rank"] = c[0]
+		echo["calling"] = "okofor"
+		echo["xp_total"] = 100 * (i + 1)
+		echo["emotion"] = { "morale_current": c[2], "fear_current": c[1], "fear_base": 15 }
+		var actor: Dictionary = EchoActor.from_echo(echo)
+		var aid: String = str(actor.get("id", ""))
+		var bonds: Array = []
+		if c[3]:
+			bonds = [
+				{ "actor_a": aid, "actor_b": "ally_live", "strength": 50 },
+				{ "actor_a": "ally_dead", "actor_b": aid, "strength": -60 },
+				{ "actor_a": "x", "actor_b": "y", "strength": 90 },
+			]
+		var all_actors: Array = [
+			{ "id": "ally_live", "faction": "echo", "is_dead": false },
+			{ "id": "ally_dead", "faction": "echo", "is_dead": true },
+		]
+		var context: Dictionary = { "bonds": bonds, "all_actors": all_actors, "bond_thresholds": thresholds,
+			"active_vow": { "vow_id": "vow.test" }, "instability": 0.0 }
+		var old_in: Dictionary = _old_inline_ctx(actor, context, cfg_data)
+		var living_ids: Dictionary = { "ally_live": true }
+		var new_in: Dictionary = MaturityExpressionService.build_ctx_inputs(
+			actor, bonds, living_ids, cfg_data, thresholds, { "vow_id": "vow.test" }, 0.0)
+		if old_in != new_in:
+			return { "ok": false, "error": "case %d: ctx_inputs differ: old=%s new=%s" % [i, str(old_in), str(new_in)] }
+		var j_old: float = float(MaturityExpressionService.derive_expression(actor, old_in, expr_cfg).get("judgment", -1.0))
+		var j_new: float = float(MaturityExpressionService.derive_expression(actor, new_in, expr_cfg).get("judgment", -2.0))
+		if j_old != j_new:
+			return { "ok": false, "error": "case %d: judgment %s vs %s" % [i, str(j_old), str(j_new)] }
+		if c[3] and (new_in["bonds"] as Array).size() != 1:
+			return { "ok": false, "error": "case %d: expected 1 living bond, got %d" % [i, (new_in["bonds"] as Array).size()] }
 	return { "ok": true }

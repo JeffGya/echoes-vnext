@@ -252,6 +252,42 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 	}
 
 
+# Shared Judgment input reader. Combat (ActorStateMachine) and the stage both call it so
+# one Echo gets one Judgment. living_party_ids: id -> true for living party members; only
+# bonds from this actor to those members count. cfg_data: the full balance data dict.
+static func build_ctx_inputs(actor: Dictionary, bonds: Array, living_party_ids: Dictionary,
+		cfg_data: Dictionary, bond_thresholds: Dictionary, active_vow: Dictionary,
+		instability: float) -> Dictionary:
+	var calling_defs: Dictionary = _as_dict(_as_dict(cfg_data.get("calling", {})).get("definitions", {}))
+	var calling_id: String = str(actor.get("calling", ""))
+	if calling_id.is_empty():
+		calling_id = str(actor.get("calling_origin", ""))
+	var calling_family: String = str(_as_dict(calling_defs.get(calling_id, {})).get("family", ""))
+
+	var actor_id: String = str(actor.get("id", ""))
+	var living_bonds: Array = []
+	for edge_v in SocialGraphService.get_bonds_for_actor(bonds, actor_id):
+		if not (edge_v is Dictionary):
+			continue
+		var edge: Dictionary = edge_v
+		var other_id: String = str(edge.get("actor_b", "")) if str(edge.get("actor_a", "")) == actor_id \
+			else str(edge.get("actor_a", ""))
+		if living_party_ids.has(other_id):
+			living_bonds.append(edge)
+
+	# fear_base_max comes from data.emotion.drift (what enforces the cap), not the autonomy_outputs copy.
+	var drift_cfg: Dictionary = _as_dict(_as_dict(cfg_data.get("emotion", {})).get("drift", {}))
+	return {
+		"bonds":            living_bonds,
+		"bond_thresholds":  bond_thresholds,
+		"active_vow":       active_vow,
+		"calling_family":   calling_family,
+		"instability":      instability,
+		"level_thresholds": _as_dict(cfg_data.get("progression", {})).get("level_thresholds", []),
+		"fear_base_max":    float(drift_cfg.get("fear_base_max", 40.0)),
+	}
+
+
 # Defensive coercion for values read out of caller-supplied actor/ctx_inputs dicts.
 # Some hand-authored actor fixtures across the test suite carry placeholder values
 # (e.g. "traits": []) that do not match the real EchoActor/EnemyActor shape — a blind

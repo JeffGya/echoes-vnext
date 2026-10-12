@@ -152,57 +152,21 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var cfg_data: Dictionary = context.get("cfg", {}).get("data", {})
 	var expr_cfg: Dictionary = cfg_data.get("maturity_expression", {})
 
-	# V2-PROG-012: assemble ctx_inputs from context this actor already has access to.
-	# FIX (Opus review): defensive coercion (MaturityExpressionService._as_dict/_as_array)
-	# instead of hard `as` casts — this read runs unconditionally for EVERY actor (echo,
-	# enemy, structure), unlike BehaviorArbiter.gd's read of the same "bonds" context key,
-	# which gates on faction == "echo". A hard cast here would be a new crash surface for
-	# non-echo actors or malformed test fixtures; a type mismatch now degrades to {}/[] like
-	# it does everywhere else in derive_expression()'s input assembly.
-	var calling_defs: Dictionary = cfg_data.get("calling", {}).get("definitions", {})
-	var calling_id_for_family: String = str(_actor.get("calling", ""))
-	if calling_id_for_family.is_empty():
-		calling_id_for_family = str(_actor.get("calling_origin", ""))
-	var calling_family: String = str(MaturityExpressionService._as_dict(
-		calling_defs.get(calling_id_for_family, {})).get("family", ""))
-
-	var raw_bonds: Array = MaturityExpressionService._as_array(context.get("bonds", []))
-	var actor_id_str: String = str(_actor.get("id", ""))
-	var actor_bonds: Array = SocialGraphService.get_bonds_for_actor(raw_bonds, actor_id_str)
-	# Only bonds to currently-living party members count — a bond to a fallen
-	# ally shouldn't keep pressing on judgment/presence mid-encounter.
+	# Runs for EVERY actor (echo, enemy, structure): the shared reader coerces defensively.
 	var living_party_ids: Dictionary = {}
 	for a_v in MaturityExpressionService._as_array(context.get("all_actors", [])):
 		if a_v is Dictionary:
 			var a: Dictionary = a_v
 			if str(a.get("faction", "")) == "echo" and not bool(a.get("is_dead", false)):
 				living_party_ids[str(a.get("id", ""))] = true
-	var living_bonds: Array = []
-	for edge_v in actor_bonds:
-		if not (edge_v is Dictionary):
-			continue
-		var edge: Dictionary = edge_v
-		var other_id: String = str(edge.get("actor_b", "")) if str(edge.get("actor_a", "")) == actor_id_str \
-			else str(edge.get("actor_a", ""))
-		if living_party_ids.has(other_id):
-			living_bonds.append(edge)
-
-	# FIX (Opus review, autonomy_outputs.fear_base_max de-dup): thread the canonical
-	# fear_base_max (data.emotion.drift.fear_base_max — what actually enforces the cap,
-	# see FlowRuntime._apply_encounter_emotion_drift()) through ctx_inputs so it can't
-	# silently desync from the autonomy_outputs fallback copy.
-	var emotion_cfg: Dictionary = MaturityExpressionService._as_dict(cfg_data.get("emotion", {}))
-	var drift_cfg: Dictionary   = MaturityExpressionService._as_dict(emotion_cfg.get("drift", {}))
-
-	var ctx_inputs: Dictionary = {
-		"bonds":            living_bonds,
-		"bond_thresholds":  context.get("bond_thresholds", {}),
-		"active_vow":       context.get("active_vow", {}),
-		"calling_family":   calling_family,
-		"instability":      float(context.get("instability", 0.0)),  # V2-PROG-012: reserved seam, no system yet
-		"level_thresholds": MaturityExpressionService._as_dict(cfg_data.get("progression", {})).get("level_thresholds", []),
-		"fear_base_max":    float(drift_cfg.get("fear_base_max", 40.0)),
-	}
+	var ctx_inputs: Dictionary = MaturityExpressionService.build_ctx_inputs(
+		_actor,
+		MaturityExpressionService._as_array(context.get("bonds", [])),
+		living_party_ids,
+		cfg_data,
+		MaturityExpressionService._as_dict(context.get("bond_thresholds", {})),
+		MaturityExpressionService._as_dict(context.get("active_vow", {})),
+		float(context.get("instability", 0.0)))
 
 	var expr_result: Dictionary = MaturityExpressionService.derive_expression(_actor, ctx_inputs, expr_cfg)
 	_expression_band = str(expr_result.get("expression_band", "nascent"))
@@ -374,7 +338,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# V2-COMBAT-003.5 Phase 3b: BehaviorArbiter's movement-style term reads this.
 	# `ctx_inputs` above carries the same value but only reaches
 	# MaturityExpressionService, so the arbiter saw "" until this line existed.
-	augmented_context["calling_family"]    = calling_family
+	augmented_context["calling_family"]    = str(ctx_inputs.get("calling_family", ""))
 	augmented_context["leadership_traits"] = leadership_traits
 	# V2-INFRA-003 pass 8: BehaviorArbiter reads OTHER actors' Whole-band leadership
 	# traits (aura score effects), so it needs the trait table and the band map, not

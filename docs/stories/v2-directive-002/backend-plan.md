@@ -178,6 +178,8 @@ Status: BUILT 2026-10-12, not committed, not attributed, not verified by qa-veri
 
 ### S2a. Shared Judgment input reader (combat must not move)
 
+**Status:** code and test written (uncommitted). `expr` 39/39, `behavior` 18/18, `combat_roundtrip` 47/47 pass. Combat hash suites (`combat_baseline`, `fingerprint_*`) await the RUN REQUEST gate.
+
 | Item | Plan |
 |---|---|
 | Files | `core/actors/MaturityExpressionService.gd` (new static); `core/actors/ActorStateMachine.gd` (`:166-207` calls it) |
