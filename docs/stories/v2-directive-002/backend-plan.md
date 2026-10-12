@@ -210,14 +210,14 @@ Status: BUILT 2026-10-12, not committed, not attributed, not verified by qa-veri
 | Rollback | Revert the commit. S1c stays valid. |
 | LESSONS #35 grep | `build_profile(directive)` gains an optional second parameter `effective_steps: int = -1`. 12 test sites pass one argument: still valid. No fake. |
 
-### S2c. Category-weight bend and frontier ranking
+### S2c. Category-weight bend. Frontier `route_character` deferred (D-51).
 
 **Status:** DONE for the bend (uncommitted). Frontier `route_character` NOT built: no config keys or definition exist (see report OPEN).
 
 | Item | Plan |
 |---|---|
 | Files | `core/movement/StagePartyMovementAdapter.gd` (`select_objective_target`, `select_frontier`); `core/realms/ActiveStageService.gd` (pass the bend) |
-| Change | `select_objective_target` gains an optional trailing `bend: Dictionary = {}` (category to delta, already clamped to `bounds.category_weight`). Rank becomes `[-authored_weight, -bend_delta, distance, id, col, row]`. The bend can only break a tie of the authored weight (D-44, K2). `select_frontier` gains an optional `route_character: Dictionary = {}` that adds a rank key AFTER heading continuation and BEFORE the salted hash: Scout prefers cells that keep the road home explored; Seek prefers continuing the heading. Both Directives get the same code; the weights come from stance data. |
+| Change | `select_objective_target` gains an optional trailing `bend: Dictionary = {}` (category to delta, already clamped to `bounds.category_weight`). Rank becomes `[-authored_weight, -bend_delta, distance, id, col, row]`. The bend can only break a tie of the authored weight (D-44, K2). Frontier `route_character` key deferred (D-51): `select_frontier` gets no new argument in this slice. Heading continuation stays as existing shared code. |
 | New functions | `static func category_bend(echoes_leans: Dictionary, stance_cfg: Dictionary) -> Dictionary` in `StagePartyStance`. |
 | Config keys | `stages.party_stance.leans.category_weight.*`, `bounds.category_weight`. |
 | Tests | Suite `movement`: `movement/bend_never_inverts_ranking`; `movement/bend_breaks_tie_only`; `movement/frontier_tie_break_salt_unchanged`; `movement/select_signature_backward_compatible`. Suite `traversal`: K2 (tie case, Seek, reward 0.9 vs intel 0.9, Sight picks intel, Edge picks nearest), O1 to O3 re-run. |
@@ -228,6 +228,8 @@ Status: BUILT 2026-10-12, not committed, not attributed, not verified by qa-veri
 | LESSONS #35 grep | New parameters are optional and trailing. The 25 call sites for `select_objective_target` and the `select_frontier` sites compile unchanged. |
 
 ### S2d. Return-safety bend
+
+Status: BUILT 2026-10-12, not committed, not verified by qa-verifier. Filters seam, venture_char, traversal, movement, explore, snapshot_fingerprint, pending, directive run; only the known red failed. No recorded value moved. Tests `seam/escape_draw_path_unchanged`, `escape_never_certain_never_impossible`, `escape_scout_ge_seek`.
 
 | Item | Plan |
 |---|---|

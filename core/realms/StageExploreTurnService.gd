@@ -98,7 +98,11 @@ func _voice_service() -> NarrativeVoiceService:
 
 ## One stance per Advance. Echoes are the saved party views; bonds are the real save bonds (D-26).
 func _build_stance(directive: Dictionary) -> Dictionary:
-	var stance_cfg := ConfigService.get_party_stance_cfg(config_service)
+	return StagePartyStanceScript.build(read_party_echoes(), directive, ConfigService.get_party_stance_cfg(config_service))
+
+
+## The current party as `read_echo` dicts (shared by the Advance stance and the return-home escape bend).
+func read_party_echoes() -> Array:
 	var cfg_data: Dictionary = {}
 	if config_service != null:
 		var data_v: Variant = config_service.get_balance().get("data", {})
@@ -112,7 +116,7 @@ func _build_stance(directive: Dictionary) -> Dictionary:
 	var echoes: Array = []
 	for a in actors:
 		echoes.append(StagePartyStanceScript.read_echo(a, bonds_v if bonds_v is Array else [], living, cfg_data))
-	return StagePartyStanceScript.build(echoes, directive, stance_cfg)
+	return echoes
 
 
 func get_last_result() -> Dictionary:

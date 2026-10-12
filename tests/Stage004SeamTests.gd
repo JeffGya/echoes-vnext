@@ -52,6 +52,12 @@ class_name Stage004SeamTests
 
 
 static func register(runner: CoreTestRunner) -> void:
+	runner.register_test("seam/escape_draw_path_unchanged",
+		Callable(Stage004SeamTests, "_t_escape_draw_path_unchanged"))
+	runner.register_test("seam/escape_never_certain_never_impossible",
+		Callable(Stage004SeamTests, "_t_escape_never_certain_never_impossible"))
+	runner.register_test("seam/escape_scout_ge_seek",
+		Callable(Stage004SeamTests, "_t_escape_scout_ge_seek"))
 	runner.register_test("seam/ally_injection_adds_actor_and_marks_consumed",
 		Callable(Stage004SeamTests, "_t_ally_injection_adds_actor_and_marks_consumed"))
 	runner.register_test("seam/ally_injection_places_on_walkable_unoccupied_cell",
@@ -3764,3 +3770,87 @@ static func _push_realm_horizontal_wheel(viewport: SubViewport, position: Vector
 		wheel.factor = 1.0
 		wheel.pressed = true
 		viewport.push_input(wheel, true)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S2d — return-safety bend
+# ─────────────────────────────────────────────────────────────────────────────
+
+const _StanceS2d = preload("res://core/movement/StagePartyStance.gd")
+
+static func _escape_bonuses(directive: Dictionary, env: Dictionary) -> Array:
+	var out: Array = []
+	for actors in StagePartyMovementTests._stance_parties():
+		var living: Dictionary = {}
+		for a in actors:
+			living[str(a["id"])] = true
+		var echoes: Array = []
+		for a in actors:
+			echoes.append(_StanceS2d.read_echo(a, [], living, env["data"]))
+		out.append(_StanceS2d.escape_bonus(echoes, directive, env["cfg"]))
+	return out
+
+
+## Same key string "stage.escape.<stage>.<turn_count>": the dispatched result equals a roll
+## drawn here on that key against the bent threshold, for success and failure turns.
+static func _t_escape_draw_path_unchanged() -> Dictionary:
+	var env := VentureCharacterizationTests._setup_explore_env("s2d_path")
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var cfg := ConfigService.get_party_stance_cfg(runtime.config_service)
+	var seed_ := int(VentureCharacterizationTests._realm(runtime.get_save_data(), "realm.01").get("seed", 0))
+	var bonus := _StanceS2d.escape_bonus(
+		StageExploreTurnService.new(flow_ctx, runtime.config_service, runtime.logger).read_party_echoes(),
+		directive, cfg)
+	var seen := {}
+	for turn in range(0, 12):
+		var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+		var emap: Dictionary = stage["explore_map"]
+		emap["turn_count"] = turn
+		emap["party_state"] = StageExploreModel.STATE_EXPLORING
+		stage["explore_map"] = emap
+		FlowStageExploreState._write_stage_back(flow_ctx, stage)
+		var roll := CampaignSeed.get_rng_from(seed_, "stage.escape.%s.%d" % [flow_ctx.stage_id, turn]).randi_range(0, 100)
+		var want := roll > maxi(0, 40 - bonus)
+		runtime.dispatch({ "type": "stage.return_home" })
+		var got := str((FlowStageExploreState._get_current_stage(flow_ctx)["explore_map"] as Dictionary).get("party_state", "")) == StageExploreModel.STATE_ESCAPED
+		seen[want] = true
+		if got != want:
+			return { "ok": false, "error": "turn %d: roll %d bonus %d expected escaped=%s got %s" % [turn, roll, bonus, want, got] }
+		if want:
+			runtime.dispatch({ "type": "flow.go_state", "to": "flow.stage_explore" })
+	if seen.size() < 2:
+		return { "ok": false, "error": "turns 0..11 did not cover both a success and a failure; widen the range" }
+	return { "ok": true }
+
+
+## Roll is 0..100 and success is roll > 40 - bonus: bonus 40 or more would be certain, and a
+## negative bonus is impossible only if the threshold passes 100. Check the bend stays inside.
+static func _t_escape_never_certain_never_impossible() -> Dictionary:
+	var env := StagePartyMovementTests._stance_env()
+	for id in ["scout", "seek"]:
+		for b in _escape_bonuses(env[id], env):
+			if b < 0 or 40 - b <= 0 or 40 - b >= 100:
+				return { "ok": false, "error": "%s escape bonus %d makes escape certain or impossible" % [id, b] }
+			var base := int(env[id].get("escape_bonus", 0))
+			if absi(b - base) > int(env["cfg"]["bounds"]["escape_bonus"]):
+				return { "ok": false, "error": "%s bonus %d outside bound around %d" % [id, b, base] }
+	return { "ok": true }
+
+
+## Same party: Scout never has a lower bonus than Seek. No profile = neutral (raw Directive value).
+static func _t_escape_scout_ge_seek() -> Dictionary:
+	var env := StagePartyMovementTests._stance_env()
+	var scout := _escape_bonuses(env["scout"], env)
+	var seek := _escape_bonuses(env["seek"], env)
+	for i in scout.size():
+		if scout[i] < seek[i]:
+			return { "ok": false, "error": "party %d: scout %d < seek %d" % [i, scout[i], seek[i]] }
+	var plain := { "id": "directive.none_test", "escape_bonus": 17 }
+	for b in _escape_bonuses(plain, env):
+		if b != 17:
+			return { "ok": false, "error": "no-profile Directive not neutral: %d" % b }
+	return { "ok": true }

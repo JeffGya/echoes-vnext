@@ -91,6 +91,11 @@ static func category_bend(echoes_leans: Dictionary, stance_cfg: Dictionary) -> D
 	return bend
 
 
+## Bent return-safety bonus (whole points). Neutral when the Directive has no profile.
+static func escape_bonus(echoes: Array, directive: Dictionary, stance_cfg: Dictionary) -> int:
+	return roundi(float(build(echoes, directive, stance_cfg)["dials"]["escape_bonus"]))
+
+
 ## `echoes` are `read_echo` dicts, any order. Returns dials, effective_steps, commitment_depth,
 ## leans {echo_id: {dial: lean}} and candidates (ids with a non-zero lean).
 static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary) -> Dictionary:
