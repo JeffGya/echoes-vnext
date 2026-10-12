@@ -34,3 +34,8 @@ Owner: phase B+C, which edits the same guard.
 - **UI per-id label and colour.** `StageExploreScreen.gd` `_label_for_directive` and `DirectiveBadge.gd` match by id. A third Directive shows an empty label there. Phase B+C frontend step reads label and colour from the Directive entry or the theme.
 - **Seek Signs friction** (ANSWERS #46: 4 divergences in 535 turns). Players may always pick Scout Carefully. It needs payoffs only Seek Signs gives.
 - **Known red test** `movement_arbiter/avoid_overcommit_stays_proportionate` (pace-reward follow-up #11, v2-combat-003.5 decisions #29/#38). Not part of this story.
+
+## Found in the numbers step (2026-10-12), not fixed
+- `core/realms/ConversationService.gd:297`: NPC morale `<= 20` in the emotional fit, plus bonuses 0.2 and 0.1 at `:291` and `:299`. These are hard-coded tunables next to the ones moved for ANSWERS #83. Not in design 10.1. Decide: join the config sweep or stay a follow-up.
+- `DirectiveService._REGISTRY` fallback (`DirectiveService.gd:61,81`) still holds the OLD picker text. It shows only when the config registry is empty.
+- `stages.party_return_fear_threshold` (60) and `stages.cautious_advance_fear_threshold` (50) already sit in config. They were not touched.
