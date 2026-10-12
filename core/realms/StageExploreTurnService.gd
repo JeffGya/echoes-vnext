@@ -49,6 +49,7 @@ const MovementPathServiceScript        := preload("res://core/movement/MovementP
 const StagePartyMovementAdapterScript  := preload("res://core/movement/StagePartyMovementAdapter.gd")
 const StageExposureMapScript           := preload("res://core/movement/StageExposureMap.gd")
 const StagePartyStanceScript           := preload("res://core/movement/StagePartyStance.gd")
+const StageStopPolicyScript            := preload("res://core/movement/StageStopPolicy.gd")
 
 var flow_ctx: FlowContext
 var config_service: ConfigService
@@ -97,8 +98,10 @@ func _voice_service() -> NarrativeVoiceService:
 
 
 ## One stance per Advance. Echoes are the saved party views; bonds are the real save bonds (D-26).
-func _build_stance(directive: Dictionary) -> Dictionary:
-	return StagePartyStanceScript.build(read_party_echoes(), directive, ConfigService.get_party_stance_cfg(config_service))
+func _build_stance(directive: Dictionary, echoes: Array = [], stance_cfg: Dictionary = {}) -> Dictionary:
+	return StagePartyStanceScript.build(
+		echoes if not echoes.is_empty() else read_party_echoes(), directive,
+		stance_cfg if not stance_cfg.is_empty() else ConfigService.get_party_stance_cfg(config_service))
 
 
 ## The current party as `read_echo` dicts (shared by the Advance stance and the return-home escape bend).
@@ -182,7 +185,9 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	# ActiveStageService (see this file's header). Built ONCE here and reused by the
 	# movement loop below — the constructor only assigns three fields and writes nothing.
 	var _session := ActiveStageService.new(flow_ctx, config_service, logger)
-	var stance := _build_stance(directive)
+	var stance_cfg := ConfigService.get_party_stance_cfg(config_service)
+	var echoes := read_party_echoes()
+	var stance := _build_stance(directive, echoes, stance_cfg)
 	var bend: Dictionary = stance["category_bend"]
 	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend)
 
@@ -190,6 +195,10 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		# All walkable cells explored and no discovered unresolved situations — nothing left.
 		logger.debug(t, "stage.advance.no_target", "advance_turn: no target found (all explored, all resolved)", {})
 		return "no_target"
+
+	# Who decided the first plan. Read-only dry runs, so it runs before any write below.
+	var why: Dictionary = StageCounterfactualService.new(flow_ctx, config_service, logger).name_deciders(directive, t)
+	var first_is_frontier := bool(target.get("is_frontier", false))
 
 	# One explore-turn consumed per Advance call
 	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
@@ -220,13 +229,32 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var commitment_depth := int(stance["commitment_depth"])
 	var profile := StagePartyMovementAdapterScript.build_profile(directive, effective_steps)
 	# Exposure is constant inside one Advance: reveal, resolve and pass only change after the loop.
-	var exposure_cfg_v: Variant = ConfigService.get_party_stance_cfg(config_service).get("exposure", {})
+	var exposure_cfg_v: Variant = stance_cfg.get("exposure", {})
 	var exposure_cfg: Dictionary = exposure_cfg_v if exposure_cfg_v is Dictionary else {}
-	var terrain_costs := StageExposureMapScript.to_terrain_costs(
-		StageExposureMapScript.build(explore_map, ConfigService.get_situation_category_cfg(config_service), exposure_cfg),
-		float((stance["dials"] as Dictionary)["exposure_tolerance"]),
-		int(StageExposureMapScript.cfg_num(exposure_cfg, "price_scale"))
-	)
+	var category_map := ConfigService.get_situation_category_cfg(config_service)
+	var tolerance := float((stance["dials"] as Dictionary)["exposure_tolerance"])
+	var exposure := StageExposureMapScript.build(explore_map, category_map, exposure_cfg)
+	var terrain_costs := StageExposureMapScript.to_terrain_costs(exposure, tolerance, int(StageExposureMapScript.cfg_num(exposure_cfg, "price_scale")))
+	# Stop knobs (design 3a). A Directive with no profile has no stop_willingness and lists no
+	# optional-find kinds: it still stops for an objective or a hostile find.
+	var stop_cfg_v: Variant = stance_cfg.get("stop", {})
+	var stop_cfg: Dictionary = stop_cfg_v if stop_cfg_v is Dictionary else {}
+	var profiles_v: Variant = stance_cfg.get("directive_profile", {})
+	var profile_v: Variant = (profiles_v as Dictionary).get(str(directive.get("id", "")), {}) if profiles_v is Dictionary else {}
+	var stop_profile: Dictionary = profile_v if profile_v is Dictionary else {}
+	var reveal_kinds_v: Variant = stop_profile.get("reveal_stop_kinds", [])
+	var reveal_kinds: Array = reveal_kinds_v if reveal_kinds_v is Array else []
+	var weights_v: Variant = directive.get("target_preference", {})
+	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
+	var stop_willingness := float((stance["dials"] as Dictionary)["stop_willingness"])
+	var width_sum := 0.0
+	for e in echoes:
+		width_sum += float((e as Dictionary).get("width", 0.0))
+	var party_width := width_sum / maxf(echoes.size(), 1)
+	var reveal_kind := ""
+	var at_target := false
+	var detour_refused := false
+	var route_character := ""
 	var first_goal: Dictionary = {}
 	var first_intent: Dictionary = {}
 	var final_reason := ""
@@ -259,6 +287,9 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 					(route.get("path", []) as Array).size(), (plain.get("path", []) as Array).size(),
 					ConfigService.get_movement_slack_cfg(config_service)):
 				route = plain
+				detour_refused = true
+			elif is_first_leg and not is_frontier:
+				route_character = "skirted" if route.get("path", []) != plain.get("path", []) else "direct"
 		if not bool(route.get("reachable", false)):
 			if is_first_leg:
 				first_goal = goal
@@ -286,17 +317,25 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 			break
 		var step_reaches_target := int(nxt.get("col", 0)) == int(target_pos.get("col", 0)) \
 			and int(nxt.get("row", 0)) == int(target_pos.get("row", 0))
+		nxt = ActiveStageService.stage_integer_cell(nxt)
+		# Pause before a highly exposed cell. Never on the first step (an Advance always moves) and
+		# never before the target itself (the party chose that cell).
+		if steps > 0 and not step_reaches_target and StageStopPolicyScript.exposure_pause(
+				float(exposure.get("%d,%d" % [int(nxt["col"]), int(nxt["row"])], 0.0)), tolerance,
+				stop_willingness, StageExposureMapScript.cfg_num(exposure_cfg, "pause_trigger")):
+			reveal_kind = "paused_to_read"
+			final_reason = "interrupted"
+			break
 		_heading_origin = {
 			"col": int(here.get("col", 0)),
 			"row": int(here.get("row", 0)),
 		}
-		nxt = ActiveStageService.stage_integer_cell(nxt)
 		explore_map["party_pos"] = nxt.duplicate()
 		stepped.append(nxt.duplicate())
 		steps += 1
 		# Lift fog around every newly entered cell (per-step so the next adapter
 		# frontier replan sees the updated explored set).
-		ActiveStageService.lift_fog_at_cell(nxt, reveal_radius, walkable, explored_cells)
+		var added_keys := ActiveStageService.lift_fog_at_cell(nxt, reveal_radius, walkable, explored_cells)
 		var step_blocks := ActiveStageService.situation_blocks_step(explore_map, nxt, target_sit_id)
 		var stop_reason := "capacity_spent" if commitment_depth >= effective_steps else "commitment_spent"
 		if step_blocks:
@@ -310,7 +349,16 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		# this is exactly the node deliberately re-targeted via Tier-4 (target_sit_id match).
 		# The post-loop reveal sweep + arrival check set pending_situation_id.
 		if step_blocks:
+			at_target = not target_sit_id.is_empty() and nxt == target_pos
 			break
+		# A stop kind ends the Advance (D-46); unspent steps are lost. The sweep below still reveals the find.
+		reveal_kind = StageStopPolicyScript.classify_reveals(explore_map, added_keys, category_map, weights, reveal_kinds, stop_cfg, party_width)
+		if reveal_kind != "":
+			final_reason = "interrupted"
+			break
+
+	var pause_cap := int(StageExposureMapScript.cfg_num(stop_cfg, "pause_cap_per_advance"))
+	assert(pause_cap <= 0 or (1 if reveal_kind == "paused_to_read" else 0) <= pause_cap)
 
 	if not first_intent.is_empty() and not final_reason.is_empty():
 		var fallback: Dictionary = first_goal.get("declared_fallback", {}) as Dictionary if final_reason == "no_route" else {}
@@ -443,6 +491,24 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	if _objective_revealed:
 		_voice_service().fire_anansi_snippet(explore_map, "objective_revealed", t)
 
+	var stop_kind := StageStopPolicyScript.kind_for(final_reason, reveal_kind, at_target)
+	if stop_kind.is_empty() and arrived:
+		stop_kind = "arrived_at"
+	var cause := str(why.get("cause", ""))
+	if cause != "echo" and detour_refused:
+		cause = "terrain"
+	var named_id := str(why.get("decisive_contributor_id", "")) if cause == "echo" else ""
+	explore_map["last_effective_steps"] = int(stance["effective_steps"])
+	explore_map["last_stop"] = { "kind": stop_kind, "col": int(party_pos["col"]), "row": int(party_pos["row"]), "echo_id": named_id }
+	explore_map["travel_why"] = StageStopPolicyScript.sanitise_why({
+		"cause": cause,
+		"purpose_family": "read" if first_is_frontier else str(first_goal.get("purpose", "advance")),
+		"route_character": "" if first_is_frontier else ("direct" if route_character.is_empty() else route_character),
+		"stop_kind": stop_kind,
+		"named_echo_name": _echo_name(named_id),
+		"echo_reason_class": str(why.get("reason_class", "")) if cause == "echo" else "",
+	})
+
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 	flow_ctx.request_save("stage.advance_turn")
@@ -453,7 +519,17 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		"is_frontier":        is_frontier,
 		"arrived":            arrived,
 		"steps_taken":        steps,
+		"stop_kind":          stop_kind,
 		"turn_count":         int(explore_map.get("turn_count", 0)),
 		"explored_count":     explored_cells.size(),
 	})
 	return "advanced"
+
+
+func _echo_name(echo_id: String) -> String:
+	if echo_id.is_empty():
+		return ""
+	for a in SanctumService.get_party_actors_static(flow_ctx.save_data):
+		if str(a.get("id", "")) == echo_id:
+			return str(a.get("name", ""))
+	return ""

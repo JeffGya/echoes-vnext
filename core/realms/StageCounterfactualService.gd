@@ -124,7 +124,7 @@ func name_deciders(directive: Dictionary, t: int) -> Dictionary:
 	var cfg_data := _cfg_data()
 	var stance_cfg := ConfigService.get_party_stance_cfg(config_service)
 	var echoes := StanceScript.read_party(flow_ctx.save_data, cfg_data)
-	var real_stance := StanceScript.build(echoes, directive, stance_cfg)
+	var real_stance := StanceScript.build(echoes, directive, stance_cfg, false)
 	var target := _pick_target(em, directive, real_stance, walkable, explored, stage, region)
 	var real := plan_first_leg(em, directive, real_stance, walkable, explored, stage, region, target)
 	out["plan"] = real
@@ -136,7 +136,7 @@ func name_deciders(directive: Dictionary, t: int) -> Dictionary:
 	var fixed: Variant = null if tier == AdapterScript.TIER_OBJECTIVE or tier == AdapterScript.TIER_WEIGHTED else target
 	var plan_for := func(party: Array) -> Dictionary:
 		dry_runs += 1
-		return plan_first_leg(em, directive, StanceScript.build(party, directive, stance_cfg), walkable, explored, stage, region, fixed)
+		return plan_first_leg(em, directive, StanceScript.build(party, directive, stance_cfg, false), walkable, explored, stage, region, fixed)
 
 	var cf_v: Variant = stance_cfg.get("counterfactual", {})
 	var cf: Dictionary = cf_v if cf_v is Dictionary else {}

@@ -58,6 +58,24 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(Stage004SeamTests, "_t_escape_never_certain_never_impossible"))
 	runner.register_test("seam/escape_scout_ge_seek",
 		Callable(Stage004SeamTests, "_t_escape_scout_ge_seek"))
+	runner.register_test("seam/stop_kind_arrived",
+		Callable(Stage004SeamTests, "_t_stop_kind_arrived"))
+	runner.register_test("seam/stop_kind_capacity_spent",
+		Callable(Stage004SeamTests, "_t_stop_kind_capacity_spent"))
+	runner.register_test("seam/stop_kind_interrupted",
+		Callable(Stage004SeamTests, "_t_stop_kind_interrupted"))
+	runner.register_test("seam/stop_kind_spotted_ahead",
+		Callable(Stage004SeamTests, "_t_stop_kind_spotted_ahead"))
+	runner.register_test("seam/stop_kind_paused_to_read",
+		Callable(Stage004SeamTests, "_t_stop_kind_paused_to_read"))
+	runner.register_test("seam/stop_kind_no_route",
+		Callable(Stage004SeamTests, "_t_stop_kind_no_route"))
+	runner.register_test("seam/stop_kinds_not_in_shared_contract",
+		Callable(Stage004SeamTests, "_t_stop_kinds_not_in_shared_contract"))
+	runner.register_test("seam/stop_noise_filter",
+		Callable(Stage004SeamTests, "_t_stop_noise_filter"))
+	runner.register_test("seam/return_safety_draw_unchanged",
+		Callable(Stage004SeamTests, "_t_return_safety_draw_unchanged"))
 	runner.register_test("seam/ally_injection_adds_actor_and_marks_consumed",
 		Callable(Stage004SeamTests, "_t_ally_injection_adds_actor_and_marks_consumed"))
 	runner.register_test("seam/ally_injection_places_on_walkable_unoccupied_cell",
@@ -3853,4 +3871,168 @@ static func _t_escape_scout_ge_seek() -> Dictionary:
 	for b in _escape_bonuses(plain, env):
 		if b != 17:
 			return { "ok": false, "error": "no-profile Directive not neutral: %d" % b }
+	return { "ok": true }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S3 — stop kinds (design 3a)
+# ─────────────────────────────────────────────────────────────────────────────
+
+const _StopPolicy = preload("res://core/movement/StageStopPolicy.gd")
+const _SitS3 = preload("res://core/realms/SituationModel.gd")
+
+
+## Two calm Echoes, a corridor (row 2, 14 cells) and the given situations; party at col 0.
+static func _s3_run(directive: String, sits: Array, terrain: Dictionary = {}) -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime(directive, 0, 70)
+	TraversalModelTests._inject_stage_with_terrain(runtime,
+		terrain if not terrain.is_empty() else TraversalModelTests._corridor_terrain(14, 5, 2), sits, { "col": 0, "row": 2 }, 700, 0)
+	var svc := TraversalModelTests._adv_service(runtime)
+	var verdict := svc.advance_turn(runtime.directive_service, 0)
+	return {
+		"runtime": runtime, "verdict": verdict, "svc": svc,
+		"stop": TraversalModelTests._read_em(runtime, "last_stop"),
+		"steps": TraversalModelTests._steps_taken(runtime),
+	}
+
+
+static func _s3_expect(r: Dictionary, kind: String, steps: int) -> Dictionary:
+	var stop: Dictionary = r["stop"] if r["stop"] is Dictionary else {}
+	if r["verdict"] != "advanced" or str(stop.get("kind", "?")) != kind or int(r["steps"]) != steps:
+		return { "ok": false, "error": "expected kind '%s' after %d steps, got %s / %d steps (%s)" % [kind, steps, stop, int(r["steps"]), r["verdict"]] }
+	var res: Dictionary = r["svc"].get_last_result()
+	var v: Dictionary = MovementResult.validate(res)
+	if not bool(v.get("valid", false)):
+		return { "ok": false, "error": "result invalid: %s" % [v] }
+	return { "ok": true }
+
+
+static func _s3_sit(id: String, type: String, col: int, objective: bool = false) -> Dictionary:
+	return _SitS3.make(id, type, col, 2, 700 + col, objective)
+
+
+static func _t_stop_kind_arrived() -> Dictionary:
+	var goal := _s3_sit("goal", _SitS3.TYPE_NPC, 2, true)
+	goal["revealed"] = true
+	var r := _s3_run("directive.scout_carefully", [goal])
+	var out := _s3_expect(r, "arrived_at", 2)
+	if bool(out["ok"]) and int((r["stop"] as Dictionary).get("col", -1)) != 2:
+		return { "ok": false, "error": "the stop must sit on the arrival cell: %s" % [r["stop"]] }
+	return out
+
+
+static func _t_stop_kind_capacity_spent() -> Dictionary:
+	return _s3_expect(_s3_run("directive.scout_carefully", []), "capacity_spent", 2)
+
+
+## Seek (fog radius 1) walks onto a hidden find that sits on the way to a revealed goal: it is
+## not the target, so the walk ends there as "interrupted".
+static func _t_stop_kind_interrupted() -> Dictionary:
+	var other := _s3_sit("other", _SitS3.TYPE_NPC, 3)
+	var goal := _s3_sit("goal", _SitS3.TYPE_NPC, 8, true)
+	goal["revealed"] = true
+	return _s3_expect(_s3_run("directive.seek_signs", [other, goal]), "interrupted", 3)
+
+
+## A hidden objective four cells away: the first step's fog lift (radius 3) shows it.
+static func _t_stop_kind_spotted_ahead() -> Dictionary:
+	var out := _s3_expect(_s3_run("directive.scout_carefully", [_s3_sit("goal", _SitS3.TYPE_NPC, 4, true)]), "spotted_ahead", 1)
+	if not bool(out["ok"]):
+		return out
+	# Seek (radius 1, 5 steps) sees the same kind of find at col 6 on its last step: an objective still stops it.
+	return _s3_expect(_s3_run("directive.seek_signs", [_s3_sit("goal", _SitS3.TYPE_NPC, 6, true)]), "spotted_ahead", 5)
+
+
+## D-29: Scout stops for any new find; Seek passes through an optional find.
+static func _t_stop_kind_paused_to_read() -> Dictionary:
+	var scout := _s3_expect(_s3_run("directive.scout_carefully", [_s3_sit("find", _SitS3.TYPE_NPC, 4)]), "paused_to_read", 1)
+	if not bool(scout["ok"]):
+		return scout
+	var seek := _s3_run("directive.seek_signs", [_s3_sit("find", _SitS3.TYPE_NPC, 6)])
+	if str((seek["stop"] as Dictionary).get("kind", "")) == "paused_to_read" or int(seek["steps"]) != 5:
+		return { "ok": false, "error": "Seek must walk its full commitment past an optional find: %s / %d steps" % [seek["stop"], int(seek["steps"])] }
+	return { "ok": true }
+
+
+## The loop's no_route branch cannot be reached on a live board: find_explore_target already
+## drops an unreachable target, so the Advance ends as "no_target" and writes no stop. The kind
+## mapping is checked directly.
+static func _t_stop_kind_no_route() -> Dictionary:
+	var terrain := {
+		"bounds": { "w": 14, "h": 5 }, "bridges": [], "islands": [],
+		"plateaus": [
+			{ "col": 0, "row": 2, "w": 3, "h": 1, "cells": [[0, 2], [1, 2], [2, 2]] },
+			{ "col": 8, "row": 2, "w": 3, "h": 1, "cells": [[8, 2], [9, 2], [10, 2]] },
+		],
+	}
+	var goal := _s3_sit("goal", _SitS3.TYPE_NPC, 9, true)
+	goal["revealed"] = true
+	var r := _s3_run("directive.scout_carefully", [goal], terrain)
+	if r["verdict"] == "advanced" and (r["stop"] as Dictionary).get("kind", "") != "no_route":
+		return { "ok": false, "error": "a walk toward an unreachable goal must end as no_route: %s" % [r["stop"]] }
+	if _StopPolicy.kind_for("no_route", "", false) != "no_route":
+		return { "ok": false, "error": "kind_for must map the no_route reason" }
+	return { "ok": true }
+
+
+static func _t_stop_kinds_not_in_shared_contract() -> Dictionary:
+	if _StopPolicy.KINDS.size() != 6:
+		return { "ok": false, "error": "six player stop kinds expected" }
+	for kind in ["spotted_ahead", "paused_to_read", "arrived_at"]:
+		if (MovementResult.STOP_REASONS as Array).has(kind) or (MovementEvent.STOP_REASONS as Array).has(kind):
+			return { "ok": false, "error": "%s leaked into the shared stop reasons" % kind }
+	for reason in ["reached_destination", "capacity_spent", "interrupted", "no_route"]:
+		if not (MovementResult.STOP_REASONS as Array).has(reason):
+			return { "ok": false, "error": "shared reason %s missing" % reason }
+	return { "ok": true }
+
+
+## Noise filter (numbers.md section 7): a low-weight optional find is dropped at high width; an
+## objective or a hostile find never is; a Directive that does not list the kind never pauses.
+static func _t_stop_noise_filter() -> Dictionary:
+	var cats := { "loot": "reward", "npc": "intel", "combat": "combat" }
+	var weights := { "reward": 1.2, "intel": 1.4, "combat": 0.4, "objective": 1.2 }
+	var cfg := { "noise_width_min": 0.5, "noise_weight_max": 1.3 }
+	var listed := ["spotted_ahead", "paused_to_read"]
+	var cases := [
+		["reward at low width", _s3_sit("a", "loot", 4), 0.1, listed, "paused_to_read"],
+		["reward at high width", _s3_sit("a", "loot", 4), 0.9, listed, ""],
+		["intel at high width", _s3_sit("a", "npc", 4), 0.9, listed, "paused_to_read"],
+		["objective at high width", _s3_sit("a", "loot", 4, true), 0.9, listed, "spotted_ahead"],
+		["hostile at high width", _s3_sit("a", "combat", 4), 0.9, listed, "spotted_ahead"],
+		["optional find, kind not listed", _s3_sit("a", "npc", 4), 0.1, ["spotted_ahead"], ""],
+		["hostile, kind not listed", _s3_sit("a", "combat", 4), 0.1, [], "spotted_ahead"],
+	]
+	for c in cases:
+		var em := { "situations": [c[1]] }
+		var got := _StopPolicy.classify_reveals(em, ["4,2"], cats, weights, c[3], cfg, c[2])
+		if got != c[4]:
+			return { "ok": false, "error": "%s: expected '%s', got '%s'" % [c[0], c[4], got] }
+	var revealed := _s3_sit("a", "combat", 4)
+	revealed["revealed"] = true
+	if _StopPolicy.classify_reveals({ "situations": [revealed] }, ["4,2"], cats, weights, listed, cfg, 0.0) != "":
+		return { "ok": false, "error": "an already revealed situation is not a new find" }
+	if not _StopPolicy.exposure_pause(1.0, 0.4, 0.7, 0.25) or _StopPolicy.exposure_pause(1.0, 0.8, 0.3, 0.25):
+		return { "ok": false, "error": "Scout must pause at peak exposure and Seek must not" }
+	return { "ok": true }
+
+
+## The escape roll still reads key "stage.escape.<stage>.<turn_count>" after a stopped Advance, and
+## the Advance raised turn_count by exactly one.
+static func _t_return_safety_draw_unchanged() -> Dictionary:
+	var r := _s3_run("directive.scout_carefully", [_s3_sit("find", _SitS3.TYPE_NPC, 4)])
+	var runtime: FlowRuntime = r["runtime"]
+	if int(TraversalModelTests._read_em(runtime, "turn_count")) != 1:
+		return { "ok": false, "error": "a stopped Advance must still count one turn" }
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var bonus := _StanceS2d.escape_bonus(
+		StageExploreTurnService.new(flow_ctx, runtime.config_service, runtime.logger).read_party_echoes(),
+		directive, ConfigService.get_party_stance_cfg(runtime.config_service))
+	var seed_ := int(flow_ctx.save_data["realms"]["realm.01"].get("seed", 0))
+	var want := CampaignSeed.get_rng_from(seed_, "stage.escape.%s.%d" % [flow_ctx.stage_id, 1]).randi_range(0, 100) > maxi(0, 40 - bonus)
+	runtime.dispatch({ "type": "stage.return_home" })
+	var got := str(TraversalModelTests._read_em(runtime, "party_state")) == StageExploreModel.STATE_ESCAPED
+	if got != want:
+		return { "ok": false, "error": "escape result %s does not match the roll on the unchanged key (%s)" % [got, want] }
 	return { "ok": true }

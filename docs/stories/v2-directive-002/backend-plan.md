@@ -263,6 +263,8 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 
 ### S3. Stop kinds, reveal peek, pause cap, snapshot fields
 
+**Status:** BUILT 2026-10-13, not committed, not verified by qa-verifier. Two recorded values moved and wait for opus attribution: `traversal/advance_state_identical` (gen100_scout, gen100_seek) and `snapshot_fingerprint/stage_explore`. Neither is re-recorded.
+
 | Item | Plan |
 |---|---|
 | Files | new `core/movement/StageStopPolicy.gd`; `core/realms/ActiveStageService.gd` (`lift_fog_at_cell` returns the keys it added: `-> Array`); `core/realms/StageExploreTurnService.gd` (stop test in the loop; writes `explore_map["last_stop"]` and `["travel_why"]`); `core/state/flow/states/venture/StageExploreSnapshotBuilder.gd` (new keys); `core/config/ConfigService.gd` (none new) |

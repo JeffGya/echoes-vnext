@@ -209,11 +209,17 @@ static func explore_walkable(explore_map: Dictionary) -> Dictionary:
 # `radius` (Chebyshev) of `cell` to `explored_cells` (mutated in place). Pure/deterministic.
 # Called per movement step so frontier chaining's adapter replan sees the freshly
 # explored cells. Same rule as the former post-loop batch (union of per-cell lifts).
-static func lift_fog_at_cell(cell: Dictionary, radius: int, walkable: Dictionary, explored_cells: Dictionary) -> void:
+## Returns the keys this lift added (not explored before), for the stop peek.
+static func lift_fog_at_cell(cell: Dictionary, radius: int, walkable: Dictionary, explored_cells: Dictionary) -> Array:
+	var added: Array = []
 	var fog_cells := StageTerrainScript.cells_within_radius(cell, radius, walkable)
 	for fc_v in fog_cells:
 		var fc: Dictionary = fc_v if fc_v is Dictionary else {}
-		explored_cells["%d,%d" % [int(fc.get("col", 0)), int(fc.get("row", 0))]] = true
+		var key := "%d,%d" % [int(fc.get("col", 0)), int(fc.get("row", 0))]
+		if not explored_cells.has(key):
+			added.append(key)
+		explored_cells[key] = true
+	return added
 
 
 # V2-STAGE-004-P5: mid-path stop predicate. Returns true when `cell` holds a situation the

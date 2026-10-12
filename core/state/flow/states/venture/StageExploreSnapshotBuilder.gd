@@ -6,6 +6,7 @@ const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd
 const SituationModelScript    := preload("res://core/realms/SituationModel.gd")      # V2-INTEL-001
 const EmotionServiceScript    := preload("res://core/emotion/EmotionService.gd")
 const StageTerrainScript      := preload("res://core/realms/StageTerrain.gd")        # V2-STAGE-004-P2
+const StageStopPolicyScript   := preload("res://core/movement/StageStopPolicy.gd")
 
 ## V2-INFRA-003 Phase 5 Slice B.
 ##
@@ -491,7 +492,28 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# non-advance refreshes (contact turns, situation overlays, etc.).
 			"travel_bark":             FlowStageExploreState._project_travel_bark(explore_map),
 			"travel_snippet":          str(explore_map.get("travel_snippet", "")),
+			# V2-DIRECTIVE-002 S3: how the last Advance ended, why, and the step bar / timing inputs.
+			# `stop.echo_id` is internal: the UI finds the named Echo's card with it and never shows it.
+			"stop":                    _project_stop(explore_map, party_pos),
+			"travel_why":              StageStopPolicyScript.sanitise_why(_dict(explore_map.get("travel_why", {}))),
+			"effective_steps":         int(explore_map.get("last_effective_steps", _step_budget_snap)),
+			"presentation":            ConfigService.get_stage_presentation_cfg(flow_ctx.config_service),
 		},
 		"actions": actions,
 		"meta": { "t": t },
+	}
+
+
+static func _dict(v: Variant) -> Dictionary:
+	return v if v is Dictionary else {}
+
+
+## Last Advance's stop; an empty kind (no Advance yet) sits on the party cell.
+static func _project_stop(explore_map: Dictionary, party_pos: Dictionary) -> Dictionary:
+	var raw := _dict(explore_map.get("last_stop", {}))
+	return {
+		"kind":    str(raw.get("kind", "")),
+		"col":     int(raw.get("col", party_pos.get("col", 0))),
+		"row":     int(raw.get("row", party_pos.get("row", 0))),
+		"echo_id": str(raw.get("echo_id", "")),
 	}

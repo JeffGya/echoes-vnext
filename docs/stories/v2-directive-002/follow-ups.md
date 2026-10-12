@@ -45,3 +45,12 @@ Owner: phase B+C, which edits the same guard.
 - `StagePartyStance.build` raises the `builds` counter. When S3 calls naming inside `advance_turn`, `traversal/one_stance_per_advance` counts the dry runs too. S3 must separate Advance builds from dry-run builds.
 - A frontier target pays the reachable region twice (`select_frontier` builds its own region; D-51 gives it no new argument). Cost is small (15 to 22 ms).
 - Stale rows in `backend-plan.md`: the S2c "Files" row names `select_frontier`; the "Fingerprints that move" row mentions `route_character` (deferred, D-51).
+
+## Found in slice S3 attribution (2026-10-13), for Jeff (opus review)
+- F1 Exposure pause exemptions: no pause on the first step of an Advance (supports design 9, no soft-lock) and no pause before the target cell (the builder's own rule; no design text supports it; inconsistent: in `gen100_scout` the party paused one cell before the hostile target, but not on the target cell). Options: keep; exempt the whole route when the target is the exposure source; remove the exemption and re-record `p5_tier1_hard_stops_on_arrival` and `fog_light_bias_seek_engages`.
+- F2 `spotted_ahead` stops every Directive (design 3a, movement model 11.7), but the code ignores `reveal_stop_kinds` for it. The `spotted_ahead` entries in `directive_profile.<id>.reveal_stop_kinds` do nothing; a data-only Directive cannot switch it off. Decide which source is authoritative: the list, or rule 11.7 (then remove the list entries).
+- F3 D-36 text defines `arrived_at` as 'walked into a situation'; design 3a defines it as 'target reached'. The code follows 3a. D-36 needs a correction in the decisions doc.
+- F4 Party width for the noise filter is the mean `interpretation_width` (design does not say mean, min or max).
+- F5 The terrain cause is forced when a detour is refused on ANY leg and no Echo is named; naming is first-plan only (D-46). One `travel_why` can mix legs and replace a correct first-plan cause. Limit to the first leg?
+- F6 (defect in S3) The `presentation` snapshot key copies `stages.presentation` with its `_comment` string: developer text reaches the UI payload, and the stage fingerprint depends on comment wording. Fix: strip `_comment*` keys in the builder or in `get_stage_presentation_cfg`. The hash moves once more.
+- F7 The shared reason `interrupted` now means both 'entered a situation' and 'a stop kind fired'. The player kind still tells them apart.

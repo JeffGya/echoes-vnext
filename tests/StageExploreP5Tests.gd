@@ -57,6 +57,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore_p5/travel_snippets_json_contract",              Callable(StageExploreP5Tests, "_t_travel_snippets_json_contract"))
 	runner.register_test("explore_p5/journey_travel_shout_resolves_non_fallback", Callable(StageExploreP5Tests, "_t_journey_travel_shout_resolves_non_fallback"))
 	runner.register_test("explore_p5/anansi_no_snippet_on_plain_advance",         Callable(StageExploreP5Tests, "_t_anansi_no_snippet_on_plain_advance"))
+	runner.register_test("explore_p5/stop_fields_typed_before_and_after_advance", Callable(StageExploreP5Tests, "_t_stop_fields_typed_before_and_after_advance"))
+	runner.register_test("explore_p5/travel_why_names_true_decider", Callable(StageExploreP5Tests, "_t_travel_why_names_true_decider"))
+	runner.register_test("explore_p5/travel_why_sanitiser", Callable(StageExploreP5Tests, "_t_travel_why_sanitiser"))
+	runner.register_test("explore_p5/dry_runs_not_counted_as_stances", Callable(StageExploreP5Tests, "_t_dry_runs_not_counted_as_stances"))
 
 
 # ─── Save-file isolation helpers (mirrors UnifiedResolveTests) ──────────────
@@ -746,4 +750,105 @@ static func _t_anansi_no_snippet_on_plain_advance() -> Dictionary:
 	if not snippet.is_empty():
 		return { "ok": false, "error": "A plain travel advance (no narrative event) must NOT fire an Anansi snippet, got '%s'" % snippet }
 
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S3: stop, travel_why, effective_steps, presentation ────
+
+const _StopPolicyP5 = preload("res://core/movement/StageStopPolicy.gd")
+const _StanceP5 = preload("res://core/movement/StagePartyStance.gd")
+
+
+static func _snap(runtime: FlowRuntime) -> Dictionary:
+	return (StageExploreSnapshotBuilder.build(runtime.flow_ctx, 1) as Dictionary)["data"]
+
+
+static func _t_stop_fields_typed_before_and_after_advance() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	runtime.flow_ctx.config_service = runtime.config_service
+	for phase in ["before", "after"]:
+		if phase == "after" and TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+			return { "ok": false, "error": "the Advance did not move" }
+		var d := _snap(runtime)
+		var stop: Variant = d.get("stop")
+		var why: Variant = d.get("travel_why")
+		if not stop is Dictionary or not why is Dictionary or not d.get("effective_steps") is int or not d.get("presentation") is Dictionary:
+			return { "ok": false, "error": "%s: stop, travel_why, effective_steps or presentation missing or mistyped" % phase }
+		var kind := str((stop as Dictionary).get("kind", "?"))
+		if not (stop as Dictionary).get("col") is int or not (stop as Dictionary).get("row") is int or not (kind == "" or _StopPolicyP5.KINDS.has(kind)):
+			return { "ok": false, "error": "%s: bad stop %s" % [phase, stop] }
+		if (why as Dictionary).keys() != _StopPolicyP5.WHY_SLOTS:
+			return { "ok": false, "error": "%s: travel_why slots %s" % [phase, (why as Dictionary).keys()] }
+		if int(d["effective_steps"]) < 1 or int(d["effective_steps"]) > int(d["step_budget"]):
+			return { "ok": false, "error": "%s: effective_steps %s outside 1..step_budget" % [phase, d["effective_steps"]] }
+		if var_to_str(d["presentation"]) != var_to_str(ConfigService.get_stage_presentation_cfg(runtime.config_service)) or (d["presentation"] as Dictionary).is_empty():
+			return { "ok": false, "error": "%s: presentation is not the stages.presentation copy" % phase }
+		if phase == "before" and kind != "":
+			return { "ok": false, "error": "no stop before the first Advance" }
+		if phase == "after" and kind.is_empty():
+			return { "ok": false, "error": "an Advance that moved must set a stop kind" }
+	return { "ok": true }
+
+
+## N7 (design 7d): the Echo named in the why is a true decider (the naming service confirms it), the
+## stop sits on that Echo, and the calm Echo is not named.
+static func _t_travel_why_names_true_decider() -> Dictionary:
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully", TraversalModelTests._cf_tie_members(), TraversalModelTests._full_rect_terrain(30, 11), [])
+	var expect := TraversalModelTests._cf_name(runtime)
+	if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+		return { "ok": false, "error": "the Advance did not move" }
+	var d := _snap(runtime)
+	var why: Dictionary = d["travel_why"]
+	var names: Dictionary = {}
+	for echo: Dictionary in runtime.flow_ctx.save_data["sanctum"]["roster"]:
+		names[str(echo["id"])] = str(echo["name"])
+	var id := str(expect["decisive_contributor_id"])
+	if why["cause"] != "echo" or id.is_empty() or why["named_echo_name"] != names[id] or why["echo_reason_class"] != expect["reason_class"]:
+		return { "ok": false, "error": "why %s does not match the confirmed decider %s" % [why, expect] }
+	if (d["stop"] as Dictionary)["echo_id"] != id:
+		return { "ok": false, "error": "the stop must sit on the named Echo: %s" % [d["stop"]] }
+	if why["named_echo_name"] == names["e_z"]:
+		return { "ok": false, "error": "the calm Echo must not be named" }
+	if why["purpose_family"] != "read" or why["route_character"] != "":
+		return { "ok": false, "error": "a frontier walk has purpose read and no route character: %s" % [why] }
+	return { "ok": true }
+
+
+static func _t_travel_why_sanitiser() -> Dictionary:
+	var dirty := { "cause": "echo_0001", "purpose_family": 3, "route_character": "stage.0", "stop_kind": 2.5,
+		"named_echo_name": 7, "echo_reason_class": "fear", "extra": "x", "weights": { "intel": 1.4 } }
+	var clean: Dictionary = _StopPolicyP5.sanitise_why(dirty)
+	if clean.keys() != _StopPolicyP5.WHY_SLOTS or clean["echo_reason_class"] != "fear":
+		return { "ok": false, "error": "sanitiser kept a bad slot or dropped a good one: %s" % [clean] }
+	for slot in ["cause", "purpose_family", "route_character", "stop_kind", "named_echo_name"]:
+		if clean[slot] != "":
+			return { "ok": false, "error": "%s kept a value that is an id or a number: %s" % [slot, clean] }
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully", TraversalModelTests._cf_tie_members(), TraversalModelTests._full_rect_terrain(30, 11), [])
+	TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	var ids: Array = ["e_x", "e_y", "e_z", "realm.01", "stage.0"]
+	var why: Dictionary = _snap(runtime)["travel_why"]
+	for slot in why:
+		var text := str(why[slot])
+		for id in ids:
+			if text.contains(id):
+				return { "ok": false, "error": "slot %s holds an id: %s" % [slot, text] }
+		for ch in text:
+			if ch >= "0" and ch <= "9":
+				return { "ok": false, "error": "slot %s holds a number: %s" % [slot, text] }
+	return { "ok": true }
+
+
+## One Advance builds one counted stance; the naming dry runs count apart (S2e finding).
+static func _t_dry_runs_not_counted_as_stances() -> Dictionary:
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully", TraversalModelTests._cf_tie_members(), TraversalModelTests._full_rect_terrain(30, 11), [])
+	var builds: int = _StanceP5.builds
+	var dry: int = _StanceP5.dry_builds
+	TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	if _StanceP5.builds - builds != 1:
+		return { "ok": false, "error": "expected 1 counted stance, got %d" % (_StanceP5.builds - builds) }
+	if _StanceP5.dry_builds - dry < 2:
+		return { "ok": false, "error": "the naming dry runs must be counted apart, got %d" % (_StanceP5.dry_builds - dry) }
+	var cap: int = int(ConfigService.get_party_stance_cfg(runtime.config_service)["stop"]["pause_cap_per_advance"])
+	if cap < 1:
+		return { "ok": false, "error": "pause_cap_per_advance key must stay in config" }
 	return { "ok": true }

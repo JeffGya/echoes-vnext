@@ -2118,8 +2118,9 @@ static func _t_p5_passed_situation_walked_through() -> Dictionary:
 # Advances through StageExploreTurnService directly.
 const ADV_COUNT := 6
 
-# Captured from the pre-S1a code, then re-recorded once for S2b commitment depth.
+# Captured from the pre-S1a code, then re-recorded for S2b and S3.
 # V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+# V2-DIRECTIVE-002 S3: stop kinds (spotted_ahead/exposure pause) and new snapshot keys
 const ADV_EXPECTED := {
 	"gen42_scout": [
 		"advanced|commitment_spent|9,23>10,24|tc1|fog41:273440436|rev[]|pend:|tr:true|tgt:",
@@ -2138,17 +2139,18 @@ const ADV_EXPECTED := {
 		"advanced|commitment_spent|12,24>13,23>14,22>15,21>16,20|tc6|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
 	],
 	"gen100_scout": [
-		"advanced|commitment_spent|16,17>17,18|tc1|fog35:2796315600|rev[sit.0]|pend:|tr:true|tgt:",
-		"advanced|commitment_spent|18,17>19,16|tc2|fog51:402733931|rev[sit.0]|pend:|tr:true|tgt:sit.0",
-		"advanced|interrupted|20,15|tc3|fog54:1485271728|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+		"advanced|interrupted|16,17>17,18|tc1|fog35:2796315600|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|18,17|tc2|fog43:2311171675|rev[sit.0]|pend:|tr:true|tgt:sit.0",
+		"advanced|interrupted|19,16>20,15|tc3|fog54:1485271728|rev[sit.0]|pend:sit.0|tr:false|tgt:",
 	],
 	"gen100_seek": [
 		"advanced|commitment_spent|16,17>17,18>18,19>19,19>20,18|tc1|fog22:3442288560|rev[]|pend:|tr:true|tgt:",
-		"advanced|interrupted|21,19>22,18>22,17>21,16>20,15|tc2|fog36:2279614770|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+		"advanced|interrupted|21,19>22,18>22,17>21,16|tc2|fog31:1099322715|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|20,15|tc3|fog36:2279614770|rev[sit.0]|pend:sit.0|tr:false|tgt:",
 	],
 	"corridor_seek": [
 		"advanced|commitment_spent|1,1>2,1>3,1>4,1>5,1|tc1|fog7:1122636189|rev[]|pend:|tr:true|tgt:",
-		"advanced|commitment_spent|6,1>7,1>8,1>9,1>10,1|tc2|fog12:4235945717|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|6,1>7,1>8,1>9,1>10,1|tc2|fog12:4235945717|rev[sit.0]|pend:|tr:true|tgt:",
 		"advanced|interrupted|11,1|tc3|fog13:814132961|rev[sit.0]|pend:sit.0|tr:false|tgt:",
 	],
 	"open_scout": [

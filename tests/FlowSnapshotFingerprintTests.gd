@@ -323,7 +323,10 @@ static func test_sanctum_fingerprint() -> Dictionary:
 #      The previous commit moved this same field 0 -> 1 for the mirror-image reason.
 # data.terrain.bridges is BYTE-IDENTICAL: no island on this particular board drew a bridge,
 # so island bridging contributes nothing to this hash. Nothing else in the payload moved.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "8214628aa3aec9c6ab5057fa314668581b8789a83fad99ce760c2e612eaaf091"
+# V2-DIRECTIVE-002 S3: stop kinds (spotted_ahead/exposure pause) and new snapshot keys.
+# The payload without data.stop, travel_why, effective_steps and presentation hashes to the
+# previous value, 8214628aa3aec9c6ab5057fa314668581b8789a83fad99ce760c2e612eaaf091.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "e33f8a5cc7fda1462f3d325a06c011478579731d7340e7ef3a9c00b603db0220"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

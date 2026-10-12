@@ -5,8 +5,10 @@ extends RefCounted
 
 const DIALS: Array = ["exposure_tolerance", "stop_willingness", "commitment_fraction", "escape_bonus"]
 
-## Test observable: one Advance must build exactly one stance.
+## Test observables: one Advance builds exactly one counted stance. Naming dry runs pass
+## `counted = false` and raise `dry_builds`.
 static var builds: int = 0
+static var dry_builds: int = 0
 
 
 ## Lean inputs of one Echo. Judgment comes from the same reader combat uses (bonds included, D-26).
@@ -115,8 +117,11 @@ static func escape_bonus(echoes: Array, directive: Dictionary, stance_cfg: Dicti
 
 ## `echoes` are `read_echo` dicts, any order. Returns dials, effective_steps, commitment_depth,
 ## leans {echo_id: {dial: lean}} and candidates (ids with a non-zero lean).
-static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary) -> Dictionary:
-	builds += 1
+static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary, counted: bool = true) -> Dictionary:
+	if counted:
+		builds += 1
+	else:
+		dry_builds += 1
 	var budget := int(directive.get("step_budget", DirectiveService.DEFAULT_STEP_BUDGET))
 	var profile := _d(_d(stance_cfg.get("directive_profile", {})).get(str(directive.get("id", "")), {}))
 	var base := {
