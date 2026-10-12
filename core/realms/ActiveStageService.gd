@@ -402,7 +402,8 @@ func find_explore_target(
 	directive: Dictionary,
 	walkable: Dictionary,
 	explored_cells: Dictionary,
-	stage: Dictionary
+	stage: Dictionary,
+	bend: Dictionary = {}
 ) -> Dictionary:
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
@@ -427,7 +428,7 @@ func find_explore_target(
 			continue  # player skipped it; objectives return in Tier 4, others never
 		pool_candidates.append(sit)
 	var best_sit := StagePartyMovementAdapterScript.select_objective_target(
-		pool_candidates, dist_from_party, target_pref, category_map, slack_config
+		pool_candidates, dist_from_party, target_pref, category_map, slack_config, bend
 	)
 	if not best_sit.is_empty():
 		best_sit["_movement_tier"] = (

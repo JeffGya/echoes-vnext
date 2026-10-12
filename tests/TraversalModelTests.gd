@@ -401,6 +401,8 @@ static func register(runner: CoreTestRunner) -> void:
 	# V2-DIRECTIVE-002 S2b: one party stance per Advance; a shaken party still moves or names a stop
 	runner.register_test("traversal/one_stance_per_advance",                 Callable(TraversalModelTests, "_t_one_stance_per_advance"))
 	runner.register_test("traversal/all_shaken_party_still_moves_or_names_stop", Callable(TraversalModelTests, "_t_all_shaken_party_still_moves_or_names_stop"))
+	# V2-DIRECTIVE-002 S2c: category-weight bend, K2 tie case
+	runner.register_test("traversal/k2_sight_vs_edge_tie",                   Callable(TraversalModelTests, "_t_k2_sight_vs_edge_tie"))
 	# V2-DIRECTIVE-002 S1c: the objective joins the weighted pool (design 3.1 O1 to O3)
 	runner.register_test("traversal/pool_o1_scout_find_first",          Callable(TraversalModelTests, "_t_pool_o1_scout_find_first"))
 	runner.register_test("traversal/pool_o2_seek_objective_first",      Callable(TraversalModelTests, "_t_pool_o2_seek_objective_first"))
@@ -2419,4 +2421,37 @@ static func _t_all_shaken_party_still_moves_or_names_stop() -> Dictionary:
 		var verdict := _adv_service(runtime).advance_turn(runtime.directive_service, 0)
 		if verdict != "advanced" or _steps_taken(runtime) < 1:
 			return { "ok": false, "error": "%s: a shaken party must still step once on an open board (%s, %d steps)" % [d, verdict, _steps_taken(runtime)] }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S2c: K2 tie case (design 7b) ───────────────────────────
+
+static func _k2_pick(calling: String) -> String:
+	var runtime := _make_runtime("directive.seek_signs")
+	var echo := ActorTests._make_test_echo("echo_k2", "K2")
+	echo["calling_origin"] = calling
+	echo["calling"] = calling
+	echo["emotion"] = { "morale_current": 70, "fear_current": 0, "fear_base": 15 }
+	runtime.flow_ctx.save_data["sanctum"] = { "roster": [echo], "active_party_ids": ["echo_k2"], "bonds": [] }
+	var reward: Dictionary = SituationModelScript.make("reward", SituationModelScript.TYPE_LOOT, 3, 5, 900, false)
+	var intel: Dictionary = SituationModelScript.make("intel", SituationModelScript.TYPE_NPC, 5, 5, 901, false)
+	reward["revealed"] = true
+	intel["revealed"] = true
+	_inject_stage_with_terrain(runtime, _full_rect_terrain(14, 11), [reward, intel], { "col": 0, "row": 5 }, 900, 0)
+	var stage: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]
+	var em: Dictionary = stage["explore_map"]
+	var svc := _adv_service(runtime)
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var bend: Dictionary = svc._build_stance(directive)["category_bend"]
+	var session := ActiveStageService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+	return str(session.find_explore_target(em, directive, ActiveStageService.explore_walkable(em), em.get("explored_cells", {}), stage, bend).get("id", ""))
+
+
+static func _t_k2_sight_vs_edge_tie() -> Dictionary:
+	var sight := _k2_pick("okomfo")
+	var edge := _k2_pick("aduro")
+	if sight != "intel":
+		return { "ok": false, "error": "a Sight party must break the tie to intel, got '%s'" % sight }
+	if edge != "reward":
+		return { "ok": false, "error": "an Edge party must keep the nearest (reward), got '%s'" % edge }
 	return { "ok": true }

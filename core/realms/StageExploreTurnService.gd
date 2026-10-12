@@ -187,7 +187,9 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	# ActiveStageService (see this file's header). Built ONCE here and reused by the
 	# movement loop below — the constructor only assigns three fields and writes nothing.
 	var _session := ActiveStageService.new(flow_ctx, config_service, logger)
-	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage)
+	var stance := _build_stance(directive)
+	var bend: Dictionary = stance["category_bend"]
+	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend)
 
 	if target.is_empty():
 		# All walkable cells explored and no discovered unresolved situations — nothing left.
@@ -219,7 +221,6 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 
 	var stepped: Array = []
 	var steps := 0
-	var stance := _build_stance(directive)
 	var effective_steps := int(stance["effective_steps"])
 	var commitment_depth := int(stance["commitment_depth"])
 	var profile := StagePartyMovementAdapterScript.build_profile(directive, effective_steps)
@@ -240,7 +241,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		var here: Dictionary = ActiveStageService.stage_integer_cell(explore_map.get("party_pos", {}))
 		explore_map["party_pos"] = here.duplicate()
 		explore_map["last_traveled_origin"] = _heading_origin.duplicate(true)
-		target = _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage)
+		target = _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend)
 		if target.is_empty():
 			break
 		target_pos_v = target.get("pos", { "col": 0, "row": 0 })

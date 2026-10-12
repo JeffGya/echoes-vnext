@@ -93,6 +93,10 @@ static func register(runner: CoreTestRunner) -> void:
 	for n in ["stance_ordering_per_dial", "stance_party_order_shuffle_identical", "stance_standing_floor_leans_at_standing_1", "stance_judgment_never_adds_steps", "stance_readiness_lower_only", "stance_all_shaken_party_keeps_one_step", "stance_bond_rule_changes_width", "stance_commitment_never_exceeds_effective_steps", "stance_directive_without_profile_is_neutral"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
+	# V2-DIRECTIVE-002 B+C slice S2c: category-weight bend.
+	for n in ["bend_never_inverts_ranking", "bend_breaks_tie_only", "select_signature_backward_compatible", "frontier_tie_break_salt_unchanged", "category_bend_clamped_and_sight_leans_intel"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
 # ---------------------------------------------------------------------------
 # Profile — capacity is the DIRECTIVE step_budget
 # ---------------------------------------------------------------------------
@@ -2149,4 +2153,88 @@ static func _t_stance_directive_without_profile_is_neutral() -> Dictionary:
 		return _fail("a Directive with no profile must keep its budget: %s" % st)
 	if float(st["dials"]["exposure_tolerance"]) != float(third["exposure_tolerance"]):
 		return _fail("a Directive with no profile must keep its tolerance")
+	return _pass()
+
+
+# ─── V2-DIRECTIVE-002 S2c: category-weight bend ──────────────────────────────
+
+static func _bend_sit(id: String, type: String, col: int) -> Dictionary:
+	return { "id": id, "type": type, "pos": { "col": col, "row": 0 } }
+
+
+# Opposite extreme bend (+bound on `a`, -bound on `b`) never changes a pick when the authored weights differ.
+static func _t_bend_never_inverts_ranking() -> Dictionary:
+	var env := _stance_env()
+	var bound := float(env["cfg"]["bounds"]["category_weight"])
+	var cats: Dictionary = ConfigService.get_situation_category_cfg(_real_config())
+	var type_of: Dictionary = {}
+	for t in cats.keys():
+		type_of[str(cats[t])] = str(t)
+	var field := { "0,0": 0, "1,0": 1, "2,0": 2, "3,0": 3 }
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var w: Dictionary = d["target_preference"]
+		for a in ["intel", "reward", "combat"]:
+			for b in ["intel", "reward", "combat"]:
+				if a == b or is_equal_approx(float(w[a]), float(w[b])):
+					continue
+				var sits := [_bend_sit("a", type_of[a], 3), _bend_sit("b", type_of[b], 1)]
+				var plain := Adapter.select_objective_target(sits, field, w, cats)
+				var bent := Adapter.select_objective_target(sits, field, w, cats, {}, { a: bound, b: -bound })
+				var bent_rev := Adapter.select_objective_target(sits, field, w, cats, {}, { a: -bound, b: bound })
+				if plain["id"] != bent["id"] or plain["id"] != bent_rev["id"]:
+					return _fail("%s: bend changed the pick between %s and %s" % [d["id"], a, b])
+	return _pass()
+
+
+static func _t_bend_breaks_tie_only() -> Dictionary:
+	var cats: Dictionary = ConfigService.get_situation_category_cfg(_real_config())
+	var field := { "0,0": 0, "2,0": 2, "4,0": 4 }
+	var w := { "intel": 0.9, "reward": 0.9 }
+	var sits := [_bend_sit("reward", "loot", 2), _bend_sit("intel", "npc", 4)]
+	if Adapter.select_objective_target(sits, field, w, cats)["id"] != "reward":
+		return _fail("a tie must fall to the nearest")
+	if Adapter.select_objective_target(sits, field, w, cats, {}, { "intel": 0.05 })["id"] != "intel":
+		return _fail("a positive bend must break the tie")
+	if Adapter.select_objective_target(sits, field, w, cats, {}, { "intel": -0.05 })["id"] != "reward":
+		return _fail("a negative bend must keep the nearest")
+	return _pass()
+
+
+static func _t_select_signature_backward_compatible() -> Dictionary:
+	var cats: Dictionary = ConfigService.get_situation_category_cfg(_real_config())
+	var field := { "0,0": 0, "2,0": 2, "4,0": 4 }
+	var w := { "intel": 0.9, "reward": 0.9 }
+	var sits := [_bend_sit("reward", "loot", 2), _bend_sit("intel", "npc", 4)]
+	if Adapter.select_objective_target(sits, field, w, cats) != Adapter.select_objective_target(sits, field, w, cats, {}, {}):
+		return _fail("an empty bend must equal the call without a bend")
+	return _pass()
+
+
+# Frontier ranking is untouched: among equidistant cells the lowest salted hash wins.
+static func _t_frontier_tie_break_salt_unchanged() -> Dictionary:
+	var board: Dictionary = {}
+	for c in 5:
+		for r in 5:
+			board["%d,%d" % [c, r]] = true
+	var ring: Array = [{"col": 4, "row": 2}, {"col": 0, "row": 2}, {"col": 2, "row": 4}, {"col": 2, "row": 0}]
+	for salt in ["s0", "s1", "s2", "s3"]:
+		var want: Dictionary = ring[0]
+		for cell: Dictionary in ring:
+			if Adapter.salted_cell_hash(salt, "%d,%d" % [cell["col"], cell["row"]]) < Adapter.salted_cell_hash(salt, "%d,%d" % [want["col"], want["row"]]):
+				want = cell
+		if Adapter.select_frontier(ring, {"col": 2, "row": 2}, {}, board, salt) != want:
+			return _fail("salt %s: frontier left the hash order" % salt)
+	return _pass()
+
+
+static func _t_category_bend_clamped_and_sight_leans_intel() -> Dictionary:
+	var env := _stance_env()
+	var bound := float(env["cfg"]["bounds"]["category_weight"])
+	var huge := Stance.category_bend({ "a": { "intel": 5.0, "combat": -5.0 }, "b": { "intel": 5.0, "combat": -5.0 } }, env["cfg"])
+	if not is_equal_approx(float(huge["intel"]), bound) or not is_equal_approx(float(huge["combat"]), -bound):
+		return _fail("the bend must clamp to bounds.category_weight: %s" % [huge])
+	var sight: Dictionary = _stance_of([_stance_actor("s", "okomfo", 1, 0, 70)], env["seek"], env)["category_bend"]
+	var edge: Dictionary = _stance_of([_stance_actor("e", "aduro", 1, 0, 70)], env["seek"], env)["category_bend"]
+	if float(sight.get("intel", 0.0)) <= 0.0 or float(edge.get("intel", 0.0)) != 0.0 or float(edge.get("combat", 0.0)) <= 0.0:
+		return _fail("Sight must lean intel, Edge must lean combat only: %s %s" % [sight, edge])
 	return _pass()

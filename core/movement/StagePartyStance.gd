@@ -27,8 +27,11 @@ static func read_echo(actor: Dictionary, bonds: Array, living_ids: Dictionary, c
 
 
 ## One Echo's signed lean on one dial, in dial units (coefficient x bound x strength).
-static func echo_lean(echo: Dictionary, dial: String, stance_cfg: Dictionary) -> float:
+## `category` selects one coefficient set inside a category dial (`category_weight`).
+static func echo_lean(echo: Dictionary, dial: String, stance_cfg: Dictionary, category: String = "") -> float:
 	var coeffs := _d(_d(stance_cfg.get("leans", {})).get(dial, {}))
+	if category != "":
+		coeffs = _d(coeffs.get(category, {}))
 	var ramps := _d(stance_cfg.get("state_ramps", {}))
 	var floor_ := _num(_d(stance_cfg.get("lean_strength", {})), "dispositional_floor")
 	var strength := floor_ + (1.0 - floor_) * float(echo.get("width", 0.0))
@@ -73,6 +76,21 @@ static func readiness_steps_lost(echoes: Array, stance_cfg: Dictionary) -> int:
 	return clampi(lost, 0, int(_num(_d(stance_cfg.get("bounds", {})), "readiness_steps")))
 
 
+## Bend per situation category: mean of the Echoes' leans, clamped to `bounds.category_weight`.
+## `echoes_leans` is {echo_id: {category: lean}}. Ranks after the authored weight, so it only breaks ties.
+static func category_bend(echoes_leans: Dictionary, stance_cfg: Dictionary) -> Dictionary:
+	var bound := _num(_d(stance_cfg.get("bounds", {})), "category_weight")
+	var sums: Dictionary = {}
+	for echo_id in echoes_leans.keys():
+		var by_cat := _d(echoes_leans[echo_id])
+		for cat in by_cat.keys():
+			sums[cat] = float(sums.get(cat, 0.0)) + float(by_cat[cat])
+	var bend: Dictionary = {}
+	for cat in sums.keys():
+		bend[cat] = clampf(float(sums[cat]) / maxf(echoes_leans.size(), 1), -bound, bound)
+	return bend
+
+
 ## `echoes` are `read_echo` dicts, any order. Returns dials, effective_steps, commitment_depth,
 ## leans {echo_id: {dial: lean}} and candidates (ids with a non-zero lean).
 static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary) -> Dictionary:
@@ -85,7 +103,7 @@ static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary) 
 		"commitment_fraction": float(profile.get("commitment_fraction", 1.0)),
 		"escape_bonus": float(directive.get("escape_bonus", 0.0)),
 	}
-	var stance := {"dials": base.duplicate(), "effective_steps": budget, "leans": {}, "candidates": []}
+	var stance := {"dials": base.duplicate(), "effective_steps": budget, "leans": {}, "candidates": [], "category_bend": {}}
 	if profile.is_empty():
 		stance["commitment_depth"] = budget
 		return stance
@@ -111,6 +129,13 @@ static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary) 
 				stance["candidates"].append(str(e["id"]))
 				break
 	stance["leans"] = leans
+	var cat_leans: Dictionary = {}
+	for e in sorted:
+		cat_leans[str(e["id"])] = {}
+		for cat in _d(_d(stance_cfg.get("leans", {})).get("category_weight", {})).keys():
+			if not str(cat).begins_with("_"):
+				cat_leans[str(e["id"])][cat] = echo_lean(e, "category_weight", stance_cfg, str(cat))
+	stance["category_bend"] = category_bend(cat_leans, stance_cfg)
 
 	var effective := maxi(budget - readiness_steps_lost(sorted, stance_cfg), mini(1, budget))
 	stance["effective_steps"] = effective

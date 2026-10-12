@@ -212,6 +212,8 @@ Status: BUILT 2026-10-12, not committed, not attributed, not verified by qa-veri
 
 ### S2c. Category-weight bend and frontier ranking
 
+**Status:** DONE for the bend (uncommitted). Frontier `route_character` NOT built: no config keys or definition exist (see report OPEN).
+
 | Item | Plan |
 |---|---|
 | Files | `core/movement/StagePartyMovementAdapter.gd` (`select_objective_target`, `select_frontier`); `core/realms/ActiveStageService.gd` (pass the bend) |

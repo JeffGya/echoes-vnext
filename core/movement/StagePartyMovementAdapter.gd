@@ -805,7 +805,8 @@ static func select_objective_target(
 	dist_field: Dictionary,
 	weights: Dictionary,
 	category_map: Dictionary,
-	slack_config: Dictionary = {}
+	slack_config: Dictionary = {},
+	bend: Dictionary = {}
 ) -> Dictionary:
 	# Pass 1 — keep the reachable candidates and find the nearest distance, which
 	# anchors the slack envelope.
@@ -842,6 +843,8 @@ static func select_objective_target(
 		var situation: Dictionary = entry["situation"] as Dictionary
 		var rank: Array = [
 			-_target_weight(situation, weights, category_map),
+			# Party bend: below the authored weight, so it only breaks an exact tie (D-44).
+			-float(bend.get(_target_category(situation, category_map), 0.0)),
 			distance,
 			str(situation.get("id", "")),
 			# Criteria 5-6 (D57): numeric col, then row. See the docblock above for
@@ -940,11 +943,13 @@ static func _target_weight(
 	weights: Dictionary,
 	category_map: Dictionary
 ) -> float:
+	return float(weights.get(_target_category(situation, category_map), DEFAULT_TARGET_WEIGHT))
+
+
+static func _target_category(situation: Dictionary, category_map: Dictionary) -> String:
 	if bool(situation.get("is_objective", false)):
-		return float(weights.get("objective", DEFAULT_TARGET_WEIGHT))
-	var situation_type: String = str(situation.get("type", ""))
-	var category: String = str(category_map.get(situation_type, DEFAULT_SITUATION_CATEGORY))
-	return float(weights.get(category, DEFAULT_TARGET_WEIGHT))
+		return "objective"
+	return str(category_map.get(str(situation.get("type", "")), DEFAULT_SITUATION_CATEGORY))
 
 
 # ---------------------------------------------------------------------------
