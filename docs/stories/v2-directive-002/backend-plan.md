@@ -103,6 +103,7 @@ Global rules for every slice:
 | S2d | Return-safety bend | Yes (escape tests) | sonnet |
 | S2e | Counterfactual naming | No (adds data only) | opus |
 | S3 | Stop kinds, reveal peek, snapshot fields | Yes, and the stage fingerprint | sonnet; opus attributes |
+| S3b | D-52 fixes F1, F2, F5, F6 | Yes (gen100_scout, stage fingerprint) | opus |
 | S4a | Contact literals to config | No | sonnet |
 | S4b | Bid scaling, one shared bid function | Yes (contact tests) | sonnet |
 | S4c | Resonance bonus and rename | Yes (score tests) | sonnet |
@@ -280,6 +281,10 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 | Risk | Medium-high. New stop points change Advance counts on recorded walks. |
 | Rollback | Revert the commit. The fingerprint returns to its S2e value. |
 | LESSONS #35 grep | `lift_fog_at_cell` return type changes `void` to `Array`. `grep` of `tests/` finds no caller. `StageExploreTurnService.gd:190,251` ignore the result today. |
+
+### S3b. D-52 fixes to S3 (F1, F2, F5, F6)
+
+**Status:** BUILT 2026-10-13, not committed, not verified by qa-verifier. F1 moved `traversal/advance_state_identical` gen100_scout Advances 2 and 3; F6 moved `STAGE_EXPLORE_FINGERPRINT_HASH`. F2 and F5 moved no recorded value. Each re-record has a `D-52 F<n>` comment. Filters traversal, seam, explore, snapshot_fingerprint, movement, objective, directive, venture_char run; only the known red failed.
 
 ### S4a. Contact literals to config (same values, no behaviour change)
 

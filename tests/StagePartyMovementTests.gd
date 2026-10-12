@@ -82,7 +82,7 @@ static func register(runner: CoreTestRunner) -> void:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 	# V2-DIRECTIVE-002 B+C slice S1b: exposure map and route price.
-	for n in ["exposure_empty_map_plain_route", "exposure_hidden_never_counts", "exposure_known_hazard_seam_counts", "exposure_scout_detours_seek_direct", "exposure_never_a_wall", "exposure_costs_are_int_ge_1"]:
+	for n in ["exposure_empty_map_plain_route", "exposure_hidden_never_counts", "exposure_known_hazard_seam_counts", "exposure_scout_detours_seek_direct", "exposure_never_a_wall", "exposure_costs_are_int_ge_1", "exposure_exclude_id_drops_one_source"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 	# V2-DIRECTIVE-002 B+C slice S1c: the objective weight in the pool.
@@ -1887,6 +1887,19 @@ static func _t_exposure_hidden_never_counts() -> Dictionary:
 	if absf(float(live.get("6,4", 0.0)) - float(cfg["hostile_peak"])) > 0.0001 or live.has("9,4") or not live.has("8,4"):
 		return _fail("a revealed hostile must peak at its cell and stop at hostile_radius: %s" % str(live))
 	return _pass()
+
+
+# D-52 F1: the exposure pause leaves out the hostile the party walks to, and only that one.
+static func _t_exposure_exclude_id_drops_one_source() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var target := _sit("combat", 6, 4)
+	target["id"] = "target"
+	var other := _sit("combat", 30, 4)
+	other["id"] = "other"
+	var got := ExposureMap.build({"situations": [target, other]}, ConfigService.get_situation_category_cfg(cs), _exposure_cfg(cs), "target")
+	return _pass() if not got.has("6,4") and got.has("30,4") else _fail("exclude_id must drop only its own source: %s" % str(got.keys()))
 
 
 static func _t_exposure_known_hazard_seam_counts() -> Dictionary:

@@ -14,8 +14,9 @@ static func cfg_num(cfg: Dictionary, key: String) -> float:
 	return float(v) if v is int or v is float else 0.0
 
 
-## An absent or empty `exposure_cfg` gives an empty map: no pricing.
-static func build(explore_map: Dictionary, category_map: Dictionary, exposure_cfg: Dictionary) -> Dictionary:
+## An absent or empty `exposure_cfg` gives an empty map: no pricing. `exclude_id` leaves out one
+## situation as a source (the exposure pause ignores the hostile the party walks to, D-52 F1).
+static func build(explore_map: Dictionary, category_map: Dictionary, exposure_cfg: Dictionary, exclude_id: String = "") -> Dictionary:
 	var exposure: Dictionary = {}
 	var radius := int(cfg_num(exposure_cfg, "hostile_radius"))
 	var peak := cfg_num(exposure_cfg, "hostile_peak")
@@ -27,6 +28,8 @@ static func build(explore_map: Dictionary, category_map: Dictionary, exposure_cf
 		if not bool(sit.get("revealed", false)) or bool(sit.get("resolved", false)) or bool(sit.get("passed", false)):
 			continue
 		if str(category_map.get(str(sit.get("type", "")), "")) != HOSTILE_CATEGORY:
+			continue
+		if not exclude_id.is_empty() and str(sit.get("id", "")) == exclude_id:
 			continue
 		_stamp(exposure, sit.get("pos", {}), radius, peak)
 	var hazards_v: Variant = explore_map.get("known_hazards", [])

@@ -54,3 +54,10 @@ Owner: phase B+C, which edits the same guard.
 - F5 The terrain cause is forced when a detour is refused on ANY leg and no Echo is named; naming is first-plan only (D-46). One `travel_why` can mix legs and replace a correct first-plan cause. Limit to the first leg?
 - F6 (defect in S3) The `presentation` snapshot key copies `stages.presentation` with its `_comment` string: developer text reaches the UI payload, and the stage fingerprint depends on comment wording. Fix: strip `_comment*` keys in the builder or in `get_stage_presentation_cfg`. The hash moves once more.
 - F7 The shared reason `interrupted` now means both 'entered a situation' and 'a stop kind fired'. The player kind still tells them apart.
+
+## Found in slice S3b (2026-10-13), assumptions to confirm with Jeff
+- F1 reading: 'the target is the exposure source' means the pause leaves out the target hostile only. A party that walks to hostile A still pauses near hostile B. (Alternative: no pause at all on a route to a hostile target; no fixture differs, gen100 has one hostile.)
+- Under F1 a party now pauses before a NON-hostile target that lies in a hostile's zone (Scout before the loot at 2,0 in `fog_light_bias_seek_engages`). Alternative: keep every target cell exempt.
+- `fog_light_bias_seek_engages`: the test read changed (null pending id read as empty); assertions unchanged. A test-read change, not a re-record.
+- F2 effect: a Directive with no profile (empty list) never stops on an objective or hostile reveal. Alternative: a safe fallback that keeps `spotted_ahead` on.
+- `data/balance.json` comment on `stages.party_stance.stop` and `directive_profile` should say the list also controls `spotted_ahead` (mid-game-designer edit).

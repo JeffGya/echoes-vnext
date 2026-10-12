@@ -66,6 +66,10 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(Stage004SeamTests, "_t_stop_kind_interrupted"))
 	runner.register_test("seam/stop_kind_spotted_ahead",
 		Callable(Stage004SeamTests, "_t_stop_kind_spotted_ahead"))
+	runner.register_test("seam/stop_kind_spotted_ahead_switched_off",
+		Callable(Stage004SeamTests, "_t_stop_kind_spotted_ahead_switched_off"))
+	runner.register_test("seam/later_leg_refusal_keeps_first_cause",
+		Callable(Stage004SeamTests, "_t_later_leg_refusal_keeps_first_cause"))
 	runner.register_test("seam/stop_kind_paused_to_read",
 		Callable(Stage004SeamTests, "_t_stop_kind_paused_to_read"))
 	runner.register_test("seam/stop_kind_no_route",
@@ -3921,6 +3925,64 @@ static func _t_stop_kind_arrived() -> Dictionary:
 	return out
 
 
+## D-52 F2: a data-only profile without "spotted_ahead" walks past a fresh objective reveal.
+static func _t_stop_kind_spotted_ahead_switched_off() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	var stance: Dictionary = runtime.config_service._balance["data"]["stages"]["party_stance"]
+	stance["directive_profile"]["directive.scout_carefully"]["reveal_stop_kinds"] = ["paused_to_read"]
+	TraversalModelTests._inject_stage_with_terrain(runtime, TraversalModelTests._corridor_terrain(14, 5, 2),
+		[_s3_sit("goal", _SitS3.TYPE_NPC, 4, true)], { "col": 0, "row": 2 }, 700, 0)
+	var svc := TraversalModelTests._adv_service(runtime)
+	var verdict := svc.advance_turn(runtime.directive_service, 0)
+	return _s3_expect({ "runtime": runtime, "verdict": verdict, "svc": svc,
+		"stop": TraversalModelTests._read_em(runtime, "last_stop"),
+		"steps": TraversalModelTests._steps_taken(runtime) }, "capacity_spent", 2)
+
+
+const _ExposureS3b = preload("res://core/movement/StageExposureMap.gd")
+
+
+## True when the priced route from `here` to `goal` is a detour longer than the slack allows.
+static func _s3b_detour_refused(runtime: FlowRuntime, here: Dictionary, goal: Dictionary, tolerance: float) -> bool:
+	var cs := runtime.config_service
+	var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+	var walkable := ActiveStageService.explore_walkable(em)
+	var exposure_cfg: Dictionary = ConfigService.get_party_stance_cfg(cs)["exposure"]
+	var exposure: Dictionary = _ExposureS3b.build(em, ConfigService.get_situation_category_cfg(cs), exposure_cfg)
+	var costs: Dictionary = _ExposureS3b.to_terrain_costs(exposure, tolerance, int(exposure_cfg["price_scale"]))
+	var priced := MovementPathService.shortest_path(here, goal, walkable, costs, {}, {})
+	var plain := MovementPathService.shortest_path(here, goal, walkable, {}, {}, {})
+	return not _ExposureS3b.detour_within_slack((priced["path"] as Array).size(), (plain["path"] as Array).size(),
+		ConfigService.get_movement_slack_cfg(cs))
+
+
+## D-52 F5: from col 0 the priced route fits the slack (4); from col 1 the slack is 3 and the
+## second leg refuses the detour. The first-plan cause must survive; only a first-leg refusal names terrain.
+static func _t_later_leg_refusal_keeps_first_cause() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	var hostile: Dictionary = _SitS3.make("hostile", _SitS3.TYPE_COMBAT, 6, 5, 900, false)
+	hostile["revealed"] = true
+	var goal: Dictionary = _SitS3.make("goal", _SitS3.TYPE_NPC, 13, 4, 901, true)
+	goal["revealed"] = true
+	TraversalModelTests._inject_stage_with_terrain(runtime, TraversalModelTests._exposure_terrain(), [hostile, goal], { "col": 0, "row": 4 }, 900, 0)
+	var svc := TraversalModelTests._adv_service(runtime)
+	var directive := runtime.directive_service.get_active_directive()
+	var tolerance := float((svc._build_stance(directive)["dials"] as Dictionary)["exposure_tolerance"])
+	var goal_pos := { "col": 13, "row": 4 }
+	if _s3b_detour_refused(runtime, { "col": 0, "row": 4 }, goal_pos, tolerance) \
+			or not _s3b_detour_refused(runtime, { "col": 1, "row": 4 }, goal_pos, tolerance):
+		return { "ok": false, "error": "board no longer gives a first-leg skirt and a second-leg refusal" }
+	var first_cause := str(TraversalModelTests._cf_svc(runtime).name_deciders(directive, 0).get("cause", ""))
+	if not ["objective", "situation", "party"].has(first_cause):
+		return { "ok": false, "error": "expected a non-echo, non-terrain first-plan cause, got '%s'" % first_cause }
+	if svc.advance_turn(runtime.directive_service, 0) != "advanced" or TraversalModelTests._steps_taken(runtime) != 2:
+		return { "ok": false, "error": "expected a two-step Advance, got %d steps" % TraversalModelTests._steps_taken(runtime) }
+	var why: Dictionary = TraversalModelTests._read_em(runtime, "travel_why")
+	if str(why.get("cause", "")) != first_cause:
+		return { "ok": false, "error": "a later-leg refusal replaced cause '%s' with '%s'" % [first_cause, why.get("cause", "")] }
+	return { "ok": true }
+
+
 static func _t_stop_kind_capacity_spent() -> Dictionary:
 	return _s3_expect(_s3_run("directive.scout_carefully", []), "capacity_spent", 2)
 
@@ -4001,7 +4063,9 @@ static func _t_stop_noise_filter() -> Dictionary:
 		["objective at high width", _s3_sit("a", "loot", 4, true), 0.9, listed, "spotted_ahead"],
 		["hostile at high width", _s3_sit("a", "combat", 4), 0.9, listed, "spotted_ahead"],
 		["optional find, kind not listed", _s3_sit("a", "npc", 4), 0.1, ["spotted_ahead"], ""],
-		["hostile, kind not listed", _s3_sit("a", "combat", 4), 0.1, [], "spotted_ahead"],
+		# V2-DIRECTIVE-002 S3b D-52 F2: the list is the switch, also for spotted_ahead.
+		["hostile, kind not listed", _s3_sit("a", "combat", 4), 0.1, [], ""],
+		["objective, only paused_to_read listed", _s3_sit("a", "loot", 4, true), 0.1, ["paused_to_read"], ""],
 	]
 	for c in cases:
 		var em := { "situations": [c[1]] }

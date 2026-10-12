@@ -15,7 +15,8 @@ const WHY_SLOTS: Array = ["cause", "purpose_family", "route_character", "stop_ki
 
 ## Read-only peek at the situations on cells the last fog lift added. They are still unrevealed:
 ## the post-walk sweep reveals them, so the walk never targets a find it just saw.
-## Returns "spotted_ahead", "paused_to_read" or "". Objective and combat finds are never noise.
+## Returns "spotted_ahead", "paused_to_read" or "". `reveal_kinds` switches each kind on (D-52 F2).
+## Objective and combat finds are never noise and never a "paused_to_read".
 static func classify_reveals(explore_map: Dictionary, new_cell_keys: Array, category_map: Dictionary,
 		weights: Dictionary, reveal_kinds: Array, stop_cfg: Dictionary, width: float) -> String:
 	if new_cell_keys.is_empty():
@@ -36,7 +37,9 @@ static func classify_reveals(explore_map: Dictionary, new_cell_keys: Array, cate
 			continue
 		var category := "objective" if bool(s.get("is_objective", false)) else str(category_map.get(str(s.get("type", "")), "intel"))
 		if category == "objective" or category == ExposureScript.HOSTILE_CATEGORY:
-			return "spotted_ahead"
+			if reveal_kinds.has("spotted_ahead"):
+				return "spotted_ahead"
+			continue
 		if reveal_kinds.has("paused_to_read") and not (width >= noise_width and float(weights.get(category, 1.0)) < noise_weight):
 			pause = true
 	return "paused_to_read" if pause else ""

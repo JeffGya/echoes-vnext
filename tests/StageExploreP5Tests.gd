@@ -60,6 +60,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore_p5/stop_fields_typed_before_and_after_advance", Callable(StageExploreP5Tests, "_t_stop_fields_typed_before_and_after_advance"))
 	runner.register_test("explore_p5/travel_why_names_true_decider", Callable(StageExploreP5Tests, "_t_travel_why_names_true_decider"))
 	runner.register_test("explore_p5/travel_why_sanitiser", Callable(StageExploreP5Tests, "_t_travel_why_sanitiser"))
+	runner.register_test("explore_p5/presentation_has_no_comment_keys", Callable(StageExploreP5Tests, "_t_presentation_has_no_comment_keys"))
 	runner.register_test("explore_p5/dry_runs_not_counted_as_stances", Callable(StageExploreP5Tests, "_t_dry_runs_not_counted_as_stances"))
 
 
@@ -787,6 +788,21 @@ static func _t_stop_fields_typed_before_and_after_advance() -> Dictionary:
 			return { "ok": false, "error": "no stop before the first Advance" }
 		if phase == "after" and kind.is_empty():
 			return { "ok": false, "error": "an Advance that moved must set a stop kind" }
+	return { "ok": true }
+
+
+## D-52 F6: snapshot.presentation holds every numeric timing and no `_comment*` key.
+static func _t_presentation_has_no_comment_keys() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	runtime.flow_ctx.config_service = runtime.config_service
+	var pres: Dictionary = _snap(runtime)["presentation"]
+	var raw: Dictionary = runtime.config_service.get_balance()["data"]["stages"]["presentation"]
+	for key in raw:
+		var is_comment := str(key).begins_with("_comment")
+		if is_comment == pres.has(key):
+			return { "ok": false, "error": "presentation key %s %s" % [key, "leaked" if is_comment else "missing"] }
+		if not is_comment and not (pres[key] is float or pres[key] is int):
+			return { "ok": false, "error": "presentation.%s is not a number" % key }
 	return { "ok": true }
 
 

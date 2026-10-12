@@ -239,3 +239,15 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-51. frontier-route-character-deferred
 **Q:** Slice S2c listed a frontier `route_character` rank key in `select_frontier` (Scout prefers cells that keep the road home explored; Seek prefers continuing the heading) with no weights and no config keys. Build it in this phase?
 **A:** Defer (Jeff, 2026-10-12, the recommended option). Evidence in `route-character-options.md` (sr-game-designer): the design goals are met by commitment depth, fog per step (D-50), exposure, the category bend and stops (D-45); the frontier rank would only choose between two fog-edge cells; Seek's heading preference already exists as shared code; a live-stage re-record would be large. Revisit with V2-STAGE-010 (hazards): there definition C (low added exposure) matches the one-exposure-input rule (D-05). Consequence: `travel_why.route_character` has no frontier source and stays empty on frontier walks. The worked-example counts came from a Python copy of the search, not the engine: re-check before any value is authored.
+
+### D-52. s3-findings-answers
+**Q:** The opus review of S3 left findings F1 to F7 (follow-ups.md). Jeff decided on 2026-10-13 (all the recommended options):
+**A:**
+- **F1:** exempt the whole route when the target is the exposure source. If the party walks to the hostile on purpose, there is no exposure pause on the way. A pause happens only for exposure the party did not choose. The first-step exemption stays (design 9: an Advance always makes progress).
+- **F2:** `reveal_stop_kinds` is the switch, also for `spotted_ahead`. The code reads the list, so a data-only Directive can turn the stop off (ANSWERS #81). Both shipped Directives keep it on.
+- **F4:** the party width for the noise filter is the mean `interpretation_width`.
+- **F5:** the terrain cause overrides only when the FIRST leg refused a detour, to match first-plan-only naming (D-46).
+- **F3 (doc fix):** D-36 defines `arrived_at` as 'walked into a situation'; design 3a defines it as 'target reached' and the code follows 3a. The D-36 wording is superseded here: `arrived_at` = target reached; `met something` (reason `interrupted`) = entered a non-target unresolved situation.
+- **F6 (defect):** strip `_comment*` keys from the `presentation` snapshot key. The stage fingerprint moves once more.
+- **F7:** accepted as is. The player kind tells the two meanings of the shared reason `interrupted` apart.
+**Work:** slice S3b (opus): F1, F2, F5, F6 in code with one named cause per moved value.

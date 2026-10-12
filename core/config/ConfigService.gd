@@ -163,9 +163,15 @@ static func get_party_stance_profile(config_service: ConfigService, directive_id
 	return entry_v if entry_v is Dictionary else {}
 
 
-## data.stages.presentation — stage screen timings in seconds; {} when absent.
+## data.stages.presentation — stage screen timings in seconds; {} when absent. `_comment*` keys are
+## dropped: this dict rides the snapshot as-is (D-52 F6).
 static func get_stage_presentation_cfg(config_service: ConfigService) -> Dictionary:
-	return _data_subtree(config_service, ["stages", "presentation"])
+	var out: Dictionary = {}
+	var cfg := _data_subtree(config_service, ["stages", "presentation"])
+	for key in cfg:
+		if not str(key).begins_with("_comment"):
+			out[key] = cfg[key]
+	return out
 
 
 ## data.contact.bid — contact bid thresholds and Judgment/fear weights; {} when absent.

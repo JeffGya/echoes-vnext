@@ -1527,12 +1527,14 @@ static func _t_fog_light_bias_seek_engages() -> Dictionary:
 	runtime_seek.dispatch({ "type": "stage.advance_turn" })
 	runtime_scout.dispatch({ "type": "stage.advance_turn" })
 
-	var seek_choice := str(_read_em(runtime_seek, "pending_situation_id"))
+	# V2-DIRECTIVE-002 S3b D-52 F1: Scout now pauses before the loot (in the hostile's zone), so
+	# pending_situation_id is absent and the choice is read from target_situation_id.
+	var seek_choice := _em_str(runtime_seek, "pending_situation_id")
 	if seek_choice.is_empty():
-		seek_choice = str(_read_em(runtime_seek, "target_situation_id"))
-	var scout_choice := str(_read_em(runtime_scout, "pending_situation_id"))
+		seek_choice = _em_str(runtime_seek, "target_situation_id")
+	var scout_choice := _em_str(runtime_scout, "pending_situation_id")
 	if scout_choice.is_empty():
-		scout_choice = str(_read_em(runtime_scout, "target_situation_id"))
+		scout_choice = _em_str(runtime_scout, "target_situation_id")
 
 	if seek_choice != "sit.combat":
 		return {
@@ -2140,8 +2142,9 @@ const ADV_EXPECTED := {
 	],
 	"gen100_scout": [
 		"advanced|interrupted|16,17>17,18|tc1|fog35:2796315600|rev[sit.0]|pend:|tr:true|tgt:",
-		"advanced|interrupted|18,17|tc2|fog43:2311171675|rev[sit.0]|pend:|tr:true|tgt:sit.0",
-		"advanced|interrupted|19,16>20,15|tc3|fog54:1485271728|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+		# V2-DIRECTIVE-002 S3b D-52 F1: sit.0 is the target and the only hostile, so no pause before 19,16.
+		"advanced|commitment_spent|18,17>19,16|tc2|fog51:402733931|rev[sit.0]|pend:|tr:true|tgt:sit.0",
+		"advanced|interrupted|20,15|tc3|fog54:1485271728|rev[sit.0]|pend:sit.0|tr:false|tgt:",
 	],
 	"gen100_seek": [
 		"advanced|commitment_spent|16,17>17,18>18,19>19,19>20,18|tc1|fog22:3442288560|rev[]|pend:|tr:true|tgt:",

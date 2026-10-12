@@ -234,9 +234,11 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var category_map := ConfigService.get_situation_category_cfg(config_service)
 	var tolerance := float((stance["dials"] as Dictionary)["exposure_tolerance"])
 	var exposure := StageExposureMapScript.build(explore_map, category_map, exposure_cfg)
+	var pause_exposure := exposure
+	var pause_exposure_target := ""
 	var terrain_costs := StageExposureMapScript.to_terrain_costs(exposure, tolerance, int(StageExposureMapScript.cfg_num(exposure_cfg, "price_scale")))
 	# Stop knobs (design 3a). A Directive with no profile has no stop_willingness and lists no
-	# optional-find kinds: it still stops for an objective or a hostile find.
+	# stop kinds: no find stops it.
 	var stop_cfg_v: Variant = stance_cfg.get("stop", {})
 	var stop_cfg: Dictionary = stop_cfg_v if stop_cfg_v is Dictionary else {}
 	var profiles_v: Variant = stance_cfg.get("directive_profile", {})
@@ -253,7 +255,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var party_width := width_sum / maxf(echoes.size(), 1)
 	var reveal_kind := ""
 	var at_target := false
-	var detour_refused := false
+	var first_detour_refused := false
 	var route_character := ""
 	var first_goal: Dictionary = {}
 	var first_intent: Dictionary = {}
@@ -287,7 +289,8 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 					(route.get("path", []) as Array).size(), (plain.get("path", []) as Array).size(),
 					ConfigService.get_movement_slack_cfg(config_service)):
 				route = plain
-				detour_refused = true
+				if is_first_leg:
+					first_detour_refused = true
 			elif is_first_leg and not is_frontier:
 				route_character = "skirted" if route.get("path", []) != plain.get("path", []) else "direct"
 		if not bool(route.get("reachable", false)):
@@ -318,10 +321,13 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		var step_reaches_target := int(nxt.get("col", 0)) == int(target_pos.get("col", 0)) \
 			and int(nxt.get("row", 0)) == int(target_pos.get("row", 0))
 		nxt = ActiveStageService.stage_integer_cell(nxt)
-		# Pause before a highly exposed cell. Never on the first step (an Advance always moves) and
-		# never before the target itself (the party chose that cell).
-		if steps > 0 and not step_reaches_target and StageStopPolicyScript.exposure_pause(
-				float(exposure.get("%d,%d" % [int(nxt["col"]), int(nxt["row"])], 0.0)), tolerance,
+		# Pause before a highly exposed cell. Never on the first step (an Advance always moves). The
+		# hostile the party walks to is not a source: only exposure the party did not choose pauses.
+		if pause_exposure_target != target_sit_id:
+			pause_exposure_target = target_sit_id
+			pause_exposure = StageExposureMapScript.build(explore_map, category_map, exposure_cfg, target_sit_id)
+		if steps > 0 and StageStopPolicyScript.exposure_pause(
+				float(pause_exposure.get("%d,%d" % [int(nxt["col"]), int(nxt["row"])], 0.0)), tolerance,
 				stop_willingness, StageExposureMapScript.cfg_num(exposure_cfg, "pause_trigger")):
 			reveal_kind = "paused_to_read"
 			final_reason = "interrupted"
@@ -495,7 +501,8 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	if stop_kind.is_empty() and arrived:
 		stop_kind = "arrived_at"
 	var cause := str(why.get("cause", ""))
-	if cause != "echo" and detour_refused:
+	# Naming is first-plan only (D-46), so only a first-leg refusal may name terrain (D-52 F5).
+	if cause != "echo" and first_detour_refused:
 		cause = "terrain"
 	var named_id := str(why.get("decisive_contributor_id", "")) if cause == "echo" else ""
 	explore_map["last_effective_steps"] = int(stance["effective_steps"])
