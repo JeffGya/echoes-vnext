@@ -163,6 +163,13 @@ static func get_party_stance_profile(config_service: ConfigService, directive_id
 	return entry_v if entry_v is Dictionary else {}
 
 
+## data.stages.escape_base_threshold — the return-home roll succeeds when roll > base - escape bonus.
+static func get_escape_base_threshold(config_service: ConfigService, fallback: int = 40) -> int:
+	if config_service == null:
+		return fallback
+	return int(_data_subtree(config_service, ["stages"]).get("escape_base_threshold", fallback))
+
+
 ## data.stages.presentation — stage screen timings in seconds; {} when absent. `_comment*` keys are
 ## dropped: this dict rides the snapshot as-is (D-52 F6).
 static func get_stage_presentation_cfg(config_service: ConfigService) -> Dictionary:

@@ -424,6 +424,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/counterfactual_depth_without_cut_names_nobody", Callable(TraversalModelTests, "_t_cf_depth_without_cut_names_nobody"))
 	runner.register_test("traversal/counterfactual_depth_cut_names_echo", Callable(TraversalModelTests, "_t_cf_depth_cut_names_echo"))
 	runner.register_test("traversal/counterfactual_named_echo_has_class", Callable(TraversalModelTests, "_t_cf_named_echo_has_class"))
+	runner.register_test("traversal/counterfactual_removed_echo_takes_its_bond_edge", Callable(TraversalModelTests, "_t_cf_removed_echo_takes_its_bond_edge"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2788,4 +2789,22 @@ static func _t_cf_named_echo_has_class() -> Dictionary:
 					steadied += 1
 	if named == 0 or steadied == 0:
 		return { "ok": false, "error": "fixture: expected named Echoes and a steadied one, got named %d steadied %d" % [named, steadied] }
+	return { "ok": true }
+
+
+# D-26: the Echo left out of a dry run takes its bond edges with it. The bonded partner reads a lower
+# Judgment than in the full party, the same as when it stands alone, and so leans less.
+static func _t_cf_removed_echo_takes_its_bond_edge() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "okofor", 3, 0, 50, 1]], _full_rect_terrain(14, 11), [])
+	var data: Dictionary = runtime.config_service.get_balance()["data"]
+	var full := _cf_party(runtime)
+	var without := _cf_party(runtime, "e_a")
+	if without.size() != 1 or str(without[0]["id"]) != "e_b":
+		return { "ok": false, "error": "removal must leave only e_b: %s" % [without] }
+	var alone := StagePartyStanceScript.read_echo(SanctumService.get_party_actors_static(runtime.flow_ctx.save_data)[1], [], { "e_b": true }, data)
+	if float(without[0]["width"]) >= float(full[1]["width"]) or float(without[0]["width"]) != float(alone["width"]):
+		return { "ok": false, "error": "e_b width: full %s, without e_a %s, alone %s" % [full[1]["width"], without[0]["width"], alone["width"]] }
+	var cfg := ConfigService.get_party_stance_cfg(runtime.config_service)
+	if StagePartyStanceScript.echo_lean(without[0], "escape_bonus", cfg) >= StagePartyStanceScript.echo_lean(full[1], "escape_bonus", cfg):
+		return { "ok": false, "error": "the lost bond edge must lower the lean of e_b" }
 	return { "ok": true }

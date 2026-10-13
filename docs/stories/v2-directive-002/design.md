@@ -118,7 +118,7 @@ One Advance builds one party profile, one party intent, one ordered path and one
 Rules:
 1. **One aggregation.** The party stance is computed once, at the start of the Advance. Each dial = Directive baseline + sum of Echo leans, each lean weighted by one share of the party, then clamped inside the dial's bound. Party size alone never moves a dial.
 2. **Internal replans are allowed only as movement model 11.7 says.** Same intent, no decision-critical find, only a frontier chain, a local continuation or a blocked-cell detour. A replan reuses the same party stance. It does not aggregate again. The live loop today re-plans each step, builds a profile, goal, route and intent each time, and drops the result (`StageExploreTurnService.gd:196-258`; the `build_result` return value is not stored). Phase C keeps exactly one result and returns it.
-3. **Replan cap.** The path replan count per Advance has a hard cap: PROPOSED DEFAULT, to be authored (a small multiple of effective steps, never unbounded). Hitting the cap ends the Advance with a visible stop. It is logged.
+3. **Replan cap.** Dropped (D-54): the replan loop ends with the Advance's effective steps, so no cap key exists.
 4. **Counterfactual naming.** After the real plan is made, the system re-plans once per candidate Echo with that Echo removed, same board, same Directive, same origin, on a copy. No state is written. An Echo is a *deciding Echo* only if removing them changes at least one of: the ordered path, the effective steps or commitment depth, the stop kind. Judgment includes bond support (D-26), so the counterfactual removes the Echo together with the bond edges that Echo supplies to the others.
 5. **Candidate cap.** Only Echoes whose lean on some dial is non-zero are candidates. Total counterfactual replans per Advance = one per candidate, plus one per input class for the single named Echo (to find the reason class). Cap = party size + number of input classes: PROPOSED DEFAULT, to be authored.
 6. **Who is named.** `contributor_ids` = all deciding Echoes. `decisive_contributor_id` = the deciding Echo whose removal changes the most of {path, commitment, stop}; then the largest absolute dial contribution; then the lowest Echo id by string order. The why line names at most the decisive one. The reason class is the input class whose neutralisation changes the plan most. When no single class changes the plan, the reason class is `steadied`: the Echo decided only through the party mean (D-54 S2). A named Echo always has a reason class. The lowest-id tie-break can pin one Echo as the named Echo every time on a tied board. `mechanics-developer` checks this (section 12, feasibility).
@@ -375,14 +375,14 @@ Scan: literal numbers in the files of the table above. Layout constants in the U
 | `core/directives/DirectiveService.gd:32` | `DEFAULT_STEP_BUDGET` 3 | Stays. Reason: one shared fallback for a Directive entry with no budget; two callers read it so they cannot diverge. |
 | `core/runtime/controllers/ContactController.gd:615` | Claimant good-outcome Ase reward 20 | Not B+C's subject. The sweep covers only lines B+C edits (D-40 item 15). This line goes on the follow-up list. |
 | `ContactController.gd:170,422`; `ContactConversationService.gd:116`; `StageExploreSnapshotBuilder.gd:258,346` | Party-size comparisons (3, 5) | Not classified. `mechanics-developer` states whether each is a structural limit (stays, with the reason) or a tunable (moves). |
-| New values B+C adds | Pause cap, replan cap, candidate cap, bend bounds, readiness bound, resonance bonus, bid strength curve | Born in `data/balance.json`. None is a literal in code. |
+| New values B+C adds | Pause cap, candidate cap, bend bounds, readiness bound, resonance bonus, bid strength curve | Born in `data/balance.json`. None is a literal in code. |
 
 ## 11. Test plan skeleton
 
 | Suite | Extend with |
 |---|---|
 | `traversal` (`TraversalModelTests.gd`) | Section 7 contrasts S1 to S4, K1 to K4, P1, P2; N1 to N7; O1 to O3; one result per Advance; effective-steps invariants; shaken-party progress. Fixtures use real bonds (section 2, rule 5). |
-| `movement` (`StagePartyMovementTests.gd`) | Profile inputs; bound and ordering invariants per dial; objective in the pool; exposure-map pricing with an empty map; replan cap; determinism with shuffled party order. |
+| `movement` (`StagePartyMovementTests.gd`) | Profile inputs; bound and ordering invariants per dial; objective in the pool; exposure-map pricing with an empty map; determinism with shuffled party order. |
 | `seam` (`Stage004SeamTests.gd`) | Stop kinds; return safety draw path unchanged. |
 | `directive` / `directive_char` | Exposure tolerance has a reader; guard nits; synthetic third Directive passes the new dials without a logic change (D-14); no hard-coded tunable left in the section 10.1 "move" rows. |
 | `explore`, `explore_p5` | The `stop`, `travel_why`, `step_budget` and `effective_steps` fields; N7 wrong-reason test; sanitiser test (no IDs, no numbers). A refused detour records the terrain cause and the why never shows a Directive cause for it (D-48). |
@@ -451,6 +451,7 @@ Re-record rule (D-01, LESSONS):
 | Q2 Refused-detour cause | Yes. A refused detour records the terrain cause. The why never shows a Directive cause for it. Wording is Jeff's. Work lands in S3 (cause value) and S5 (saved field). | D-48 |
 | S2c frontier `route_character` key (Scout: explored ground; Seek: heading) | Deferred. Heading preference stays as shared code. `travel_why.route_character` has no frontier source and stays empty on frontier walks. Revisit with V2-STAGE-010 (hazards). | D-51 |
 | QA package A (S1, S2, N2) | Depth is material only when it cuts the walk (section 4 rule 8). Fifth reason class `steadied` (section 4 rule 6, section 8). Readiness applies to every Directive (section 5). | D-54 |
+| Replan cap | Dropped. The key `replan_cap_per_effective_step` had no reader and the loop is already bounded; section 4 rule 3 no longer promises a stop. | D-54 |
 
 ### 12b. Still open
 

@@ -54,6 +54,10 @@ class_name Stage004SeamTests
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("seam/escape_draw_path_unchanged",
 		Callable(Stage004SeamTests, "_t_escape_draw_path_unchanged"))
+	runner.register_test("seam/escape_threshold_uses_bent_bonus",
+		Callable(Stage004SeamTests, "_t_escape_threshold_uses_bent_bonus"))
+	runner.register_test("seam/escape_base_threshold_from_config",
+		Callable(Stage004SeamTests, "_t_escape_base_threshold_from_config"))
 	runner.register_test("seam/escape_never_certain_never_impossible",
 		Callable(Stage004SeamTests, "_t_escape_never_certain_never_impossible"))
 	runner.register_test("seam/escape_scout_ge_seek",
@@ -3847,6 +3851,63 @@ static func _t_escape_draw_path_unchanged() -> Dictionary:
 	if seen.size() < 2:
 		return { "ok": false, "error": "turns 0..11 did not cover both a success and a failure; widen the range" }
 	return { "ok": true }
+
+
+## A calm Anchor party bends the bonus away from the Directive base. A turn whose roll sits between
+## the two thresholds succeeds or fails depending on which value the threshold used.
+static func _t_escape_threshold_uses_bent_bonus() -> Dictionary:
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully",
+		[["e_a", "okofor", 6, 0, 90, 0], ["e_b", "okofor", 6, 0, 90, 1]], TraversalModelTests._full_rect_terrain(30, 11), [])
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var bent := _StanceS2d.escape_bonus(StageExploreTurnService.new(flow_ctx, runtime.config_service, runtime.logger).read_party_echoes(),
+		directive, ConfigService.get_party_stance_cfg(runtime.config_service))
+	var base := int(directive["escape_bonus"])
+	if bent == base:
+		return { "ok": false, "error": "fixture: the bent bonus must differ from the base %d" % base }
+	var lo := 40 - maxi(bent, base)
+	var hi := 40 - mini(bent, base)
+	var seed_ := int(flow_ctx.save_data["realms"]["realm.01"].get("seed", 0))
+	for turn in range(0, 300):
+		var roll := CampaignSeed.get_rng_from(seed_, "stage.escape.%s.%d" % [flow_ctx.stage_id, turn]).randi_range(0, 100)
+		if roll <= lo or roll > hi:
+			continue
+		var emap: Dictionary = flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+		emap["turn_count"] = turn
+		runtime.dispatch({ "type": "stage.return_home" })
+		var got := str(emap.get("party_state", "")) == StageExploreModel.STATE_ESCAPED
+		if got != (roll > 40 - bent):
+			return { "ok": false, "error": "turn %d roll %d: bent %d base %d, escaped=%s" % [turn, roll, bent, base, got] }
+		return { "ok": true }
+	return { "ok": false, "error": "fixture: no roll between the two thresholds in 300 turns" }
+
+
+## The shipped base is 40. With the key set to 0, a roll that fails at 40 (above 0, at or below
+## 40 - bonus) escapes, so the controller reads the key.
+static func _t_escape_base_threshold_from_config() -> Dictionary:
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully",
+		[["e_a", "okofor", 6, 0, 90, 0]], TraversalModelTests._full_rect_terrain(30, 11), [])
+	if ConfigService.get_escape_base_threshold(runtime.config_service) != 40 \
+			or int(runtime.config_service.get_balance()["data"]["stages"]["escape_base_threshold"]) != 40:
+		return { "ok": false, "error": "shipped escape_base_threshold must be 40" }
+	if ConfigService.get_escape_base_threshold(null) != 40:
+		return { "ok": false, "error": "the getter must fall back to 40" }
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var bonus := _StanceS2d.escape_bonus(StageExploreTurnService.new(flow_ctx, runtime.config_service, runtime.logger).read_party_echoes(),
+		runtime.directive_service.get_active_directive(), ConfigService.get_party_stance_cfg(runtime.config_service))
+	runtime.config_service._balance["data"]["stages"]["escape_base_threshold"] = 0
+	var seed_ := int(flow_ctx.save_data["realms"]["realm.01"].get("seed", 0))
+	for turn in range(0, 300):
+		var roll := CampaignSeed.get_rng_from(seed_, "stage.escape.%s.%d" % [flow_ctx.stage_id, turn]).randi_range(0, 100)
+		if roll < 1 or roll > 40 - bonus:
+			continue
+		var emap: Dictionary = flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+		emap["turn_count"] = turn
+		runtime.dispatch({ "type": "stage.return_home" })
+		if str(emap.get("party_state", "")) != StageExploreModel.STATE_ESCAPED:
+			return { "ok": false, "error": "turn %d roll %d did not escape with base 0 and bonus %d" % [turn, roll, bonus] }
+		return { "ok": true }
+	return { "ok": false, "error": "fixture: no roll in 1..%d in 300 turns" % (40 - bonus) }
 
 
 ## Roll is 0..100 and success is roll > 40 - bonus: bonus 40 or more would be certain, and a

@@ -62,6 +62,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore_p5/travel_why_sanitiser", Callable(StageExploreP5Tests, "_t_travel_why_sanitiser"))
 	runner.register_test("explore_p5/presentation_has_no_comment_keys", Callable(StageExploreP5Tests, "_t_presentation_has_no_comment_keys"))
 	runner.register_test("explore_p5/dry_runs_not_counted_as_stances", Callable(StageExploreP5Tests, "_t_dry_runs_not_counted_as_stances"))
+	runner.register_test("explore_p5/first_step_never_pauses_for_exposure", Callable(StageExploreP5Tests, "_t_first_step_never_pauses_for_exposure"))
+	runner.register_test("explore_p5/snapshot_effective_steps_follows_readiness", Callable(StageExploreP5Tests, "_t_snapshot_effective_steps_follows_readiness"))
+	runner.register_test("explore_p5/peek_does_not_reveal", Callable(StageExploreP5Tests, "_t_peek_does_not_reveal"))
+	runner.register_test("explore_p5/profileless_directive_advances_with_readiness", Callable(StageExploreP5Tests, "_t_profileless_directive_advances_with_readiness"))
 
 
 # ─── Save-file isolation helpers (mirrors UnifiedResolveTests) ──────────────
@@ -869,4 +873,72 @@ static func _t_dry_runs_not_counted_as_stances() -> Dictionary:
 	var cap: int = int(ConfigService.get_party_stance_cfg(runtime.config_service)["stop"]["pause_cap_per_advance"])
 	if cap < 1:
 		return { "ok": false, "error": "pause_cap_per_advance key must stay in config" }
+	return { "ok": true }
+
+
+## Design 9: an Advance always makes progress. Step 1 enters the exposed cell next to the hostile
+## spur (2,4) without a pause; the pause comes before step 2.
+static func _t_first_step_never_pauses_for_exposure() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	var cells: Array = [[2, 4]]
+	for c in range(14):
+		cells.append([c, 5])
+	var terrain := { "bounds": { "w": 14, "h": 6 }, "bridges": [], "islands": [],
+		"plateaus": [{ "col": 0, "row": 4, "w": 14, "h": 2, "cells": cells }] }
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 2, 4, 900, false)
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 4, 5, 901, true)
+	hostile["revealed"] = true
+	goal["revealed"] = true
+	TraversalModelTests._inject_stage_with_terrain(runtime, terrain, [hostile, goal], { "col": 0, "row": 5 }, 900, 0)
+	var verdict := TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	var stop: Dictionary = TraversalModelTests._read_em(runtime, "last_stop")
+	if verdict != "advanced" or TraversalModelTests._steps_taken(runtime) != 1 or str(stop.get("kind", "")) != "paused_to_read":
+		return { "ok": false, "error": "expected one step then paused_to_read, got %s / %d steps / %s" % [verdict, TraversalModelTests._steps_taken(runtime), stop] }
+	return { "ok": true }
+
+
+## The crossed-out steps in the step bar read `effective_steps`; a shaken party must show fewer than the budget.
+static func _t_snapshot_effective_steps_follows_readiness() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 95, 2)
+	runtime.flow_ctx.config_service = runtime.config_service
+	var want := int(TraversalModelTests._adv_service(runtime)._build_stance(runtime.directive_service.get_active_directive())["effective_steps"])
+	if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+		return { "ok": false, "error": "the Advance did not move" }
+	var d := _snap(runtime)
+	if int(d["effective_steps"]) >= int(d["step_budget"]) or int(d["effective_steps"]) != want:
+		return { "ok": false, "error": "a shaken party must show %d of %d steps, got %s" % [want, int(d["step_budget"]), d["effective_steps"]] }
+	return { "ok": true }
+
+
+## The reveal peek reads the explore map and writes nothing: the find is revealed by the sweep later.
+static func _t_peek_does_not_reveal() -> Dictionary:
+	var find: Dictionary = SituationModelScript.make("find", SituationModelScript.TYPE_NPC, 4, 2, 700, false)
+	var em := { "situations": [find] }
+	var before := var_to_str(em)
+	var cfg := ConfigService.get_party_stance_cfg(TraversalModelTests._make_runtime().config_service)
+	var kind := _StopPolicyP5.classify_reveals(em, ["4,2"], { "npc": "intel" }, { "intel": 1.4 },
+		["spotted_ahead", "paused_to_read"], cfg["stop"], 0.0)
+	if kind != "paused_to_read":
+		return { "ok": false, "error": "fixture: the peek must see the find, got '%s'" % kind }
+	if var_to_str(em) != before or bool(find.get("revealed", false)):
+		return { "ok": false, "error": "the peek changed the map: %s" % [em] }
+	return { "ok": true }
+
+
+## D-14, D-54 N2: a Directive with no directive_profile entry still advances, and readiness still lowers its steps.
+static func _t_profileless_directive_advances_with_readiness() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.synthetic", 95, 2)
+	var cfg := TraversalModelTests._make_directive_cfg()
+	var synthetic: Dictionary = (cfg["data"]["directives"]["directive.scout_carefully"] as Dictionary).duplicate(true)
+	synthetic["id"] = "directive.synthetic"
+	cfg["data"]["directives"] = { "directive.synthetic": synthetic }
+	runtime.directive_service.load_from_config(cfg)
+	runtime.flow_ctx.config_service = runtime.config_service
+	if (ConfigService.get_party_stance_cfg(runtime.config_service)["directive_profile"] as Dictionary).has("directive.synthetic"):
+		return { "ok": false, "error": "fixture: the synthetic Directive must have no profile" }
+	if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced" or TraversalModelTests._steps_taken(runtime) < 1:
+		return { "ok": false, "error": "a profile-less Directive must advance" }
+	var d := _snap(runtime)
+	if str((d["stop"] as Dictionary).get("kind", "")).is_empty() or int(d["effective_steps"]) >= int(d["step_budget"]):
+		return { "ok": false, "error": "expected a stop kind and readiness steps below the budget, got %s / %s of %s" % [d["stop"], d["effective_steps"], d["step_budget"]] }
 	return { "ok": true }

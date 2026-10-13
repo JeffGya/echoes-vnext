@@ -3101,6 +3101,8 @@
 
 			"party_return_fear_threshold": 60,
 			"cautious_advance_fear_threshold": 50,
+			"escape_base_threshold": 40,
+			"_comment_escape_base_threshold": "PROPOSED DEFAULT. Return-home roll (0 to 100) succeeds when roll > escape_base_threshold - bent escape bonus. Value 40 is the literal it replaced; Scout bonus 20 gives 20, Seek bonus 0 gives 40.",
 				"party_stance": {
 					"_comment": "PROPOSED DEFAULT. V2-DIRECTIVE-002 phases B+C, docs/stories/v2-directive-002/numbers.md. Party stance numbers for the stage Directive profile. READER PENDING: mechanics-developer adds a ConfigService getter (same shape as get_movement_slack_cfg) read by StageExploreTurnService and ActiveStageService. Jeff owns the final values. Every bound is smaller than half the gap between the two authored Directive baselines, so a party can soften a Directive but never invert it.",
 					"bounds": {
@@ -3196,8 +3198,7 @@
 						"_comment_pause_cap_per_advance": "PROPOSED DEFAULT. Set by D-45, probe 2026-10-12. Safety cap for the party bends. No probed Advance reached 3 pauses. Re-measure after the backend lands."
 					},
 					"counterfactual": {
-						"_comment": "PROPOSED DEFAULT. Caps for the 'who decided' dry runs (D-04). Replan cap per Advance = replan_cap_per_effective_step * effective steps. Candidate cap = party size + extra_replans_per_reason_class * number of reason_classes (party max 5, so at most 9).",
-						"replan_cap_per_effective_step": 3,
+						"_comment": "PROPOSED DEFAULT. Caps for the 'who decided' dry runs (D-04). Cap = party size + extra_replans_per_reason_class * number of reason_classes.",
 						"extra_replans_per_reason_class": 1,
 						"reason_classes": [
 							"calling",

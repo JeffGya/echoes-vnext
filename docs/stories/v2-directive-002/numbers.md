@@ -26,6 +26,7 @@ All paths start at `data.`. Line numbers were checked on 2026-10-12.
 | `stages.presentation.walk_seconds` | 0.5 | Literal `_TRAVEL_DURATION`. | `StageExploreScreen.gd:71` | reader pending |
 | `stages.presentation.snippet_fade_in_seconds` | 0.4 | Literal. | `StageExploreScreen.gd:1211` | reader pending |
 | `stages.presentation.snippet_hold_seconds` | 2.1 | Literal. | `StageExploreScreen.gd:1212` | reader pending |
+| `stages.escape_base_threshold` | 40 | Return-home roll succeeds when roll > base - bent escape bonus. Same value as the literal (D-54 S6). | `VentureController.gd:340` through `ConfigService.get_escape_base_threshold` | read, PROPOSED DEFAULT |
 | `stages.presentation.snippet_fade_out_seconds` | 0.5 | Literal. | `StageExploreScreen.gd:1213` | reader pending |
 | `stages.presentation.zoom_seconds` | 0.35 | Literal `_ZOOM_DURATION`. Design 10.1 row "other timings". | `StageExploreScreen.gd:56` | reader pending |
 | `stages.presentation.preview_fade_seconds` | 0.25 | Literal (two tweens). | `StageExploreScreen.gd:430-431` | reader pending |
@@ -122,7 +123,6 @@ Effective steps = baseline minus loss, never below 1, never above 6 (code floors
 
 | Key (`stages.party_stance.counterfactual`) | Value | Why | Consumer | Status |
 |---|---|---|---|---|
-| `replan_cap_per_effective_step` | 3 | Cap = 3 x effective steps (at most 18). Small multiple, never unbounded. | reader pending | PROPOSED DEFAULT |
 | `extra_replans_per_reason_class` | 1 | One extra dry run per reason class for the named Echo. | reader pending | PROPOSED DEFAULT |
 | `reason_classes` | calling, temperament, fear, morale, steadied | The five classes of design section 8 (`steadied` by D-54 S2). Count is derived from the list. `steadied` runs no dry run. | reader pending | PROPOSED DEFAULT |
 
@@ -188,7 +188,7 @@ Not in `balance.json`. Suggested home: `stages.presentation`.
 | Decision | Rows affected |
 |---|---|
 | D-46 A1 (pause ends the Advance) | Section 7 `pause_cap_per_advance` (unused). Section 7 `pause_trigger` (at most one pause per Advance; the trigger still decides when). Section 4 `reveal_stop_kinds` (a stop ends the Advance). |
-| D-46 A2 (first-plan-only naming) | Section 8 `replan_cap_per_effective_step`, `extra_replans_per_reason_class`, `reason_classes`: the dry runs now cover the first plan only. The caps stay as upper bounds. Re-check the 9-dry-run line under the table. |
+| D-46 A2 (first-plan-only naming) | Section 8 `extra_replans_per_reason_class`, `reason_classes`: the dry runs now cover the first plan only. The caps stay as upper bounds (`replan_cap_per_effective_step` was dropped, D-54). Re-check the 9-dry-run line under the table. |
 | D-47 J5 | Section 1 new row `contact.max_voices_per_turn`. Section 8 note on party max 5 (same `party_max_size`). |
 | D-47 J6 | Section 1 three new `emotional_fit_modifiers` rows. The old 'Not moved' note is replaced. |
 | D-47 J3, J4, J7 | No numbers row. J4 adds a snapshot copy of `stages.presentation` (section 1 timing rows, consumer path). |
