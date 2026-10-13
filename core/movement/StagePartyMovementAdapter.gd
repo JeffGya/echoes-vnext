@@ -659,18 +659,19 @@ static func _build_step_events(origin: Dictionary, path: Array, stop_reason: Str
 ## Distances come from MovementPathService.reachable_cost_region, so the shared
 ## two-solid-corners diagonal rule applies. When `walkable` is the legacy
 ## all-walkable sentinel (empty) the board is unbounded and BFS cannot terminate,
-## so chebyshev distance stands in.
+## so chebyshev distance stands in. `region_costs`: that region's costs, when the caller has it.
 static func select_frontier(
 	candidates: Array,
 	party_pos: Dictionary,
 	heading: Dictionary,
 	walkable: Dictionary,
-	salt: String = ""
+	salt: String = "",
+	region_costs: Dictionary = {}
 ) -> Dictionary:
 	var party: Dictionary = _cell_of(party_pos)
-	var costs: Dictionary = {}
+	var costs: Dictionary = region_costs
 	var use_bfs: bool = not walkable.is_empty()
-	if use_bfs:
+	if use_bfs and costs.is_empty():
 		# Capacity == cell count: an upper bound on any in-region distance, so
 		# nothing reachable is ever truncated away.
 		var region: Dictionary = MovementPathService.reachable_cost_region(

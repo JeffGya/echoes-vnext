@@ -86,3 +86,11 @@ Owner: phase B+C, which edits the same guard.
 - Correction to QA note N1: the model plan and the real walk differ in the QA case because of equal-cost route ties under per-step replanning (diagonal ties near an exposure source), not because the model skips pauses or reveal stops. All 24 drops in the probe were route ties; none came from a walk that stopped early.
 - Fallback rate in the probe: 24 of 185 proposed names (13.0%), 24 of 369 Advances (6.5%); all on Advance 0 of boards with a hostile near the start. Test boards, not real maps.
 - Open choice for Jeff: accept the drop rate, or make the model use the live per-step route tie rule so the ties match (a model change; not option 3).
+
+## Found in QA package E (2026-10-13)
+- Speed after package E (M2 Mac, headless, 576 Advances before and after, outputs byte-identical): naming mean 70 to 101 ms before, 8 to 34 ms after; the whole dispatch with 5 Echoes 338 ms (Scout) and 484 ms (Seek) before, 169 ms and 228 ms after. Target met (D-55).
+- Remaining cost: each step after the first still builds a full reachable region in `find_explore_target` and runs two route searches (owner: V2-INFRA-010).
+- The snapshot rebuild costs about 60 ms per dispatch, about a third of the new Advance cost. No story owns it. Decide: V2-INFRA-010 takes it, or a new story.
+- One isolated naming maximum is 220 ms (5 Echoes, Scout), probably a terrain-cause Advance where `_only_way` runs one path search per path cell. Not measured apart.
+- The `_data_subtree` check `get_script() == ConfigService` keeps test subclasses that override `get_balance()` working (LESSONS #35). Do not remove it.
+- The new equivalence test `traversal/shared_region_same_naming_and_frontier` costs about 4.5 s of suite time.

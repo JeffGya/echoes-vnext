@@ -140,15 +140,18 @@ static func get_directives_cfg(config_service: ConfigService) -> Dictionary:
 
 
 ## Walks `data.<path...>`; returns {} when the service is null or any step is missing or not a Dictionary.
+## Copies only the subtree: get_balance() deep-copies the whole file, and these getters run many
+## times per Advance. A subclass that overrides get_balance() keeps being read through it.
 static func _data_subtree(config_service: ConfigService, path: Array) -> Dictionary:
 	if config_service == null:
 		return {}
-	var node: Variant = config_service.get_balance().get("data", {})
+	var root: Dictionary = config_service._balance if config_service.get_script() == ConfigService else config_service.get_balance()
+	var node: Variant = root.get("data", {})
 	for key in path:
 		if not node is Dictionary:
 			return {}
 		node = (node as Dictionary).get(key, {})
-	return node if node is Dictionary else {}
+	return (node as Dictionary).duplicate(true) if node is Dictionary else {}
 
 
 ## data.stages.party_stance — V2-DIRECTIVE-002 party-stance numbers; {} when absent (neutral stance).
@@ -408,16 +411,7 @@ static func get_threads_cfg(config_service: ConfigService) -> Dictionary:
 ## ActiveStageService: it is a plain "read a named subtree of balance.json", which
 ## the established rule places here beside get_bond_thresholds_cfg and friends.
 static func get_situation_category_cfg(config_service: ConfigService) -> Dictionary:
-	if config_service == null:
-		return {}
-	var balance_v: Variant = config_service.get_balance()
-	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var stages_v: Variant = data.get("stages", {})
-	var stages: Dictionary = stages_v if stages_v is Dictionary else {}
-	var category_v: Variant = stages.get("situation_category", {})
-	return category_v if category_v is Dictionary else {}
+	return _data_subtree(config_service, ["stages", "situation_category"])
 
 
 ## data.combat.objective_modes — per-mode objective tuning (recover / protect / endure /
@@ -497,18 +491,7 @@ static func get_voice_cfg(config_service: ConfigService) -> Dictionary:
 ## off FlowRuntime (private _stage_movement_slack_config), same rationale as
 ## get_situation_category_cfg above.
 static func get_movement_slack_cfg(config_service: ConfigService) -> Dictionary:
-	if config_service == null:
-		return {}
-	var balance_v: Variant = config_service.get_balance()
-	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var combat_v: Variant = data.get("combat", {})
-	var combat: Dictionary = combat_v if combat_v is Dictionary else {}
-	var movement_v: Variant = combat.get("movement", {})
-	var movement: Dictionary = movement_v if movement_v is Dictionary else {}
-	var slack_v: Variant = movement.get("slack", {})
-	return slack_v if slack_v is Dictionary else {}
+	return _data_subtree(config_service, ["combat", "movement", "slack"])
 
 
 ## data.summoning.birth_stats + data.actor.enemy_types — the two-key `cfg` dict that

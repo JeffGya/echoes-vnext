@@ -110,10 +110,11 @@ static func _depth_cuts(plan: Dictionary) -> bool:
 
 
 ## Names the deciders of the first plan of the current stage. Writes nothing.
+## `start_region`: stage_reachable_costs from the party cell, when the caller has it.
 ## Returns {plan, contributor_ids, decisive_contributor_id, reason_class, cause, dry_runs}.
 ## cause: "echo" when an Echo is named, else terrain / objective / situation / party / directive,
 ## or "" when there is no target (no Advance happens).
-func name_deciders(directive: Dictionary, t: int) -> Dictionary:
+func name_deciders(directive: Dictionary, t: int, start_region: Dictionary = {}) -> Dictionary:
 	dry_runs = 0
 	_cause_if_unnamed = Callable()
 	var out := {"plan": {}, "contributor_ids": [], "decisive_contributor_id": "", "reason_class": "", "cause": "", "dry_runs": 0}
@@ -130,7 +131,7 @@ func name_deciders(directive: Dictionary, t: int) -> Dictionary:
 	# The live loop lifts the origin fog before its first in-loop target pick.
 	ActiveStageService.lift_fog_at_cell(here, int(directive.get("reveal_radius", directive.get("passive_reveal_radius", 2))), walkable, explored)
 	em["explored_cells"] = explored
-	var region := ActiveStageService.stage_reachable_costs(here, walkable)
+	var region := start_region if not start_region.is_empty() else ActiveStageService.stage_reachable_costs(here, walkable)
 
 	var cfg_data := _cfg_data()
 	var stance_cfg := ConfigService.get_party_stance_cfg(config_service)

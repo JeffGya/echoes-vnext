@@ -428,6 +428,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/counterfactual_walk_probe", Callable(TraversalModelTests, "_t_cf_walk_probe"))
 	runner.register_test("traversal/counterfactual_walk_differs_names_nobody", Callable(TraversalModelTests, "_t_cf_walk_differs_names_nobody"))
 	runner.register_test("traversal/counterfactual_walk_equal_keeps_name", Callable(TraversalModelTests, "_t_cf_walk_equal_keeps_name"))
+	runner.register_test("traversal/shared_region_same_naming_and_frontier", Callable(TraversalModelTests, "_t_shared_region_same_naming_and_frontier"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2492,6 +2493,12 @@ const CF_SEEK := "directive.seek_signs"
 # through SocialGraphService so Judgment carries the bond term (design 2 rule 5).
 static func _cf_runtime(directive: String, members: Array, terrain: Dictionary, sits: Array) -> FlowRuntime:
 	var runtime := _make_runtime(directive)
+	_cf_setup(runtime, members, terrain, sits)
+	return runtime
+
+
+# Replaces the party and the stage of `runtime`.
+static func _cf_setup(runtime: FlowRuntime, members: Array, terrain: Dictionary, sits: Array) -> void:
 	var data: Dictionary = runtime.config_service.get_balance()["data"]
 	var roster: Array = []
 	var ids: Array = []
@@ -2511,7 +2518,6 @@ static func _cf_runtime(directive: String, members: Array, terrain: Dictionary, 
 			bonds = SocialGraphService.apply_score_delta(bonds, ids[i], ids[j], 40, data["sanctum"]["bond_thresholds"], runtime.logger, 0)
 	runtime.flow_ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids, "bonds": bonds }
 	_inject_stage_with_terrain(runtime, terrain, sits, { "col": 0, "row": 5 }, 900, 0)
-	return runtime
 
 
 static func _cf_svc(runtime: FlowRuntime) -> StageCounterfactualService:
@@ -2940,3 +2946,69 @@ static func _t_cf_walk_equal_keeps_name() -> Dictionary:
 	if expected.is_empty() or a["named"] != expected or a["cause"] != "echo":
 		return { "ok": false, "error": "expected the live name '%s', got %s" % [expected, a] }
 	return { "ok": true }
+
+
+# A 20x11 board with a wall at column 6 (rows 0 to 8): the way east bends through the bottom rows.
+static func _cf_wall_terrain() -> Dictionary:
+	var cells: Array = []
+	for c in range(20):
+		for r in range(11):
+			if c != 6 or r > 8:
+				cells.append([c, r])
+	return { "bounds": { "w": 20, "h": 11 }, "plateaus": [{ "col": 0, "row": 0, "w": 20, "h": 11, "cells": cells }], "bridges": [], "islands": [] }
+
+
+static func _cf_region_boards() -> Array:
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 4, 5, 902, false)
+	hostile["revealed"] = true
+	var hidden: Dictionary = SituationModelScript.make("hidden", SituationModelScript.TYPE_COMBAT, 3, 5, 903, false)
+	var find: Dictionary = SituationModelScript.make("find", SituationModelScript.TYPE_NPC, 12, 2, 904, false)
+	find["revealed"] = true
+	return [
+		[_full_rect_terrain(30, 11), []],
+		[_corridor_terrain(30, 11, 5), []],
+		[_full_rect_terrain(14, 11), _cf_goal_sits()],
+		[_full_rect_terrain(30, 11), _cf_goal_sits() + [hostile]],
+		[_full_rect_terrain(30, 11), [hidden, find]],
+		[_cf_wall_terrain(), _cf_goal_sits()],
+	]
+
+
+# 12 parties over 6 boards, both Directives: a reachable region handed in by the caller gives the same
+# naming as one built inside, and select_frontier gives the same cell with or without it.
+static func _t_shared_region_same_naming_and_frontier() -> Dictionary:
+	var callings := ["okofor", "aduro", "okomfo", "kra_soro"]
+	var seen := { "echo": 0, "frontier": 0, "pool": 0 }
+	var runtimes := [_make_runtime(CF_SCOUT), _make_runtime(CF_SEEK)]
+	var boards := _cf_region_boards()
+	for p in 12:
+		var b: Array = boards[p % boards.size()]
+		for runtime: FlowRuntime in runtimes:
+			var members: Array = []
+			for k in 1 + p % 5:
+				members.append(["e_%d" % k, callings[(k + p) % 4], 1 + (k * 2 + p) % 6, (k * 37 + p * 23) % 100, (k * 29 + p * 17) % 100, k + p])
+			_cf_setup(runtime, members, b[0], (b[1] as Array).duplicate(true))
+			var directive := runtime.directive_service.get_active_directive()
+			var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+			var region := ActiveStageService.stage_reachable_costs(em["party_pos"], ActiveStageService.explore_walkable(em))
+			var own := _cf_svc(runtime).name_deciders(directive, 0)
+			var shared := _cf_svc(runtime).name_deciders(directive, 0, region)
+			if var_to_str(own) != var_to_str(shared):
+				return { "ok": false, "error": "%s party %d: the shared region changed the naming:\n%s\n%s" % [directive["id"], p, own, shared] }
+			seen["echo"] += 1 if str(own["cause"]) == "echo" else 0
+			seen["frontier" if str(own["plan"]["target_id"]).is_empty() else "pool"] += 1
+	for b: Array in boards:
+		var walkable := ActiveStageService.explore_walkable({ "terrain": b[0] })
+		var cells: Array = []
+		for key in walkable:
+			var parts := str(key).split(",")
+			cells.append({ "col": int(parts[0]), "row": int(parts[1]) })
+		for from: Dictionary in [cells[0], cells[cells.size() / 2], cells[cells.size() - 1]]:
+			var with_region := StagePartyMovementAdapter.select_frontier(cells, from, {}, walkable, "salt",
+				ActiveStageService.stage_reachable_costs(from, walkable))
+			if with_region != StagePartyMovementAdapter.select_frontier(cells, from, {}, walkable, "salt"):
+				return { "ok": false, "error": "select_frontier from %s changed with the region" % [from] }
+	if seen["echo"] == 0 or seen["frontier"] == 0 or seen["pool"] == 0:
+		return { "ok": false, "error": "fixture must cover a named Echo, a frontier and a pool target: %s" % [seen] }
+	return { "ok": true }
+

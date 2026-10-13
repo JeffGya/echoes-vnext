@@ -461,7 +461,8 @@ func find_explore_target(
 		party_pos,
 		stage_party_heading(explore_map),
 		walkable,
-		stage_movement_salt(stage)
+		stage_movement_salt(stage),
+		dist_from_party
 	)
 	if not frontier_cell.is_empty():
 		return {

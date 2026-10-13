@@ -189,7 +189,9 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var echoes := read_party_echoes()
 	var stance := _build_stance(directive, echoes, stance_cfg)
 	var bend: Dictionary = stance["category_bend"]
-	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend)
+	# One reachable region from the start cell: the first pick, the naming and the first in-loop pick share it.
+	var start_region := ActiveStageService.stage_reachable_costs(explore_map["party_pos"], walkable)
+	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend, start_region)
 
 	if target.is_empty():
 		# All walkable cells explored and no discovered unresolved situations — nothing left.
@@ -198,7 +200,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 
 	# Who decided the first plan. Read-only dry runs, so it runs before any write below.
 	var counterfactual := StageCounterfactualService.new(flow_ctx, config_service, logger)
-	var why: Dictionary = counterfactual.name_deciders(directive, t)
+	var why: Dictionary = counterfactual.name_deciders(directive, t, start_region)
 	var first_is_frontier := bool(target.get("is_frontier", false))
 
 	# One explore-turn consumed per Advance call
@@ -268,7 +270,8 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		var here: Dictionary = ActiveStageService.stage_integer_cell(explore_map.get("party_pos", {}))
 		explore_map["party_pos"] = here.duplicate()
 		explore_map["last_traveled_origin"] = _heading_origin.duplicate(true)
-		target = _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend)
+		target = _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend,
+			start_region if steps == 0 else {})
 		if target.is_empty():
 			break
 		target_pos_v = target.get("pos", { "col": 0, "row": 0 })

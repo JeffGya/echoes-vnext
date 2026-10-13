@@ -409,3 +409,5 @@ Skipped (ponytail): no new suite (`party_stance` is a Jeff option; cases go in `
 QA package B done (D-54: S3 tests, S6 escape base to config, S4 replan key dropped), 2026-10-13. Not committed, not verified by qa-verifier.
 
 QA package D done (D-55 option 2: a name only when the base plan equals the real walk), 2026-10-13. Not committed, not verified by qa-verifier.
+
+QA package E done (D-55 A2: naming and Advance cost; no recorded value moved), 2026-10-13. Naming mean 70-101 ms to 8-34 ms; Advance dispatch mean 305-484 ms to 144-228 ms (M2, headless). Not committed, not verified by qa-verifier.
