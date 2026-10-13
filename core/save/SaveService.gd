@@ -3,6 +3,7 @@ extends RefCounted
 class_name SaveService
 
 const StageExploreModelScript := preload("res://core/realms/StageExploreModel.gd")  # V2-STAGE-001
+const StageStopPolicyScript := preload("res://core/movement/StageStopPolicy.gd")
 
 # SaveService owns persistence (file IO)
 # It should stay UI-free and Node-free.
@@ -1349,6 +1350,8 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						if not _emap_003.has("combat_intro_reason"):
 							_emap_003["combat_intro_reason"] = ""
 							_003_repaired = true
+						if _repair_journey_entry(_emap_003):
+							_003_repaired = true
 					if _003_repaired:
 						repaired = true
 						repaired_notes.append("realm.%s.stage.%s contact fields defaulted (V2-STAGE-003)" % [_realm_id, _stage_label])
@@ -1362,6 +1365,35 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		
 	return repaired
 	
+## V2-DIRECTIVE-002 design 8a: the saved journey entry. Missing or malformed means empty: no glyph,
+## no chip, no error. `last_effective_steps` has no empty value (absent = the snapshot uses the
+## step budget), so a malformed one is erased, never defaulted. Returns true when it changed the map.
+static func _repair_journey_entry(emap: Dictionary) -> bool:
+	var changed := false
+	if not StageStopPolicyScript.valid_stop(emap.get("last_stop")):
+		emap["last_stop"] = {}
+		changed = true
+	var why_v: Variant = emap.get("travel_why")
+	if not why_v is Dictionary:
+		emap["travel_why"] = {}
+		changed = true
+	elif not (why_v as Dictionary).is_empty():
+		var clean := StageStopPolicyScript.sanitise_why(why_v)
+		if clean != why_v:
+			emap["travel_why"] = clean
+			changed = true
+	var leg_v: Variant = emap.get("leg_start_length")
+	if not (leg_v is int or leg_v is float) or int(leg_v) < -1:
+		emap["leg_start_length"] = -1
+		changed = true
+	if emap.has("last_effective_steps"):
+		var steps_v: Variant = emap["last_effective_steps"]
+		if not (steps_v is int or steps_v is float) or int(steps_v) < 0:
+			emap.erase("last_effective_steps")
+			changed = true
+	return changed
+
+
 static func validate(data: Dictionary, report_errors: bool = true) -> bool:
 	if data.is_empty():
 		return false

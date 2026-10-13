@@ -95,6 +95,7 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 	var preserved_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": height / 2 })
 	var preserved_pos: Dictionary = preserved_pos_v if preserved_pos_v is Dictionary else { "col": 0, "row": height / 2 }
 	var preserved_turns := int(explore_map.get("turn_count", 0))
+	var old_map := explore_map
 
 	# Rebuild explore_map — geometry + intel kept; pending engagement always cleared.
 	explore_map = {
@@ -119,6 +120,7 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		# whisper fires at most once per run, even across return_home→re-entry. Durable like locked.
 		"anansi_complete_fired": bool(explore_map.get("anansi_complete_fired", false)),
 	}
+	explore_map.merge(carry_journey(old_map, locked), true)
 
 	stage["explore_map"] = explore_map
 	_write_stage_back(flow_ctx, stage)
@@ -159,6 +161,21 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 	)
 	stage["explore_map"] = _rss_em2
 	_write_stage_back(flow_ctx, stage)
+
+## The journey entry of the last Advance (design 8a): it lives until the next Advance replaces it,
+## so a re-entry (combat, contact, reload) keeps it. A return home ends the journey: the next entry
+## starts empty. `locked` is always true here (the lock runs first); it guards a direct caller.
+## `leg_start_length` is saved for the later C1 detour rule (D-48); nothing writes it yet. -1 = none.
+static func carry_journey(old_map: Dictionary, locked: bool) -> Dictionary:
+	var out: Dictionary = { "last_stop": {}, "travel_why": {}, "leg_start_length": -1 }
+	if not locked or str(old_map.get("party_state", "")) == StageExploreModelScript.STATE_ESCAPED:
+		return out
+	for key in ["last_stop", "travel_why", "leg_start_length", "last_effective_steps"]:
+		if old_map.has(key):
+			var v: Variant = old_map[key]
+			out[key] = (v as Dictionary).duplicate(true) if v is Dictionary else v
+	return out
+
 
 func exit(ctx: RefCounted, t: int) -> void:
 	pass

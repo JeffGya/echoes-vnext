@@ -338,6 +338,8 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 
 ### S5. Saved journey entry and `stop` (old-save repair)
 
+**Status:** BUILT 2026-10-13, not committed, not verified by qa-verifier. No recorded value moved. Tests: 6 in `save_integrity` (`journey_*`, `old_save_loads_empty_journey`, `malformed_journey_repaired`, `reset_keeps_every_old_key`). Carry rule: kept on every re-entry, cleared after a return home (`party_state` escaped), not on `locked` alone (always true at reset). `leg_start_length` saved (-1, no writer; C1 not built).
+
 | Item | Plan |
 |---|---|
 | Files | `core/state/flow/states/venture/FlowStageExploreState.gd` (`_reset_session_state` key list `:96-123`); `core/save/SaveService.gd` (`:1306-1313` region: default `last_stop` `{}` and `travel_why` `{}`); `core/realms/StageExploreModel.gd` (`make_default` optional) |

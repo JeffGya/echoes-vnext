@@ -66,3 +66,12 @@ Owner: phase B+C, which edits the same guard.
 - Numbers question for `mid-game-designer` and Jeff: with the shipped numbers (`apply_threshold` 0.45, judgment weight 1.0, fear weight 0.6) suppression releases at fear 10 when the width is above about 0.49. A real rank-6 Echo with xp_total 40 and no bonds has width 0.489 and stays silent; one with xp_total 1000 bids. The design example '0.6 bids' holds only for an Echo with high xp.
 - Existing gap: `EchoActor.from_echo` does not copy `storyweight`; `derive_expression` falls back to `xp_total`, so stage and combat Judgment use `xp_total`.
 - Behaviour change to test in play (design 6a row 11): a frightened wise Echo whose Calling is suppressed now bids 'reactive' (before: silent). Probe: Scout Carefully contact, rank-6 `aduro` Echo at fear 60, expect the 'Reacting from fear' card.
+
+## Found in slice S5 (2026-10-13)
+- The plan rule 'carry only when `locked` is true' has no effect: `_lock_map_if_needed` runs before `_reset_session_state`, so `locked` is always true there. The carry rule uses `party_state` instead (proposed lifetime table in the S5 report; Jeff approves).
+- The comment at `FlowStageExploreState.gd:91-94` says party_pos is reset 'only when the stage first locks'; the code keeps `party_pos` and `turn_count` always. The comment looks wrong, not the code.
+- An encounter retreat (`FlowRuntime._handle_encounter_retreat`) does not set `escaped`, so after a retreat and a later entry the old journey entry still shows.
+- `ally_contact`, `target_situation_id` and other durable keys are repaired in `SaveService` but are not in the reset key list, so every `enter()` drops them (`DebugController.gd:303` already notes it).
+- If the Directive changes inside a stage, a carried `last_effective_steps` can exceed the new `step_budget` (possible since S3).
+- Exception E1 to the AGENTS.md save rules: a malformed `last_effective_steps` is erased, not defaulted; an absent key is its valid empty state. No field removed from the schema.
+- C1 field `leg_start_length` (-1 = no leg) is saved and repaired; nothing writes it yet (C1 is built later, D-48).

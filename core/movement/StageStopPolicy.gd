@@ -78,6 +78,25 @@ static func sanitise_why(why: Dictionary) -> Dictionary:
 	return out
 
 
+## Saved `last_stop` shape check: only `kind`, `col`, `row`, `echo_id`, with a known kind or "".
+## `echo_id` is internal (the UI finds the Echo card with it) and is never shown.
+static func valid_stop(stop: Variant) -> bool:
+	if not stop is Dictionary:
+		return false
+	for key in stop:
+		if not ["kind", "col", "row", "echo_id"].has(key):
+			return false
+	var kind: Variant = stop.get("kind", "")
+	var echo_id: Variant = stop.get("echo_id", "")
+	if not kind is String or not (kind == "" or KINDS.has(kind)) or not echo_id is String:
+		return false
+	for key in ["col", "row"]:
+		var v: Variant = stop.get(key, 0)
+		if not (v is int or v is float):
+			return false
+	return true
+
+
 static func _arr(v: Variant) -> Array:
 	return v if v is Array else []
 
