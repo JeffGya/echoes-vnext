@@ -421,7 +421,6 @@ func find_explore_target(
 	var category_map := ConfigService.get_situation_category_cfg(config_service)
 	var slack_config := ConfigService.get_movement_slack_cfg(config_service)
 
-	# ---- Tiers 1-2 merged (D-28): objective and non-objective candidates share one weighted pool ----
 	var target_pref_v: Variant = directive.get("target_preference", {})
 	var target_pref: Dictionary = target_pref_v if target_pref_v is Dictionary else {}
 

@@ -88,10 +88,8 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		if bool(s.get("is_objective", false)) and bool(s.get("resolved", false)):
 			obj_found += 1
 
-	# V2-STAGE-002: preserve party_pos and turn_count if re-entering a locked stage
-	# (returning from combat mid-run). Only reset them when the stage first locks
-	# (first entry) so the party holds their position between encounters.
-	var preserve_pos := locked  # locked=true means this is a re-entry, not a fresh start
+	# The lock runs first, so party_pos and turn_count are kept on every entry.
+	var preserve_pos := locked
 	var preserved_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": height / 2 })
 	var preserved_pos: Dictionary = preserved_pos_v if preserved_pos_v is Dictionary else { "col": 0, "row": height / 2 }
 	var preserved_turns := int(explore_map.get("turn_count", 0))

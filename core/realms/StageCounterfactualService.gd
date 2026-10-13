@@ -1,7 +1,7 @@
 # res://core/realms/StageCounterfactualService.gd
 # Who decided the first plan of a stage Advance (V2-DIRECTIVE-002 design 4, D-04, D-46).
-# First plan only: target, entered cells of the first leg, effective steps, commitment depth and
-# the predicted stop, all from the party cell. An Echo is named only when removing that Echo (and
+# First plan only: target, entered cells of the first leg, effective steps and commitment depth,
+# all from the party cell. The plan does not model pauses and reveal stops. An Echo is named only when removing that Echo (and
 # the bond edges it gives the others, D-26) changes that plan, and that plan is the real walk
 # (confirm_walk, D-55). Read-only: every plan runs on a deep copy of the explore map. No RNG draw.
 # Never calls SaveService.

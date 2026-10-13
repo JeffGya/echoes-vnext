@@ -28,7 +28,7 @@
 				"target_preference": { "intel": 1.4, "objective": 1.2, "combat": 0.4, "reward": 1.2 },
 				"precise_intel_bias": 25,
 				"exposure_tolerance": 0.3,
-				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Authored in V2-DIRECTIVE-001. READER PENDING: nothing reads it yet. V2-DIRECTIVE-002 phases B+C make it the one exposure input (D-05); it is bent by the party stance, see data.stages.party_stance.",
+				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Read by StagePartyStance; bent by data.stages.party_stance (D-05).",
 				"escape_bonus": 20,
 				"intel_retention": true,
 				"intel_retention_bonus": 1.5,
@@ -63,7 +63,7 @@
 				"target_preference": { "intel": 0.9, "objective": 1.6, "combat": 1.4, "reward": 0.9 },
 				"precise_intel_bias": 75,
 				"exposure_tolerance": 0.8,
-				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Authored in V2-DIRECTIVE-001. READER PENDING: nothing reads it yet. V2-DIRECTIVE-002 phases B+C make it the one exposure input (D-05); it is bent by the party stance, see data.stages.party_stance.",
+				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Read by StagePartyStance; bent by data.stages.party_stance (D-05).",
 				"escape_bonus": 0,
 				"intel_retention": false,
 				"intel_retention_bonus": 1.0,
@@ -3104,7 +3104,7 @@
 			"escape_base_threshold": 40,
 			"_comment_escape_base_threshold": "PROPOSED DEFAULT. Return-home roll (0 to 100) succeeds when roll > escape_base_threshold - bent escape bonus. Value 40 is the literal it replaced; Scout bonus 20 gives 20, Seek bonus 0 gives 40.",
 				"party_stance": {
-					"_comment": "PROPOSED DEFAULT. V2-DIRECTIVE-002 phases B+C, docs/stories/v2-directive-002/numbers.md. Party stance numbers for the stage Directive profile. READER PENDING: mechanics-developer adds a ConfigService getter (same shape as get_movement_slack_cfg) read by StageExploreTurnService and ActiveStageService. Jeff owns the final values. Every bound is smaller than half the gap between the two authored Directive baselines, so a party can soften a Directive but never invert it.",
+					"_comment": "PROPOSED DEFAULT. Party stance numbers for the stage Directive profile. Every bound is under half the gap between the two Directive baselines, so a party softens a Directive but never inverts it.",
 					"bounds": {
 						"_comment": "PROPOSED DEFAULT. Largest total bend a party can apply to one dial, either direction. Gaps between Scout and Seek baselines: step_budget 3 (readiness_steps), exposure_tolerance 0.5, escape_bonus 20, commitment_fraction 0.35, stop_willingness 0.4. category_weight is under half the smallest non-zero gap between two categories in one Directive (0.2), so a bend never inverts a ranking the Directive authored.",
 						"category_weight": 0.09,
@@ -3191,7 +3191,7 @@
 						"pause_trigger": 0.25
 					},
 					"stop": {
-						"_comment": "PROPOSED DEFAULT. Stop trigger knobs (D-29). Which find kinds stop a Directive is per Directive: directive_profile.<id>.reveal_stop_kinds. Judgment removes noise stops only: an optional-find pause is dropped when interpretation_width >= noise_width_min and the find category weight (the Directive's target_preference) is below noise_weight_max. Objective and hostile finds are never noise.",
+						"_comment": "PROPOSED DEFAULT. Stop knobs (D-29). directive_profile.<id>.reveal_stop_kinds picks the stopping find kinds and also controls spotted_ahead (D-52 F2). Judgment drops optional-find pauses as noise.",
 						"noise_width_min": 0.5,
 						"noise_weight_max": 1.3,
 						"pause_cap_per_advance": 2,
@@ -3209,7 +3209,7 @@
 						]
 					},
 					"directive_profile": {
-						"_comment": "PROPOSED DEFAULT. Scout commitment_fraction 0.6 by D-50 (range 0.5 to 0.7). Per-Directive stage numbers keyed by Directive id. They belong inside data.directives.<id> (ANSWERS #81) but DirectiveService.ENTRY_SCHEMA rejects unknown entry keys and the load aborts. When mechanics-developer adds an optional 'party_stance' dict key to ENTRY_SCHEMA, move each block below to data.directives.<id>.party_stance unchanged. commitment_fraction = share of effective steps spent before reassessing (at least 1 step; rounding is a code choice). stop_willingness 0 to 1.",
+						"_comment": "PROPOSED DEFAULT. Per-Directive stage numbers. They stay in party_stance (D-44 A2). commitment_fraction = share of effective steps before reassessing; Scout 0.6 (D-50).",
 						"directive.scout_carefully": {
 							"commitment_fraction": 0.6,
 							"stop_willingness": 0.7,
@@ -3228,7 +3228,7 @@
 					}
 				},
 				"presentation": {
-					"_comment": "Stage screen timings in seconds. The first group holds today's literals moved with the SAME value (no behaviour change). READER PENDING: the UI reads no config today; mechanics-developer and ui-ux-designer choose the path (snapshot field or ConfigService). New timings (shaken shake, glyph settle and fade) are NOT authored here; game-feel-developer proposes, Jeff approves (D-37).",
+					"_comment": "Stage screen timings in seconds. Read through ConfigService.get_stage_presentation_cfg. New timings need Jeff's approval (D-37).",
 					"walk_seconds": 0.5,
 					"snippet_fade_in_seconds": 0.4,
 					"snippet_hold_seconds": 2.1,
@@ -3510,7 +3510,7 @@
 				"high_fear_grounding_bonus": 0.1,
 				"high_fear_aggressive_penalty": -0.15,
 				"high_fear_npc_min": 60,
-				"_comment_npc_turn_score": "PROPOSED DEFAULT. V2-DIRECTIVE-002 B+C (D-47 J6). Same values as the literals in ConversationService turn score. READER PENDING.",
+				"_comment_npc_turn_score": "PROPOSED DEFAULT. Same values as the old ConversationService literals (D-47 J6). Read by ConversationService.",
 				"high_fear_broken_charge_bonus": 0.2,
 				"low_morale_npc_max": 20,
 				"low_morale_broken_bonus": 0.1
@@ -3528,7 +3528,7 @@
 			},
 			"combat_fear_bleed": 8,
 				"bid": {
-					"_comment": "PROPOSED DEFAULT. Contact bid numbers (design section 6). reactive_fear_min moves the literal 60 from ConversationService.compute_bids and the snapshot builder's second copy, same value (D-33), compare >=. strength = 1 - judgment_weight * interpretation_width - fear_weight * fear / 100. A Directive suppression or boost applies only when strength >= apply_threshold. READER PENDING.",
+					"_comment": "PROPOSED DEFAULT. Contact bid numbers. Read by ConversationService.compute_bids. A Directive suppression or boost applies only when strength >= apply_threshold.",
 					"reactive_fear_min": 60,
 					"suppression": {
 						"judgment_weight": 1.0,
@@ -3542,11 +3542,11 @@
 					}
 				},
 				"turn_count_modifiers": {
-					"_comment": "Same values as the literals in ContactConversationService.start_conversation (D-33). npc_fear_above compares with >, npc_morale_below with <. READER PENDING.",
+					"_comment": "Same values as the old start_conversation literals (D-33). Read by ContactConversationService. npc_fear_above uses >, npc_morale_below uses <.",
 					"npc_fear_above": 60,
 					"npc_morale_below": 30
 				},
-				"_comment_max_voices_per_turn": "PROPOSED DEFAULT. V2-DIRECTIVE-002 B+C (D-47 J5). Most Echoes that speak in one contact turn. Same value as the literal 3 in ContactController and ContactConversationService. READER PENDING.",
+				"_comment_max_voices_per_turn": "PROPOSED DEFAULT. Most Echoes that speak in one contact turn (D-47 J5). Read through ConfigService.get_contact_max_voices_per_turn.",
 				"max_voices_per_turn": 3,
 			"_comment_storyweight_speak_partial_step": "PROPOSED DEFAULT (V2-PROG-012 Phase 8): 1 storyweight per winning conversation turn. For scale: combat awards kill 25 / stage clear 40 / realm 100, against level_thresholds of 100 for Step 1→2. Previous value 0.2 truncated to 0 under int() and silently granted nothing.",
 			"storyweight_speak_partial_step": 1,

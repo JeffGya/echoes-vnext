@@ -217,12 +217,12 @@ Status: BUILT 2026-10-12, not committed, not attributed, not verified by qa-veri
 
 | Item | Plan |
 |---|---|
-| Files | `core/movement/StagePartyMovementAdapter.gd` (`select_objective_target`, `select_frontier`); `core/realms/ActiveStageService.gd` (pass the bend) |
+| Files | `core/movement/StagePartyMovementAdapter.gd` (`select_objective_target`); `core/realms/ActiveStageService.gd` (pass the bend) |
 | Change | `select_objective_target` gains an optional trailing `bend: Dictionary = {}` (category to delta, already clamped to `bounds.category_weight`). Rank becomes `[-authored_weight, -bend_delta, distance, id, col, row]`. The bend can only break a tie of the authored weight (D-44, K2). Frontier `route_character` key deferred (D-51): `select_frontier` gets no new argument in this slice. Heading continuation stays as existing shared code. |
 | New functions | `static func category_bend(echoes_leans: Dictionary, stance_cfg: Dictionary) -> Dictionary` in `StagePartyStance`. |
 | Config keys | `stages.party_stance.leans.category_weight.*`, `bounds.category_weight`. |
 | Tests | Suite `movement`: `movement/bend_never_inverts_ranking`; `movement/bend_breaks_tie_only`; `movement/frontier_tie_break_salt_unchanged`; `movement/select_signature_backward_compatible`. Suite `traversal`: K2 (tie case, Seek, reward 0.9 vs intel 0.9, Sight picks intel, Edge picks nearest), O1 to O3 re-run. |
-| Fingerprints that move | Small. Only boards with a tie. The frontier hash order is unchanged for an empty `route_character`. |
+| Fingerprints that move | Small. Only boards with a tie. `route_character` is not built (D-51), so the frontier order does not change. |
 | Tier | sonnet. |
 | Risk | Low-medium. The existing total-order test (`StagePartyMovementTests.gd:1390-1441`) must stay green. |
 | Rollback | Revert the commit. |
@@ -275,7 +275,7 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 | Config keys | `stages.party_stance.stop.*`, `.exposure.pause_trigger`, `.directive_profile.<id>.reveal_stop_kinds`, `.stop_willingness`; `stages.presentation.*`. |
 | D-48 (A2) | Terrain cause: when the exposure price makes the stage refuse a detour, `travel_why.cause` gets a terrain value (name set here, wording is Jeff's) so the why never shows a false Directive reason. S5 saves it. |
 | Pause cap | `stop.pause_cap_per_advance` is read and asserted, but under A1 it cannot bind (B1). |
-| Tests | Suite `seam`: `seam/stop_kind_arrived`, `capacity_spent`, `interrupted`, `spotted_ahead`, `paused_to_read`, `no_route`; `seam/stop_kinds_not_in_shared_contract` (`STOP_REASONS` unchanged); `seam/return_safety_draw_unchanged`. Suite `explore` and `explore_p5`: `stop` and `travel_why` fields present and typed; N7; sanitiser (no id, no number in any `travel_why` slot); Scout stops for a new find, Seek passes through (D-29); noise filter drops a low-weight find at high width but never an objective; `peek_does_not_reveal` (a find revealed by the sweep, not before); `reveal_sweep_order_unchanged` (same `intel_quality` roll per situation as before). Suite `traversal`: S2, `all_shaken_party_progress`. |
+| Tests | Suite `seam`: `seam/stop_kind_arrived`, `stop_kind_capacity_spent`, `stop_kind_interrupted`, `stop_kind_spotted_ahead`, `stop_kind_spotted_ahead_switched_off`, `stop_kind_paused_to_read`, `stop_kind_no_route`, `stop_kinds_not_in_shared_contract`, `stop_noise_filter`, `return_safety_draw_unchanged`. Suite `explore_p5`: `stop_fields_typed_before_and_after_advance`, `travel_why_names_true_decider`, `travel_why_sanitiser`, `presentation_has_no_comment_keys`, `dry_runs_not_counted_as_stances`, `first_step_never_pauses_for_exposure`, `snapshot_effective_steps_follows_readiness`, `peek_does_not_reveal`, `profileless_directive_advances_with_readiness`. Suite `traversal`: `all_shaken_party_still_moves_or_names_stop`. |
 | Fingerprints that move | **`snapshot_fingerprint/stage_explore` (`STAGE_EXPLORE_FINGERPRINT_HASH`)** because `data` gains 4 keys. This is the only slice that moves it. Plus stop-dependent Advance expectations in `traversal`/`seam`/`explore_p5` (Scout now stops at new finds). Combat hashes must not move. |
 | Tier | sonnet builds. `opus` attributes the moved values. |
 | Risk | Medium-high. New stop points change Advance counts on recorded walks. |
@@ -343,10 +343,10 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 | Item | Plan |
 |---|---|
 | Files | `core/state/flow/states/venture/FlowStageExploreState.gd` (`_reset_session_state` key list `:96-123`); `core/save/SaveService.gd` (`:1306-1313` region: default `last_stop` `{}` and `travel_why` `{}`); `core/realms/StageExploreModel.gd` (`make_default` optional) |
-| Change | Two additive `explore_map` keys: `last_stop` and `travel_why`. `_reset_session_state` carries both ONLY when `locked` is true (a re-entry, same rule as `party_pos`). On the first entry of a stage they start empty. The next Advance replaces them (`advance_turn` writes them in S3). A load of an old save repairs a missing key to `{}`: no glyph, no chip, no error. No key is removed or renamed. `flow_ctx.request_save` stays one flush per dispatch. |
+| Change | Two additive `explore_map` keys: `last_stop` and `travel_why`. `_reset_session_state` carries both through `carry_journey` (D-53): kept on every re-entry, cleared after a return home (`party_state` escaped). `locked` alone is always true there. On the first entry of a stage they start empty. The next Advance replaces them (`advance_turn` writes them in S3). A load of an old save repairs a missing key to `{}`: no glyph, no chip, no error. No key is removed or renamed. `flow_ctx.request_save` stays one flush per dispatch. |
 | D-48 (A1, A2) | Same opus save pass also saves (a) the terrain cause field and (b) for the later C1 rule, the plain route length at leg start (one number per leg). Both additive, safe defaults on old saves. C1 itself is not built here (D-48 A1: per-step rule stays). |
 | New functions | `static func carry_journey(old_map: Dictionary, locked: bool) -> Dictionary` in `FlowStageExploreState` (returns `{last_stop, travel_why}` or empties). |
-| Tests | Save suite (`save_integrity`): `save_integrity/journey_round_trip` (save, load, same entry, same `stop`); `save_integrity/old_save_loads_empty` (a save with neither key); `save_integrity/no_field_removed_or_renamed` (key list diff); `save_integrity/journey_cleared_on_first_entry`; `save_integrity/journey_kept_on_reentry`. Suite `explore`: sanitiser on the saved entry (no id, no number). |
+| Tests | Save suite (`save_integrity`): `save_integrity/journey_round_trip` (save, load, same entry, same `stop`); `save_integrity/old_save_loads_empty` (a save with neither key); `save_integrity/no_field_removed_or_renamed` (key list diff); `save_integrity/journey_cleared_on_new_entry`; `save_integrity/journey_kept_on_reentry`. Suite `explore`: sanitiser on the saved entry (no id, no number). |
 | Fingerprints that move | None. `stage_explore` already moved in S3 (empty keys on a fresh save were included there). |
 | Tier | **opus** (save schema, design 8a requires an opus pass before merge). |
 | Risk | Medium. `_reset_session_state` runs on every entry, so a missed carry loses the glyph after combat. |

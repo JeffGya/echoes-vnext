@@ -44,7 +44,7 @@ Owner: phase B+C, which edits the same guard.
 - Under Scout, a calm party cannot change the first plan with today's numbers (opus, S2e). Commitment depth is always 2 (D-50). Scout's weights have no tie that a category bend breaks. The exposure price rounds per cell; the Scout tolerance stays between 0.18 and 0.42, so a cell with exposure 0.67 always costs 3 (rounding boundary at tolerance 0.4375). So Scout naming can name only fear or morale. Design contrasts S1 and P1 cannot occur under Scout. Question for `mid-game-designer` and Jeff: change the `exposure_tolerance` bound or the price rounding so that a Scout lean can change a route? Test P1 was built on Seek.
 - `StagePartyStance.build` raises the `builds` counter. When S3 calls naming inside `advance_turn`, `traversal/one_stance_per_advance` counts the dry runs too. S3 must separate Advance builds from dry-run builds.
 - A frontier target pays the reachable region twice (`select_frontier` builds its own region; D-51 gives it no new argument). Cost is small (15 to 22 ms).
-- Stale rows in `backend-plan.md`: the S2c "Files" row names `select_frontier`; the "Fingerprints that move" row mentions `route_character` (deferred, D-51).
+- Stale rows in `backend-plan.md`: the S2c "Files" row names `select_frontier`; the "Fingerprints that move" row mentions `route_character` (deferred, D-51). FIXED (QA package C, 2026-10-13).
 
 ## Found in slice S3 attribution (2026-10-13), for Jeff (opus review)
 - F1 Exposure pause exemptions: no pause on the first step of an Advance (supports design 9, no soft-lock) and no pause before the target cell (the builder's own rule; no design text supports it; inconsistent: in `gen100_scout` the party paused one cell before the hostile target, but not on the target cell). Options: keep; exempt the whole route when the target is the exposure source; remove the exemption and re-record `p5_tier1_hard_stops_on_arrival` and `fog_light_bias_seek_engages`.
@@ -60,7 +60,7 @@ Owner: phase B+C, which edits the same guard.
 - Under F1 a party now pauses before a NON-hostile target that lies in a hostile's zone (Scout before the loot at 2,0 in `fog_light_bias_seek_engages`). Alternative: keep every target cell exempt.
 - `fog_light_bias_seek_engages`: the test read changed (null pending id read as empty); assertions unchanged. A test-read change, not a re-record.
 - F2 effect: a Directive with no profile (empty list) never stops on an objective or hostile reveal. Alternative: a safe fallback that keeps `spotted_ahead` on.
-- `data/balance.json` comment on `stages.party_stance.stop` and `directive_profile` should say the list also controls `spotted_ahead` (mid-game-designer edit).
+- `data/balance.json` comment on `stages.party_stance.stop` and `directive_profile` should say the list also controls `spotted_ahead` (mid-game-designer edit). FIXED (QA package C, 2026-10-13).
 
 ## Found in slice S4b (2026-10-13)
 - Numbers question for `mid-game-designer` and Jeff: with the shipped numbers (`apply_threshold` 0.45, judgment weight 1.0, fear weight 0.6) suppression releases at fear 10 when the width is above about 0.49. A real rank-6 Echo with xp_total 40 and no bonds has width 0.489 and stays silent; one with xp_total 1000 bids. The design example '0.6 bids' holds only for an Echo with high xp.
@@ -69,7 +69,7 @@ Owner: phase B+C, which edits the same guard.
 
 ## Found in slice S5 (2026-10-13)
 - The plan rule 'carry only when `locked` is true' has no effect: `_lock_map_if_needed` runs before `_reset_session_state`, so `locked` is always true there. The carry rule uses `party_state` instead (proposed lifetime table in the S5 report; Jeff approves).
-- The comment at `FlowStageExploreState.gd:91-94` says party_pos is reset 'only when the stage first locks'; the code keeps `party_pos` and `turn_count` always. The comment looks wrong, not the code.
+- The comment at `FlowStageExploreState.gd:91-94` says party_pos is reset 'only when the stage first locks'; the code keeps `party_pos` and `turn_count` always. The comment looks wrong, not the code. FIXED (QA package C, 2026-10-13).
 - An encounter retreat (`FlowRuntime._handle_encounter_retreat`) does not set `escaped`, so after a retreat and a later entry the old journey entry still shows.
 - `ally_contact`, `target_situation_id` and other durable keys are repaired in `SaveService` but are not in the reset key list, so every `enter()` drops them (`DebugController.gd:303` already notes it).
 - If the Directive changes inside a stage, a carried `last_effective_steps` can exceed the new `step_budget` (possible since S3).
@@ -80,7 +80,7 @@ Owner: phase B+C, which edits the same guard.
 - The counterfactual first plan can differ from the real walk for the same party. In the QA case the plan path has 3,4 where the real walk has 3,5. This looks like QA note N1: the naming plan does not model the exposure pause and the reveal stops. The naming compares two plans; if the base plan is not the real walk, a name can be wrong. Not fixed (D-54 did not select N1). Decide later: make the base plan equal the real result (S1a keeps `last_result`).
 - A profile-less Directive has no candidates. A shaken party loses a step, but no Echo can be named for the loss. The cause is 'directive' or 'party'.
 - `steadied` is a fallback label: it covers every named Echo where no single class changes the plan (party mean, party size, bond edges, or a mix). It is not proof that only the mean moved.
-- The `counterfactual` comment in `data/balance.json` still says 'at most 9' and names `replan_cap_per_effective_step` (package B and C own it).
+- The `counterfactual` comment in `data/balance.json` still says 'at most 9' and names `replan_cap_per_effective_step` (package B and C own it). FIXED (QA package C, 2026-10-13).
 
 ## Found in QA package D (2026-10-13)
 - Correction to QA note N1: the model plan and the real walk differ in the QA case because of equal-cost route ties under per-step replanning (diagonal ties near an exposure source), not because the model skips pauses or reveal stops. All 24 drops in the probe were route ties; none came from a walk that stopped early.

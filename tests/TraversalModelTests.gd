@@ -2129,8 +2129,8 @@ static func _t_p5_passed_situation_walked_through() -> Dictionary:
 const ADV_COUNT := 6
 
 # Captured from the pre-S1a code, then re-recorded for S2b and S3.
-# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
-# V2-DIRECTIVE-002 S3: stop kinds (spotted_ahead/exposure pause) and new snapshot keys
+# Moved by commitment depth (S2b, D-50: Scout 2, Seek 5) and stop kinds (S3, S3b).
+# The lines hold no snapshot keys, so the new snapshot keys did not move them.
 const ADV_EXPECTED := {
 	"gen42_scout": [
 		"advanced|commitment_spent|9,23>10,24|tc1|fog41:273440436|rev[]|pend:|tr:true|tgt:",

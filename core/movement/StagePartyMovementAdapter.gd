@@ -1,8 +1,5 @@
 # res://core/movement/StagePartyMovementAdapter.gd
-# V2-COMBAT-002 Slice 5 (Unit A) — PURE + DORMANT stage-party movement adapter.
-#
-# Bridges STAGE EXPLORATION onto the slice-1..4 movement contracts. Nothing in
-# production calls this file: it is consumed at the slice-6 cutover.
+# Pure adapter that bridges stage exploration onto the movement contracts.
 #
 # ---------------------------------------------------------------------------
 # THE ONE PARTY TOKEN

@@ -490,8 +490,6 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# non-advance refreshes (contact turns, situation overlays, etc.).
 			"travel_bark":             FlowStageExploreState._project_travel_bark(explore_map),
 			"travel_snippet":          str(explore_map.get("travel_snippet", "")),
-			# V2-DIRECTIVE-002 S3: how the last Advance ended, why, and the step bar / timing inputs.
-			# `stop.echo_id` is internal: the UI finds the named Echo's card with it and never shows it.
 			"stop":                    _project_stop(explore_map, party_pos),
 			"travel_why":              StageStopPolicyScript.sanitise_why(_dict(explore_map.get("travel_why", {}))),
 			"effective_steps":         int(explore_map.get("last_effective_steps", _step_budget_snap)),

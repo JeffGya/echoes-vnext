@@ -833,6 +833,7 @@
 **A:** Calling family, the ten virtue domains (only through the implemented identity state, never as a new direct multiplier layer), Standing/maturity band and Judgment, fear and morale. Bonds act as an interrupt only (rescue or abandon). Vows wait for V2-VOW-002. Equipment waits for V2-ITEM-003. Contrast is required at every Standing; higher Standing widens reinterpretation, never obedience.
 **Source:** Jeff, 2026-10-10 (V2-DIRECTIVE-002 planning; decisions.md D-03, D-08)
 **Date:** 2026-10-10
+**Amended 2026-10-13:** D-26 amends this entry: stage Judgment includes bond support (bonds are not an interrupt only); the bond interrupt is V2-BOND-004 (D-25).
 
 ---
 

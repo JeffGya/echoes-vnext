@@ -419,7 +419,6 @@ func handle_speak_response(action: Dictionary, t: int) -> FlowActionOutcome:
 
 	explore_map["pending_contact"] = contact
 
-	# Auto-regenerate responses for the next turn when party fits the voices cap (mirrors the initial engagement path).
 	# Above the cap, responses stay empty so the picker fires via cta.consult_echoes.
 	if _next_party.size() <= ConfigService.get_contact_max_voices_per_turn(config_service):
 		var _next_dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})

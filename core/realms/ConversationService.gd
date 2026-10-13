@@ -77,7 +77,7 @@ static func generate_responses(
 	cfg: Dictionary,
 	response_data: Dictionary,
 	t: int,
-	bid_state: Dictionary = {},  # echo_id -> bid_type ("alignment"/"reactive"/"")
+	bid_state: Dictionary = {},
 	resonance_bonus: float = 0.0
 ) -> Array:
 	var results: Array = []
@@ -300,7 +300,7 @@ static func _compute_emotional_fit(
 	# Morale bonus for near-collapse speaker with broken NPC morale
 	if contact_morale <= int(mods.get("low_morale_npc_max", 20)):
 		if band == "broken":
-			base += float(mods.get("low_morale_broken_bonus", 0.1))  # resonance of shared vulnerability
+			base += float(mods.get("low_morale_broken_bonus", 0.1))
 
 	return base
 

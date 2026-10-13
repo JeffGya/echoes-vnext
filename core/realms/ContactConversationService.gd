@@ -113,7 +113,7 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 	if not _bv_opening.is_empty():
 		contact_work["npc_line"] = _bv_opening
 
-	# Auto-generate responses if party ≤ 3
+	# Auto-generate responses when the party fits the voice cap
 	var contact_responses: Array = []
 	if _party_echoes.size() <= ConfigService.get_contact_max_voices_per_turn(config_service):
 		contact_responses = ConversationService.generate_responses(

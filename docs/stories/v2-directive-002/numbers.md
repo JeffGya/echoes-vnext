@@ -2,7 +2,7 @@
 
 Author: `mid-game-designer`, 2026-10-12. Source: `design.md` (D-43). File edited: `data/balance.json`.
 Every new value is PROPOSED DEFAULT unless the Status column says otherwise. Jeff owns the final values.
-"Reader pending" means no code reads the key yet. Code was not changed. `mechanics-developer` adds each reader.
+"Reader pending" means no code reads the key yet. A row names the file that reads the key once it exists.
 All paths start at `data.`. Line numbers were checked on 2026-10-12.
 
 ## 0. Three things Jeff must see first
@@ -15,23 +15,23 @@ All paths start at `data.`. Line numbers were checked on 2026-10-12.
 
 | Key | Value | Why | Consumer (literal today) | Status |
 |---|---|---|---|---|
-| `contact.bid.reactive_fear_min` | 60 | Same as the literal. Compare `>=`. One key for both copies. | `ConversationService.gd:483`; second copy `StageExploreSnapshotBuilder.gd:191` | reader pending |
-| `contact.emotional_fit_modifiers.high_fear_npc_min` | 60 | NPC fear gate in the turn score. A different rule from the bid. Compare `>=`. | `ConversationService.gd:287` (cfg is `data.contact`, see `:247`) | reader pending |
-| `contact.turn_count_modifiers.npc_fear_above` | 60 | Literal. Compare `>`. | `ContactConversationService.gd:74` | reader pending |
-| `contact.turn_count_modifiers.npc_morale_below` | 30 | Literal. Compare `<`. | `ContactConversationService.gd:76` | reader pending |
-| `contact.max_voices_per_turn` | 3 | Most Echoes that speak in one contact turn (D-47 J5). Same value as the literal. Authored in `balance.json` after `turn_count_modifiers`. | `ContactController.gd:170-171` (trim), `ContactController.gd:422` (`<= 3` auto-responses), `ContactConversationService.gd:116` (`<= 3` auto-responses). Reader pending. | PROPOSED DEFAULT |
-| `contact.emotional_fit_modifiers.high_fear_broken_charge_bonus` | 0.2 | Bonus for a broken speaker with a frightened `charge` NPC (D-47 J6). Same value. | `ConversationService.gd:292` (`base += 0.2`). Reader pending. | PROPOSED DEFAULT |
-| `contact.emotional_fit_modifiers.low_morale_npc_max` | 20 | NPC morale limit for the shared-vulnerability bonus. Compare `<=`. Same value. | `ConversationService.gd:298` (`contact_morale <= 20`). Reader pending. | PROPOSED DEFAULT |
-| `contact.emotional_fit_modifiers.low_morale_broken_bonus` | 0.1 | Bonus for a broken speaker when NPC morale is at or below the limit. Same value. | `ConversationService.gd:299` (`base += 0.1`). Reader pending. | PROPOSED DEFAULT |
-| `stages.presentation.walk_seconds` | 0.5 | Literal `_TRAVEL_DURATION`. | `StageExploreScreen.gd:71` | reader pending |
-| `stages.presentation.snippet_fade_in_seconds` | 0.4 | Literal. | `StageExploreScreen.gd:1211` | reader pending |
-| `stages.presentation.snippet_hold_seconds` | 2.1 | Literal. | `StageExploreScreen.gd:1212` | reader pending |
+| `contact.bid.reactive_fear_min` | 60 | Same as the literal. Compare `>=`. One key for both copies. | `ConversationService.gd:483`; second copy `StageExploreSnapshotBuilder.gd:191` | read in `ConversationService.gd` (`compute_bids`) and `StageExploreSnapshotBuilder.gd` |
+| `contact.emotional_fit_modifiers.high_fear_npc_min` | 60 | NPC fear gate in the turn score. A different rule from the bid. Compare `>=`. | `ConversationService.gd:287` (cfg is `data.contact`, see `:247`) | read in `ConversationService.gd` |
+| `contact.turn_count_modifiers.npc_fear_above` | 60 | Literal. Compare `>`. | `ContactConversationService.gd:74` | read in `ContactConversationService.gd` |
+| `contact.turn_count_modifiers.npc_morale_below` | 30 | Literal. Compare `<`. | `ContactConversationService.gd:76` | read in `ContactConversationService.gd` |
+| `contact.max_voices_per_turn` | 3 | Most Echoes that speak in one contact turn (D-47 J5). Same value as the literal. Authored in `balance.json` after `turn_count_modifiers`. | `ContactController.gd:170-171` (trim), `ContactController.gd:422` (`<= 3` auto-responses), `ContactConversationService.gd:116` (`<= 3` auto-responses). read in `ContactController.gd`, `ContactConversationService.gd` | PROPOSED DEFAULT |
+| `contact.emotional_fit_modifiers.high_fear_broken_charge_bonus` | 0.2 | Bonus for a broken speaker with a frightened `charge` NPC (D-47 J6). Same value. | `ConversationService.gd:292` (`base += 0.2`). read in `ConversationService.gd` | PROPOSED DEFAULT |
+| `contact.emotional_fit_modifiers.low_morale_npc_max` | 20 | NPC morale limit for the shared-vulnerability bonus. Compare `<=`. Same value. | `ConversationService.gd:298` (`contact_morale <= 20`). read in `ConversationService.gd` | PROPOSED DEFAULT |
+| `contact.emotional_fit_modifiers.low_morale_broken_bonus` | 0.1 | Bonus for a broken speaker when NPC morale is at or below the limit. Same value. | `ConversationService.gd:299` (`base += 0.1`). read in `ConversationService.gd` | PROPOSED DEFAULT |
+| `stages.presentation.walk_seconds` | 0.5 | Literal `_TRAVEL_DURATION`. | `StageExploreScreen.gd:71` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
+| `stages.presentation.snippet_fade_in_seconds` | 0.4 | Literal. | `StageExploreScreen.gd:1211` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
+| `stages.presentation.snippet_hold_seconds` | 2.1 | Literal. | `StageExploreScreen.gd:1212` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
 | `stages.escape_base_threshold` | 40 | Return-home roll succeeds when roll > base - bent escape bonus. Same value as the literal (D-54 S6). | `VentureController.gd:340` through `ConfigService.get_escape_base_threshold` | read, PROPOSED DEFAULT |
-| `stages.presentation.snippet_fade_out_seconds` | 0.5 | Literal. | `StageExploreScreen.gd:1213` | reader pending |
-| `stages.presentation.zoom_seconds` | 0.35 | Literal `_ZOOM_DURATION`. Design 10.1 row "other timings". | `StageExploreScreen.gd:56` | reader pending |
-| `stages.presentation.preview_fade_seconds` | 0.25 | Literal (two tweens). | `StageExploreScreen.gd:430-431` | reader pending |
-| `stages.presentation.flash_half_seconds` | 0.1 | Literal (in and out, one half each). | `StageExploreScreen.gd:1239-1240` | reader pending |
-| `stages.presentation.reaction_fade_in_seconds` | 0.35 | Literal. | `StageExploreScreen.gd:1286` | reader pending |
+| `stages.presentation.snippet_fade_out_seconds` | 0.5 | Literal. | `StageExploreScreen.gd:1213` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
+| `stages.presentation.zoom_seconds` | 0.35 | Literal `_ZOOM_DURATION`. Design 10.1 row "other timings". | `StageExploreScreen.gd:56` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
+| `stages.presentation.preview_fade_seconds` | 0.25 | Literal (two tweens). | `StageExploreScreen.gd:430-431` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
+| `stages.presentation.flash_half_seconds` | 0.1 | Literal (in and out, one half each). | `StageExploreScreen.gd:1239-1240` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
+| `stages.presentation.reaction_fade_in_seconds` | 0.35 | Literal. | `StageExploreScreen.gd:1286` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
 
 Notes:
 - The UI reads no config today (`grep` of `ui/` finds only `AppRoot.gd`). The timing path (snapshot field or `ConfigService` getter) is for `mechanics-developer` and `ui-ux-designer`.
@@ -57,12 +57,12 @@ Party dial = Directive baseline + sum of (Echo lean / party size), then clamp to
 
 | Key (under `stages.party_stance.bounds`) | Value | Gap Scout to Seek (half) | Result range Scout / Seek | Consumer | Status |
 |---|---|---|---|---|---|
-| `exposure_tolerance` | 0.12 | 0.5 (0.25) | 0.18 to 0.42 / 0.68 to 0.92 | reader pending (baseline `directives.<id>.exposure_tolerance` has no reader either) | PROPOSED DEFAULT |
-| `stop_willingness` | 0.12 | 0.4 (0.2) | 0.58 to 0.82 / 0.18 to 0.42 | reader pending | PROPOSED DEFAULT |
-| `commitment_fraction` | 0.10 | 0.35 (0.175) | 0.40 to 0.60 / 0.75 to 0.95 | reader pending | PROPOSED DEFAULT |
+| `exposure_tolerance` | 0.12 | 0.5 (0.25) | 0.18 to 0.42 / 0.68 to 0.92 | read in `StagePartyStance.gd` (baseline `directives.<id>.exposure_tolerance` is read in `StagePartyStance.gd`) | PROPOSED DEFAULT |
+| `stop_willingness` | 0.12 | 0.4 (0.2) | 0.58 to 0.82 / 0.18 to 0.42 | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
+| `commitment_fraction` | 0.10 | 0.35 (0.175) | 0.40 to 0.60 / 0.75 to 0.95 | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
 | `escape_bonus` | 6 | 20 (10) | 14 to 26 / 0 to 6 (Seek clamps at 0) | `VentureController.gd:337` reads the Directive value today | PROPOSED DEFAULT |
 | `category_weight` | 0.09 | smallest non-zero gap inside one Directive is 0.2 (0.1). The bound now decides ties only (D-44). | each weight moves at most 0.09 | `ActiveStageService.gd:438` (`target_preference`) | PROPOSED DEFAULT |
-| `readiness_steps` | 1 | step_budget gap 3 (1.5) | Scout 2 to 3 / Seek 5 to 6 | reader pending | PROPOSED DEFAULT |
+| `readiness_steps` | 1 | step_budget gap 3 (1.5) | Scout 2 to 3 / Seek 5 to 6 | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
 
 Ordering check (Seek is at least Scout on tolerance, steps, commitment; Scout is at least Seek on escape and stop willingness): worst Seek is still above best Scout on every row. The test `mechanics-developer` writes should read these bounds from config.
 
@@ -70,9 +70,9 @@ Ordering check (Seek is at least Scout on tolerance, steps, commitment; Scout is
 
 | Key (under `stages.party_stance.directive_profile.<id>`) | Scout | Seek | Why | Consumer | Status |
 |---|---|---|---|---|---|
-| `commitment_fraction` | 0.6 | 0.85 | D-50: Scout 0.6 (range 0.5 to 0.7) so Scout is 2 steps under every lean (0.5 sat on the 1-step/2-step rounding edge). Seek spends most of its steps (E6). | reader pending | PROPOSED DEFAULT |
-| `stop_willingness` | 0.7 | 0.3 | Scout stops readily. Seek passes through (E4). | reader pending | PROPOSED DEFAULT |
-| `reveal_stop_kinds` | spotted_ahead, paused_to_read | spotted_ahead | D-29. Scout stops for any new find. Seek stops for an objective or hostile only. Data, so no Directive id in code. | reader pending | PROPOSED DEFAULT |
+| `commitment_fraction` | 0.6 | 0.85 | D-50: Scout 0.6 (range 0.5 to 0.7) so Scout is 2 steps under every lean (0.5 sat on the 1-step/2-step rounding edge). Seek spends most of its steps (E6). | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
+| `stop_willingness` | 0.7 | 0.3 | Scout stops readily. Seek passes through (E4). | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
+| `reveal_stop_kinds` | spotted_ahead, paused_to_read | spotted_ahead | D-29. Scout stops for any new find. Seek stops for an objective or hostile only. Data, so no Directive id in code. | read in `StageStopPolicy.gd` | PROPOSED DEFAULT |
 
 Unchanged baselines that these bend (already authored): `step_budget` 3 / 6, `exposure_tolerance` 0.3 / 0.8, `escape_bonus` 20 / 0, `target_preference` per Directive. I added a `_comment_exposure_tolerance` to both entries (PROPOSED DEFAULT, reader pending, now the one exposure input per D-05).
 
@@ -80,7 +80,7 @@ Unchanged baselines that these bend (already authored): `step_budget` 3 / 6, `ex
 
 Lean of one Echo = coefficient x dial bound x strength. Coefficient 1.0 = primary lean. 0.5 and 0.25 = secondary.
 Strength: Calling and identity leans = `dispositional_floor + (1 - dispositional_floor) x interpretation_width`. Fear and morale = 1.0 (not scaled; fear already lowers Judgment).
-Leans are the same for both Directives. The Directive supplies the baseline. Reader pending for all rows. Status: PROPOSED DEFAULT for all rows.
+Leans are the same for both Directives. The Directive supplies the baseline. Read in `StagePartyStance.gd`. Status: PROPOSED DEFAULT for all rows.
 
 | Key | Value | Why |
 |---|---|---|
@@ -99,11 +99,11 @@ Leans are the same for both Directives. The Directive supplies the baseline. Rea
 
 | Key (`stages.party_stance.readiness`) | Value | Why | Consumer | Status |
 |---|---|---|---|---|
-| `fear_uneasy_at` | 35 | Party mean fear. Below `fear_base` max (40) is calm. | reader pending | PROPOSED DEFAULT |
-| `fear_shaken_at` | 55 | Under the party-return gate (60) so the band shows before the return request. | reader pending | PROPOSED DEFAULT |
-| `morale_low_below` | 40 | Inside the EmotionService "shaken" morale tier (25 to 49). | reader pending | PROPOSED DEFAULT |
-| `steps_lost` | calm 0, uneasy 0, shaken 1 | Lower only. Uneasy feeds stop willingness through fear lean, not steps (no double count). | reader pending | PROPOSED DEFAULT |
-| `low_morale_steps_lost` | 1 | One step. Total loss is capped by `bounds.readiness_steps` (1). | reader pending | PROPOSED DEFAULT |
+| `fear_uneasy_at` | 35 | Party mean fear. Below `fear_base` max (40) is calm. | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
+| `fear_shaken_at` | 55 | Under the party-return gate (60) so the band shows before the return request. | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
+| `morale_low_below` | 40 | Inside the EmotionService "shaken" morale tier (25 to 49). | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
+| `steps_lost` | calm 0, uneasy 0, shaken 1 | Lower only. Uneasy feeds stop willingness through fear lean, not steps (no double count). | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
+| `low_morale_steps_lost` | 1 | One step. Total loss is capped by `bounds.readiness_steps` (1). | read in `StagePartyStance.gd` | PROPOSED DEFAULT |
 
 Effective steps = baseline minus loss, never below 1, never above 6 (code floors stay: `StagePartyMovementAdapter.gd:214-216`).
 
@@ -111,20 +111,20 @@ Effective steps = baseline minus loss, never below 1, never above 6 (code floors
 
 | Key | Value | Why | Consumer | Status |
 |---|---|---|---|---|
-| `party_stance.exposure.hostile_radius` | 2 | A known hostile marks cells within 2. | reader pending (path call `StageExploreTurnService.gd:214` passes `{}` today) | PROPOSED DEFAULT |
-| `party_stance.exposure.hostile_peak` | 1.0 | Exposure 1.0 at the hostile cell, 0.67 at 1, 0.33 at 2. | reader pending | PROPOSED DEFAULT |
-| `party_stance.exposure.price_scale` | 4 | Entry cost = 1 + round(exposure x (1 - tolerance) x 4). Scout at peak pays +3, so a 2-cell detour wins. Seek pays +1, so direct wins. Costs must be int >= 1 (`MovementPathService.gd:269-275`). | reader pending | PROPOSED DEFAULT |
-| `party_stance.exposure.pause_trigger` | 0.25 | Pause when exposure x (1 - tolerance) x stop_willingness >= 0.25. Scout at peak: 0.49, pauses above exposure 0.51. Seek at peak: 0.06, never. | reader pending | PROPOSED DEFAULT |
-| `party_stance.stop.noise_width_min` | 0.5 | A party with Judgment width at or above 0.5 drops noise stops. | reader pending | PROPOSED DEFAULT |
-| `party_stance.stop.noise_weight_max` | 1.3 | Noise = optional find whose category weight is below 1.3. Scout: reward (1.2) can be noise. Intel (1.4) never. Objective and hostile never. | reader pending | PROPOSED DEFAULT |
+| `party_stance.exposure.hostile_radius` | 2 | A known hostile marks cells within 2. | read in `StageExposureMap.gd` | PROPOSED DEFAULT |
+| `party_stance.exposure.hostile_peak` | 1.0 | Exposure 1.0 at the hostile cell, 0.67 at 1, 0.33 at 2. | read in `StageExposureMap.gd` | PROPOSED DEFAULT |
+| `party_stance.exposure.price_scale` | 4 | Entry cost = 1 + round(exposure x (1 - tolerance) x 4). Scout at peak pays +3, so a 2-cell detour wins. Seek pays +1, so direct wins. Costs must be int >= 1 (`MovementPathService.gd:269-275`). | read in `StageExploreTurnService.gd`, `StageCounterfactualService.gd` | PROPOSED DEFAULT |
+| `party_stance.exposure.pause_trigger` | 0.25 | Pause when exposure x (1 - tolerance) x stop_willingness >= 0.25. Scout at peak: 0.49, pauses above exposure 0.51. Seek at peak: 0.06, never. | read in `StageStopPolicy.gd` | PROPOSED DEFAULT |
+| `party_stance.stop.noise_width_min` | 0.5 | A party with Judgment width at or above 0.5 drops noise stops. | read in `StageStopPolicy.gd` | PROPOSED DEFAULT |
+| `party_stance.stop.noise_weight_max` | 1.3 | Noise = optional find whose category weight is below 1.3. Scout: reward (1.2) can be noise. Intel (1.4) never. Objective and hostile never. | read in `StageStopPolicy.gd` | PROPOSED DEFAULT |
 | `party_stance.stop.pause_cap_per_advance` | 2 (D-45, probe result) | Unused safety key. A pause ends the Advance (D-46), so there is at most one pause per Advance and the cap has no job today. Probe 2026-10-12: no shipped Advance reached 3 pauses. `mechanics-developer` decides: keep or drop. | none (unused); backend decides keep or drop | PROPOSED DEFAULT |
 
 ## 8. Counterfactual caps (D-04)
 
 | Key (`stages.party_stance.counterfactual`) | Value | Why | Consumer | Status |
 |---|---|---|---|---|
-| `extra_replans_per_reason_class` | 1 | One extra dry run per reason class for the named Echo. | reader pending | PROPOSED DEFAULT |
-| `reason_classes` | calling, temperament, fear, morale, steadied | The five classes of design section 8 (`steadied` by D-54 S2). Count is derived from the list. `steadied` runs no dry run. | reader pending | PROPOSED DEFAULT |
+| `extra_replans_per_reason_class` | 1 | One extra dry run per reason class for the named Echo. | read in `StageCounterfactualService.gd` | PROPOSED DEFAULT |
+| `reason_classes` | calling, temperament, fear, morale, steadied | The five classes of design section 8 (`steadied` by D-54 S2). Count is derived from the list. `steadied` runs no dry run. | read in `StageCounterfactualService.gd` | PROPOSED DEFAULT |
 
 Candidate cap = party size + 1 x 5. Party max is 5 (`sanctum.party_max_size`, read by `ConfigService.get_party_max_size`, `ConfigService.gd:146`), so the cap is at most 10. `steadied` runs no dry run, so at most 9 dry runs happen.
 
@@ -134,12 +134,12 @@ strength = 1 - judgment_weight x width - fear_weight x fear / 100. The effect ap
 
 | Key (`contact.bid`) | Value | Why | Consumer | Status |
 |---|---|---|---|---|
-| `suppression.judgment_weight` | 1.0 | At calm fear a wise Echo (width above 0.55) is released from suppression. | `ConversationService.gd:458` (`compute_bids`, no cfg argument yet) | reader pending |
-| `suppression.fear_weight` | 0.6 | Fear 50 alone removes 0.3 of strength. | same | reader pending |
-| `suppression.apply_threshold` | 0.45 | See above. | same | reader pending |
-| `boost.judgment_weight` | 1.0 | Same shape. | same | reader pending |
-| `boost.fear_weight` | 0.8 | A frightened Echo refuses the nudge more strongly. | same | reader pending |
-| `boost.apply_threshold` | 0.45 | See above. | same | reader pending |
+| `suppression.judgment_weight` | 1.0 | At calm fear a wise Echo (width above 0.55) is released from suppression. | `ConversationService.gd:458` (`compute_bids`, no cfg argument yet) | read in `ConversationService.gd` |
+| `suppression.fear_weight` | 0.6 | Fear 50 alone removes 0.3 of strength. | same | read in `ConversationService.gd` |
+| `suppression.apply_threshold` | 0.45 | See above. | same | read in `ConversationService.gd` |
+| `boost.judgment_weight` | 1.0 | Same shape. | same | read in `ConversationService.gd` |
+| `boost.fear_weight` | 0.8 | A frightened Echo refuses the nudge more strongly. | same | read in `ConversationService.gd` |
+| `boost.apply_threshold` | 0.45 | See above. | same | read in `ConversationService.gd` |
 
 Status for all: PROPOSED DEFAULT. Seek authors no suppression or boost, so these change nothing for Seek.
 Check against S4: width 0.3 and fear 10 gives 0.64 (applies, Standing 1 stays silent). Width 0.6 gives 0.34 (released, Standing 6 bids if the role fits). The real width per Standing is not known to me. `qa-verifier` should compute it.

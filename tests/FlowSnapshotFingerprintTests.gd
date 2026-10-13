@@ -323,11 +323,10 @@ static func test_sanctum_fingerprint() -> Dictionary:
 #      The previous commit moved this same field 0 -> 1 for the mirror-image reason.
 # data.terrain.bridges is BYTE-IDENTICAL: no island on this particular board drew a bridge,
 # so island bridging contributes nothing to this hash. Nothing else in the payload moved.
-# V2-DIRECTIVE-002 S3: stop kinds (spotted_ahead/exposure pause) and new snapshot keys.
-# The payload without data.stop, travel_why, effective_steps and presentation hashes to the
-# previous value, 8214628aa3aec9c6ab5057fa314668581b8789a83fad99ce760c2e612eaaf091.
-# V2-DIRECTIVE-002 S3b D-52 F6: presentation._comment is no longer in the payload. The previous
-# payload without that one key hashes to this value; nothing else moved.
+# V2-DIRECTIVE-002 S3 moved the hash by four new snapshot keys (data.stop, travel_why,
+# effective_steps, presentation). Without them the old value was
+# 8214628aa3aec9c6ab5057fa314668581b8789a83fad99ce760c2e612eaaf091.
+# S3b D-52 F6 then stripped presentation._comment from the payload. Stop kinds cannot move this hash.
 const STAGE_EXPLORE_FINGERPRINT_HASH := "81d5d8875e8ed077e2b9eb562a79f665305440ebcc6fd1d8849c5d619758b1ac"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
