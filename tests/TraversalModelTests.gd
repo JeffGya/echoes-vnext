@@ -425,6 +425,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/counterfactual_depth_cut_names_echo", Callable(TraversalModelTests, "_t_cf_depth_cut_names_echo"))
 	runner.register_test("traversal/counterfactual_named_echo_has_class", Callable(TraversalModelTests, "_t_cf_named_echo_has_class"))
 	runner.register_test("traversal/counterfactual_removed_echo_takes_its_bond_edge", Callable(TraversalModelTests, "_t_cf_removed_echo_takes_its_bond_edge"))
+	runner.register_test("traversal/counterfactual_walk_probe", Callable(TraversalModelTests, "_t_cf_walk_probe"))
+	runner.register_test("traversal/counterfactual_walk_differs_names_nobody", Callable(TraversalModelTests, "_t_cf_walk_differs_names_nobody"))
+	runner.register_test("traversal/counterfactual_walk_equal_keeps_name", Callable(TraversalModelTests, "_t_cf_walk_equal_keeps_name"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2807,4 +2810,133 @@ static func _t_cf_removed_echo_takes_its_bond_edge() -> Dictionary:
 	var cfg := ConfigService.get_party_stance_cfg(runtime.config_service)
 	if StagePartyStanceScript.echo_lean(without[0], "escape_bonus", cfg) >= StagePartyStanceScript.echo_lean(full[1], "escape_bonus", cfg):
 		return { "ok": false, "error": "the lost bond edge must lower the lean of e_b" }
+	return { "ok": true }
+
+
+# ─── D-55: a name only when the base plan is the real walk ───────────────────
+
+static func _cf_board(runtime: FlowRuntime, board: String) -> void:
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 6, 5, 902, false)
+	hostile["revealed"] = true
+	match board:
+		"exposure":
+			var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 39, 4, 901, true)
+			goal["revealed"] = true
+			_inject_stage_with_terrain(runtime, _exposure_terrain(), [hostile, goal], { "col": 0, "row": 4 }, 900, 0)
+		"open":
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(30, 11), [hostile], { "col": 0, "row": 5 }, 900, 0)
+		"qa", "qa2", "qa3":
+			var hpos: Array = {"qa": [5, 4], "qa2": [4, 6], "qa3": [3, 3]}[board]
+			hostile["pos"] = { "col": hpos[0], "row": hpos[1] }
+			var g: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 12, 5, 901, true)
+			g["revealed"] = true
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(20, 11), [g, hostile], { "col": 0, "row": 5 }, 900, 0)
+		_:
+			var sits := _cf_goal_sits()
+			sits.append(hostile)
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(14, 11), sits, { "col": 0, "row": 5 }, 900, 0)
+
+
+# One live Advance with debug logs on: the proposed naming and the fallback come from the log.
+static func _cf_live_advance(runtime: FlowRuntime, svc: StageExploreTurnService, t: int) -> Dictionary:
+	runtime.logger.set_level("debug")
+	runtime.logger.clear()
+	var verdict := svc.advance_turn(runtime.directive_service, t)
+	var out := { "verdict": verdict, "pre_cause": "", "plan": {}, "fell_back": false }
+	for e: Dictionary in runtime.logger.get_logs():
+		if str(e.get("type", "")) == "stage.counterfactual.named":
+			out["pre_cause"] = str(e["data"]["cause"])
+			out["plan"] = e["data"]["plan"]
+		elif str(e.get("type", "")) == "stage.counterfactual.walk_differs":
+			out["fell_back"] = true
+	out["named"] = str((_read_em(runtime, "last_stop") as Dictionary).get("echo_id", ""))
+	out["cause"] = str((_read_em(runtime, "travel_why") as Dictionary).get("cause", ""))
+	out["path"] = _read_em(runtime, "last_traveled_path")
+	out["stop"] = str(svc.get_last_result().get("stop_reason", ""))
+	out["steps"] = int(_read_em(runtime, "last_effective_steps"))
+	return out
+
+
+# Independent of plan_is_walk: the plan cells open the walk, in order, and the stop agrees.
+static func _cf_plan_matches(plan: Dictionary, a: Dictionary) -> bool:
+	var path: Array = plan["path"]
+	var walk: Array = a["path"]
+	if int(plan["effective_steps"]) != int(a["steps"]) or walk.size() < path.size():
+		return false
+	for i in path.size():
+		if int(path[i]["col"]) != int(walk[i]["col"]) or int(path[i]["row"]) != int(walk[i]["row"]):
+			return false
+	return str(plan["stop_kind"]) == (str(a["stop"]) if walk.size() == path.size() else "reached_destination")
+
+
+static func _cf_probe_parties() -> Array:
+	var pool := {
+		"e_a": ["e_a", "okofor", 1, 0, 50, 0], "e_b": ["e_b", "aduro", 1, 0, 50, 1], "e_c": ["e_c", "okomfo", 1, 0, 50, 2],
+		"e_d": ["e_d", "okomfo", 6, 50, 50, 3], "e_e": ["e_e", "okofor", 6, 80, 20, 4], "e_f": ["e_f", "aduro", 6, 0, 95, 5],
+		"e_g": ["e_g", "okomfo", 1, 45, 80, 6], "e_h": ["e_h", "aduro", 3, 30, 30, 7],
+	}
+	var out: Array = []
+	for ids: Array in [["e_a", "e_h"], ["e_b", "e_h"], ["e_c", "e_h"], ["e_a", "e_e"], ["e_a", "e_f"], ["e_d", "e_g"],
+			["e_f"], ["e_e"], ["e_g"], ["e_b", "e_f"], ["e_c", "e_d"], ["e_e", "e_g"], ["e_a", "e_b", "e_c"], ["e_d", "e_f", "e_h"]]:
+		var m: Array = []
+		for id in ids:
+			m.append(pool[id])
+		out.append(m)
+	return out
+
+
+# 14 parties, 6 boards, both Directives, up to 3 Advances each (Jeff asked for the fallback rate).
+# Every live name has a base plan equal to the real walk; every fallback dropped a proposed name
+# whose plan differs from the walk.
+static func _t_cf_walk_probe() -> Dictionary:
+	var proposed := 0
+	var fell_back := 0
+	for d in [CF_SCOUT, CF_SEEK]:
+		for board in ["goal", "exposure", "open", "qa", "qa2", "qa3"]:
+			for members: Array in _cf_probe_parties():
+				var runtime := _cf_runtime(d, members, _full_rect_terrain(14, 11), [])
+				_cf_board(runtime, board)
+				var svc := _adv_service(runtime)
+				for i in 3:
+					var a := _cf_live_advance(runtime, svc, i)
+					if a["verdict"] != "advanced":
+						break
+					var where := "%s %s %s Advance %d" % [d, board, members.map(func(m: Array) -> String: return m[0]), i]
+					if a["pre_cause"] == "echo":
+						proposed += 1
+					if a["fell_back"]:
+						fell_back += 1
+						if a["pre_cause"] != "echo" or not a["named"].is_empty() or a["cause"] == "echo" \
+								or _cf_plan_matches(a["plan"], a):
+							return { "ok": false, "error": "%s: a fallback must drop a proposed name of a plan that is not the walk: %s" % [where, a] }
+					elif not a["named"].is_empty() and not _cf_plan_matches(a["plan"], a):
+						return { "ok": false, "error": "%s: named %s but the plan is not the walk: %s" % [where, a["named"], a] }
+					if not _em_str(runtime, "pending_situation_id").is_empty():
+						break
+	if fell_back == 0 or proposed == fell_back:
+		return { "ok": false, "error": "fixture: expected kept names and fallbacks, got proposed %d fell back %d" % [proposed, fell_back] }
+	return { "ok": true }
+
+
+# The QA case: the model goes through 3,4, the live walk through 3,5. A name is proposed and dropped.
+static func _t_cf_walk_differs_names_nobody() -> Dictionary:
+	var runtime := _cf_runtime(CF_SEEK, (_cf_probe_parties()[0] as Array), _full_rect_terrain(14, 11), [])
+	_cf_board(runtime, "qa")
+	var a := _cf_live_advance(runtime, _adv_service(runtime), 0)
+	if a["pre_cause"] != "echo" or _cf_plan_matches(a["plan"], a):
+		return { "ok": false, "error": "fixture: a name must be proposed for a plan that is not the walk: %s" % [a] }
+	if not a["named"].is_empty() or not a["cause"] in ["terrain", "objective", "situation", "party", "directive"]:
+		return { "ok": false, "error": "a plan that is not the walk must name nobody, with a cause without a name: %s" % [a] }
+	return { "ok": true }
+
+
+# The model is the walk: the live Advance keeps the name the pre-walk naming gives.
+static func _t_cf_walk_equal_keeps_name() -> Dictionary:
+	var expected := str(_cf_name(_cf_runtime(CF_SEEK, _cf_qa_members(), _full_rect_terrain(14, 11), _cf_goal_sits()))["decisive_contributor_id"])
+	var runtime := _cf_runtime(CF_SEEK, _cf_qa_members(), _full_rect_terrain(14, 11), _cf_goal_sits())
+	var a := _cf_live_advance(runtime, _adv_service(runtime), 0)
+	if a["fell_back"] or not _cf_plan_matches(a["plan"], a):
+		return { "ok": false, "error": "fixture: the plan must be the walk: %s" % [a] }
+	if expected.is_empty() or a["named"] != expected or a["cause"] != "echo":
+		return { "ok": false, "error": "expected the live name '%s', got %s" % [expected, a] }
 	return { "ok": true }

@@ -81,3 +81,8 @@ Owner: phase B+C, which edits the same guard.
 - A profile-less Directive has no candidates. A shaken party loses a step, but no Echo can be named for the loss. The cause is 'directive' or 'party'.
 - `steadied` is a fallback label: it covers every named Echo where no single class changes the plan (party mean, party size, bond edges, or a mix). It is not proof that only the mean moved.
 - The `counterfactual` comment in `data/balance.json` still says 'at most 9' and names `replan_cap_per_effective_step` (package B and C own it).
+
+## Found in QA package D (2026-10-13)
+- Correction to QA note N1: the model plan and the real walk differ in the QA case because of equal-cost route ties under per-step replanning (diagonal ties near an exposure source), not because the model skips pauses or reveal stops. All 24 drops in the probe were route ties; none came from a walk that stopped early.
+- Fallback rate in the probe: 24 of 185 proposed names (13.0%), 24 of 369 Advances (6.5%); all on Advance 0 of boards with a hostile near the start. Test boards, not real maps.
+- Open choice for Jeff: accept the drop rate, or make the model use the live per-step route tie rule so the ties match (a model change; not option 3).

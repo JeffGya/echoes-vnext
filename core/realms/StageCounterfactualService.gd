@@ -2,8 +2,9 @@
 # Who decided the first plan of a stage Advance (V2-DIRECTIVE-002 design 4, D-04, D-46).
 # First plan only: target, entered cells of the first leg, effective steps, commitment depth and
 # the predicted stop, all from the party cell. An Echo is named only when removing that Echo (and
-# the bond edges it gives the others, D-26) changes that plan. Read-only: every plan runs on a deep
-# copy of the explore map. No RNG draw. Never calls SaveService.
+# the bond edges it gives the others, D-26) changes that plan, and that plan is the real walk
+# (confirm_walk, D-55). Read-only: every plan runs on a deep copy of the explore map. No RNG draw.
+# Never calls SaveService.
 class_name StageCounterfactualService
 extends RefCounted
 
@@ -18,6 +19,8 @@ var config_service: ConfigService
 var logger: StructuredLogger
 ## Plans with a changed party made by the latest name_deciders call. Test observable.
 var dry_runs: int = 0
+# The no-name cause of the latest name_deciders call, on its pre-walk copy. Set only when it named an Echo.
+var _cause_if_unnamed: Callable = Callable()
 
 
 func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _logger: StructuredLogger) -> void:
@@ -112,6 +115,7 @@ static func _depth_cuts(plan: Dictionary) -> bool:
 ## or "" when there is no target (no Advance happens).
 func name_deciders(directive: Dictionary, t: int) -> Dictionary:
 	dry_runs = 0
+	_cause_if_unnamed = Callable()
 	var out := {"plan": {}, "contributor_ids": [], "decisive_contributor_id": "", "reason_class": "", "cause": "", "dry_runs": 0}
 	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
 	if stage.is_empty():
@@ -177,11 +181,47 @@ func name_deciders(directive: Dictionary, t: int) -> Dictionary:
 		out["decisive_contributor_id"] = deciders[0]["id"]
 		out["reason_class"] = _reason_class(str(deciders[0]["id"]), echoes, classes, stance_cfg, real, plan_for, cap)
 		out["cause"] = "echo"
+		_cause_if_unnamed = func() -> String:
+			return _cause_without_echo(real, target, here, walkable, real_stance, plan_for, dry_runs < cap)
 	out["dry_runs"] = dry_runs
 	logger.debug(t, "stage.counterfactual.named", "first-plan naming", {
-		"cause": out["cause"], "reason_class": out["reason_class"], "dry_runs": dry_runs, "cap": cap,
+		"cause": out["cause"], "reason_class": out["reason_class"], "dry_runs": dry_runs, "cap": cap, "plan": real,
 	})
 	return out
+
+
+## Keeps the name of `why` (this instance's latest name_deciders result) only when its base plan is
+## the real walk (D-55). Else names nobody and gives the no-name cause. `walk` is the live Advance:
+## {target_id (first leg), path (every entered cell), stop_kind (the loop's final reason),
+## effective_steps, commitment_depth}.
+func confirm_walk(why: Dictionary, walk: Dictionary, t: int) -> Dictionary:
+	if str(why.get("cause", "")) != "echo" or plan_is_walk(why["plan"], walk):
+		return why
+	var out := why.duplicate()
+	out["contributor_ids"] = []
+	out["decisive_contributor_id"] = ""
+	out["reason_class"] = ""
+	out["cause"] = _cause_if_unnamed.call()
+	out["dry_runs"] = dry_runs
+	logger.debug(t, "stage.counterfactual.walk_differs", "base plan is not the real walk; no name", {
+		"cause": out["cause"], "plan_path": (why["plan"] as Dictionary)["path"], "walk_path": walk.get("path", []),
+	})
+	return out
+
+
+## Equal: same first-leg target, steps and depth; the walk enters the plan cells first, in order;
+## the walk ends where the plan ends with the same stop kind, or walks on only past a reached target.
+static func plan_is_walk(plan: Dictionary, walk: Dictionary) -> bool:
+	var path: Array = plan["path"]
+	var cells: Array = walk.get("path", [])
+	if str(plan["target_id"]) != str(walk.get("target_id", "")) \
+			or int(plan["effective_steps"]) != int(walk.get("effective_steps", -1)) \
+			or int(plan["commitment_depth"]) != int(walk.get("commitment_depth", -1)) \
+			or cells.size() < path.size() or cells.slice(0, path.size()) != path:
+		return false
+	if cells.size() == path.size():
+		return str(plan["stop_kind"]) == str(walk.get("stop_kind", ""))
+	return str(plan["stop_kind"]) == "reached_destination"
 
 
 func _pick_target(em: Dictionary, directive: Dictionary, stance: Dictionary, walkable: Dictionary,

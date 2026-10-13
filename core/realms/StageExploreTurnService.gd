@@ -197,7 +197,8 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		return "no_target"
 
 	# Who decided the first plan. Read-only dry runs, so it runs before any write below.
-	var why: Dictionary = StageCounterfactualService.new(flow_ctx, config_service, logger).name_deciders(directive, t)
+	var counterfactual := StageCounterfactualService.new(flow_ctx, config_service, logger)
+	var why: Dictionary = counterfactual.name_deciders(directive, t)
 	var first_is_frontier := bool(target.get("is_frontier", false))
 
 	# One explore-turn consumed per Advance call
@@ -259,6 +260,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var route_character := ""
 	var first_goal: Dictionary = {}
 	var first_intent: Dictionary = {}
+	var first_target_id := ""
 	var final_reason := ""
 	var _heading_origin_v: Variant = explore_map.get("last_traveled_origin", {})
 	var _heading_origin: Dictionary = _heading_origin_v if _heading_origin_v is Dictionary else {}
@@ -274,6 +276,8 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		is_frontier = bool(target.get("is_frontier", false))
 		target_sit_id = str(target.get("id", ""))
 		target_tier = int(target.get("_movement_tier", StagePartyMovementAdapterScript.TIER_FRONTIER))
+		if first_intent.is_empty():
+			first_target_id = target_sit_id
 		if int(here.get("col", 0)) == int(target_pos.get("col", 0)) \
 				and int(here.get("row", 0)) == int(target_pos.get("row", 0)):
 			break
@@ -362,6 +366,11 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		if reveal_kind != "":
 			final_reason = "interrupted"
 			break
+
+	why = counterfactual.confirm_walk(why, {
+		"target_id": first_target_id, "path": stepped, "stop_kind": final_reason,
+		"effective_steps": effective_steps, "commitment_depth": commitment_depth,
+	}, t)
 
 	var pause_cap := int(StageExposureMapScript.cfg_num(stop_cfg, "pause_cap_per_advance"))
 	assert(pause_cap <= 0 or (1 if reveal_kind == "paused_to_read" else 0) <= pause_cap)

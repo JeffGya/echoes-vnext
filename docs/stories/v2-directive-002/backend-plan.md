@@ -407,3 +407,5 @@ BLOCKED: B2. Final exact test counts and the exact list of moved recorded values
 Skipped (ponytail): no new suite (`party_stance` is a Jeff option; cases go in `movement`); no new files beyond four pure statics and one service; no change to the shared `STOP_REASONS` contract; no refactor of `find_explore_target`'s double region search beyond one optional argument; no UI, scene or data file touched. Not checked: real runtime of the counterfactual (estimated from the INFRA-010 evidence, not measured); whether any `traversal` fixture already puts a combat situation near a path (R2 shows it).
 
 QA package B done (D-54: S3 tests, S6 escape base to config, S4 replan key dropped), 2026-10-13. Not committed, not verified by qa-verifier.
+
+QA package D done (D-55 option 2: a name only when the base plan equals the real walk), 2026-10-13. Not committed, not verified by qa-verifier.
