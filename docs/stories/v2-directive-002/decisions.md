@@ -251,3 +251,7 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **F6 (defect):** strip `_comment*` keys from the `presentation` snapshot key. The stage fingerprint moves once more.
 - **F7:** accepted as is. The player kind tells the two meanings of the shared reason `interrupted` apart.
 **Work:** slice S3b (opus): F1, F2, F5, F6 in code with one named cause per moved value.
+
+### D-53. journey-entry-lifetime-approved
+**Q:** Lifetime and reset rules for the saved journey entry (`last_stop`, `travel_why`, `last_effective_steps`), proposed in the S5 report?
+**A:** Approved (Jeff, 2026-10-13). First entry of a stage: empty. Return from combat or a contact, or a reload: kept. After a successful return home (`party_state` escaped), then a later entry: cleared. Final objective won, then re-entry: kept. The next Advance, including a retarget: replaced. Return home failed: kept. Stage switch: each stage keeps its own entry. The plan rule 'carry only when `locked`' is replaced by the `party_state` rule (the lock always runs before the reset). Open follow-ups: an encounter retreat does not set `escaped`; a carried `last_effective_steps` can exceed a new `step_budget` after a Directive change; the stale comment at `FlowStageExploreState.gd:91-94`.
