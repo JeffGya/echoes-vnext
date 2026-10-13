@@ -117,7 +117,8 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 	var contact_responses: Array = []
 	if _party_echoes.size() <= ConfigService.get_contact_max_voices_per_turn(config_service):
 		contact_responses = ConversationService.generate_responses(
-			_party_echoes, contact_work, contact_cfg_bal, response_data, t, bid_state
+			_party_echoes, contact_work, contact_cfg_bal, response_data, t, bid_state,
+			float(_dir_fx.get("conversation_resonance_bonus", 0.0))
 		)
 
 	explore_map["pending_contact"] = contact_work

@@ -68,7 +68,7 @@
 				"intel_retention": false,
 				"intel_retention_bonus": 1.0,
 				"contact_effects": {
-					"witness_resonance_bonus": 0.1,
+					"conversation_resonance_bonus": 0.1,
 					"guide_reveal_bonus": 1
 				}
 			}

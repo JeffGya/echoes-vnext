@@ -210,7 +210,8 @@ func handle_consult_echoes(action: Dictionary, t: int) -> FlowActionOutcome:
 	# Generate responses for selected echoes
 	contact["consulted_ids_this_turn"] = echo_ids
 	var contact_responses := ConversationService.generate_responses(
-		selected_echoes, contact, contact_cfg, response_data, t, bid_state
+		selected_echoes, contact, contact_cfg, response_data, t, bid_state,
+		float(dir_fx.get("conversation_resonance_bonus", 0.0))
 	)
 
 	explore_map["pending_contact"] = contact
@@ -424,7 +425,8 @@ func handle_speak_response(action: Dictionary, t: int) -> FlowActionOutcome:
 		var _next_dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
 		var _next_bids := ConversationService.compute_bids(_next_party, contact, _next_dir_fx, ConfigService.get_contact_bid_cfg(config_service), ConversationService.party_widths(flow_ctx.save_data, ConfigService.get_balance_data(config_service)))
 		_next_responses = ConversationService.generate_responses(
-			_next_party, contact, contact_cfg, _next_resp_data, t, _next_bids
+			_next_party, contact, contact_cfg, _next_resp_data, t, _next_bids,
+			float(_next_dir_fx.get("conversation_resonance_bonus", 0.0))
 		)
 	explore_map["contact_responses"] = _next_responses
 	stage["explore_map"] = explore_map

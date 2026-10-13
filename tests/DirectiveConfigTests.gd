@@ -128,6 +128,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_cfg/integrity_rejects_all_nonpositive_weights", Callable(DirectiveConfigTests, "_t_integrity_rejects_all_nonpositive_weights"))
 	runner.register_test("directive_cfg/integrity_rejects_untranslated_keys", Callable(DirectiveConfigTests, "_t_integrity_rejects_untranslated_keys"))
 	runner.register_test("directive_cfg/integrity_accepts_partial_translation", Callable(DirectiveConfigTests, "_t_integrity_accepts_partial_translation"))
+	runner.register_test("directive_cfg/resonance_key_renamed", Callable(DirectiveConfigTests, "_t_resonance_key_renamed"))
 
 
 # ─── Test 1 — scout step_budget == 3 after load_from_config ─────────────────
@@ -414,4 +415,20 @@ static func _t_integrity_accepts_partial_translation() -> Dictionary:
 	}
 	if not DirectiveService.validate_config_integrity(directives_cfg, _actor_cfg_for_integrity(), null, 0):
 		return { "ok": false, "error": "expected validate_config_integrity to return true — survival_bias is positive and translated (actor.idle row)" }
+	return { "ok": true }
+
+
+static func _t_resonance_key_renamed() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load balance.json" }
+	var seek: Dictionary = (ConfigService.get_directives_cfg(cs)["directive.seek_signs"] as Dictionary).duplicate(true)
+	var fx: Dictionary = seek["contact_effects"]
+	if not fx.has("conversation_resonance_bonus"):
+		return { "ok": false, "error": "shipped Seek entry lacks conversation_resonance_bonus" }
+	if not DirectiveService.validate_entry_schema({ "directive.seek_signs": seek }, null, 0):
+		return { "ok": false, "error": "new key was rejected" }
+	fx["witness_resonance_bonus"] = fx["conversation_resonance_bonus"]
+	if DirectiveService.validate_entry_schema({ "directive.seek_signs": seek }, null, 0):
+		return { "ok": false, "error": "old key witness_resonance_bonus was accepted" }
 	return { "ok": true }

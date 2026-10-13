@@ -321,6 +321,8 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 
 ### S4c. Resonance bonus and rename (one change, D-24)
 
+**Status:** BUILT 2026-10-13, not committed, not verified by qa-verifier. No recorded value moved. Tests: `directive_cfg/resonance_key_renamed`; `conversation_repair/resonance_bonus_*` (3). Three callers pass the bonus: `ContactController` (2), `ContactConversationService` (1).
+
 | Item | Plan |
 |---|---|
 | Files | `core/directives/DirectiveService.gd` (`:54` key list); `data/balance.json` (`:71`, edited by `mid-game-designer` or by me only with explicit approval; the plan lists it so the rename is ONE change); `core/realms/ConversationService.gd` (`:162`, `:108`); `CONVENTIONS.md:938` |

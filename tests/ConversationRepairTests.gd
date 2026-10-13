@@ -44,6 +44,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("conversation_repair/storyweight_gain_log_fires_with_correct_values", Callable(ConversationRepairTests, "_t_storyweight_gain_log_fires_with_correct_values"))
 	runner.register_test("conversation_repair/storyweight_gain_reaches_snapshot", Callable(ConversationRepairTests, "_t_storyweight_gain_reaches_snapshot"))
 	runner.register_test("conversation_repair/losing_turn_no_gain_no_confirmation", Callable(ConversationRepairTests, "_t_losing_turn_no_gain_no_confirmation"))
+	runner.register_test("conversation_repair/resonance_bonus_before_clamp_range_0_to_1_2", Callable(ConversationRepairTests, "_t_resonance_bonus_before_clamp"))
+	runner.register_test("conversation_repair/resonance_bonus_applies_to_every_echo_equally", Callable(ConversationRepairTests, "_t_resonance_bonus_every_echo"))
+	runner.register_test("conversation_repair/resonance_bonus_zero_for_scout", Callable(ConversationRepairTests, "_t_resonance_bonus_zero_for_scout"))
 
 
 # ─── Save-file isolation (mirrors UnifiedResolveTests.gd) ────────────────────
@@ -441,4 +444,67 @@ static func _t_losing_turn_no_gain_no_confirmation() -> Dictionary:
 		var ev: Dictionary = ev_v
 		if str(ev.get("type", "")) == "conversation.storyweight_gain.awarded":
 			return { "ok": false, "error": "conversation.storyweight_gain.awarded fired on a losing turn" }
+	return { "ok": true }
+
+
+# ─── Resonance bonus (D-16, D-30) ───────────────────────────────────────────
+static func _contact_cfg() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	return ConfigService.get_balance_data(cs).get("contact", {})
+
+
+static func _score(cfg: Dictionary, bonus: float) -> float:
+	return ConversationService.compute_turn_score_from_virtue(
+		"courage", "wisdom", "wisdom", "bold", 24, 68, "steady", cfg, "witness", bonus)
+
+
+static func _t_resonance_bonus_before_clamp() -> Dictionary:
+	var cfg := _contact_cfg()
+	var base := _score(cfg, 0.0)
+	if base > 1.0:
+		return { "ok": false, "error": "fixture score %f too high to show the bonus" % base }
+	if absf(_score(cfg, 0.1) - (base + 0.1)) > 0.0001:
+		return { "ok": false, "error": "a 0.1 bonus did not add 0.1 to %f" % base }
+	if not is_equal_approx(_score(cfg, 5.0), 1.2):
+		return { "ok": false, "error": "a large bonus must clamp to 1.2, got %f" % _score(cfg, 5.0) }
+	if not is_equal_approx(_score(cfg, -5.0), 0.0):
+		return { "ok": false, "error": "a large negative bonus must clamp to 0.0" }
+	return { "ok": true }
+
+
+static func _t_resonance_bonus_every_echo() -> Dictionary:
+	var cfg := _contact_cfg()
+	var contact := ContactModelScript.make("contact.rb", "witness", "acceptance", "acceptance", 24, 68, "none", "Nana Adwoa", 2)
+	var echoes: Array = [
+		{ "id": "echo.a", "name": "A", "calling": "okofor" },
+		{ "id": "echo.b", "name": "B", "calling": "onyamesu" },
+		{ "id": "echo.c", "name": "C", "calling": "kra_soro" },
+	]
+	var plain := ConversationService.generate_responses(echoes, contact, cfg, {}, 1)
+	var boosted := ConversationService.generate_responses(echoes, contact, cfg, {}, 1, {}, 0.1)
+	if plain.size() != 3 or boosted.size() != 3:
+		return { "ok": false, "error": "expected 3 responses each" }
+	for i in 3:
+		var p := float(plain[i]["resonance_score"])
+		var d := float(boosted[i]["resonance_score"]) - p
+		if p > 1.1:
+			return { "ok": false, "error": "fixture score for echo %d too high (%f) to show the bonus" % [i, p] }
+		if absf(d - 0.1) > 0.0001:
+			return { "ok": false, "error": "echo %d moved by %f, expected 0.1" % [i, d] }
+	return { "ok": true }
+
+
+static func _t_resonance_bonus_zero_for_scout() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var dcfg := ConfigService.get_directives_cfg(cs)
+	var fx := {}
+	for id in ["directive.scout_carefully", "directive.seek_signs"]:
+		var save := { "stage_context": { "active_directive_id": id } }
+		fx[id] = float(DirectiveService.resolve(save, dcfg).get("contact_effects", {}).get("conversation_resonance_bonus", 0.0))
+	if fx["directive.scout_carefully"] != 0.0:
+		return { "ok": false, "error": "Scout must carry no resonance bonus, got %f" % fx["directive.scout_carefully"] }
+	if not is_equal_approx(fx["directive.seek_signs"], 0.1):
+		return { "ok": false, "error": "Seek bonus expected 0.1, got %f" % fx["directive.seek_signs"] }
 	return { "ok": true }

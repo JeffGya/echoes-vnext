@@ -8,7 +8,7 @@ All paths start at `data.`. Line numbers were checked on 2026-10-12.
 ## 0. Three things Jeff must see first
 
 1. **Per-Directive numbers are not inside `data.directives.<id>`.** `DirectiveService.ENTRY_SCHEMA` (`DirectiveService.gd:41`) rejects unknown entry keys. `ConfigService.gd:29` then aborts the load. They sit in `stages.party_stance.directive_profile.<id>`. One small code change moves them (add an optional `party_stance` dict key to `ENTRY_SCHEMA`; cut and paste the two blocks).
-2. **`witness_resonance_bonus` is NOT renamed.** The new name inside `contact_effects` is also rejected (`CONTACT_EFFECT_KEYS`, `DirectiveService.gd:52`; error at `:353`). The value is already 0.1, as D-30 wants. The rename is a `mechanics-developer` change (D-24).
+2. **Resolved (S4c, D-24).** The key is now `conversation_resonance_bonus` (was `witness_resonance_bonus`). The value is 0.1, as D-30 wants.
 3. **Resolved (D-44). Design test K2 conflicted with the "never invert" rule.** K2 wants a Seek party with a Sight Echo to take an intel find over a combat find (authored 0.9 against 1.4). The rule in design section 3 E1 says a bend never inverts the authored ranking. Both cannot hold. Jeff kept the ranking (D-44): a bend only decides ties. K2 is rewritten to a tie case.
 
 ## 1. Existing literals moved to config (same value, no behaviour change)
@@ -148,7 +148,7 @@ Check against S4: width 0.3 and fear 10 gives 0.64 (applies, Standing 1 stays si
 
 | Key | Value | Why | Consumer | Status |
 |---|---|---|---|---|
-| `directives.directive.seek_signs.contact_effects.witness_resonance_bonus` | 0.1 (unchanged) | D-30 value. Applied before the 1.2 clamp at `ConversationService.gd:184`. Name not changed (section 0, item 2). | schema `DirectiveService.gd:54`; no reader in `core/` for the value yet (`grep` finds none) | PROPOSED DEFAULT, reader pending |
+| `directives.directive.seek_signs.contact_effects.conversation_resonance_bonus` | 0.1 (unchanged) | D-30 value. Applied before the 1.2 clamp at `ConversationService.gd:184`. Renamed in S4c. | schema `DirectiveService.gd:54`; read by `ContactController` and `ContactConversationService` | PROPOSED DEFAULT |
 
 ## 11. Objective weight in the pool (D-28)
 

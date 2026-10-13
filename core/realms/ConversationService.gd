@@ -77,7 +77,8 @@ static func generate_responses(
 	cfg: Dictionary,
 	response_data: Dictionary,
 	t: int,
-	bid_state: Dictionary = {}  # echo_id -> bid_type ("alignment"/"reactive"/"")
+	bid_state: Dictionary = {},  # echo_id -> bid_type ("alignment"/"reactive"/"")
+	resonance_bonus: float = 0.0
 ) -> Array:
 	var results: Array = []
 	var contact_role := str(contact.get("role", ""))
@@ -109,7 +110,7 @@ static func generate_responses(
 		var resonance_score := compute_turn_score_from_virtue(
 			virtue_alignment, contact_virtue_primary, contact_virtue_secondary,
 			contact_disposition, contact_fear, contact_morale,
-			emotional_status, cfg, contact_role
+			emotional_status, cfg, contact_role, resonance_bonus
 		)
 
 		# Stat texture from dominant stat
@@ -169,7 +170,8 @@ static func compute_turn_score_from_virtue(
 	contact_morale: int,
 	emotional_status: String,
 	cfg: Dictionary,
-	contact_role: String = ""
+	contact_role: String = "",
+	resonance_bonus: float = 0.0
 ) -> float:
 	var weights_v: Variant = cfg.get("resonance_weights", {})
 	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
@@ -182,7 +184,8 @@ static func compute_turn_score_from_virtue(
 		disposition, contact_fear, contact_morale, emotional_status, cfg, contact_role
 	)
 
-	return clampf(virtue_score + emotional_fit, 0.0, 1.2)
+	# The bonus joins the sum before the clamp so the range stays 0 to 1.2.
+	return clampf(virtue_score + emotional_fit + resonance_bonus, 0.0, 1.2)
 
 
 # Virtue resonance: primary=1.0, adjacent=0.7, two_steps=0.4, opposite=0.1

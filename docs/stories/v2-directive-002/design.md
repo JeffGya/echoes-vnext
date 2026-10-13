@@ -161,7 +161,7 @@ Result at each Standing: Standing 1: the Directive's lists decide, so Calling gi
 - Where: `compute_turn_score_from_virtue` (`ConversationService.gd:162`). Apply BEFORE the clamp, so the documented range 0 to 1.2 holds (`ConversationService.gd:184`).
 - What it does: the chosen response's score drives the NPC reaction (`ContactController.gd:256`, `apply_npc_reaction`) and social effects. A higher score gives a better NPC fear and morale change. It lifts every Echo equally. It does not change which Echo is best. It changes outcomes, not the picker order.
 - Risk: a flat bonus is not profile-sensitive. It is Seek's reward for choosing conversation. It must stay small, or Scout players lose the contact game (section 9).
-- Name: the key is renamed from `witness_resonance_bonus` in the B+C backend step (D-24).
+- Name: `conversation_resonance_bonus` (renamed from `witness_resonance_bonus`, D-24; done in slice S4c).
 
 ## 7. Contrast cases the tests must show (D-08)
 
