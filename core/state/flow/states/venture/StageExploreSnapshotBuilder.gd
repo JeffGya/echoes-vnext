@@ -125,7 +125,6 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			var _bd: Dictionary = _bd_v if _bd_v is Dictionary else {}
 			contact_cfg_v = _bd.get("contact", {})
 		var contact_cfg: Dictionary = contact_cfg_v if contact_cfg_v is Dictionary else {}
-		var reactive_fear_min := int(ConfigService.get_contact_bid_cfg(flow_ctx.config_service).get("reactive_fear_min", 60))
 		var roles_cfg_v: Variant = contact_cfg.get("roles", {})
 		var roles_cfg: Dictionary = roles_cfg_v if roles_cfg_v is Dictionary else {}
 		var contact_role := str(pending_contact.get("role", ""))
@@ -176,10 +175,17 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var bid_party_ids: Array = bid_party_ids_v if bid_party_ids_v is Array else []
 		var bid_roster_v: Variant = sanctum_bids.get("roster", [])
 		var bid_roster: Array = bid_roster_v if bid_roster_v is Array else []
+		var bid_party: Array = []
 		for be_v in bid_roster:
-			var be: Dictionary = be_v if be_v is Dictionary else {}
-			if str(be.get("id", "")) not in bid_party_ids:
-				continue
+			if be_v is Dictionary and str((be_v as Dictionary).get("id", "")) in bid_party_ids:
+				bid_party.append(be_v)
+		# The same bid function the simulation calls, so the card equals the conversation.
+		var bid_dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(flow_ctx.config_service)).get("contact_effects", {})
+		var bid_by_id := ConversationService.compute_bids(
+			bid_party, pending_contact, bid_dir_fx, ConfigService.get_contact_bid_cfg(flow_ctx.config_service),
+			ConversationService.party_widths(flow_ctx.save_data, ConfigService.get_balance_data(flow_ctx.config_service)))
+		for be_v in bid_party:
+			var be: Dictionary = be_v
 			var be_calling := str(be.get("calling", ""))
 			if be_calling.is_empty():
 				be_calling = str(be.get("calling_origin", ""))
@@ -188,17 +194,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			var fear2   := int(emo2.get("fear_current",   0))
 			var morale2 := int(emo2.get("morale_current", 50))
 			var emotional_status2 := EmotionServiceScript.get_emotional_status(morale2, fear2)
-			# Determine bid type: alignment or reactive
-			var bid_type := ""
-			if fear2 >= reactive_fear_min:
-				bid_type = "reactive"
-			else:
-				match contact_role:
-					"charge":         if be_calling in ["okofor", "onyamesu"]: bid_type = "alignment"
-					"witness":        if be_calling in ["okomfo", "kra_soro"]: bid_type = "alignment"
-					"guide":          if be_calling in ["okomfo", "kra_soro", "sum_okwanfo"]: bid_type = "alignment"
-					"claimant":       if be_calling in ["aduro", "okomfo"]: bid_type = "alignment"
-					"temporary_ally": if be_calling in ["aduro", "okofor"]: bid_type = "alignment"
+			var bid_type := str(bid_by_id.get(str(be.get("id", "")), ""))
 			# dominant_vector is the unique differentiator — two echoes with the same calling
 			# but different vectors lean in meaningfully different directions.
 			var be_dominant_vector := str(be.get("dominant_vector", ""))

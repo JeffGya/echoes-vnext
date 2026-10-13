@@ -618,6 +618,7 @@ func _run_tests(parts: Array) -> void:
 	ConversationRepairTests.register(runner)  # V2-PROG-012 Phase 8: conversation repairs (npc_line overwrite, storyweight truncation)
 	DirectiveCharacterizationTests.register(runner)  # V2-DIRECTIVE-002 phase A: Directive accessor, registry lists, guard, no-literal scan
 	ContactConfigLiteralTests.register(runner)  # V2-DIRECTIVE-002 S4a: contact literals read config
+	ContactBidScalingTests.register(runner)  # V2-DIRECTIVE-002 S4b: contact bids scale by Judgment and fear
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables
 	BarkPopupLayerTests.register(runner)  # V2-PROG-012 playtest fix: combat_divergence bark visual distinctness
 	FlowFingerprintTests.register(runner)  # V2-INFRA-003: seven resolution-mode characterization fingerprints

@@ -92,7 +92,8 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 
 	# Compute initial bids
 	var bid_state := ConversationService.compute_bids(
-		_party_echoes, contact_work, _dir_fx, ConfigService.get_contact_bid_cfg(config_service)
+		_party_echoes, contact_work, _dir_fx, ConfigService.get_contact_bid_cfg(config_service),
+		ConversationService.party_widths(flow_ctx.save_data, ConfigService.get_balance_data(config_service))
 	)
 
 	# Set NPC opening line from burden_variant (authored in contact_responses.json), when available.

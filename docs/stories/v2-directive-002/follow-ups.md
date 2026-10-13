@@ -61,3 +61,8 @@ Owner: phase B+C, which edits the same guard.
 - `fog_light_bias_seek_engages`: the test read changed (null pending id read as empty); assertions unchanged. A test-read change, not a re-record.
 - F2 effect: a Directive with no profile (empty list) never stops on an objective or hostile reveal. Alternative: a safe fallback that keeps `spotted_ahead` on.
 - `data/balance.json` comment on `stages.party_stance.stop` and `directive_profile` should say the list also controls `spotted_ahead` (mid-game-designer edit).
+
+## Found in slice S4b (2026-10-13)
+- Numbers question for `mid-game-designer` and Jeff: with the shipped numbers (`apply_threshold` 0.45, judgment weight 1.0, fear weight 0.6) suppression releases at fear 10 when the width is above about 0.49. A real rank-6 Echo with xp_total 40 and no bonds has width 0.489 and stays silent; one with xp_total 1000 bids. The design example '0.6 bids' holds only for an Echo with high xp.
+- Existing gap: `EchoActor.from_echo` does not copy `storyweight`; `derive_expression` falls back to `xp_total`, so stage and combat Judgment use `xp_total`.
+- Behaviour change to test in play (design 6a row 11): a frightened wise Echo whose Calling is suppressed now bids 'reactive' (before: silent). Probe: Scout Carefully contact, rank-6 `aduro` Echo at fear 60, expect the 'Reacting from fear' card.

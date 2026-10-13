@@ -304,6 +304,8 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 
 ### S4b. Bid scaling by Judgment and fear, one shared bid function
 
+**Status:** BUILT 2026-10-13, not committed, not verified by qa-verifier. No recorded value moved. Tests: 6 in `tests/ContactBidScalingTests.gd` (names `conversation_repair/bid_*`).
+
 | Item | Plan |
 |---|---|
 | Files | `core/realms/ConversationService.gd`; `core/runtime/controllers/ContactController.gd` (`:201`, `:424`); `core/realms/ContactConversationService.gd` (`:93`); `StageExploreSnapshotBuilder.gd` (`:187-201`) |

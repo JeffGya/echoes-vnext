@@ -174,7 +174,13 @@ static func get_stage_presentation_cfg(config_service: ConfigService) -> Diction
 	return out
 
 
+## The whole `data` subtree of balance.json; {} when absent.
+static func get_balance_data(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, [])
+
+
 ## data.contact.bid — contact bid thresholds and Judgment/fear weights; {} when absent.
+
 static func get_contact_bid_cfg(config_service: ConfigService) -> Dictionary:
 	return _data_subtree(config_service, ["contact", "bid"])
 

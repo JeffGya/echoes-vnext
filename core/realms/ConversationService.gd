@@ -7,6 +7,7 @@ extends RefCounted
 # Response generation, resonance scoring, NPC reaction, outcome resolution, social effects.
 
 # Stat textures derived from dominant stat (used on response card chip)
+const _StagePartyStance := preload("res://core/movement/StagePartyStance.gd")
 const _STAT_TEXTURE_BY_DOMINANT: Dictionary = {
 	"atk":   "forceful",
 	"def":   "grounding",
@@ -455,7 +456,10 @@ static func get_social_effects(
 # Returns Dict keyed by echo_id -> bid_type ("alignment" / "reactive" / "")
 # "alignment" = calling/vector naturally fits this NPC role
 # "reactive"  = high-fear echo reacting emotionally
-static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dictionary, bid_cfg: Dictionary = {}) -> Dictionary:
+# The one bid rule: the simulation and the snapshot card both call it. width_by_id: echo id ->
+# Judgment width (`party_widths`); a missing id is 0.0 (neutral). A Directive effect applies only
+# when its strength reaches apply_threshold; an empty bid_cfg section means it always applies.
+static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dictionary, bid_cfg: Dictionary = {}, width_by_id: Dictionary = {}) -> Dictionary:
 	var reactive_fear_min := int(bid_cfg.get("reactive_fear_min", 60))
 	var bids: Dictionary = {}
 	var contact_role := str(contact.get("role", ""))
@@ -470,34 +474,46 @@ static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dicti
 		var calling := str(echo.get("calling", ""))
 		if calling.is_empty():
 			calling = str(echo.get("calling_origin", ""))
-
-		# Suppression
-		if calling in suppressed_callings:
-			bids[echo_id] = ""
-			continue
-
 		var emo_v: Variant = echo.get("emotion", {})
 		var emo: Dictionary = emo_v if emo_v is Dictionary else {}
 		var fear_current := int(emo.get("fear_current", 0))
+		var width := float(width_by_id.get(echo_id, 0.0))
 
-		# Reactive bid: high-fear echo
-		if fear_current >= reactive_fear_min:
+		var suppressed := calling in suppressed_callings and _effect_applies(bid_cfg.get("suppression", {}), width, fear_current)
+		# Reactive before suppression: a frightened Echo speaks from fear unless suppression still holds.
+		if fear_current >= reactive_fear_min and not suppressed:
 			bids[echo_id] = "reactive"
-			continue
-
-		# Alignment bid
-		if _is_calling_aligned(calling, contact_role):
+		elif suppressed:
+			bids[echo_id] = ""
+		elif _is_calling_aligned(calling, contact_role):
 			bids[echo_id] = "alignment"
-			continue
-
-		# Directive boost
-		if calling in boosted_callings:
+		elif calling in boosted_callings and _effect_applies(bid_cfg.get("boost", {}), width, fear_current):
 			bids[echo_id] = "alignment"
-			continue
-
-		bids[echo_id] = ""
+		else:
+			bids[echo_id] = ""
 
 	return bids
+
+
+## Strength of one Directive bid effect on one Echo: falls as Judgment width and fear rise.
+static func bid_strength(width: float, fear: int, judgment_weight: float, fear_weight: float) -> float:
+	return 1.0 - judgment_weight * width - fear_weight * float(fear) / 100.0
+
+
+## Judgment width per party Echo id, from the stage reader (real bonds, same as combat).
+static func party_widths(save_data: Dictionary, cfg_data: Dictionary) -> Dictionary:
+	var widths: Dictionary = {}
+	for e: Dictionary in _StagePartyStance.read_party(save_data, cfg_data):
+		widths[str(e.get("id", ""))] = float(e.get("width", 0.0))
+	return widths
+
+
+static func _effect_applies(effect_cfg_v: Variant, width: float, fear: int) -> bool:
+	var effect_cfg: Dictionary = effect_cfg_v if effect_cfg_v is Dictionary else {}
+	if effect_cfg.is_empty():
+		return true
+	return bid_strength(width, fear, float(effect_cfg.get("judgment_weight", 0.0)), float(effect_cfg.get("fear_weight", 0.0))) \
+		>= float(effect_cfg.get("apply_threshold", 0.0))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
