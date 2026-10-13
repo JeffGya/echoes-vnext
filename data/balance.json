@@ -3203,7 +3203,8 @@
 							"calling",
 							"temperament",
 							"fear",
-							"morale"
+							"morale",
+							"steadied"
 						]
 					},
 					"directive_profile": {

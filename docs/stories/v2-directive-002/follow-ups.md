@@ -75,3 +75,9 @@ Owner: phase B+C, which edits the same guard.
 - If the Directive changes inside a stage, a carried `last_effective_steps` can exceed the new `step_budget` (possible since S3).
 - Exception E1 to the AGENTS.md save rules: a malformed `last_effective_steps` is erased, not defaulted; an absent key is its valid empty state. No field removed from the schema.
 - C1 field `leg_start_length` (-1 = no leg) is saved and repaired; nothing writes it yet (C1 is built later, D-48).
+
+## Found in QA package A (2026-10-13)
+- The counterfactual first plan can differ from the real walk for the same party. In the QA case the plan path has 3,4 where the real walk has 3,5. This looks like QA note N1: the naming plan does not model the exposure pause and the reveal stops. The naming compares two plans; if the base plan is not the real walk, a name can be wrong. Not fixed (D-54 did not select N1). Decide later: make the base plan equal the real result (S1a keeps `last_result`).
+- A profile-less Directive has no candidates. A shaken party loses a step, but no Echo can be named for the loss. The cause is 'directive' or 'party'.
+- `steadied` is a fallback label: it covers every named Echo where no single class changes the plan (party mean, party size, bond edges, or a mix). It is not proof that only the mean moved.
+- The `counterfactual` comment in `data/balance.json` still says 'at most 9' and names `replan_cap_per_effective_step` (package B and C own it).

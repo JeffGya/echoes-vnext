@@ -1,7 +1,8 @@
 extends RefCounted
 ## Party stance for one stage Advance (V2-DIRECTIVE-002 design 3 to 5). Pure and static.
 ## Dial = Directive baseline + sum(Echo lean) / party size, clamped to the dial bound. Readiness
-## only lowers steps. A Directive with no `directive_profile` entry (or no config) is neutral.
+## only lowers steps, for every Directive. A Directive with no `directive_profile` entry keeps its
+## baseline dials and has no leans (D-54 N2).
 
 const DIALS: Array = ["exposure_tolerance", "stop_willingness", "commitment_fraction", "escape_bonus"]
 
@@ -130,9 +131,10 @@ static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary, 
 		"commitment_fraction": float(profile.get("commitment_fraction", 1.0)),
 		"escape_bonus": float(directive.get("escape_bonus", 0.0)),
 	}
-	var stance := {"dials": base.duplicate(), "effective_steps": budget, "leans": {}, "candidates": [], "category_bend": {}}
+	var effective := maxi(budget - readiness_steps_lost(echoes, stance_cfg), mini(1, budget))
+	var stance := {"dials": base.duplicate(), "effective_steps": effective, "leans": {}, "candidates": [], "category_bend": {}}
 	if profile.is_empty():
-		stance["commitment_depth"] = budget
+		stance["commitment_depth"] = effective
 		return stance
 
 	var sorted := echoes.duplicate()
@@ -164,8 +166,6 @@ static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary, 
 				cat_leans[str(e["id"])][cat] = echo_lean(e, "category_weight", stance_cfg, str(cat))
 	stance["category_bend"] = category_bend(cat_leans, stance_cfg)
 
-	var effective := maxi(budget - readiness_steps_lost(sorted, stance_cfg), mini(1, budget))
-	stance["effective_steps"] = effective
 	stance["commitment_depth"] = mini(maxi(roundi(effective * float(stance["dials"]["commitment_fraction"])), 1), effective)
 	return stance
 

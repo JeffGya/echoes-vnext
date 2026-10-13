@@ -124,9 +124,9 @@ Effective steps = baseline minus loss, never below 1, never above 6 (code floors
 |---|---|---|---|---|
 | `replan_cap_per_effective_step` | 3 | Cap = 3 x effective steps (at most 18). Small multiple, never unbounded. | reader pending | PROPOSED DEFAULT |
 | `extra_replans_per_reason_class` | 1 | One extra dry run per reason class for the named Echo. | reader pending | PROPOSED DEFAULT |
-| `reason_classes` | calling, temperament, fear, morale | The four classes of design section 8. Count is derived from the list. | reader pending | PROPOSED DEFAULT |
+| `reason_classes` | calling, temperament, fear, morale, steadied | The five classes of design section 8 (`steadied` by D-54 S2). Count is derived from the list. `steadied` runs no dry run. | reader pending | PROPOSED DEFAULT |
 
-Candidate cap = party size + 1 x 4. Party max is 5 (`sanctum.party_max_size`, read by `ConfigService.get_party_max_size`, `ConfigService.gd:146`), so at most 9 dry runs.
+Candidate cap = party size + 1 x 5. Party max is 5 (`sanctum.party_max_size`, read by `ConfigService.get_party_max_size`, `ConfigService.gd:146`), so the cap is at most 10. `steadied` runs no dry run, so at most 9 dry runs happen.
 
 ## 9. Contact bids (D-11, D-33)
 

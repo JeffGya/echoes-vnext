@@ -84,11 +84,13 @@ func plan_first_leg(explore_map: Dictionary, directive: Dictionary, stance: Dict
 
 
 ## How many of the three material groups differ (design 4 rule 8): path (with target), steps, stop.
+## A different depth counts only when it cuts the walk of either plan before the stop (D-54 S1).
 func plan_changes(a: Dictionary, b: Dictionary) -> int:
 	var n := 0
 	if a["path"] != b["path"] or a["target_id"] != b["target_id"]:
 		n += 1
-	if a["effective_steps"] != b["effective_steps"] or a["commitment_depth"] != b["commitment_depth"]:
+	if a["effective_steps"] != b["effective_steps"] \
+			or (a["commitment_depth"] != b["commitment_depth"] and (_depth_cuts(a) or _depth_cuts(b))):
 		n += 1
 	if a["stop_kind"] != b["stop_kind"]:
 		n += 1
@@ -97,6 +99,11 @@ func plan_changes(a: Dictionary, b: Dictionary) -> int:
 
 func plans_differ(a: Dictionary, b: Dictionary) -> bool:
 	return plan_changes(a, b) > 0
+
+
+# The walk ended on the depth, not on the stop it was walking to.
+static func _depth_cuts(plan: Dictionary) -> bool:
+	return plan["stop_kind"] == "commitment_spent" or plan["stop_kind"] == "capacity_spent"
 
 
 ## Names the deciders of the first plan of the current stage. Writes nothing.
@@ -184,7 +191,8 @@ func _pick_target(em: Dictionary, directive: Dictionary, stance: Dictionary, wal
 
 
 ## Neutralises one class on the named Echo and keeps the class whose removal changes the most;
-## ties keep config order. "" when no single class changes the plan.
+## ties keep config order. When no single class changes the plan, the Echo decided through the
+## party mean alone: "steadied" (D-54 S2), which needs no dry run.
 func _reason_class(id: String, echoes: Array, classes: Array, stance_cfg: Dictionary, real: Dictionary,
 		plan_for: Callable, cap: int) -> String:
 	var ramps_v: Variant = stance_cfg.get("state_ramps", {})
@@ -209,6 +217,8 @@ func _reason_class(id: String, echoes: Array, classes: Array, stance_cfg: Dictio
 		if n > best_n:
 			best = str(cls)
 			best_n = n
+	if best.is_empty() and classes.has("steadied"):
+		return "steadied"
 	return best
 
 

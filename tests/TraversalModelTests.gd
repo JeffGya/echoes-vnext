@@ -421,6 +421,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/counterfactual_cap_respected", Callable(TraversalModelTests, "_t_cf_cap_respected"))
 	runner.register_test("traversal/counterfactual_no_state_written", Callable(TraversalModelTests, "_t_cf_no_state_written"))
 	runner.register_test("traversal/counterfactual_name_matches_cause", Callable(TraversalModelTests, "_t_cf_name_matches_cause"))
+	runner.register_test("traversal/counterfactual_depth_without_cut_names_nobody", Callable(TraversalModelTests, "_t_cf_depth_without_cut_names_nobody"))
+	runner.register_test("traversal/counterfactual_depth_cut_names_echo", Callable(TraversalModelTests, "_t_cf_depth_cut_names_echo"))
+	runner.register_test("traversal/counterfactual_named_echo_has_class", Callable(TraversalModelTests, "_t_cf_named_echo_has_class"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -2637,8 +2640,8 @@ static func _t_cf_s3_fear_names_frightened() -> Dictionary:
 # P1 (on Seek, see the S2e report): Edge at high morale commits deeper than Anchor and Sight;
 # the Edge Echo is named, and removing it changes the plan.
 static func _t_cf_p1_named_echo_changes_plan() -> Dictionary:
-	var party_a := _cf_runtime(CF_SEEK, [["e_a", "okofor", 1, 0, 50, 0], ["e_s", "okomfo", 1, 0, 50, 1]], _full_rect_terrain(30, 11), [])
-	var party_b := _cf_runtime(CF_SEEK, [["e_e", "aduro", 1, 0, 100, 2]], _full_rect_terrain(30, 11), [])
+	var party_a := _cf_runtime(CF_SEEK, [["e_a", "okofor", 1, 0, 50, 0], ["e_s", "okomfo", 1, 0, 50, 1]], _full_rect_terrain(14, 11), _cf_goal_sits())
+	var party_b := _cf_runtime(CF_SEEK, [["e_e", "aduro", 1, 0, 100, 2]], _full_rect_terrain(14, 11), _cf_goal_sits())
 	var a := _cf_name(party_a)
 	var b := _cf_name(party_b)
 	if not _cf_svc(party_a).plans_differ(a["plan"], b["plan"]):
@@ -2657,7 +2660,7 @@ static func _t_cf_tie_pin_lowest_id() -> Dictionary:
 	return { "ok": err.is_empty(), "error": err }
 
 
-# Five candidates plus four reason classes: exactly the cap (party size + 1 x 4 classes).
+# Five candidates plus four reason classes with a dry run; "steadied" needs none.
 static func _t_cf_cap_respected() -> Dictionary:
 	var members := [["e_1", "okofor", 3, 70, 50, 0], ["e_2", "aduro", 3, 70, 50, 1], ["e_3", "okomfo", 3, 70, 50, 2],
 		["e_4", "okofor", 3, 70, 50, 3], ["e_5", "aduro", 3, 0, 50, 4]]
@@ -2706,4 +2709,83 @@ static func _t_cf_name_matches_cause() -> Dictionary:
 		return { "ok": false, "error": "the reason must be fear and neutralising fear must change the plan: %s" % [out] }
 	if svc.plans_differ(real, _cf_plan(runtime, _cf_neutral(runtime, named, "family", ""))):
 		return { "ok": false, "error": "calling alone must not change this plan" }
+	return { "ok": true }
+
+
+static func _cf_qa_members() -> Array:
+	return [["e_a", "okofor", 1, 0, 50, 0], ["e_f", "aduro", 6, 0, 95, 5]]
+
+
+# Path, stop cell and kind, and steps of one live Advance. The stop echo_id comes from the naming.
+static func _cf_live(directive: String, members: Array, terrain: Dictionary, sits: Array) -> String:
+	var runtime := _cf_runtime(directive, members, terrain, sits)
+	_adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	var stop: Dictionary = (_read_em(runtime, "last_stop") as Dictionary).duplicate()
+	stop.erase("echo_id")
+	return var_to_str([_read_em(runtime, "last_traveled_path"), stop, _read_em(runtime, "last_effective_steps")])
+
+
+# D-54 S1, QA case: depth 5 or 6, but the walk stops on the hostile in 5 steps either way.
+static func _t_cf_depth_without_cut_names_nobody() -> Dictionary:
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 5, 4, 902, false)
+	hostile["revealed"] = true
+	var sits: Array = [SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 12, 5, 901, true), hostile]
+	sits[0]["revealed"] = true
+	var m := _cf_qa_members()
+	var live := _cf_live(CF_SEEK, m, _full_rect_terrain(20, 11), sits)
+	for alone in [[m[0]], [m[1]]]:
+		if _cf_live(CF_SEEK, alone, _full_rect_terrain(20, 11), sits) != live:
+			return { "ok": false, "error": "fixture: the live walk must not change without %s" % [alone] }
+	var runtime := _cf_runtime(CF_SEEK, m, _full_rect_terrain(20, 11), sits)
+	var out := _cf_name(runtime)
+	var depths := {}
+	for id in ["", "e_a", "e_f"]:
+		depths[int(_cf_plan(runtime, _cf_party(runtime, id))["commitment_depth"])] = true
+	if depths.size() < 2:
+		return { "ok": false, "error": "fixture: removing an Echo must change the depth: %s" % [depths] }
+	if not str(out["decisive_contributor_id"]).is_empty() or str(out["cause"]) == "echo":
+		return { "ok": false, "error": "a depth that does not cut the walk must not name an Echo: %s" % [out] }
+	return { "ok": true }
+
+
+# D-54 S1: the objective lies past the depth, so the depth cuts the walk and a depth-only change still names an Echo.
+static func _t_cf_depth_cut_names_echo() -> Dictionary:
+	var runtime := _cf_runtime(CF_SEEK, _cf_qa_members(), _full_rect_terrain(14, 11), _cf_goal_sits())
+	var out := _cf_name(runtime)
+	var named := str(out["decisive_contributor_id"])
+	if str(out["cause"]) != "echo" or named.is_empty():
+		return { "ok": false, "error": "a depth that cuts the walk must name an Echo: %s" % [out] }
+	var real: Dictionary = out["plan"]
+	var without := _cf_plan(runtime, _cf_party(runtime, named))
+	if without["effective_steps"] != real["effective_steps"] or without["commitment_depth"] == real["commitment_depth"]:
+		return { "ok": false, "error": "fixture: only the depth may differ: %s / %s" % [real, without] }
+	return { "ok": true }
+
+
+# D-54 S2: every named Echo carries a reason class. Some Echoes decide only through the party mean.
+static func _t_cf_named_echo_has_class() -> Dictionary:
+	var pool := {
+		"e_a": ["e_a", "okofor", 1, 0, 50, 0], "e_b": ["e_b", "aduro", 1, 0, 50, 1], "e_c": ["e_c", "okomfo", 1, 0, 50, 2],
+		"e_d": ["e_d", "okomfo", 6, 50, 50, 3], "e_e": ["e_e", "okofor", 6, 80, 20, 4], "e_f": ["e_f", "aduro", 6, 0, 95, 5],
+		"e_g": ["e_g", "okomfo", 1, 45, 80, 6], "e_h": ["e_h", "aduro", 3, 30, 30, 7],
+	}
+	var parties := [["e_a", "e_h"], ["e_b", "e_h"], ["e_c", "e_h"], ["e_a", "e_e"], ["e_a", "e_f"], ["e_d", "e_g"]]
+	var named := 0
+	var steadied := 0
+	for d in [CF_SCOUT, CF_SEEK]:
+		for board in ["corridor", "goal"]:
+			for ids: Array in parties:
+				var members := [pool[ids[0]], pool[ids[1]]]
+				var runtime := _cf_runtime(d, members, _corridor_terrain(30, 11, 5), []) if board == "corridor" \
+					else _cf_runtime(d, members, _full_rect_terrain(14, 11), _cf_goal_sits())
+				var out := _cf_name(runtime)
+				if str(out["cause"]) != "echo":
+					continue
+				named += 1
+				if str(out["reason_class"]).is_empty():
+					return { "ok": false, "error": "%s %s %s: a named Echo has no reason class: %s" % [d, board, ids, out] }
+				if str(out["reason_class"]) == "steadied":
+					steadied += 1
+	if named == 0 or steadied == 0:
+		return { "ok": false, "error": "fixture: expected named Echoes and a steadied one, got named %d steadied %d" % [named, steadied] }
 	return { "ok": true }

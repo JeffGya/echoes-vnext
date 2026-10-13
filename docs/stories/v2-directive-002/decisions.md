@@ -255,3 +255,13 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-53. journey-entry-lifetime-approved
 **Q:** Lifetime and reset rules for the saved journey entry (`last_stop`, `travel_why`, `last_effective_steps`), proposed in the S5 report?
 **A:** Approved (Jeff, 2026-10-13). First entry of a stage: empty. Return from combat or a contact, or a reload: kept. After a successful return home (`party_state` escaped), then a later entry: cleared. Final objective won, then re-entry: kept. The next Advance, including a retarget: replaced. Return home failed: kept. Stage switch: each stage keeps its own entry. The plan rule 'carry only when `locked`' is replaced by the `party_state` rule (the lock always runs before the reset). Open follow-ups: an encounter retreat does not set `escaped`; a carried `last_effective_steps` can exceed a new `step_budget` after a Directive change; the stale comment at `FlowStageExploreState.gd:91-94`.
+
+### D-54. qa-backend-findings-answers
+**Q:** The opus QA pass over the combined backend (no blockers, 7 should-fix, 9 notes) left decisions. Jeff answered on 2026-10-13:
+**A:**
+- **S1 (false Echo name):** depth counts only when it cuts the path. A different commitment depth is material only when the depth is less than the steps to the stop. Design 4 rule 8 is amended accordingly.
+- **S2 (named Echo without a reason class):** add a fifth reason class for the 'steadied the party' case (the Echo is named only because they lift the party mean). Token: `steadied` (internal; the wording is Jeff's). The class list stays in config.
+- **N2 (readiness):** readiness applies to every Directive, also one with no `directive_profile` entry (D-13, D-27). A profile-less Directive stays neutral for the dials, not for readiness. A5 is amended.
+- **Fix list:** S3 (add the four missing guard tests), S6 (move the escape base threshold 40 to config, same value), S4 (drop the unused `replan_cap_per_effective_step` key and the design 4 rule 3 promise; the loop is already bounded), S7 and the stale comments and doc rows (commit `StageStopPolicy.gd.uid`; fix the READER PENDING markers, the DORMANT header, plan and numbers.md rows). Comments follow the AGENTS.md rule: fewer comments; delete noise comments while fixing stale ones.
+- **Not selected:** S5 (shard map entry for `contact_cfg` and the `AGENTS.md` suite count 129 to 130). It waits for the docs pass; `AGENTS.md` needs Jeff's yes. N1, N3 to N6 and N8 are noted and not fixed now.
+**Order:** package A (opus: S1, S2, N2), package B (S3 tests, S6, S4), package C (S7 and comments and docs). One commit each.

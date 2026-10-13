@@ -9,7 +9,7 @@ const KINDS: Array = ["arrived_at", "capacity_spent", "interrupted", "spotted_ah
 const CAUSES: Array = ["echo", "terrain", "objective", "situation", "party", "directive"]
 const PURPOSES: Array = ["advance", "reposition", "read", "hold"]
 const ROUTES: Array = ["direct", "skirted"]
-const REASON_CLASSES: Array = ["calling", "temperament", "fear", "morale"]
+const REASON_CLASSES: Array = ["calling", "temperament", "fear", "morale", "steadied"]
 const WHY_SLOTS: Array = ["cause", "purpose_family", "route_character", "stop_kind", "named_echo_name", "echo_reason_class"]
 
 

@@ -90,7 +90,7 @@ static func register(runner: CoreTestRunner) -> void:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 	# V2-DIRECTIVE-002 B+C slice S2b: the party stance.
-	for n in ["stance_ordering_per_dial", "stance_party_order_shuffle_identical", "stance_standing_floor_leans_at_standing_1", "stance_judgment_never_adds_steps", "stance_readiness_lower_only", "stance_all_shaken_party_keeps_one_step", "stance_bond_rule_changes_width", "stance_commitment_never_exceeds_effective_steps", "stance_directive_without_profile_is_neutral"]:
+	for n in ["stance_ordering_per_dial", "stance_party_order_shuffle_identical", "stance_standing_floor_leans_at_standing_1", "stance_judgment_never_adds_steps", "stance_readiness_lower_only", "stance_all_shaken_party_keeps_one_step", "stance_bond_rule_changes_width", "stance_commitment_never_exceeds_effective_steps", "stance_directive_without_profile_keeps_readiness"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 	# V2-DIRECTIVE-002 B+C slice S2c: category-weight bend.
@@ -1777,8 +1777,8 @@ static func _t_party_stance_reason_classes_count() -> Dictionary:
 	if cs == null:
 		return _fail("could not load production balance.json")
 	var classes: Variant = ConfigService.get_party_stance_cfg(cs).get("counterfactual", {}).get("reason_classes", [])
-	if not classes is Array or (classes as Array).size() != 4:
-		return _fail("reason_classes must list 4 classes, got %s" % str(classes))
+	if not classes is Array or (classes as Array).size() != 5:
+		return _fail("reason_classes must list 5 classes, got %s" % str(classes))
 	return _pass()
 
 
@@ -2160,15 +2160,23 @@ static func _t_stance_commitment_never_exceeds_effective_steps() -> Dictionary:
 	return _pass()
 
 
-static func _t_stance_directive_without_profile_is_neutral() -> Dictionary:
+# D-54 N2: readiness applies to a Directive with no profile; its dials stay at the baselines.
+static func _t_stance_directive_without_profile_keeps_readiness() -> Dictionary:
 	var env := _stance_env()
 	var third: Dictionary = (env["seek"] as Dictionary).duplicate(true)
 	third["id"] = "directive.synthetic_third"
-	var st := _stance_of(_stance_parties()[-1], third, env)
-	if int(st["effective_steps"]) != int(third["step_budget"]) or int(st["commitment_depth"]) != int(third["step_budget"]):
-		return _fail("a Directive with no profile must keep its budget: %s" % st)
-	if float(st["dials"]["exposure_tolerance"]) != float(third["exposure_tolerance"]):
-		return _fail("a Directive with no profile must keep its tolerance")
+	var budget := int(third["step_budget"])
+	var base := {"exposure_tolerance": float(third["exposure_tolerance"]), "stop_willingness": 0.0,
+		"commitment_fraction": 1.0, "escape_bonus": float(third.get("escape_bonus", 0.0))}
+	var calm := _stance_of([_stance_actor("e_a", "okofor", 3, 0, 50)], third, env)
+	var shaken := _stance_of([_stance_actor("e_a", "okofor", 3, 90, 10)], third, env)
+	if int(calm["effective_steps"]) != budget or int(calm["commitment_depth"]) != budget:
+		return _fail("a calm party must keep the budget: %s" % calm)
+	if int(shaken["effective_steps"]) >= budget or int(shaken["commitment_depth"]) != int(shaken["effective_steps"]):
+		return _fail("a shaken party must lose steps under a Directive with no profile: %s" % shaken)
+	for st: Dictionary in [calm, shaken]:
+		if st["dials"] != base or not (st["candidates"] as Array).is_empty():
+			return _fail("the dials must equal the Directive baselines %s: %s" % [base, st])
 	return _pass()
 
 
