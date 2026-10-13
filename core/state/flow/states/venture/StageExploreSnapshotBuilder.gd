@@ -125,6 +125,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			var _bd: Dictionary = _bd_v if _bd_v is Dictionary else {}
 			contact_cfg_v = _bd.get("contact", {})
 		var contact_cfg: Dictionary = contact_cfg_v if contact_cfg_v is Dictionary else {}
+		var reactive_fear_min := int(ConfigService.get_contact_bid_cfg(flow_ctx.config_service).get("reactive_fear_min", 60))
 		var roles_cfg_v: Variant = contact_cfg.get("roles", {})
 		var roles_cfg: Dictionary = roles_cfg_v if roles_cfg_v is Dictionary else {}
 		var contact_role := str(pending_contact.get("role", ""))
@@ -189,7 +190,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			var emotional_status2 := EmotionServiceScript.get_emotional_status(morale2, fear2)
 			# Determine bid type: alignment or reactive
 			var bid_type := ""
-			if fear2 >= 60:
+			if fear2 >= reactive_fear_min:
 				bid_type = "reactive"
 			else:
 				match contact_role:
@@ -255,8 +256,9 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var roster_v: Variant = sanctum.get("roster", [])
 	var roster: Array = roster_v if roster_v is Array else []
 	var party_preview: Array = []
+	var party_max := ConfigService.get_party_max_size(flow_ctx.config_service)
 	for echo_id_v in active_ids:
-		if party_preview.size() >= 5:
+		if party_preview.size() >= party_max:
 			break
 		var echo_id := str(echo_id_v)
 		for echo_v in roster:

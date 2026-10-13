@@ -166,9 +166,10 @@ func handle_consult_echoes(action: Dictionary, t: int) -> FlowActionOutcome:
 	if echo_ids.is_empty():
 		logger.debug(t, "stage.consult.invalid", "consult_echoes: no echo_ids provided", {})
 		return FlowActionOutcome.handled_outcome()
-	# Trim to max 3 — button auto-passes all party IDs; handler caps the consultation.
-	if echo_ids.size() > 3:
-		echo_ids = echo_ids.slice(0, 3)
+	# Trim to the voices cap — button auto-passes all party IDs; handler caps the consultation.
+	var max_voices := ConfigService.get_contact_max_voices_per_turn(config_service)
+	if echo_ids.size() > max_voices:
+		echo_ids = echo_ids.slice(0, max_voices)
 
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
 	if stage.is_empty():
@@ -198,7 +199,7 @@ func handle_consult_echoes(action: Dictionary, t: int) -> FlowActionOutcome:
 			selected_echoes.append(echo)
 
 	# Track ignored bids
-	var bid_state := ConversationService.compute_bids(all_party, contact, dir_fx)
+	var bid_state := ConversationService.compute_bids(all_party, contact, dir_fx, ConfigService.get_contact_bid_cfg(config_service))
 	var ignored_counts_v: Variant = contact.get("ignored_bid_counts", {})
 	var ignored_counts: Dictionary = ignored_counts_v if ignored_counts_v is Dictionary else {}
 	for eid in bid_state:
@@ -417,11 +418,11 @@ func handle_speak_response(action: Dictionary, t: int) -> FlowActionOutcome:
 
 	explore_map["pending_contact"] = contact
 
-	# Auto-regenerate responses for the next turn when party ≤ 3 (mirrors the initial engagement path).
-	# For party > 3, responses stay empty so the picker fires via cta.consult_echoes.
-	if _next_party.size() <= 3:
+	# Auto-regenerate responses for the next turn when party fits the voices cap (mirrors the initial engagement path).
+	# Above the cap, responses stay empty so the picker fires via cta.consult_echoes.
+	if _next_party.size() <= ConfigService.get_contact_max_voices_per_turn(config_service):
 		var _next_dir_fx: Dictionary = DirectiveService.resolve(flow_ctx.save_data, ConfigService.get_directives_cfg(config_service)).get("contact_effects", {})
-		var _next_bids := ConversationService.compute_bids(_next_party, contact, _next_dir_fx)
+		var _next_bids := ConversationService.compute_bids(_next_party, contact, _next_dir_fx, ConfigService.get_contact_bid_cfg(config_service))
 		_next_responses = ConversationService.generate_responses(
 			_next_party, contact, contact_cfg, _next_resp_data, t, _next_bids
 		)

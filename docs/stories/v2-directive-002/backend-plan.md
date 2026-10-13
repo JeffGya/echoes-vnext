@@ -288,6 +288,8 @@ Status: BUILT 2026-10-13, not committed, not verified by qa-verifier. Not wired 
 
 ### S4a. Contact literals to config (same values, no behaviour change)
 
+**Status:** BUILT 2026-10-13, not committed, not verified by qa-verifier. No recorded value moved. Tests: suite `contact_cfg` (6 tests, `tests/ContactConfigLiteralTests.gd`).
+
 | Item | Plan |
 |---|---|
 | Files | `core/realms/ConversationService.gd` (`:287` reads `contact.emotional_fit_modifiers.high_fear_npc_min`; the reactive `:483` reads `contact.bid.reactive_fear_min`); `core/realms/ContactConversationService.gd` (`:74,:76` read `contact.turn_count_modifiers`); `core/state/flow/states/venture/StageExploreSnapshotBuilder.gd` (`:187-201`: replace the second bid rule with the output of the one shared bid function from S4b, or in S4a read the same key) |

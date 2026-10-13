@@ -284,19 +284,19 @@ static func _compute_emotional_fit(
 				base += float(mods.get("proud", {}).get("condescension", -0.3) if mods.get("proud", null) is Dictionary else -0.3)
 
 	# High-fear NPC bonus/penalty
-	if contact_fear >= 60:
+	if contact_fear >= int(mods.get("high_fear_npc_min", 60)):
 		if band in ["grounded", "strained"]:
 			base += float(mods.get("high_fear_grounding_bonus", 0.1))
 		elif band == "broken" and contact_role == "charge":
 			# Near-collapse echo resonates with frightened NPC — like recognises like
-			base += 0.2
+			base += float(mods.get("high_fear_broken_charge_bonus", 0.2))
 		elif band == "grounded" and disposition == "bold":
 			base += float(mods.get("high_fear_aggressive_penalty", -0.15))
 
 	# Morale bonus for near-collapse speaker with broken NPC morale
-	if contact_morale <= 20:
+	if contact_morale <= int(mods.get("low_morale_npc_max", 20)):
 		if band == "broken":
-			base += 0.1  # resonance of shared vulnerability
+			base += float(mods.get("low_morale_broken_bonus", 0.1))  # resonance of shared vulnerability
 
 	return base
 
@@ -455,7 +455,8 @@ static func get_social_effects(
 # Returns Dict keyed by echo_id -> bid_type ("alignment" / "reactive" / "")
 # "alignment" = calling/vector naturally fits this NPC role
 # "reactive"  = high-fear echo reacting emotionally
-static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dictionary) -> Dictionary:
+static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dictionary, bid_cfg: Dictionary = {}) -> Dictionary:
+	var reactive_fear_min := int(bid_cfg.get("reactive_fear_min", 60))
 	var bids: Dictionary = {}
 	var contact_role := str(contact.get("role", ""))
 	var suppressed_callings_v: Variant = dir_fx.get("bid_suppression", [])
@@ -480,7 +481,7 @@ static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dicti
 		var fear_current := int(emo.get("fear_current", 0))
 
 		# Reactive bid: high-fear echo
-		if fear_current >= 60:
+		if fear_current >= reactive_fear_min:
 			bids[echo_id] = "reactive"
 			continue
 

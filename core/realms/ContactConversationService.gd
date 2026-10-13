@@ -71,9 +71,10 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 	var npc_fear  := int(contact_work.get("fear",   50))
 	var npc_morale := int(contact_work.get("morale", 50))
 	var tc := int(contact_work.get("turn_count", 2))
-	if npc_fear > 60:
+	var tc_cfg := ConfigService.get_contact_turn_count_cfg(config_service)
+	if npc_fear > int(tc_cfg.get("npc_fear_above", 60)):
 		tc = max(1, tc - 1)
-	elif npc_morale < 30:
+	elif npc_morale < int(tc_cfg.get("npc_morale_below", 30)):
 		tc += 1
 	contact_work["turn_count"] = tc
 
@@ -91,7 +92,7 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 
 	# Compute initial bids
 	var bid_state := ConversationService.compute_bids(
-		_party_echoes, contact_work, _dir_fx
+		_party_echoes, contact_work, _dir_fx, ConfigService.get_contact_bid_cfg(config_service)
 	)
 
 	# Set NPC opening line from burden_variant (authored in contact_responses.json), when available.
@@ -113,7 +114,7 @@ func start_conversation(sit: Dictionary, sit_id: String, explore_map: Dictionary
 
 	# Auto-generate responses if party ≤ 3
 	var contact_responses: Array = []
-	if _party_echoes.size() <= 3:
+	if _party_echoes.size() <= ConfigService.get_contact_max_voices_per_turn(config_service):
 		contact_responses = ConversationService.generate_responses(
 			_party_echoes, contact_work, contact_cfg_bal, response_data, t, bid_state
 		)
