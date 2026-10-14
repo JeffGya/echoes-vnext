@@ -289,3 +289,12 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 **Q:** The Directive badge has no colour data (the per-Directive colour code was removed from the UI). One neutral colour, or a colour per Directive in config?
 **A:** One neutral colour (Jeff, 2026-10-14, the recommended option). The badge keeps its dark pill and the label from the snapshot. The optional `directive.tint` read stays in the UI and stays unused. A new Directive needs no colour work.
 **Open backend items from the UI build (F1):** add an Echo `id` to each `party_preview` row of the stage snapshot (the UI matches the named Echo by display name today); add the `presentation` key to the preview snapshot (`flow.stage`, built in FlowStageState). Both are small core changes; they may move snapshot fingerprints.
+
+### D-59. frontend-qa-answers
+**Q:** The frontend QA pass (no blockers; 5 should-fix, 13 notes) left decisions. Jeff answered on 2026-10-14:
+**A:**
+- **Chip place (S1, S2):** no new decision. D-42 and design 8.1 item 3 already settle it: the chip sits beside the Echo cards, inside the safe area, never covers a card, never shrinks a card below its minimum width. The build broke this with 4 or 5 Echoes (the chip was off screen) and shifted the cards by 36 px. The fix follows D-42: reserve a fixed slot beside the cards, always inside the safe area, so the cards never shift. The cards scroll in the remaining width. `ui-ux-designer` places it.
+- **Overlay hold (S3):** wait for the mark. The contact, situation and choice overlays open after the stop beat ends (the beat plan `ready_at`), so the mark always lands first. This replaces the fixed 0.35 s hold of D-57 O1.
+- **Token tap (N3):** a second tap on the party token closes the why card; a tap outside the card closes it too (design 8.1).
+- **Small fixes:** fix the single-quote gap of the Directive-literal test (also scan `.tscn`), the two stale comments, the doubled focus colour (one shared source) and the same-holder fade.
+- **Not now:** S4 (walk reduced-motion form; D-57 O2 stands: no switch in this story), N2 (the double-press guard has no headless test; the windowed probe shows it works), S5 (docs: part of the docs pass), the close button (kept: the design 'no button' means no opener button).
