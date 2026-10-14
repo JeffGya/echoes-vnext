@@ -537,7 +537,7 @@ static func _t_echo_card_tap_locks_the_party() -> Dictionary:
 	var realm := fx["realm"] as RealmShell
 	var cards: Array = []
 	for child in (realm.get_node("%EchoBar") as HBoxContainer).get_children():
-		if not child.is_queued_for_deletion():
+		if child is EchoCardItem and not child.is_queued_for_deletion():
 			cards.append(child)
 	if cards.is_empty():
 		return _fail(fx, "Echo bar has no cards; premise failed")
@@ -586,7 +586,7 @@ static func _t_echo_card_drag_does_not_lock_the_party() -> Dictionary:
 	var cam := fx["camera"] as BoardCameraController
 	var cards: Array = []
 	for child in ((fx["realm"] as RealmShell).get_node("%EchoBar") as HBoxContainer).get_children():
-		if not child.is_queued_for_deletion():
+		if child is EchoCardItem and not child.is_queued_for_deletion():
 			cards.append(child)
 	if cards.is_empty():
 		return _fail(fx, "Echo bar has no cards; premise failed")
@@ -1275,6 +1275,11 @@ static func _t_parked_refresh_during_walk_keeps_token_and_target() -> Dictionary
 		return _no_fixture()
 	var cam := fx["camera"] as BoardCameraController
 	var stage := fx["stage"] as StageExploreScreen
+	# V2-DIRECTIVE-002 S3: a reveal stop ends the Advance (D-46); this fixture needs a 2-cell walk
+	var profiles: Dictionary = _runtime(fx["env"]).config_service._balance["data"]["stages"]["party_stance"]["directive_profile"]
+	for profile: Variant in profiles.values():
+		if profile is Dictionary:
+			profile["reveal_stop_kinds"] = []
 	_advance(fx)
 	var path: Array = _data(fx).get("traveled_path", [])
 	var tween := stage.get("_travel_tween") as Tween
