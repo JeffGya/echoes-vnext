@@ -268,6 +268,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 				var pp_morale := int(pp_emo.get("morale_current", 50))
 				var pp_emotional_status := EmotionServiceScript.get_emotional_status(pp_morale, pp_fear)
 				party_preview.append({
+					"id":               echo_id,
 					"name":             str(echo.get("name", "")),
 					"rank":             int(echo.get("rank", 1)),
 					"calling_origin":   str(echo.get("calling_origin", "")),

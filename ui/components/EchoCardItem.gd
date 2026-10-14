@@ -78,6 +78,10 @@ func has_stop_glyph() -> bool:
 	return _stop_glyph.visible
 
 
+func actor_id() -> String:
+	return _actor_id
+
+
 func display_name() -> String:
 	return name_label.text
 

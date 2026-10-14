@@ -5,6 +5,7 @@ signal action_requested(action: Dictionary)
 signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 var _active_overlay: Control = null
+var _bar_is_stage := false
 var _resolve_overlay: Control = null
 var _layout: Dictionary = {}
 var _active_modal_id: StringName = &""
@@ -112,6 +113,7 @@ func _can_refresh_active_modal_on_layout() -> bool:
 ## Called on every set_snapshot() — always reflects the latest HP + emotional state.
 func _update_echo_bar(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
+	_bar_is_stage = snap_type.begins_with("flow.stage")
 	var data: Dictionary = snap.get("data", {})
 
 	var party: Array = []
@@ -136,14 +138,13 @@ func _update_echo_bar(snap: Dictionary) -> void:
 				elif str(a.get("faction", "")) == "echo":
 					party.append(a)
 		"flow.stage", "flow.stage_map", "flow.stage_explore":
-			# Stage snapshots include party_preview: { name, rank, calling_origin }
 			var preview: Variant = data.get("party_preview", [])
 			if preview is Array:
 				party = preview
 
 	# Cards live across snapshots and are updated in place. A card that took a press must still be
 	# there for its release, and the bar must not jump. Cards are matched by kind and actor id (by
-	# kind and position when the id is empty, as on Stage); new ones are added, gone ones removed.
+	# kind and position when the id is empty); new ones are added, gone ones removed.
 	var wanted: Array[Dictionary] = []
 	var empty_ids: Dictionary = {}
 	for actor in party:
@@ -197,8 +198,8 @@ static func _card_key(kind: String, actor_id: String, empty_ids: Dictionary) -> 
 # ─────────────────────────────────────────────────────────────
 
 ## The mark is drawn from snapshot.stop, so it survives a reload. It sits on the named Echo's card,
-## or on the party chip when no Echo is named. The party_preview rows carry no Echo id, so the
-## card is found by the display name in travel_why; the id itself is never shown.
+## or on the party chip when no Echo is named. The card is found by stop.echo_id; the display name
+## in travel_why is the fallback for a row without an id. The id is never shown.
 func _update_stop_mark(snap: Dictionary) -> void:
 	var data: Dictionary = snap.get("data", {})
 	var stop_v: Variant = data.get("stop", {})
@@ -209,11 +210,15 @@ func _update_stop_mark(snap: Dictionary) -> void:
 	if StopGlyphs.texture(kind) == null:
 		kind = ""
 	var named := str(_stop_why.get("named_echo_name", ""))
+	var echo_id := str(stop.get("echo_id", ""))
 	var holder: EchoCardItem = null
 	for child in _echo_bar.get_children():
-		if child is EchoCardItem and kind != "" and holder == null and not named.is_empty() \
-				and str(stop.get("echo_id", "")) != "" and (child as EchoCardItem).display_name() == named:
-			holder = child as EchoCardItem
+		if not (child is EchoCardItem) or kind == "" or holder != null or echo_id.is_empty():
+			continue
+		var card := child as EchoCardItem
+		var by_id := not card.actor_id().is_empty()
+		if (by_id and card.actor_id() == echo_id) or (not by_id and not named.is_empty() and card.display_name() == named):
+			holder = card
 	var open_name := StageWhyText.text("ui", "open_why")
 	for child in _echo_bar.get_children():
 		if child is EchoCardItem:
@@ -267,13 +272,13 @@ func _input(event: InputEvent) -> void:
 			_why_card.close()
 
 
-## ANSWERS.md #77: a card tap locks the active screen's camera onto that actor. Any screen that
-## implements select_board_target() takes it, so the shell names no screen type.
+## ANSWERS.md #77: a card tap locks the active screen's camera onto that actor. On a Stage
+## snapshot the id only matches the stop glyph, so the tap means the party ("").
 func _on_echo_card_pressed(actor_id: String, card: EchoCardItem) -> void:
 	if card.has_stop_glyph():
 		_toggle_why(card)
 	if _active_overlay != null and _active_overlay.has_method("select_board_target"):
-		_active_overlay.call("select_board_target", actor_id)
+		_active_overlay.call("select_board_target", "" if _bar_is_stage else actor_id)
 
 
 ## Composes the spirit ally's one-line objective status from objective_state.

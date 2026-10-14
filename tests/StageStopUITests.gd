@@ -15,6 +15,7 @@ const PARTY: Array[String] = ["Ama", "Kofi", "Yaa"]
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("stage_stop_ui/scenes_load", Callable(StageStopUITests, "_t_scenes_load"))
 	runner.register_test("stage_stop_ui/glyph_on_named_card_for_all_six_kinds", Callable(StageStopUITests, "_t_glyph_per_kind"))
+	runner.register_test("stage_stop_ui/glyph_matches_by_id_when_names_repeat", Callable(StageStopUITests, "_t_glyph_by_id"))
 	runner.register_test("stage_stop_ui/chip_only_when_no_echo_named", Callable(StageStopUITests, "_t_chip_only_without_name"))
 	runner.register_test("stage_stop_ui/no_mark_without_a_stop_kind", Callable(StageStopUITests, "_t_no_mark_without_kind"))
 	runner.register_test("stage_stop_ui/why_card_has_no_digit_and_no_id", Callable(StageStopUITests, "_t_why_card_clean"))
@@ -91,6 +92,24 @@ static func _t_glyph_per_kind() -> Dictionary:
 			return _fail(m, "%s: %d cards hold a glyph" % [kind, holders])
 		if (m[1].get_node("%PartyStopChip") as Control).visible:
 			return _fail(m, "%s: chip shows next to a card glyph" % kind)
+	m[0].free()
+	return { "ok": true }
+
+
+static func _t_glyph_by_id() -> Dictionary:
+	var m := _mount(RealmShellScene)
+	var snap := _snap("capacity_spent", "Kofi", "echo_b")
+	var rows: Array = []
+	for id in ["echo_a", "echo_b"]:
+		rows.append({ "id": id, "name": "Kofi", "rank": 1, "calling_origin": "x", "emotional_status": "grounded" })
+	snap["data"]["party_preview"] = rows
+	_feed(m[1], snap)
+	var holders: Array[String] = []
+	for card in _cards(m[1]):
+		if (card as EchoCardItem).has_stop_glyph():
+			holders.append((card as EchoCardItem).actor_id())
+	if holders != ["echo_b"]:
+		return _fail(m, "glyph must sit on echo_b only, got %s" % str(holders))
 	m[0].free()
 	return { "ok": true }
 

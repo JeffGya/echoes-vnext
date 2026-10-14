@@ -46,6 +46,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore_p5/directive_composite_matches_active",         Callable(StageExploreP5Tests, "_t_directive_composite_matches_active"))
 	runner.register_test("explore_p5/party_preview_emotional_status_valid_tier",  Callable(StageExploreP5Tests, "_t_party_preview_emotional_status_valid_tier"))
 	runner.register_test("explore_p5/party_preview_emotional_status_matches_service", Callable(StageExploreP5Tests, "_t_party_preview_emotional_status_matches_service"))
+	runner.register_test("explore_p5/party_preview_carries_roster_id_for_same_name", Callable(StageExploreP5Tests, "_t_party_preview_carries_roster_id_for_same_name"))
+	runner.register_test("explore_p5/stage_preview_presentation_matches_config", Callable(StageExploreP5Tests, "_t_stage_preview_presentation_matches_config"))
 	runner.register_test("explore_p5/situation_pending_choices_obstacle_nonempty", Callable(StageExploreP5Tests, "_t_situation_pending_choices_obstacle_nonempty"))
 	runner.register_test("explore_p5/situation_pending_choices_structure_nonempty", Callable(StageExploreP5Tests, "_t_situation_pending_choices_structure_nonempty"))
 	runner.register_test("explore_p5/situation_pending_choices_combat_empty",     Callable(StageExploreP5Tests, "_t_situation_pending_choices_combat_empty"))
@@ -441,6 +443,47 @@ static func _t_party_preview_emotional_status_matches_service() -> Dictionary:
 		if actual != expected:
 			return { "ok": false, "error": "party_preview[%d] emotional_status expected '%s', got '%s'" % [i, expected, actual] }
 
+	return { "ok": true }
+
+
+static func _t_party_preview_carries_roster_id_for_same_name() -> Dictionary:
+	var ctx := _make_ctx_with_real_config()
+	_inject_pending_situation(ctx, SituationModelScript.TYPE_LOOT)
+	var bal: Dictionary = ctx.config_service.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var roster: Array = []
+	var ids: Array = []
+	for i in range(2):
+		var echo: Dictionary = EchoFactory.generate("p5_id", "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+		echo["id"] = "echo_%04d" % (i + 1)
+		echo["name"] = "Same Name"
+		roster.append(echo)
+		ids.append(str(echo["id"]))
+	ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids }
+
+	var preview: Array = StageExploreSnapshotBuilder.build(ctx, 1).get("data", {}).get("party_preview", [])
+	if preview.size() != 2:
+		return { "ok": false, "error": "Expected 2 party_preview rows, got %d" % preview.size() }
+	var got: Array = [str(preview[0].get("id", "")), str(preview[1].get("id", ""))]
+	if got != ids or got[0] == got[1]:
+		return { "ok": false, "error": "party_preview ids expected %s, got %s" % [str(ids), str(got)] }
+	return { "ok": true }
+
+
+static func _t_stage_preview_presentation_matches_config() -> Dictionary:
+	var ctx := _make_ctx_with_real_config()
+	var expected: Dictionary = {}
+	var raw: Dictionary = ctx.config_service.get_balance().get("data", {}).get("stages", {}).get("presentation", {})
+	for key in raw:
+		if not str(key).begins_with("_comment"):
+			expected[key] = raw[key]
+	if expected.is_empty():
+		return { "ok": false, "error": "stages.presentation is empty in balance.json" }
+	var data: Dictionary = FlowStageState.build_snapshot(ctx, 0).get("data", {})
+	var actual: Variant = data.get("presentation", null)
+	if not (actual is Dictionary) or actual != expected:
+		return { "ok": false, "error": "preview presentation differs from config copy" }
 	return { "ok": true }
 
 
