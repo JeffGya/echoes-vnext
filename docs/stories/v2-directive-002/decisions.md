@@ -284,3 +284,8 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **O2:** a reduced-motion setting is NOT in this story. The code reads one flag that defaults to off, and each effect has its reduced form ready. A later settings story adds the switch.
 - **O3 (open):** is a still pressed button enough when the Advance tail is about 1 s or more on a phone? Decide after a phone measurement.
 - Reserved keys `shaken_shake_delay_seconds` and `shaken_shake_oscillations` are replaced by `stop_rest_seconds` and `shaken_shake_offsets_px` (nothing read the old names).
+
+### D-58. directive-badge-one-neutral-colour
+**Q:** The Directive badge has no colour data (the per-Directive colour code was removed from the UI). One neutral colour, or a colour per Directive in config?
+**A:** One neutral colour (Jeff, 2026-10-14, the recommended option). The badge keeps its dark pill and the label from the snapshot. The optional `directive.tint` read stays in the UI and stays unused. A new Directive needs no colour work.
+**Open backend items from the UI build (F1):** add an Echo `id` to each `party_preview` row of the stage snapshot (the UI matches the named Echo by display name today); add the `presentation` key to the preview snapshot (`flow.stage`, built in FlowStageState). Both are small core changes; they may move snapshot fingerprints.
