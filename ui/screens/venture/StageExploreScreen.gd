@@ -563,9 +563,9 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		_play_travel_bark(data)
 		_travel_tween.tween_callback(_begin_stop_beats)
 
-		# The mark lands first: an overlay waits before it opens.
+		# The mark lands first: an overlay opens when the stop beats end, and never before the hold.
 		if _explore_requests_modal(data, actions):
-			_travel_tween.tween_interval(_pres("overlay_hold_seconds", 0.0))
+			_travel_tween.tween_interval(maxf(_pres("overlay_hold_seconds", 0.0), float(_stop_plan["ready_at"])))
 		_pending_overlay_data    = data
 		_pending_overlay_actions = actions
 		_travel_tween.finished.connect(_apply_pending_overlay, CONNECT_ONE_SHOT)
@@ -1189,7 +1189,7 @@ func _on_overlay_action(action: Dictionary) -> void:
 
 # ── V2-STAGE-004 Phase 5 travel-beat helpers ─────────────────────────────────
 
-## Called after each travel tween segment: dims one more step diamond + updates fraction.
+## Called after each travel tween segment: dims one more step diamond.
 func _on_step_consumed(spent: int) -> void:
 	if _step_budget > 0:
 		_step_progress_bar.call("set_spent", spent)

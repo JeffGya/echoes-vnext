@@ -8,6 +8,7 @@ signal pressed
 
 var _pointer := BoardPointerTracker.new()
 var _motion: StopMarkMotion
+var _pending_tex: Texture2D
 var _glyph_pressed := false
 ## The snapshot's presentation timings, set by RealmShell. Read for the press feedback.
 var presentation: Dictionary = {}
@@ -28,12 +29,27 @@ func _ready() -> void:
 ## Shows the glyph for `kind`; "" or an unknown kind hides the chip.
 func set_stop_glyph(kind: String, accessible_name: String = "") -> void:
 	_motion.stop()
+	_pending_tex = null
 	_glyph_pressed = false
 	var tex := StopGlyphs.texture(kind)
 	_glyph.texture = tex
 	visible = tex != null
 	modulate = Color.WHITE
 	accessibility_name = accessible_name
+
+
+## Same holder, new mark: the old shape fades out, the new one is swapped in unseen and settles at its beat.
+func swap_stop_glyph_after_fade(kind: String, accessible_name: String, seconds: float) -> void:
+	_pending_tex = StopGlyphs.texture(kind)
+	accessibility_name = accessible_name
+	_motion.fade_out(seconds, _apply_pending_glyph)
+
+
+func _apply_pending_glyph() -> void:
+	if _pending_tex != null:
+		_glyph.texture = _pending_tex
+		_pending_tex = null
+	modulate.a = 0.0
 
 
 ## The old mark while the next Advance computes.
@@ -43,10 +59,12 @@ func dim_stop_glyph() -> void:
 
 
 func hide_stop_glyph_for_beat() -> void:
-	_motion.hide_for_beat()
+	if _pending_tex == null:
+		_motion.hide_for_beat()
 
 
 func settle_stop_glyph(p: Dictionary) -> void:
+	_apply_pending_glyph()
 	_motion.settle(p, false)
 
 
@@ -81,4 +99,4 @@ func _on_gui_input(event: InputEvent) -> void:
 
 func _draw() -> void:
 	if has_focus():
-		draw_rect(Rect2(Vector2.ZERO, size), Color("#F5F1E7"), false, 3.0)
+		draw_rect(Rect2(Vector2.ZERO, size), StopGlyphs.FOCUS_RING, false, 3.0)

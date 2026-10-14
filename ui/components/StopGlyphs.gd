@@ -2,6 +2,8 @@ class_name StopGlyphs
 extends RefCounted
 ## The six stop kinds and their glyph textures. A kind outside the set gives null (no glyph).
 
+## Focus ring of the two controls that can hold a stop mark. The theme has no colour for it.
+const FOCUS_RING := Color("#F5F1E7")
 const KINDS: Array[String] = ["arrived_at", "capacity_spent", "interrupted", "spotted_ahead", "paused_to_read", "no_route"]
 
 

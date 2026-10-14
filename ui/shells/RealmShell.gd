@@ -32,7 +32,8 @@ var _scene_by_flow_type: Dictionary = {}
 
 @onready var _overlay_root: Control      = $OverlayRoot
 @onready var _chrome_layer: CanvasLayer = $ChromeLayer
-@onready var _echo_bar_frame: MarginContainer = %EchoBarFrame
+@onready var _echo_bar_frame: HBoxContainer = %EchoBarFrame
+@onready var _chip_slot: Control = %ChipSlot
 @onready var _echo_bar_scroll: ScrollContainer = %EchoBarScroll
 @onready var _echo_bar:     HBoxContainer = %EchoBar
 @onready var _party_chip: PartyStopChip = %PartyStopChip
@@ -44,6 +45,8 @@ var _stop_holder: Control = null
 var _why_opener: Control = null
 # The mark is set but its beat has not come: it is invisible and a tap on it does nothing yet.
 var _mark_hidden := false
+# A press outside the card closed it; the tap that follows on release must not reopen it.
+var _press_closed_card := false
 var _pres: Dictionary = {}
 
 func _ready() -> void:
@@ -119,6 +122,8 @@ func _update_echo_bar(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
 	_bar_is_stage = snap_type.begins_with("flow.stage")
 	var data: Dictionary = snap.get("data", {})
+	# The slot keeps its width whether or not the chip shows, so the cards never shift.
+	_chip_slot.visible = _bar_is_stage
 
 	var party: Array = []
 	# GUIDE_SPIRIT: the escorted/protected ally is projected into data.actors with is_spirit=true.
@@ -235,13 +240,19 @@ func _update_stop_mark(snap: Dictionary) -> void:
 			var card := child as EchoCardItem
 			card.presentation = _pres
 			if child == holder:
-				card.set_stop_glyph(kind, open_name)
+				if _mark_hidden and card.has_stop_glyph():
+					card.swap_stop_glyph_after_fade(kind, open_name, fade)
+				else:
+					card.set_stop_glyph(kind, open_name)
 			elif _mark_hidden and card.has_stop_glyph():
 				card.fade_out_stop_glyph(fade)
 			else:
 				card.set_stop_glyph("", open_name)
 	if holder == null and kind != "":
-		_party_chip.set_stop_glyph(kind, StageWhyText.text("ui", "chip"))
+		if _mark_hidden and _party_chip.visible:
+			_party_chip.swap_stop_glyph_after_fade(kind, StageWhyText.text("ui", "chip"), fade)
+		else:
+			_party_chip.set_stop_glyph(kind, StageWhyText.text("ui", "chip"))
 	elif _mark_hidden and _party_chip.visible:
 		_party_chip.fade_out_stop_glyph(fade)
 	else:
@@ -266,8 +277,12 @@ func _toggle_why(opener: Control) -> void:
 		_why_card.open(_stop_why)
 
 
-## The party token is an alias for the mark: it opens the card, never closes it.
+## The party token is an alias for the mark. Its tap fires on release; a press that just closed the
+## card already made the net result "closed", so the release must not open it again.
 func _on_why_requested() -> void:
+	if _press_closed_card:
+		_press_closed_card = false
+		return
 	if _stop_holder != null and not _mark_hidden and not _why_card.is_open():
 		_why_card.open(_stop_why)
 
@@ -317,6 +332,8 @@ func _exit_tree() -> void:
 
 # A press outside the card closes it and is not consumed, so the Advance button still gets it.
 func _input(event: InputEvent) -> void:
+	if (event is InputEventMouseButton or event is InputEventScreenTouch) and not event.is_pressed():
+		set_deferred("_press_closed_card", false)  # after this release's tap has been handled
 	if not _why_card.is_open():
 		return
 	if event.is_action_pressed("ui_cancel"):
@@ -326,6 +343,7 @@ func _input(event: InputEvent) -> void:
 		var point: Vector2 = (event as InputEventMouse).position if event is InputEventMouse else (event as InputEventScreenTouch).position
 		if not _why_card.get_global_rect().has_point(point) \
 				and not (_stop_holder != null and _stop_holder.get_global_rect().has_point(point)):
+			_press_closed_card = true
 			_why_card.close()
 
 
@@ -365,7 +383,7 @@ func _apply_shell_layout() -> void:
 	var frame_width := minf(_ECHO_BAR_MAX_WIDTH, available_width)
 	var frame_left := safe_left + maxf(0.0, (available_width - frame_width) * 0.5)
 	if _echo_bar_frame == null:
-		_echo_bar_frame = get_node_or_null("%EchoBarFrame") as MarginContainer
+		_echo_bar_frame = get_node_or_null("%EchoBarFrame") as HBoxContainer
 	if _echo_bar_scroll == null:
 		_echo_bar_scroll = get_node_or_null("%EchoBarScroll") as ScrollContainer
 	if _echo_bar_frame != null:

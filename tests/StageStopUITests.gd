@@ -31,6 +31,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("stage_stop_ui/motion_mark_hidden_until_beat_then_tappable", Callable(StageStopUITests, "_t_motion_shell_mark"))
 	runner.register_test("stage_stop_ui/motion_press_and_pulse_values", Callable(StageStopUITests, "_t_motion_press_pulse"))
 	runner.register_test("stage_stop_ui/motion_leaves_snapshot_untouched_and_frees_tweens", Callable(StageStopUITests, "_t_motion_no_leak"))
+	runner.register_test("stage_stop_ui/chip_slot_fixed_inside_view_cards_never_shift", Callable(StageStopUITests, "_t_chip_slot"))
+	runner.register_test("stage_stop_ui/overlay_opens_after_the_mark_lands", Callable(StageStopUITests, "_t_overlay_after_mark"))
+	runner.register_test("stage_stop_ui/token_tap_closes_open_why_card", Callable(StageStopUITests, "_t_token_tap_closes"))
+	runner.register_test("stage_stop_ui/same_holder_old_glyph_fades_then_new_settles", Callable(StageStopUITests, "_t_same_holder_fade"))
 	runner.register_test("stage_stop_ui/no_directive_id_literal_in_ui", Callable(StageStopUITests, "_t_no_directive_literal"))
 
 
@@ -132,6 +136,111 @@ static func _t_chip_only_without_name() -> Dictionary:
 	return { "ok": ok, "error": "chip must show alone, at least 48 x 48" }
 
 
+static func _t_chip_slot() -> Dictionary:
+	var m := _mount(RealmShellScene)
+	var shell := m[1] as RealmShell
+	var frame := shell.get_node("%EchoBarFrame") as Control
+	var scroll := shell.get_node("%EchoBarScroll") as ScrollContainer
+	var chip := shell.get_node("%PartyStopChip") as Control
+	for count in [1, 3, 4, 5]:
+		for inset in [0.0, 48.0]:
+			shell.set_layout({ "profile": &"standard", "logical_size": Vector2(1280, 720), "safe_insets": Vector4(inset, inset, inset, inset) })
+			var xs: Array = []
+			for kind in ["capacity_spent", ""]:
+				var snap := _snap(kind, "")
+				var rows: Array = []
+				for i in range(count):
+					rows.append({ "id": "e%d" % i, "name": "Echo %d" % i, "rank": 1, "calling_origin": "x", "emotional_status": "grounded" })
+				snap["data"]["party_preview"] = rows
+				_feed(shell, snap)
+				for pass_index in range(4):
+					shell.propagate_notification(Control.NOTIFICATION_RESIZED)
+					shell.propagate_notification(Container.NOTIFICATION_SORT_CHILDREN)
+				var view := Rect2(Vector2(maxf(16.0, inset), maxf(16.0, inset)), Vector2(1280.0 - 2.0 * maxf(16.0, inset), 720.0 - 2.0 * maxf(16.0, inset)))
+				var where := "party %d inset %d kind '%s'" % [count, int(inset), kind]
+				if kind != "":
+					var rect := chip.get_global_rect()
+					if not chip.visible or not view.encloses(rect):
+						return _fail(m, "%s: chip %s outside view %s" % [where, str(rect), str(view)])
+					if rect.size.x < 48.0 or rect.size.y < 48.0:
+						return _fail(m, "%s: chip under 48 px" % where)
+					if rect.intersects(scroll.get_global_rect()):
+						return _fail(m, "%s: chip overlaps the card scroll area" % where)
+					for card in _cards(shell):
+						if rect.intersects((card as Control).get_global_rect().intersection(scroll.get_global_rect())):
+							return _fail(m, "%s: chip covers a card" % where)
+				elif chip.visible:
+					return _fail(m, "%s: chip shows without a stop" % where)
+				for card in _cards(shell):
+					if (card as Control).size.x < 280.0 - 0.1:
+						return _fail(m, "%s: card under 280 wide" % where)
+				xs.append((_cards(shell)[0] as Control).get_global_rect().position.x)
+				if frame.get_global_rect().size.x <= 0.0:
+					return _fail(m, "frame has no size")
+			if not is_equal_approx(xs[0], xs[1]):
+				return _fail(m, "party %d inset %d: cards moved %s -> %s" % [count, int(inset), str(xs[0]), str(xs[1])])
+	m[0].free()
+	return { "ok": true }
+
+
+static func _t_token_tap_closes() -> Dictionary:
+	var m := _mount(RealmShellScene)
+	var shell := m[1] as RealmShell
+	var card := shell.get_node("%StageWhyCard") as StageWhyCard
+	_feed(shell, _snap("capacity_spent", ""))
+	shell.call("_on_why_requested")
+	if not card.is_open():
+		return _fail(m, "first token tap must open the card")
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	press.position = Vector2(640, 300)
+	shell.call("_input", press)
+	shell.call("_on_why_requested")
+	if card.is_open():
+		return _fail(m, "second token tap (press closes, release taps) must leave the card closed")
+	m[0].free()
+	return { "ok": true }
+
+
+static func _t_same_holder_fade() -> Dictionary:
+	for early_beat in [false, true]:
+		var m := _mount(RealmShellScene)
+		var shell := m[1] as RealmShell
+		_feed(shell, _snap("capacity_spent", "Kofi"))
+		var card: EchoCardItem
+		for c in _cards(shell):
+			if (c as EchoCardItem).has_stop_glyph():
+				card = c
+		var glyph := card.get_node("%StopGlyph") as TextureRect
+		var old_tex := StopGlyphs.texture("capacity_spent")
+		var new_tex := StopGlyphs.texture("interrupted")
+		shell.call("_on_advance_started")
+		shell.call("_on_travel_started")
+		_feed(shell, _snap("interrupted", "Kofi"))
+		if glyph.texture != old_tex or not is_equal_approx(glyph.modulate.a, 0.5):
+			return _fail(m, "old glyph must stay at alpha 0.5 until the fade runs, got alpha %f" % glyph.modulate.a)
+		if early_beat:
+			shell.call("_on_stop_beat", &"mark")
+			if glyph.texture != new_tex:
+				return _fail(m, "a beat before the fade ends must show the new shape")
+		else:
+			var fade: Tween = (card.get("_motion") as StopMarkMotion).get("_fade")
+			fade.custom_step(0.1)
+			if glyph.texture != old_tex or not (glyph.modulate.a > 0.0 and glyph.modulate.a < 0.5):
+				return _fail(m, "old glyph must fade, not cut: alpha %f" % glyph.modulate.a)
+			fade.custom_step(0.15)
+			if glyph.texture != new_tex or glyph.modulate.a != 0.0:
+				return _fail(m, "after the fade the new shape waits unseen")
+			shell.call("_on_stop_beat", &"mark")
+		var settle: Tween = (card.get("_motion") as StopMarkMotion).get("_settle")
+		settle.custom_step(1.0)
+		if glyph.texture != new_tex or not is_equal_approx(glyph.modulate.a, 1.0):
+			return _fail(m, "new glyph must settle in")
+		m[0].free()
+	return { "ok": true }
+
+
 static func _t_no_mark_without_kind() -> Dictionary:
 	var m := _mount(RealmShellScene)
 	_feed(m[1], _snap("", ""))
@@ -213,14 +322,14 @@ static func _t_presentation_read() -> Dictionary:
 
 
 static func _t_no_directive_literal() -> Dictionary:
-	var re := RegEx.create_from_string("\"directive\\.(?!select\"|confirm\")[a-z_]+\"")
+	var re := RegEx.create_from_string("[\"']directive\\.(?!(select|confirm)[\"'])[a-z_]+[\"']")
 	var stack: Array[String] = ["res://ui"]
 	while not stack.is_empty():
 		var dir: String = stack.pop_back()
 		for sub in DirAccess.get_directories_at(dir):
 			stack.append(dir + "/" + sub)
 		for f in DirAccess.get_files_at(dir):
-			if f.ends_with(".gd"):
+			if f.ends_with(".gd") or f.ends_with(".tscn"):
 				if re.search(FileAccess.get_file_as_string(dir + "/" + f)) != null:
 					return { "ok": false, "error": "Directive id literal in " + dir + "/" + f }
 	return { "ok": true }
@@ -285,6 +394,38 @@ static func _t_motion_calm() -> Dictionary:
 	if t[2] != [&"mark", &"pulse"]:
 		return _fail(t, "pulse must follow the mark: %s" % str(t[2]))
 	t[0].free()
+	return { "ok": true }
+
+
+static func _t_overlay_after_mark() -> Dictionary:
+	for lost in [0, 2, 5]:
+		var m := _mount(StageScene)
+		var screen := m[1] as StageExploreScreen
+		var events: Array = []
+		var clock := [0.0]
+		screen.stop_beat.connect(func(b: StringName) -> void: events.append([b, clock[0]]))
+		screen.modal_requested.connect(func(_id: StringName, _payload: Dictionary) -> void: events.append([&"modal", clock[0]]))
+		screen.set_snapshot(_explore_snap(1, "capacity_spent", "Kofi", 0))
+		var travel := _explore_snap(3, "capacity_spent", "Kofi", lost)
+		travel["data"]["contact_pending"] = { "x": 1 }
+		screen.set_snapshot(travel)
+		var walk := screen.get("_travel_tween") as Tween
+		for i in range(300):
+			clock[0] += 0.01
+			walk.custom_step(0.01)
+			var stop: Tween = screen.get("_stop_tween")
+			if stop != null and stop.is_valid() and clock[0] > 0.5:
+				stop.custom_step(0.01)
+		var mark_at := -1.0
+		var modal_at := -1.0
+		for e in events:
+			if e[0] == &"mark":
+				mark_at = e[1]
+			elif e[0] == &"modal":
+				modal_at = e[1]
+		if modal_at < 0.0 or mark_at < 0.0 or modal_at < mark_at:
+			return _fail(m, "lost %d: mark at %f, modal at %f" % [lost, mark_at, modal_at])
+		m[0].free()
 	return { "ok": true }
 
 

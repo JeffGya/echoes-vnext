@@ -17,7 +17,7 @@ class_name EchoCardItem
 extends PanelContainer
 
 ## Tap on the card: a press and release on it, with no drag and no scroll of the bar between. actor_id
-## is the actor's snapshot id, or "" when the data shape has none (Stage party_preview rows).
+## is the actor's snapshot id, or "" when the data shape has none.
 signal card_pressed(actor_id: String)
 
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
@@ -51,6 +51,7 @@ var slot_key: String = ""
 var _pointer := BoardPointerTracker.new()
 var _scroll_at_press := Vector2i.ZERO
 var _motion: StopMarkMotion
+var _pending_tex: Texture2D
 var _pulse: Tween
 var _glyph_pressed := false
 ## The snapshot's presentation timings, set by RealmShell. Read for the press feedback.
@@ -69,6 +70,7 @@ func _ready() -> void:
 ## glyph takes keyboard focus; its tap opens the why card.
 func set_stop_glyph(kind: String, accessible_name: String = "") -> void:
 	_motion.stop()
+	_pending_tex = null
 	_glyph_pressed = false
 	var tex := StopGlyphs.texture(kind)
 	_stop_glyph.texture = tex
@@ -77,6 +79,20 @@ func set_stop_glyph(kind: String, accessible_name: String = "") -> void:
 	_body_margin.add_theme_constant_override("margin_right", 42 if tex != null else 6)
 	focus_mode = Control.FOCUS_ALL if tex != null else Control.FOCUS_NONE
 	accessibility_name = accessible_name if tex != null else ""
+
+
+## Same holder, new mark: the old shape fades out, the new one is swapped in unseen and settles at its beat.
+func swap_stop_glyph_after_fade(kind: String, accessible_name: String, seconds: float) -> void:
+	_pending_tex = StopGlyphs.texture(kind)
+	accessibility_name = accessible_name
+	_motion.fade_out(seconds, _apply_pending_glyph)
+
+
+func _apply_pending_glyph() -> void:
+	if _pending_tex != null:
+		_stop_glyph.texture = _pending_tex
+		_pending_tex = null
+	_stop_glyph.modulate.a = 0.0
 
 
 ## The old mark while the next Advance computes.
@@ -91,10 +107,12 @@ func has_stop_glyph() -> bool:
 
 ## The glyph is set but has not appeared yet: invisible, still not a tap target for the shell.
 func hide_stop_glyph_for_beat() -> void:
-	_motion.hide_for_beat()
+	if _pending_tex == null:
+		_motion.hide_for_beat()
 
 
 func settle_stop_glyph(p: Dictionary) -> void:
+	_apply_pending_glyph()
 	_motion.settle(p, true)
 
 
@@ -141,7 +159,7 @@ func display_name() -> String:
 
 func _draw() -> void:
 	if has_focus():
-		draw_rect(Rect2(Vector2.ZERO, size), Color("#F5F1E7"), false, 3.0)
+		draw_rect(Rect2(Vector2.ZERO, size), StopGlyphs.FOCUS_RING, false, 3.0)
 
 
 func _gui_input(event: InputEvent) -> void:
