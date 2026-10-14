@@ -21,6 +21,7 @@ const SpatialModeGoalTestsScript := preload("res://tests/SpatialModeGoalTests.gd
 const StagePartyMovementTestsScript := preload("res://tests/StagePartyMovementTests.gd")
 const CombatObjectiveLabelTestsScript := preload("res://tests/CombatObjectiveLabelTests.gd")
 const PaceUITestsScript := preload("res://tests/PaceUITests.gd")
+const StageStopUITestsScript := preload("res://tests/StageStopUITests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -545,6 +546,7 @@ func _run_tests(parts: Array) -> void:
 	CombatTokenPresentationTests.register(runner)
 	CombatObjectiveLabelTestsScript.register(runner)
 	PaceUITestsScript.register(runner)
+	StageStopUITestsScript.register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 	MaturityExpressionTests.register(runner)  # V2-PROG-006

@@ -1,0 +1,27 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/components/PartyStopChip.gd" id="1_chip"]
+
+[node name="PartyStopChip" type="PanelContainer"]
+visible = false
+custom_minimum_size = Vector2(56, 48)
+size_flags_vertical = 3
+focus_mode = 2
+mouse_filter = 1
+script = ExtResource("1_chip")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+
+[node name="ChipGlyph" type="TextureRect" parent="Margin"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(28, 28)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5

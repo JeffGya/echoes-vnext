@@ -1,6 +1,9 @@
 [gd_scene format=3 uid="uid://bwm4aksecsiyy"]
 
 [ext_resource type="Script" uid="uid://c7smmm40nja3b" path="res://ui/shells/RealmShell.gd" id="1_realmshell"]
+[ext_resource type="PackedScene" path="res://ui/components/PartyStopChip.tscn" id="2_chip"]
+[ext_resource type="PackedScene" path="res://ui/components/StageWhyCard.tscn" id="3_why"]
+
 [node name="RealmShell" type="Control" unique_id=257620160]
 layout_mode = 3
 anchors_preset = 15
@@ -58,3 +61,16 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 16
 alignment = 1
+
+[node name="PartyStopChip" parent="ChromeLayer/ChromeRoot/EchoBarFrame/EchoBarScroll/EchoBar" instance=ExtResource("2_chip")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="StageWhyCard" parent="ChromeLayer/ChromeRoot" instance=ExtResource("3_why")]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 96.0
+offset_right = 376.0
+offset_bottom = 96.0

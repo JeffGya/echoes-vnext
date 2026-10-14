@@ -26,6 +26,10 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 
 signal action_requested(action: Dictionary)
 signal modal_requested(modal_id: StringName, payload: Dictionary)
+## The player pressed Advance. RealmShell dims the old stop mark.
+signal advance_started
+## A tap on the party token. RealmShell opens the why card.
+signal why_requested
 
 # ─── Tile constants ───────────────────────────────────────────────────────────
 const _TILE_SOURCE_ID:    int      = 0
@@ -54,7 +58,6 @@ const _STAGE_INFO_MAX_WIDTH := 1120.0
 const _PREVIEW_INFO_SEPARATION := 16.0
 
 # ─── Zoom tween constants (preview → explore transition) ─────────────────────
-const _ZOOM_DURATION:  float = 0.35
 const _ZOOM_SCALE_MUL: float = 3.0
 
 # ─── Explore camera zoom (same numbers as CombatBoardScreen; decisions.md #70, #71) ──────────
@@ -68,7 +71,9 @@ const _ZOOM_DEFAULT: float     = 1.3
 const _PARTY_TARGET := "party"
 
 # ─── Travel animation ─────────────────────────────────────────────────────────
-const _TRAVEL_DURATION: float = 0.5
+
+# snapshot.presentation. A literal passed to _pres() is the fallback for a snapshot without the key.
+var _presentation: Dictionary = {}
 
 # ─── Cached actions ───────────────────────────────────────────────────────────
 var _cached_start_action:   Dictionary = {}
@@ -106,13 +111,9 @@ var _snippet_tween: Tween = null
 # field lingers unchanged, so without this guard the same line would replay on every
 # subsequent non-advance re-render.
 var _last_played_snippet: String = ""
-# Current step budget for this turn (drives StepProgressBar text denominator).
+# Baseline step budget for this turn (the diamonds the bar draws).
 var _step_budget: int = 0
-# V2-STAGE-004 P5 (playtest fix): number of tiles ACTUALLY walked this advance
-# (traveled_path segment count). Drives how many diamonds the bar shows while in
-# motion so it depletes to zero in sync with the travel tween — instead of showing
-# the full budget with a dimmed remainder. 0 when parked/idle (bar shows full budget).
-var _travel_step_count: int = 0
+var _advance_pending: bool = false
 # Type of the currently-pending situation, used to gate the pre-combat transition beat.
 var _pending_sit_type: String = ""
 # Combat-track situation types that warrant the pre-combat transition beat.
@@ -193,7 +194,6 @@ var _last_paint_key: String = ""
 # ─── V2-STAGE-004 Phase 5 explore-bundle refs ────────────────────────────────
 @onready var _step_budget_row:    HBoxContainer  = %StepBudgetRow
 @onready var _step_progress_bar:  Control        = %StepProgressBar
-@onready var _step_fraction_lbl:  Label          = %StepFractionLabel
 @onready var _directive_badge:    PanelContainer = %DirectiveBadge
 @onready var _travel_snippet_lbl: Label          = %TravelSnippetLabel
 @onready var _bark_layer:         Control        = %BarkPopupLayer
@@ -309,9 +309,17 @@ func _process(_delta: float) -> void:
 
 # ─── Bespoke Screen Contract ─────────────────────────────────────────────────
 
+func _pres(key: String, fallback: float) -> float:
+	var v: Variant = _presentation.get(key, fallback)
+	return float(v) if v is int or v is float else fallback
+
+
 func set_snapshot(snap: Dictionary) -> void:
 	var snap_type := str(snap.get("type", ""))
 	var data: Dictionary    = snap.get("data", {})
+	var pres_v: Variant = data.get("presentation", {})
+	_presentation = pres_v if pres_v is Dictionary else {}
+	_advance_pending = false
 	var actions: Dictionary = snap.get("actions", {})
 
 	match snap_type:
@@ -363,7 +371,7 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_obj_title.text   = "%d Objective%s" % [obj_count, "s" if obj_count != 1 else ""]
 	var dir_v: Variant      = data.get("directive", {})
 	var dir_data: Dictionary = dir_v if dir_v is Dictionary else {}
-	_directive_label.text   = "Directive: " + _label_for_directive(str(dir_data.get("active_id", "")))
+	_directive_label.text   = "Directive: " + _active_directive_label(dir_data)
 
 	var av_sf_v: Variant = data.get("active_vow", {})
 	var av_sf: Dictionary = av_sf_v if av_sf_v is Dictionary else {}
@@ -427,8 +435,9 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 		_preview_fade_tween.kill()
 	_preview_fade_tween = create_tween()
 	_preview_fade_tween.set_parallel(true)
-	_preview_fade_tween.tween_property(self, "modulate", Color(1, 1, 1, 1), 0.25)
-	_preview_fade_tween.tween_property(_board_root, "modulate", Color(1, 1, 1, 1), 0.25)
+	var fade := _pres("preview_fade_seconds", 0.25)
+	_preview_fade_tween.tween_property(self, "modulate", Color(1, 1, 1, 1), fade)
+	_preview_fade_tween.tween_property(_board_root, "modulate", Color(1, 1, 1, 1), fade)
 
 
 # ─── Explore mode ─────────────────────────────────────────────────────────────
@@ -506,11 +515,10 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		# The tween only sequences the walk: the party token, the follow target, the ghost trail and
 		# the step diamonds. It never writes the camera, so it cannot fight the camera's own follow.
 		_travel_tween = create_tween()
+		var walk_seconds := _pres("walk_seconds", 0.5)
 		if traveled_path.size() >= 1:
 			var seg_count: int = traveled_path.size()
-			# Bar shows one diamond per tile actually walked this advance (depletes to zero).
-			_travel_step_count = seg_count
-			var seg_dur: float = _TRAVEL_DURATION / float(seg_count)
+			var seg_dur: float = walk_seconds / float(seg_count)
 			for _seg_i in range(seg_count):
 				var step_v: Variant = traveled_path[_seg_i]
 				var step: Dictionary = step_v if step_v is Dictionary else {}
@@ -531,22 +539,23 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 				_travel_tween.tween_callback(_drop_travel_ghost.bind(vacated_local))
 		else:
 			# Fallback: one straight segment (no path data or single-cell move).
-			_travel_step_count = 1
-			_travel_tween.tween_callback(_on_travel_segment.bind(party_local, _TRAVEL_DURATION))
-			_travel_tween.tween_interval(_TRAVEL_DURATION)
+			_travel_tween.tween_callback(_on_travel_segment.bind(party_local, walk_seconds))
+			_travel_tween.tween_interval(walk_seconds)
 			_travel_tween.tween_callback(_on_step_consumed.bind(1))
 
 		# Travel-beat presentation: ghost-text snippet + party-token speech bubble.
 		_maybe_play_travel_snippet(str(data.get("travel_snippet", "")))
 		_play_travel_bark(data)
 
+		# The mark lands first: an overlay waits before it opens.
+		if _explore_requests_modal(data, actions):
+			_travel_tween.tween_interval(_pres("overlay_hold_seconds", 0.0))
 		_pending_overlay_data    = data
 		_pending_overlay_actions = actions
 		_travel_tween.finished.connect(_apply_pending_overlay, CONNECT_ONE_SHOT)
 	else:
 		# Parked/idle refresh — no travel this snapshot; bar shows full budget. The camera keeps
 		# the view the player has (a locked camera keeps following its target).
-		_travel_step_count = 0
 		if not _is_travelling():
 			_party_layer.call("init_position", party_local)
 		_pending_overlay_data    = {}
@@ -565,22 +574,13 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	var dir_snap: Dictionary = dir_snap_v if dir_snap_v is Dictionary else {}
 	_directive_badge.call("set_directive", dir_snap)
 
-	# ── V2-STAGE-004 Phase 5: step-budget diamonds ───────────────────────────
-	# One diamond per step_budget; deplete in sync with the travel tween below.
-	# When step_budget is absent the row hides (old snapshots render as today).
+	# ── Step row: baseline diamonds, lost steps crossed out (D-40 item 8, D-43). ──
+	# During a walk the diamonds dim tile by tile; the crosses are drawn from the start.
 	_step_budget = int(data.get("step_budget", 0))
 	if _step_budget > 0:
 		_step_budget_row.visible = true
-		if is_travel and _travel_step_count > 0:
-			# In motion: show one diamond per tile actually walked this advance so the bar
-			# depletes to zero in sync with the travel tween. The tween's _on_step_consumed
-			# callbacks dim them one-by-one. Text keeps the "x/y" budget context (y = budget).
-			_step_progress_bar.call("set_budget", _travel_step_count)
-			_step_fraction_lbl.text = "%d/%d" % [_travel_step_count, _step_budget]
-		else:
-			# Parked/idle: full budget shown as available — "how far can we go" at rest.
-			_step_progress_bar.call("set_budget", _step_budget)
-			_step_fraction_lbl.text = "%d/%d" % [_step_budget, _step_budget]
+		var effective := clampi(int(data.get("effective_steps", _step_budget)), 0, _step_budget)
+		_step_progress_bar.call("set_budget", _step_budget, _step_budget - effective)
 	else:
 		_step_budget_row.visible = false
 
@@ -1061,8 +1061,15 @@ func _on_stage_complete_pressed() -> void:
 		_cached_stage_complete_action = {}
 
 
+## The compute blocks the main thread, so the pressed state must be drawn once before it starts.
 func _on_advance_pressed() -> void:
-	if not _cached_advance_action.is_empty():
+	if _cached_advance_action.is_empty() or _advance_pending:
+		return
+	_advance_pending = true
+	_advance_btn.disabled = true
+	advance_started.emit()
+	await RenderingServer.frame_post_draw
+	if is_inside_tree():
 		action_requested.emit(_cached_advance_action)
 
 
@@ -1086,15 +1093,16 @@ func _on_begin_pressed() -> void:
 	_preview_transition_tween.set_ease(Tween.EASE_IN)
 	_preview_transition_tween.set_trans(Tween.TRANS_QUAD)
 
+	var zoom_seconds := _pres("zoom_seconds", 0.35)
 	var target_scale := Vector2(_preview_scale * _ZOOM_SCALE_MUL, _preview_scale * _ZOOM_SCALE_MUL)
 	var current_pos  := _board_root.position
 	var map_offset   := _preview_center - current_pos
 	var target_pos   := _preview_center - map_offset * _ZOOM_SCALE_MUL
 
-	_preview_transition_tween.parallel().tween_property(_board_root, "scale",    target_scale,      _ZOOM_DURATION)
-	_preview_transition_tween.parallel().tween_property(_board_root, "position", target_pos,        _ZOOM_DURATION)
-	_preview_transition_tween.parallel().tween_property(_stage_info, "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
-	_preview_transition_tween.parallel().tween_property(_back_btn,   "modulate", Color(1, 1, 1, 0), _ZOOM_DURATION)
+	_preview_transition_tween.parallel().tween_property(_board_root, "scale",    target_scale,      zoom_seconds)
+	_preview_transition_tween.parallel().tween_property(_board_root, "position", target_pos,        zoom_seconds)
+	_preview_transition_tween.parallel().tween_property(_stage_info, "modulate", Color(1, 1, 1, 0), zoom_seconds)
+	_preview_transition_tween.parallel().tween_property(_back_btn,   "modulate", Color(1, 1, 1, 0), zoom_seconds)
 
 	_preview_transition_tween.finished.connect(_on_zoom_finished)
 
@@ -1163,14 +1171,8 @@ func _on_overlay_action(action: Dictionary) -> void:
 
 ## Called after each travel tween segment: dims one more step diamond + updates fraction.
 func _on_step_consumed(spent: int) -> void:
-	if _step_budget <= 0:
-		return
-	# In motion the bar shows _travel_step_count diamonds (tiles walked this advance); the
-	# numerator counts diamonds still filled, the denominator stays the directive budget.
-	var shown: int = _travel_step_count if _travel_step_count > 0 else _step_budget
-	var clamped: int = clampi(spent, 0, shown)
-	_step_progress_bar.call("set_spent", clamped)
-	_step_fraction_lbl.text = "%d/%d" % [shown - clamped, _step_budget]
+	if _step_budget > 0:
+		_step_progress_bar.call("set_spent", spent)
 
 
 ## Drop a fading ghost footprint at a vacated cell (board-local pixel). Called from the
@@ -1208,9 +1210,9 @@ func _play_travel_snippet(snippet: String) -> void:
 	_travel_snippet_lbl.visible  = true
 	_travel_snippet_lbl.modulate = Color(1, 1, 1, 0)
 	_snippet_tween = create_tween()
-	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 1.0, 0.4)
-	_snippet_tween.tween_interval(2.1)
-	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 0.0, 0.5)
+	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 1.0, _pres("snippet_fade_in_seconds", 0.4))
+	_snippet_tween.tween_interval(_pres("snippet_hold_seconds", 2.1))
+	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 0.0, _pres("snippet_fade_out_seconds", 0.5))
 	_snippet_tween.tween_callback(func() -> void: _travel_snippet_lbl.visible = false)
 
 
@@ -1236,15 +1238,19 @@ func _play_travel_bark(data: Dictionary) -> void:
 func _play_transition_flash() -> void:
 	_transition_flash.modulate = Color(1, 1, 1, 0)
 	var tw := create_tween()
-	tw.tween_property(_transition_flash, "modulate:a", 1.0, 0.1)
-	tw.tween_property(_transition_flash, "modulate:a", 0.0, 0.1)
+	var half := _pres("flash_half_seconds", 0.1)
+	tw.tween_property(_transition_flash, "modulate:a", 1.0, half)
+	tw.tween_property(_transition_flash, "modulate:a", 0.0, half)
 
 
-func _label_for_directive(dir_id: String) -> String:
-	match dir_id:
-		"directive.scout_carefully": return "Scout Carefully"
-		"directive.seek_signs":      return "Seek Signs"
-		_: return dir_id.capitalize() if not dir_id.is_empty() else "None"
+## The label of the active Directive, read from the snapshot's own list. "None" when it has none.
+func _active_directive_label(dir_data: Dictionary) -> String:
+	var entries_v: Variant = dir_data.get("directives", [])
+	for entry_v in (entries_v if entries_v is Array else []):
+		var entry: Dictionary = entry_v if entry_v is Dictionary else {}
+		if str(entry.get("id", "")) == str(dir_data.get("active_id", "")) and not str(entry.get("label", "")).is_empty():
+			return str(entry["label"])
+	return "None"
 
 
 # ─── Contact conversation ─────────────────────────────────────────────────────
@@ -1283,7 +1289,7 @@ func _show_contact_panel(contact: Dictionary, data: Dictionary, actions: Diction
 		_npc_reaction_label.modulate  = Color(1.0, 1.0, 1.0, 0.0)
 		_npc_reaction_label.visible   = true
 		var rw_tween := create_tween()
-		rw_tween.tween_property(_npc_reaction_label, "modulate:a", 1.0, 0.35)
+		rw_tween.tween_property(_npc_reaction_label, "modulate:a", 1.0, _pres("reaction_fade_in_seconds", 0.35))
 	else:
 		_npc_reaction_label.visible = false
 
@@ -1734,6 +1740,8 @@ func _on_pointer_tap(pos: Vector2) -> void:
 		camera.deselect()
 	else:
 		select_board_target(target)
+		if target == _PARTY_TARGET and not _is_travelling():
+			why_requested.emit()
 
 
 ## Locks the camera onto the party ("" and "party", which is what any echo card sends) or onto a

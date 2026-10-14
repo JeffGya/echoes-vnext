@@ -38,6 +38,8 @@ const _ALLY_PANEL_STYLE: StyleBox = preload("res://ui/components/EchoCardAllyAcc
 @onready var progress_label: Label   = %ProgressLabel
 @onready var ally_badge: Label       = %AllyBadge
 @onready var companion_tag: Label    = %CompanionTag
+@onready var _stop_glyph: TextureRect = %StopGlyph
+@onready var _body_margin: MarginContainer = $VBoxContainer/BodyMargin
 
 var _actor_id: String = ""
 ## Set by RealmShell: which bar slot this card fills (kind and actor id), so a snapshot updates it in place.
@@ -49,9 +51,47 @@ var _pointer := BoardPointerTracker.new()
 var _scroll_at_press := Vector2i.ZERO
 
 func _ready() -> void:
+	focus_exited.connect(queue_redraw)
+	focus_entered.connect(queue_redraw)
 	_pointer.space_held_fn = Callable(self, "_never")
 	_pointer.tap.connect(_on_pointer_tap)
 	gui_input.connect(_on_gui_input)
+
+## Shows the stop glyph for `kind`, or hides it for "" or an unknown kind. Only a card that holds a
+## glyph takes keyboard focus; its tap opens the why card.
+func set_stop_glyph(kind: String, accessible_name: String = "") -> void:
+	var tex := StopGlyphs.texture(kind)
+	_stop_glyph.texture = tex
+	_stop_glyph.visible = tex != null
+	_stop_glyph.modulate = Color.WHITE
+	_body_margin.add_theme_constant_override("margin_right", 42 if tex != null else 6)
+	focus_mode = Control.FOCUS_ALL if tex != null else Control.FOCUS_NONE
+	accessibility_name = accessible_name if tex != null else ""
+
+
+## The old mark while the next Advance computes.
+func dim_stop_glyph() -> void:
+	_stop_glyph.modulate.a = 0.5
+
+
+func has_stop_glyph() -> bool:
+	return _stop_glyph.visible
+
+
+func display_name() -> String:
+	return name_label.text
+
+
+func _draw() -> void:
+	if has_focus():
+		draw_rect(Rect2(Vector2.ZERO, size), Color("#F5F1E7"), false, 3.0)
+
+
+func _gui_input(event: InputEvent) -> void:
+	if has_focus() and event.is_action_pressed("ui_accept"):
+		card_pressed.emit(_actor_id)
+		accept_event()
+
 
 func _never() -> bool:
 	return false

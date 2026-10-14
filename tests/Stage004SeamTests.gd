@@ -3675,7 +3675,7 @@ static func _t_echo_bar_safe_geometry_matrix() -> Dictionary:
 				or scroll_rect.end.y > float(viewport_size.y) - safe_bottom + 0.1:
 			viewport.free()
 			return { "ok": false, "error": "EchoBar clipped viewport escaped safe rect at %s" % str(case["name"]) }
-		var cards := echo_bar.get_children()
+		var cards := echo_bar.get_children().filter(func(c: Node) -> bool: return c is EchoCardItem)
 		if cards.size() != 5:
 			viewport.free()
 			return { "ok": false, "error": "EchoBar card order/count changed during responsive layout" }

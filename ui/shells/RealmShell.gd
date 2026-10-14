@@ -25,6 +25,7 @@ const EchoCardScene := preload("res://ui/components/EchoCardItem.tscn")
 const _ECHO_BAR_HEIGHT := 88.0
 const _CHROME_EDGE_INSET := 16.0
 const _ECHO_BAR_MAX_WIDTH := 1440.0
+const _WHY_CARD_TOP := 80.0  # clears the HUD strip
 
 var _scene_by_flow_type: Dictionary = {}
 
@@ -33,6 +34,13 @@ var _scene_by_flow_type: Dictionary = {}
 @onready var _echo_bar_frame: MarginContainer = %EchoBarFrame
 @onready var _echo_bar_scroll: ScrollContainer = %EchoBarScroll
 @onready var _echo_bar:     HBoxContainer = %EchoBar
+@onready var _party_chip: PartyStopChip = %PartyStopChip
+@onready var _why_card: StageWhyCard = %StageWhyCard
+
+# The last stop mark: the snapshot's travel_why for the why card, and the control that holds the glyph.
+var _stop_why: Dictionary = {}
+var _stop_holder: Control = null
+var _why_opener: Control = null
 
 func _ready() -> void:
 	_scene_by_flow_type = {
@@ -47,6 +55,8 @@ func _ready() -> void:
 	# chrome inactive whenever routing or an ancestor hides this shell.
 	visibility_changed.connect(_sync_chrome_layer_visibility)
 	_sync_chrome_layer_visibility()
+	_party_chip.pressed.connect(_toggle_why.bind(_party_chip))
+	_why_card.closed.connect(_on_why_closed)
 	_apply_shell_layout()
 
 func _sync_chrome_layer_visibility() -> void:
@@ -55,6 +65,7 @@ func _sync_chrome_layer_visibility() -> void:
 
 func set_snapshot(snap: Dictionary) -> void:
 	_update_echo_bar(snap)
+	_update_stop_mark(snap)
 	_show_overlay_for_type(str(snap.get("type", "")), snap)
 
 func set_layout(layout: Dictionary) -> void:
@@ -156,7 +167,7 @@ func _update_echo_bar(snap: Dictionary) -> void:
 		if card == null:
 			card = EchoCardScene.instantiate()
 			_echo_bar.add_child(card)
-			card.card_pressed.connect(_on_echo_card_pressed)
+			card.card_pressed.connect(_on_echo_card_pressed.bind(card))
 			card.slot_key = str(entry["key"])
 		else:
 			existing.erase(entry["key"])
@@ -181,9 +192,86 @@ static func _card_key(kind: String, actor_id: String, empty_ids: Dictionary) -> 
 	return "%s|#%d" % [kind, n]
 
 
+# ─────────────────────────────────────────────────────────────
+# Stop mark (D-41, D-42) and why card (D-32)
+# ─────────────────────────────────────────────────────────────
+
+## The mark is drawn from snapshot.stop, so it survives a reload. It sits on the named Echo's card,
+## or on the party chip when no Echo is named. The party_preview rows carry no Echo id, so the
+## card is found by the display name in travel_why; the id itself is never shown.
+func _update_stop_mark(snap: Dictionary) -> void:
+	var data: Dictionary = snap.get("data", {})
+	var stop_v: Variant = data.get("stop", {})
+	var stop: Dictionary = stop_v if stop_v is Dictionary else {}
+	var why_v: Variant = data.get("travel_why", {})
+	_stop_why = why_v if why_v is Dictionary else {}
+	var kind := str(stop.get("kind", "")) if str(snap.get("type", "")) == "flow.stage_explore" else ""
+	if StopGlyphs.texture(kind) == null:
+		kind = ""
+	var named := str(_stop_why.get("named_echo_name", ""))
+	var holder: EchoCardItem = null
+	for child in _echo_bar.get_children():
+		if child is EchoCardItem and kind != "" and holder == null and not named.is_empty() \
+				and str(stop.get("echo_id", "")) != "" and (child as EchoCardItem).display_name() == named:
+			holder = child as EchoCardItem
+	var open_name := StageWhyText.text("ui", "open_why")
+	for child in _echo_bar.get_children():
+		if child is EchoCardItem:
+			(child as EchoCardItem).set_stop_glyph(kind if child == holder else "", open_name)
+	_party_chip.set_stop_glyph(kind if holder == null else "", StageWhyText.text("ui", "chip"))
+	_stop_holder = holder if holder != null else (_party_chip if kind != "" else null)
+	if _stop_holder == null:
+		_why_card.close()
+	elif _why_card.visible:
+		_why_card.open(_stop_why)
+
+
+func _toggle_why(opener: Control) -> void:
+	if _why_card.visible:
+		_why_card.close()
+	elif _stop_holder != null:
+		_why_opener = opener
+		_why_card.open(_stop_why)
+
+
+## The party token is an alias for the mark: it opens the card, never closes it.
+func _on_why_requested() -> void:
+	if _stop_holder != null and not _why_card.visible:
+		_why_card.open(_stop_why)
+
+
+func _on_why_closed() -> void:
+	if _why_opener != null and is_instance_valid(_why_opener) and _why_opener.is_visible_in_tree():
+		_why_opener.grab_focus()
+	_why_opener = null
+
+
+## The next Advance has started: the old mark goes dim and the card closes. A new snapshot redraws both.
+func _on_advance_started() -> void:
+	_why_card.close()
+	if _stop_holder != null:
+		_stop_holder.call("dim_stop_glyph")
+
+
+# A press outside the card closes it and is not consumed, so the Advance button still gets it.
+func _input(event: InputEvent) -> void:
+	if not _why_card.visible:
+		return
+	if event.is_action_pressed("ui_cancel"):
+		_why_card.close()
+		get_viewport().set_input_as_handled()
+	elif (event is InputEventMouseButton or event is InputEventScreenTouch) and event.is_pressed():
+		var point: Vector2 = (event as InputEventMouse).position if event is InputEventMouse else (event as InputEventScreenTouch).position
+		if not _why_card.get_global_rect().has_point(point) \
+				and not (_stop_holder != null and _stop_holder.get_global_rect().has_point(point)):
+			_why_card.close()
+
+
 ## ANSWERS.md #77: a card tap locks the active screen's camera onto that actor. Any screen that
 ## implements select_board_target() takes it, so the shell names no screen type.
-func _on_echo_card_pressed(actor_id: String) -> void:
+func _on_echo_card_pressed(actor_id: String, card: EchoCardItem) -> void:
+	if card.has_stop_glyph():
+		_toggle_why(card)
 	if _active_overlay != null and _active_overlay.has_method("select_board_target"):
 		_active_overlay.call("select_board_target", actor_id)
 
@@ -223,6 +311,10 @@ func _apply_shell_layout() -> void:
 		_echo_bar_frame.offset_right = frame_left + frame_width
 		_echo_bar_frame.offset_top = -(_ECHO_BAR_HEIGHT + safe_bottom)
 		_echo_bar_frame.offset_bottom = -safe_bottom
+	if _why_card != null:
+		_why_card.offset_left = safe_left
+		_why_card.offset_top = maxf(_CHROME_EDGE_INSET, ceilf(insets.y)) + _WHY_CARD_TOP
+		_why_card.offset_right = _why_card.offset_left + _why_card.custom_minimum_size.x
 	if _echo_bar_scroll != null:
 		# Overflow remains discoverable on desktop and touch: the authored
 		# horizontal scrollbar appears only when the party exceeds the frame.
@@ -279,6 +371,10 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 		var ok := _active_overlay.connect("action_requested", Callable(self, "_on_overlay_action_requested"))
 		if ok != OK:
 			push_warning("RealmShell: failed to connect overlay action_requested (err=%d)" % ok)
+	if _active_overlay != null and _active_overlay.has_signal("advance_started"):
+		_active_overlay.connect("advance_started", _on_advance_started)
+	if _active_overlay != null and _active_overlay.has_signal("why_requested"):
+		_active_overlay.connect("why_requested", _on_why_requested)
 	if _active_overlay != null and _active_overlay.has_signal("modal_requested"):
 		var modal_ok := _active_overlay.connect("modal_requested", Callable(self, "_on_overlay_modal_requested"))
 		if modal_ok != OK:
