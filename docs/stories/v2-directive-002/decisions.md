@@ -275,3 +275,12 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-56. dropped-names-accepted
 **Q:** The naming check drops 13% of proposed names on test boards with a hostile near the start (6.5% of Advances), all from equal-cost route ties under per-step replanning. Accept, or match the live tie rule in the model?
 **A:** Accept the drop rate (Jeff, 2026-10-13, the recommended option). A wrong name never appears. The cause shows without a name. The model is not changed. Package E (speed) starts next.
+
+### D-57. frontend-timings-approved
+**Q:** The game-feel timing proposal (`timings-proposal.md`): approve as starting values? Overlay wait? Reduced motion?
+**A:** (Jeff, 2026-10-13, all recommended options)
+- **Timings:** approved as starting values. They go into `stages.presentation` as PROPOSED DEFAULT. Jeff tunes them in the game after the build. First tests: the shake size, the glyph overshoot, the pulse peak, the 0.85 s input-ready point.
+- **O1:** the contact, situation and choice overlays wait 0.35 s (`overlay_hold_seconds`) so the glyph lands first.
+- **O2:** a reduced-motion setting is NOT in this story. The code reads one flag that defaults to off, and each effect has its reduced form ready. A later settings story adds the switch.
+- **O3 (open):** is a still pressed button enough when the Advance tail is about 1 s or more on a phone? Decide after a phone measurement.
+- Reserved keys `shaken_shake_delay_seconds` and `shaken_shake_oscillations` are replaced by `stop_rest_seconds` and `shaken_shake_offsets_px` (nothing read the old names).

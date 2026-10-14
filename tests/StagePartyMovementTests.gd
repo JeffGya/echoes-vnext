@@ -1792,8 +1792,12 @@ static func _t_stage_presentation_keys_numeric() -> Dictionary:
 		if str(key).begins_with("_"):
 			continue
 		seen += 1
-		if not (pres[key] is float or pres[key] is int) or float(pres[key]) <= 0.0:
-			return _fail("presentation.%s must be a positive number" % key)
+		var items: Array = pres[key] if pres[key] is Array else [pres[key]]
+		if items.is_empty():
+			return _fail("presentation.%s must not be an empty list" % key)
+		for item: Variant in items:
+			if not (item is float or item is int) or float(item) <= 0.0:
+				return _fail("presentation.%s must be a positive number or a list of them" % key)
 	if seen == 0:
 		return _fail("presentation block is empty")
 	return _pass()

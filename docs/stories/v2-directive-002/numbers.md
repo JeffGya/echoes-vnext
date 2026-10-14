@@ -32,6 +32,24 @@ All paths start at `data.`. Line numbers were checked on 2026-10-12.
 | `stages.presentation.preview_fade_seconds` | 0.25 | Literal (two tweens). | `StageExploreScreen.gd:430-431` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
 | `stages.presentation.flash_half_seconds` | 0.1 | Literal (in and out, one half each). | `StageExploreScreen.gd:1239-1240` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
 | `stages.presentation.reaction_fade_in_seconds` | 0.35 | Literal. | `StageExploreScreen.gd:1286` | snapshot carries it (`StageExploreSnapshotBuilder.gd`); UI reader pending |
+| `stages.presentation.stop_rest_seconds` | 0.1 | Pause between token parked and the first stop beat. Replaces reserved `shaken_shake_delay_seconds`. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.beat_gap_seconds` | 0.05 | Gap between two stop beats in a chain. Also the snippet start offset after the last beat. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.glyph_fade_seconds` | 0.2 | Old glyph or chip fades out when the next Advance snapshot arrives. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.glyph_settle_seconds` | 0.25 | Glyph on an Echo card appears and settles. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.glyph_settle_from_scale` | 0.95 | Glyph start scale. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.glyph_settle_overshoot_scale` | 1.1 | Glyph peak scale. Jeff may need 1.2. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.chip_settle_seconds` | 0.25 | Party chip appears and settles. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.glyph_press_seconds` | 0.08 | Tap feedback on glyph, card and chip. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.why_open_seconds` | 0.15 | Why card fade in. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.why_close_seconds` | 0.1 | Why card fade out. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.portrait_pulse_seconds` | 0.5 | One brightness cycle on the named Echo's portrait. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.portrait_pulse_peak` | 1.25 | Peak portrait brightness. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.shaken_shake_seconds` | 0.22 | Whole shake of token and step row. Was reserved (section 12). Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.shaken_shake_offsets_px` | [3, 3, 2, 2] | Alternating sideways offsets in screen pixels at 1280x720, then back to 0. Replaces reserved `shaken_shake_oscillations`. A list: see the test impact note. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.cross_stagger_seconds` | 0.06 | Gap between lost-step crosses. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.cross_in_seconds` | 0.12 | One cross fades in. Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.reduced_motion_fade_seconds` | 0.15 | Shared fade for every reduced-motion replacement. The flag itself is not in this story (D-57 O2). Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
+| `stages.presentation.overlay_hold_seconds` | 0.35 | Contact, situation and choice overlays wait this long after walk end so the glyph lands first (D-57 O1). Source: timings-proposal.md, D-57. | none (new) | PROPOSED DEFAULT; UI reader pending (frontend) |
 
 Notes:
 - The UI reads no config today (`grep` of `ui/` finds only `AppRoot.gd`). The timing path (snapshot field or `ConfigService` getter) is for `mechanics-developer` and `ui-ux-designer`.
@@ -163,18 +181,9 @@ No change. The authored weights already give the right order and margins. Weight
 
 Watch: Scout objective (1.2) ties Scout reward (1.2). A tie falls to the nearest candidate. If Jeff wants Scout to prefer rewards over the objective, lower Scout `objective` to 1.1 (still under intel 1.4).
 
-## 12. Reserved key names, no value (D-37: game-feel proposes, Jeff approves)
+## 12. Reserved key names (closed)
 
-Not in `balance.json`. Suggested home: `stages.presentation`.
-
-| Key name | Status |
-|---|---|
-| `shaken_shake_seconds` | value pending game-feel (mockup proposal about 0.22 s) |
-| `shaken_shake_oscillations` | value pending game-feel (mockup proposal 2 to 3) |
-| `shaken_shake_delay_seconds` | value pending game-feel (mockup proposal about 0.60 s) |
-| `glyph_settle_seconds` | value pending game-feel |
-| `glyph_fade_seconds` | value pending game-feel |
-| `chip_settle_seconds` | value pending game-feel |
+D-57 approved the timings. Every reserved key now has a row in section 1 (`stages.presentation`). The reserved names `shaken_shake_delay_seconds` and `shaken_shake_oscillations` are replaced by `stop_rest_seconds` and `shaken_shake_offsets_px`. They were never in `balance.json`. Nothing in `core/`, `ui/` or `tests/` reads them.
 
 ## 13. Checks run
 

@@ -805,9 +805,21 @@ static func _t_presentation_has_no_comment_keys() -> Dictionary:
 		var is_comment := str(key).begins_with("_comment")
 		if is_comment == pres.has(key):
 			return { "ok": false, "error": "presentation key %s %s" % [key, "leaked" if is_comment else "missing"] }
-		if not is_comment and not (pres[key] is float or pres[key] is int):
-			return { "ok": false, "error": "presentation.%s is not a number" % key }
+		if not is_comment and not _is_positive_number_or_list(pres[key]):
+			return { "ok": false, "error": "presentation.%s is not a positive number or list of them" % key }
+	var offsets: Variant = pres.get("shaken_shake_offsets_px")
+	if not offsets is Array or (offsets as Array).size() != 4 or not _is_positive_number_or_list(offsets):
+		return { "ok": false, "error": "shaken_shake_offsets_px must be an Array of 4 positive numbers: %s" % [offsets] }
 	return { "ok": true }
+
+
+static func _is_positive_number_or_list(v: Variant) -> bool:
+	if v is Array:
+		for item: Variant in v:
+			if not (item is float or item is int) or float(item) <= 0.0:
+				return false
+		return true
+	return (v is float or v is int) and float(v) > 0.0
 
 
 ## N7 (design 7d): the Echo named in the why is a true decider (the naming service confirms it), the
