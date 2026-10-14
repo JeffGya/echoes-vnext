@@ -42,6 +42,9 @@ var _scene_by_flow_type: Dictionary = {}
 var _stop_why: Dictionary = {}
 var _stop_holder: Control = null
 var _why_opener: Control = null
+# The mark is set but its beat has not come: it is invisible and a tap on it does nothing yet.
+var _mark_hidden := false
+var _pres: Dictionary = {}
 
 func _ready() -> void:
 	_scene_by_flow_type = {
@@ -66,8 +69,9 @@ func _sync_chrome_layer_visibility() -> void:
 
 func set_snapshot(snap: Dictionary) -> void:
 	_update_echo_bar(snap)
-	_update_stop_mark(snap)
+	# The screen first: on a travel snapshot it announces the walk, and the mark waits for its beat.
 	_show_overlay_for_type(str(snap.get("type", "")), snap)
+	_update_stop_mark(snap)
 
 func set_layout(layout: Dictionary) -> void:
 	_layout = layout.duplicate(true)
@@ -206,6 +210,11 @@ func _update_stop_mark(snap: Dictionary) -> void:
 	var stop: Dictionary = stop_v if stop_v is Dictionary else {}
 	var why_v: Variant = data.get("travel_why", {})
 	_stop_why = why_v if why_v is Dictionary else {}
+	var pres_v: Variant = data.get("presentation", {})
+	_pres = pres_v if pres_v is Dictionary else {}
+	_why_card.open_seconds = StopMarkMotion.pres(_pres, "why_open_seconds", 0.15)
+	_why_card.close_seconds = StopMarkMotion.pres(_pres, "why_close_seconds", 0.1)
+	_party_chip.presentation = _pres
 	var kind := str(stop.get("kind", "")) if str(snap.get("type", "")) == "flow.stage_explore" else ""
 	if StopGlyphs.texture(kind) == null:
 		kind = ""
@@ -220,19 +229,37 @@ func _update_stop_mark(snap: Dictionary) -> void:
 		if (by_id and card.actor_id() == echo_id) or (not by_id and not named.is_empty() and card.display_name() == named):
 			holder = card
 	var open_name := StageWhyText.text("ui", "open_why")
+	var fade := StopMarkMotion.pres(_pres, "reduced_motion_fade_seconds" if StopMarkMotion.reduced else "glyph_fade_seconds", 0.2)
 	for child in _echo_bar.get_children():
 		if child is EchoCardItem:
-			(child as EchoCardItem).set_stop_glyph(kind if child == holder else "", open_name)
-	_party_chip.set_stop_glyph(kind if holder == null else "", StageWhyText.text("ui", "chip"))
+			var card := child as EchoCardItem
+			card.presentation = _pres
+			if child == holder:
+				card.set_stop_glyph(kind, open_name)
+			elif _mark_hidden and card.has_stop_glyph():
+				card.fade_out_stop_glyph(fade)
+			else:
+				card.set_stop_glyph("", open_name)
+	if holder == null and kind != "":
+		_party_chip.set_stop_glyph(kind, StageWhyText.text("ui", "chip"))
+	elif _mark_hidden and _party_chip.visible:
+		_party_chip.fade_out_stop_glyph(fade)
+	else:
+		_party_chip.set_stop_glyph("", StageWhyText.text("ui", "chip"))
 	_stop_holder = holder if holder != null else (_party_chip if kind != "" else null)
 	if _stop_holder == null:
+		_mark_hidden = false
 		_why_card.close()
-	elif _why_card.visible:
+	elif _mark_hidden:
+		_stop_holder.call("hide_stop_glyph_for_beat")
+	elif _why_card.is_open():
 		_why_card.open(_stop_why)
 
 
 func _toggle_why(opener: Control) -> void:
-	if _why_card.visible:
+	if _mark_hidden:
+		return
+	if _why_card.is_open():
 		_why_card.close()
 	elif _stop_holder != null:
 		_why_opener = opener
@@ -241,7 +268,7 @@ func _toggle_why(opener: Control) -> void:
 
 ## The party token is an alias for the mark: it opens the card, never closes it.
 func _on_why_requested() -> void:
-	if _stop_holder != null and not _why_card.visible:
+	if _stop_holder != null and not _mark_hidden and not _why_card.is_open():
 		_why_card.open(_stop_why)
 
 
@@ -254,13 +281,43 @@ func _on_why_closed() -> void:
 ## The next Advance has started: the old mark goes dim and the card closes. A new snapshot redraws both.
 func _on_advance_started() -> void:
 	_why_card.close()
+	_stop_motion_off()
 	if _stop_holder != null:
 		_stop_holder.call("dim_stop_glyph")
 
 
+func _on_travel_started() -> void:
+	_stop_motion_off()
+	_mark_hidden = true
+
+
+## The beats come from the screen's walk tween, so the shell and the screen share one clock.
+func _on_stop_beat(beat: StringName) -> void:
+	if _stop_holder == null:
+		return
+	match beat:
+		&"mark":
+			_mark_hidden = false
+			_stop_holder.call("settle_stop_glyph", _pres)
+		&"pulse":
+			if _stop_holder is EchoCardItem:
+				(_stop_holder as EchoCardItem).pulse_portrait(_pres)
+
+
+func _stop_motion_off() -> void:
+	for child in _echo_bar.get_children():
+		if child is EchoCardItem:
+			(child as EchoCardItem).stop_motion()
+	_party_chip.stop_motion()
+
+
+func _exit_tree() -> void:
+	_stop_motion_off()
+
+
 # A press outside the card closes it and is not consumed, so the Advance button still gets it.
 func _input(event: InputEvent) -> void:
-	if not _why_card.visible:
+	if not _why_card.is_open():
 		return
 	if event.is_action_pressed("ui_cancel"):
 		_why_card.close()
@@ -378,6 +435,10 @@ func _show_overlay_for_type(snap_type: String, snap: Dictionary) -> void:
 			push_warning("RealmShell: failed to connect overlay action_requested (err=%d)" % ok)
 	if _active_overlay != null and _active_overlay.has_signal("advance_started"):
 		_active_overlay.connect("advance_started", _on_advance_started)
+	if _active_overlay != null and _active_overlay.has_signal("travel_started"):
+		_active_overlay.connect("travel_started", _on_travel_started)
+	if _active_overlay != null and _active_overlay.has_signal("stop_beat"):
+		_active_overlay.connect("stop_beat", _on_stop_beat)
 	if _active_overlay != null and _active_overlay.has_signal("why_requested"):
 		_active_overlay.connect("why_requested", _on_why_requested)
 	if _active_overlay != null and _active_overlay.has_signal("modal_requested"):

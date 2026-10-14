@@ -13,7 +13,7 @@
 # This node draws its diamonds via _draw() only (canvas drawing — permitted in script per
 # Lesson 5; no child nodes are constructed here). No count text is shown (D-43). A lost step
 # (shaken party) is a dim diamond with a red slash cross: a shape cue, not colour alone.
-# Its parent is a plain Control (StepBarShake) so a shake can move the row; this node sizes it.
+# Its parent is a plain Control (StepBarShake) so a shake can move this node; it sizes the parent.
 #
 # Graceful degradation: budget defaults to 0. When step_budget is absent from the snapshot
 # the screen simply never calls set_budget()/set_spent() with meaningful values, the node
@@ -33,6 +33,8 @@ const _COLOR_LOST    := Color("#E0533D")               # red cross on a lost ste
 var _budget: int = 0
 var _spent:  int = 0
 var _lost:   int = 0
+# Opacity of each lost step's cross, left to right. All 1 unless the screen is revealing them.
+var _cross_alpha: Array[float] = []
 
 
 func _ready() -> void:
@@ -45,8 +47,29 @@ func set_budget(budget: int, lost: int = 0) -> void:
 	_budget = max(0, budget)
 	_lost   = clampi(lost, 0, _budget)
 	_spent  = 0
+	_cross_alpha.clear()
+	_cross_alpha.resize(_lost)
+	_cross_alpha.fill(1.0)
 	_update_min_width()
 	queue_redraw()
+
+
+func show_crosses() -> void:
+	_cross_alpha.fill(1.0)
+	queue_redraw()
+
+
+## Hides every cross; set_cross_alpha() brings them back one by one.
+func hide_crosses() -> void:
+	_cross_alpha.fill(0.0)
+	queue_redraw()
+
+
+## Opacity of the cross on the index-th lost step (0 is the leftmost lost step).
+func set_cross_alpha(alpha: float, index: int) -> void:
+	if index >= 0 and index < _cross_alpha.size():
+		_cross_alpha[index] = alpha
+		queue_redraw()
 
 
 ## Set how many leading diamonds are dimmed (steps already consumed this turn).
@@ -77,8 +100,9 @@ func _draw() -> void:
 		if i >= _budget - _lost:
 			_draw_diamond(centre, _COLOR_SPENT)
 			var arm := Vector2(_DIAMOND_W * 0.55, _DIAMOND_H * 0.75)
-			draw_line(centre - arm, centre + arm, _COLOR_LOST, 3.0, true)
-			draw_line(centre + Vector2(-arm.x, arm.y), centre + Vector2(arm.x, -arm.y), _COLOR_LOST, 3.0, true)
+			var cross := Color(_COLOR_LOST, _cross_alpha[i - (_budget - _lost)])
+			draw_line(centre - arm, centre + arm, cross, 3.0, true)
+			draw_line(centre + Vector2(-arm.x, arm.y), centre + Vector2(arm.x, -arm.y), cross, 3.0, true)
 		else:
 			_draw_diamond(centre, fill)
 

@@ -30,6 +30,10 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 signal advance_started
 ## A tap on the party token. RealmShell opens the why card.
 signal why_requested
+## A travel snapshot arrived. Fires before RealmShell draws the stop mark, so the mark can wait for its beat.
+signal travel_started
+## A stop beat is due: `&"mark"` (the glyph or chip appears) or `&"pulse"` (the named Echo's portrait).
+signal stop_beat(beat: StringName)
 
 # ─── Tile constants ───────────────────────────────────────────────────────────
 const _TILE_SOURCE_ID:    int      = 0
@@ -126,6 +130,13 @@ const _COMBAT_TRACK_TYPES := {
 var _last_party_col:          int        = -1
 var _last_party_row:          int        = -1
 var _travel_tween:            Tween      = null
+var _stop_tween:              Tween      = null
+var _shake_tween:             Tween      = null
+var _cross_tween:             Tween      = null
+# Beat times in seconds from the end of the walk; built per travel snapshot by _build_stop_plan().
+var _stop_plan:               Dictionary = {}
+# What the snapshot says about the Advance button; a walk holds it disabled until input is ready.
+var _advance_allowed:         bool       = true
 var _pending_overlay_data:    Dictionary = {}
 var _pending_overlay_actions: Dictionary = {}
 
@@ -495,6 +506,9 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	if is_travel:
 		if _travel_tween != null and _travel_tween.is_valid():
 			_travel_tween.kill()
+		_cut_effects()
+		_stop_plan = _build_stop_plan(data)
+		travel_started.emit()
 
 		# An Advance locks the camera on the party. The lock stays after the walk, until the player
 		# taps away.
@@ -543,9 +557,11 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 			_travel_tween.tween_interval(walk_seconds)
 			_travel_tween.tween_callback(_on_step_consumed.bind(1))
 
-		# Travel-beat presentation: ghost-text snippet + party-token speech bubble.
-		_maybe_play_travel_snippet(str(data.get("travel_snippet", "")))
+		# Travel-beat presentation: ghost-text snippet + party-token speech bubble. The snippet waits
+		# for the last stop beat.
+		_maybe_play_travel_snippet(str(data.get("travel_snippet", "")), walk_seconds + float(_stop_plan["snippet_at"]))
 		_play_travel_bark(data)
+		_travel_tween.tween_callback(_begin_stop_beats)
 
 		# The mark lands first: an overlay waits before it opens.
 		if _explore_requests_modal(data, actions):
@@ -575,12 +591,14 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_directive_badge.call("set_directive", dir_snap)
 
 	# ── Step row: baseline diamonds, lost steps crossed out (D-40 item 8, D-43). ──
-	# During a walk the diamonds dim tile by tile; the crosses are drawn from the start.
+	# During a walk the diamonds dim tile by tile; on a travel snapshot the crosses appear in the stop beat.
 	_step_budget = int(data.get("step_budget", 0))
 	if _step_budget > 0:
 		_step_budget_row.visible = true
 		var effective := clampi(int(data.get("effective_steps", _step_budget)), 0, _step_budget)
 		_step_progress_bar.call("set_budget", _step_budget, _step_budget - effective)
+		if is_travel and float(_stop_plan.get("shake_at", -1.0)) >= 0.0:
+			_step_progress_bar.call("hide_crosses")
 	else:
 		_step_budget_row.visible = false
 
@@ -596,7 +614,8 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 
 	var adv_v: Variant   = actions.get("cta.advance_turn", {})
 	var adv: Dictionary  = adv_v if adv_v is Dictionary else {}
-	_advance_btn.disabled = bool(adv.get("disabled", false))
+	_advance_allowed = not bool(adv.get("disabled", false))
+	_advance_btn.disabled = not _advance_allowed or is_travel
 	_cached_advance_action = { "type": "stage.advance_turn" }
 	_cached_return_action  = { "type": "stage.return_home" }
 
@@ -1067,6 +1086,7 @@ func _on_advance_pressed() -> void:
 		return
 	_advance_pending = true
 	_advance_btn.disabled = true
+	_cut_effects()
 	advance_started.emit()
 	await RenderingServer.frame_post_draw
 	if is_inside_tree():
@@ -1192,15 +1212,15 @@ func _drop_travel_ghost(vacated_local: Vector2) -> void:
 ## last-presented text (updated on every call, including the "" clear case) keeps
 ## presentation exactly-once while still allowing a genuinely new/different snippet
 ## (or the field going back to empty) to be picked up immediately.
-func _maybe_play_travel_snippet(snippet: String) -> void:
+func _maybe_play_travel_snippet(snippet: String, delay: float = 0.0) -> void:
 	if snippet == _last_played_snippet:
 		return
 	_last_played_snippet = snippet
-	_play_travel_snippet(snippet)
+	_play_travel_snippet(snippet, delay)
 
 
 ## Ghost-text snippet fading in/out during the travel tween. No-op when empty.
-func _play_travel_snippet(snippet: String) -> void:
+func _play_travel_snippet(snippet: String, delay: float = 0.0) -> void:
 	if _snippet_tween != null and _snippet_tween.is_valid():
 		_snippet_tween.kill()
 	if snippet.is_empty():
@@ -1210,6 +1230,8 @@ func _play_travel_snippet(snippet: String) -> void:
 	_travel_snippet_lbl.visible  = true
 	_travel_snippet_lbl.modulate = Color(1, 1, 1, 0)
 	_snippet_tween = create_tween()
+	if delay > 0.0:
+		_snippet_tween.tween_interval(delay)
 	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 1.0, _pres("snippet_fade_in_seconds", 0.4))
 	_snippet_tween.tween_interval(_pres("snippet_hold_seconds", 2.1))
 	_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 0.0, _pres("snippet_fade_out_seconds", 0.5))
@@ -1797,6 +1819,129 @@ func _on_travel_segment(step_local: Vector2, duration: float) -> void:
 ## is the drawn position, so the camera never gets ahead of the token.
 func _party_token_world() -> Vector2:
 	return _board.to_global(_party_layer.call("display_position") as Vector2)
+
+
+# ─── Stop beats: one clock, started by the walk tween ────────────────────────
+
+## Beat times in seconds from the end of the walk. The mark and the pulse are played by RealmShell on
+## `stop_beat`; the shake and the crosses are played here. Presentation only.
+func _build_stop_plan(data: Dictionary) -> Dictionary:
+	var reduced := StopMarkMotion.reduced
+	var fade := _pres("reduced_motion_fade_seconds", 0.15)
+	var gap := _pres("beat_gap_seconds", 0.05)
+	var stop_v: Variant = data.get("stop", {})
+	var stop: Dictionary = stop_v if stop_v is Dictionary else {}
+	var why_v: Variant = data.get("travel_why", {})
+	var why: Dictionary = why_v if why_v is Dictionary else {}
+	var has_mark := StopGlyphs.texture(str(stop.get("kind", ""))) != null
+	var named := has_mark and str(why.get("named_echo_name", "")) != "" and str(stop.get("echo_id", "")) != ""
+	var budget := int(data.get("step_budget", 0))
+	var lost := budget - clampi(int(data.get("effective_steps", budget)), 0, maxi(budget, 0)) if budget > 0 else 0
+	var t := 0.0 if reduced else _pres("stop_rest_seconds", 0.1)
+	var plan := { "lost": lost, "named": named, "shake_at": -1.0, "mark_at": -1.0, "pulse_at": -1.0 }
+	var any_beat := false
+	if lost > 0:
+		plan["shake_at"] = t
+		var crosses := float(lost - 1) * _pres("cross_stagger_seconds", 0.06) + _pres("cross_in_seconds", 0.12)
+		t += fade if reduced else maxf(_pres("shaken_shake_seconds", 0.22), crosses)
+		any_beat = true
+		if has_mark:
+			t += gap
+	if has_mark:
+		plan["mark_at"] = t
+		t += StopMarkMotion.settle_seconds(_presentation, named)
+		any_beat = true
+	plan["ready_at"] = t
+	if named and not reduced:
+		plan["pulse_at"] = t + gap
+	plan["snippet_at"] = t + (gap if any_beat else 0.0)
+	return plan
+
+
+func _begin_stop_beats() -> void:
+	if _stop_plan.is_empty():
+		return
+	if _stop_tween != null and _stop_tween.is_valid():
+		_stop_tween.kill()
+	_stop_tween = create_tween()
+	var cursor := 0.0
+	var events: Array = []
+	if float(_stop_plan["shake_at"]) >= 0.0:
+		events.append([float(_stop_plan["shake_at"]), _play_shake_beat])
+	if float(_stop_plan["mark_at"]) >= 0.0:
+		events.append([float(_stop_plan["mark_at"]), _emit_beat.bind(&"mark")])
+	events.append([float(_stop_plan["ready_at"]), _on_input_ready])
+	if float(_stop_plan["pulse_at"]) >= 0.0:
+		events.append([float(_stop_plan["pulse_at"]), _emit_beat.bind(&"pulse")])
+	for e in events:
+		_stop_tween.tween_interval(maxf(0.0, float(e[0]) - cursor))
+		_stop_tween.tween_callback(e[1])
+		cursor = maxf(cursor, float(e[0]))
+
+
+func _emit_beat(beat: StringName) -> void:
+	stop_beat.emit(beat)
+
+
+func _play_shake_beat() -> void:
+	var reduced := StopMarkMotion.reduced
+	var lost := int(_stop_plan["lost"])
+	_cross_tween = create_tween().set_parallel(true)
+	var cross_in := _pres("reduced_motion_fade_seconds", 0.15) if reduced else _pres("cross_in_seconds", 0.12)
+	for i in lost:
+		var delay := 0.0 if reduced else float(i) * _pres("cross_stagger_seconds", 0.06)
+		_cross_tween.tween_method(Callable(_step_progress_bar, "set_cross_alpha").bind(i), 0.0, 1.0, cross_in) \
+			.set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if reduced:
+		return
+	var offsets_v: Variant = _presentation.get("shaken_shake_offsets_px", [3, 3, 2, 2])
+	var offsets: Array = offsets_v if offsets_v is Array and not (offsets_v as Array).is_empty() else [3, 3, 2, 2]
+	var step := _pres("shaken_shake_seconds", 0.22) / float(offsets.size() + 1)
+	_shake_tween = create_tween()
+	var from := 0.0
+	var side := 1.0
+	for off in offsets:
+		var to := side * float(off)
+		_shake_tween.tween_method(_set_shake, from, to, step)
+		from = to
+		side = -side
+	_shake_tween.tween_method(_set_shake, from, 0.0, step)
+
+
+## `px` is in screen pixels at the 1280x720 base. The token sits in the zoomed world, so it divides.
+func _set_shake(px: float) -> void:
+	var zoom := maxf(camera.zoom.x, 0.0001) if camera != null else 1.0
+	_party_layer.position.x = px / zoom
+	_step_progress_bar.position.x = px
+
+
+func _on_input_ready() -> void:
+	_advance_btn.disabled = not _advance_allowed
+	if _advance_btn.visible and not _advance_btn.disabled and get_viewport().gui_get_focus_owner() == null:
+		_advance_btn.grab_focus()
+
+
+## Stops every stop effect and puts the board back to rest. The snippet fades out fast.
+func _cut_effects() -> void:
+	for t in [_stop_tween, _shake_tween, _cross_tween]:
+		if t != null and t.is_valid():
+			t.kill()
+	_set_shake(0.0)
+	_step_progress_bar.call("show_crosses")
+	if _snippet_tween != null and _snippet_tween.is_valid():
+		_snippet_tween.kill()
+		if _travel_snippet_lbl.visible and _travel_snippet_lbl.modulate.a > 0.0:
+			_snippet_tween = create_tween()
+			_snippet_tween.tween_property(_travel_snippet_lbl, "modulate:a", 0.0, _pres("reduced_motion_fade_seconds", 0.15))
+			_snippet_tween.tween_callback(func() -> void: _travel_snippet_lbl.visible = false)
+		else:
+			_travel_snippet_lbl.visible = false
+
+
+func _exit_tree() -> void:
+	for t in [_travel_tween, _stop_tween, _shake_tween, _cross_tween, _snippet_tween]:
+		if t != null and t.is_valid():
+			t.kill()
 
 
 func _is_travelling() -> bool:

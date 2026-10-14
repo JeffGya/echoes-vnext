@@ -40,6 +40,7 @@ const _ALLY_PANEL_STYLE: StyleBox = preload("res://ui/components/EchoCardAllyAcc
 @onready var companion_tag: Label    = %CompanionTag
 @onready var _stop_glyph: TextureRect = %StopGlyph
 @onready var _body_margin: MarginContainer = $VBoxContainer/BodyMargin
+@onready var _portrait: ColorRect = %PortraitPanel
 
 var _actor_id: String = ""
 ## Set by RealmShell: which bar slot this card fills (kind and actor id), so a snapshot updates it in place.
@@ -49,6 +50,11 @@ var slot_key: String = ""
 # reaches the EchoBar's ScrollContainer, which can scroll.
 var _pointer := BoardPointerTracker.new()
 var _scroll_at_press := Vector2i.ZERO
+var _motion: StopMarkMotion
+var _pulse: Tween
+var _glyph_pressed := false
+## The snapshot's presentation timings, set by RealmShell. Read for the press feedback.
+var presentation: Dictionary = {}
 
 func _ready() -> void:
 	focus_exited.connect(queue_redraw)
@@ -56,10 +62,14 @@ func _ready() -> void:
 	_pointer.space_held_fn = Callable(self, "_never")
 	_pointer.tap.connect(_on_pointer_tap)
 	gui_input.connect(_on_gui_input)
+	mouse_exited.connect(_release_glyph)
+	_motion = StopMarkMotion.new(_stop_glyph, self)
 
 ## Shows the stop glyph for `kind`, or hides it for "" or an unknown kind. Only a card that holds a
 ## glyph takes keyboard focus; its tap opens the why card.
 func set_stop_glyph(kind: String, accessible_name: String = "") -> void:
+	_motion.stop()
+	_glyph_pressed = false
 	var tex := StopGlyphs.texture(kind)
 	_stop_glyph.texture = tex
 	_stop_glyph.visible = tex != null
@@ -71,11 +81,54 @@ func set_stop_glyph(kind: String, accessible_name: String = "") -> void:
 
 ## The old mark while the next Advance computes.
 func dim_stop_glyph() -> void:
+	_motion.stop()
 	_stop_glyph.modulate.a = 0.5
 
 
 func has_stop_glyph() -> bool:
 	return _stop_glyph.visible
+
+
+## The glyph is set but has not appeared yet: invisible, still not a tap target for the shell.
+func hide_stop_glyph_for_beat() -> void:
+	_motion.hide_for_beat()
+
+
+func settle_stop_glyph(p: Dictionary) -> void:
+	_motion.settle(p, true)
+
+
+func fade_out_stop_glyph(seconds: float) -> void:
+	_motion.fade_out(seconds, set_stop_glyph.bind("", ""))
+
+
+## One brightness cycle on the portrait of the named Echo. Brightness, not scale: the card sits in a container.
+func pulse_portrait(p: Dictionary) -> void:
+	stop_pulse()
+	if StopMarkMotion.reduced:
+		return
+	var half := StopMarkMotion.pres(p, "portrait_pulse_seconds", 0.5) * 0.5
+	var peak := StopMarkMotion.pres(p, "portrait_pulse_peak", 1.25)
+	_pulse = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_pulse.tween_property(_portrait, "modulate", Color(peak, peak, peak, 1.0), half)
+	_pulse.tween_property(_portrait, "modulate", Color.WHITE, half)
+
+
+func stop_pulse() -> void:
+	if _pulse != null and _pulse.is_valid():
+		_pulse.kill()
+	_portrait.modulate = Color.WHITE
+
+
+func stop_motion() -> void:
+	stop_pulse()
+	_motion.stop()
+
+
+func _release_glyph() -> void:
+	if _glyph_pressed:
+		_glyph_pressed = false
+		_motion.press(false, presentation)
 
 
 func actor_id() -> String:
@@ -101,9 +154,15 @@ func _never() -> bool:
 	return false
 
 func _on_gui_input(event: InputEvent) -> void:
-	if (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) \
-			or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed):
+	var down := (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) \
+			or (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed)
+	if down:
 		_scroll_at_press = _scroll_position()
+		if _stop_glyph.visible and _stop_glyph.modulate.a > 0.01 and not _glyph_pressed:
+			_glyph_pressed = true
+			_motion.press(true, presentation)
+	elif event is InputEventMouseButton or event is InputEventScreenTouch or event is InputEventScreenDrag:
+		_release_glyph()
 	_pointer.handle_event(event)
 
 # A release outside the card is no tap (press on one card, release on another). A bar that scrolled

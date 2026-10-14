@@ -23,6 +23,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("stage_stop_ui/step_row_crosses_budget_minus_effective", Callable(StageStopUITests, "_t_step_row_lost"))
 	runner.register_test("stage_stop_ui/step_fraction_label_is_gone", Callable(StageStopUITests, "_t_fraction_label_gone"))
 	runner.register_test("stage_stop_ui/presentation_read_with_literal_fallback", Callable(StageStopUITests, "_t_presentation_read"))
+	runner.register_test("stage_stop_ui/motion_calm_timeline_from_snapshot", Callable(StageStopUITests, "_t_motion_calm"))
+	runner.register_test("stage_stop_ui/motion_shaken_shake_and_crosses", Callable(StageStopUITests, "_t_motion_shaken"))
+	runner.register_test("stage_stop_ui/motion_snippet_waits_on_travel_only", Callable(StageStopUITests, "_t_motion_snippet"))
+	runner.register_test("stage_stop_ui/motion_advance_ready_then_second_advance_cuts", Callable(StageStopUITests, "_t_motion_cut"))
+	runner.register_test("stage_stop_ui/motion_reduced_has_no_shake_no_scale_no_pulse", Callable(StageStopUITests, "_t_motion_reduced"))
+	runner.register_test("stage_stop_ui/motion_mark_hidden_until_beat_then_tappable", Callable(StageStopUITests, "_t_motion_shell_mark"))
+	runner.register_test("stage_stop_ui/motion_press_and_pulse_values", Callable(StageStopUITests, "_t_motion_press_pulse"))
+	runner.register_test("stage_stop_ui/motion_leaves_snapshot_untouched_and_frees_tweens", Callable(StageStopUITests, "_t_motion_no_leak"))
 	runner.register_test("stage_stop_ui/no_directive_id_literal_in_ui", Callable(StageStopUITests, "_t_no_directive_literal"))
 
 
@@ -216,3 +224,272 @@ static func _t_no_directive_literal() -> Dictionary:
 				if re.search(FileAccess.get_file_as_string(dir + "/" + f)) != null:
 					return { "ok": false, "error": "Directive id literal in " + dir + "/" + f }
 	return { "ok": true }
+
+
+# ─── Stop motion (F2) ─────────────────────────────────────────────────────────
+
+static func _pres_full() -> Dictionary:
+	return { "walk_seconds": 0.5, "snippet_fade_in_seconds": 0.4, "snippet_hold_seconds": 2.1, "snippet_fade_out_seconds": 0.5,
+		"stop_rest_seconds": 0.2, "beat_gap_seconds": 0.1, "glyph_fade_seconds": 0.2, "glyph_settle_seconds": 0.4,
+		"glyph_settle_from_scale": 0.9, "glyph_settle_overshoot_scale": 1.2, "chip_settle_seconds": 0.3, "glyph_press_seconds": 0.08,
+		"why_open_seconds": 0.15, "why_close_seconds": 0.1, "portrait_pulse_seconds": 0.6, "portrait_pulse_peak": 1.5,
+		"shaken_shake_seconds": 0.25, "shaken_shake_offsets_px": [4, 4, 2, 2], "cross_stagger_seconds": 0.1, "cross_in_seconds": 0.2,
+		"reduced_motion_fade_seconds": 0.15, "overlay_hold_seconds": 0.35 }
+
+
+static func _explore_snap(col: int, kind: String, named: String, lost: int, snippet: String = "") -> Dictionary:
+	var snap := _snap(kind, named)
+	var d: Dictionary = snap["data"]
+	d.merge({ "map_width": 6, "map_height": 6, "party_pos": { "col": col, "row": 1 }, "step_budget": 5, "effective_steps": 5 - lost,
+		"situations": [], "terrain": {}, "presentation": _pres_full(), "travel_snippet": snippet,
+		"traveled_origin": { "col": 1, "row": 1 }, "traveled_path": [{ "col": 2, "row": 1 }, { "col": 3, "row": 1 }] if col > 1 else [] })
+	snap["actions"] = { "cta.advance_turn": {} }
+	return snap
+
+
+## Mounts the stage screen on its first-entry snapshot, then sends a travel snapshot. Returns [viewport, screen, beats].
+static func _travel(kind: String, named: String, lost: int, snippet: String = "") -> Array:
+	var m := _mount(StageScene)
+	var screen := m[1] as StageExploreScreen
+	var beats: Array = []
+	screen.stop_beat.connect(func(b: StringName) -> void: beats.append(b))
+	screen.set_snapshot(_explore_snap(1, kind, named, 0))
+	screen.set_snapshot(_explore_snap(3, kind, named, lost, snippet))
+	return [m[0], screen, beats]
+
+
+static func _near(a: float, b: float) -> bool:
+	return absf(a - b) < 0.002
+
+
+static func _t_motion_calm() -> Dictionary:
+	var t := _travel("capacity_spent", "Kofi", 0)
+	var screen := t[1] as StageExploreScreen
+	var plan: Dictionary = screen.get("_stop_plan")
+	var ok: bool = _near(plan["mark_at"], 0.2) and _near(plan["ready_at"], 0.6) and _near(plan["pulse_at"], 0.7) and _near(plan["snippet_at"], 0.7) \
+		and float(plan["shake_at"]) < 0.0
+	if not ok:
+		return _fail(t, "calm plan wrong: %s" % str(plan))
+	var walk := screen.get("_travel_tween") as Tween
+	walk.custom_step(0.5001)
+	var stop := screen.get("_stop_tween") as Tween
+	if stop == null or not stop.is_valid():
+		return _fail(t, "walk end must start the stop beats")
+	stop.custom_step(0.19)
+	if not (t[2] as Array).is_empty():
+		return _fail(t, "mark must wait for stop_rest_seconds")
+	stop.custom_step(0.02)
+	if t[2] != [&"mark"]:
+		return _fail(t, "mark beat missing at rest end: %s" % str(t[2]))
+	stop.custom_step(0.5001)
+	if t[2] != [&"mark", &"pulse"]:
+		return _fail(t, "pulse must follow the mark: %s" % str(t[2]))
+	t[0].free()
+	return { "ok": true }
+
+
+static func _t_motion_shaken() -> Dictionary:
+	var t := _travel("capacity_spent", "", 2)
+	var screen := t[1] as StageExploreScreen
+	var plan: Dictionary = screen.get("_stop_plan")
+	# shake 0.25 vs crosses 0.1 + 0.2 = 0.3: the longer one sets the beat; the chip follows after the gap.
+	if not (_near(plan["shake_at"], 0.2) and _near(plan["mark_at"], 0.6) and float(plan["pulse_at"]) < 0.0):
+		return _fail(t, "shaken plan wrong: %s" % str(plan))
+	var bar := screen.get_node("%StepProgressBar")
+	var layer := screen.get_node("%PartyTokenLayer") as Node2D
+	var cam := screen.get_node("%BoardCamera") as Camera2D
+	cam.zoom = Vector2(2, 2)
+	(screen.get("_travel_tween") as Tween).custom_step(0.5001)
+	var stop := screen.get("_stop_tween") as Tween
+	stop.custom_step(0.201)
+	var cross := screen.get("_cross_tween") as Tween
+	var shake := screen.get("_shake_tween") as Tween
+	if cross == null or shake == null or not cross.is_valid():
+		return _fail(t, "shake beat must start both tweens")
+	if (bar.get("_cross_alpha") as Array).any(func(a: float) -> bool: return a > 0.0):
+		return _fail(t, "crosses must be hidden before the beat")
+	shake.custom_step(0.025)
+	if not (_near((bar as Control).position.x, 2.0) and _near(layer.position.x, 1.0)):
+		return _fail(t, "shake is 4 px on the bar and 4 / zoom on the token: bar %f token %f" % [(bar as Control).position.x, layer.position.x])
+	shake.custom_step(0.3)
+	if layer.position.x != 0.0 or (bar as Control).position.x != 0.0:
+		return _fail(t, "shake must end at rest, token %f bar %f" % [layer.position.x, (bar as Control).position.x])
+	cross.custom_step(0.31)
+	if (bar.get("_cross_alpha") as Array).any(func(a: float) -> bool: return not _near(a, 1.0)):
+		return _fail(t, "all crosses must be in after the stagger")
+	t[0].free()
+	return { "ok": true }
+
+
+static func _t_motion_snippet() -> Dictionary:
+	var t := _travel("capacity_spent", "Kofi", 0, "A line.")
+	var screen := t[1] as StageExploreScreen
+	var label := screen.get_node("%TravelSnippetLabel") as Label
+	var tween := screen.get("_snippet_tween") as Tween
+	tween.custom_step(0.5 + 0.7 - 0.01)
+	var early := label.modulate.a
+	tween.custom_step(0.21)
+	var later := label.modulate.a
+	t[0].free()
+	if early != 0.0 or later < 0.4:
+		return { "ok": false, "error": "snippet must start 0.7 s after the walk begins; early %f later %f" % [early, later] }
+	var m := _mount(StageScene)
+	var screen2 := m[1] as StageExploreScreen
+	screen2.set_snapshot(_explore_snap(1, "capacity_spent", "Kofi", 0, "Entry line."))
+	(screen2.get("_snippet_tween") as Tween).custom_step(0.2)
+	var at_once: float = (screen2.get_node("%TravelSnippetLabel") as Label).modulate.a
+	m[0].free()
+	return { "ok": at_once > 0.4, "error": "a stage entry must play the snippet at once" }
+
+
+static func _t_motion_cut() -> Dictionary:
+	var t := _travel("capacity_spent", "", 2, "A line.")
+	var screen := t[1] as StageExploreScreen
+	var btn := screen.get_node("%AdvanceButton") as Button
+	if not btn.disabled:
+		return _fail(t, "Advance must wait during the walk")
+	(screen.get("_travel_tween") as Tween).custom_step(0.5001)
+	var stop := screen.get("_stop_tween") as Tween
+	stop.custom_step(0.201)
+	var shake := screen.get("_shake_tween") as Tween
+	shake.custom_step(0.06)
+	stop.custom_step(0.9 - 0.201 + 0.01)
+	if btn.disabled:
+		return _fail(t, "Advance must be ready when the mark has settled")
+	var ready_at := float((screen.get("_stop_plan") as Dictionary)["ready_at"])
+	if ready_at < 0.8:
+		return _fail(t, "ready_at too early: %f" % ready_at)
+	var started := [0]
+	screen.advance_started.connect(func() -> void: started[0] += 1)
+	screen.call("_on_advance_pressed")
+	var layer := screen.get_node("%PartyTokenLayer") as Node2D
+	var bar := screen.get_node("%StepProgressBar")
+	var dead := not shake.is_valid() and not stop.is_valid() and not (screen.get("_cross_tween") as Tween).is_valid()
+	var ok: bool = dead and started[0] == 1 and layer.position.x == 0.0 and (bar as Control).position.x == 0.0 \
+		and not (bar.get("_cross_alpha") as Array).any(func(a: float) -> bool: return a < 1.0)
+	t[0].free()
+	return { "ok": ok, "error": "a new Advance must kill every stop tween and reset the board" }
+
+
+static func _t_motion_reduced() -> Dictionary:
+	StopMarkMotion.reduced = true
+	var t := _travel("capacity_spent", "Kofi", 2)
+	var screen := t[1] as StageExploreScreen
+	var plan: Dictionary = screen.get("_stop_plan")
+	(screen.get("_travel_tween") as Tween).custom_step(0.5001)
+	(screen.get("_stop_tween") as Tween).custom_step(0.001)
+	var no_shake: bool = screen.get("_shake_tween") == null
+	var crosses := screen.get("_cross_tween") as Tween
+	var plan_ok: bool = _near(plan["shake_at"], 0.0) and _near(plan["mark_at"], 0.15 + 0.1) and float(plan["pulse_at"]) < 0.0
+	StopMarkMotion.reduced = false
+	t[0].free()
+	var m := _mount(RealmShellScene)
+	StopMarkMotion.reduced = true
+	var snap := _snap("capacity_spent", "Kofi")
+	snap["data"]["presentation"] = _pres_full()
+	m[1].call("_on_travel_started")
+	_feed(m[1], snap)
+	m[1].call("_on_stop_beat", &"mark")
+	var holder: EchoCardItem
+	for card in _cards(m[1]):
+		if (card as EchoCardItem).has_stop_glyph():
+			holder = card
+	var glyph := holder.get_node("%StopGlyph") as Control
+	m[1].call("_on_stop_beat", &"pulse")
+	var settle := holder.get("_motion").get("_settle") as Tween
+	settle.custom_step(0.05)
+	var scale_flat: bool = glyph.scale == Vector2.ONE
+	var no_pulse: bool = holder.get("_pulse") == null
+	StopMarkMotion.reduced = false
+	m[0].free()
+	var ok: bool = no_shake and crosses != null and plan_ok and scale_flat and no_pulse
+	return { "ok": ok, "error": "reduced: shake %s crosses %s plan %s flat %s nopulse %s" % [no_shake, crosses != null, plan_ok, scale_flat, no_pulse] }
+
+
+static func _t_motion_shell_mark() -> Dictionary:
+	var m := _mount(RealmShellScene)
+	var shell: Control = m[1]
+	var snap := _snap("interrupted", "Kofi")
+	snap["data"]["presentation"] = _pres_full()
+	shell.call("_on_travel_started")
+	_feed(shell, snap)
+	var holder: EchoCardItem
+	for card in _cards(shell):
+		if (card as EchoCardItem).has_stop_glyph():
+			holder = card
+	var glyph := holder.get_node("%StopGlyph") as Control
+	var why := shell.get_node("%StageWhyCard") as StageWhyCard
+	if glyph.modulate.a != 0.0:
+		return _fail(m, "the mark must be invisible before its beat")
+	holder.card_pressed.emit(holder.actor_id())
+	if why.is_open():
+		return _fail(m, "a tap before the mark shows must do nothing")
+	shell.call("_on_stop_beat", &"mark")
+	var settle := holder.get("_motion").get("_settle") as Tween
+	if settle == null or not settle.is_valid():
+		return _fail(m, "the mark must settle on its beat")
+	holder.card_pressed.emit(holder.actor_id())
+	if not why.is_open():
+		return _fail(m, "a tap must open the why card from the first visible frame")
+	settle.custom_step(0.239)
+	var over := glyph.scale.x
+	settle.custom_step(0.5001)
+	var rest := glyph.scale.x
+	var alpha := glyph.modulate.a
+	m[0].free()
+	return { "ok": over > 1.15 and over <= 1.2001 and _near(rest, 1.0) and _near(alpha, 1.0), "error": "settle must overshoot to 1.2 then rest at 1 (over %f)" % over }
+
+
+static func _t_motion_press_pulse() -> Dictionary:
+	var m := _mount(RealmShellScene)
+	var shell: Control = m[1]
+	var snap := _snap("interrupted", "Kofi")
+	snap["data"]["presentation"] = _pres_full()
+	_feed(shell, snap)
+	var holder: EchoCardItem
+	for card in _cards(shell):
+		if (card as EchoCardItem).has_stop_glyph():
+			holder = card
+	var glyph := holder.get_node("%StopGlyph") as Control
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	holder.call("_on_gui_input", down)
+	(holder.get("_motion").get("_press") as Tween).custom_step(0.09)
+	var pressed_ok: bool = _near(glyph.modulate.r, 0.85) and _near(glyph.scale.x, 0.95)
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	holder.call("_on_gui_input", up)
+	(holder.get("_motion").get("_press") as Tween).custom_step(0.09)
+	var back_ok: bool = _near(glyph.modulate.r, 1.0) and _near(glyph.scale.x, 1.0)
+	shell.call("_on_stop_beat", &"pulse")
+	var portrait := holder.get_node("%PortraitPanel") as Control
+	var pulse := holder.get("_pulse") as Tween
+	pulse.custom_step(0.301)
+	var peak := portrait.modulate.r
+	pulse.custom_step(0.31)
+	var end := portrait.modulate.r
+	m[0].free()
+	return { "ok": pressed_ok and back_ok and _near(peak, 1.5) and _near(end, 1.0),
+		"error": "press %s back %s pulse peak %f end %f" % [pressed_ok, back_ok, peak, end] }
+
+
+static func _t_motion_no_leak() -> Dictionary:
+	var snap1 := _explore_snap(1, "capacity_spent", "", 2)
+	var snap2 := _explore_snap(3, "capacity_spent", "", 2, "A line.")
+	var before := [snap1.hash(), snap2.hash()]
+	var m := _mount(StageScene)
+	var screen := m[1] as StageExploreScreen
+	screen.set_snapshot(snap1)
+	screen.set_snapshot(snap2)
+	(screen.get("_travel_tween") as Tween).custom_step(0.5001)
+	(screen.get("_stop_tween") as Tween).custom_step(0.25)
+	var tweens: Array = []
+	for name in ["_travel_tween", "_stop_tween", "_shake_tween", "_cross_tween", "_snippet_tween"]:
+		tweens.append(screen.get(name))
+	if tweens.any(func(x: Variant) -> bool: return x == null or not (x as Tween).is_valid()):
+		return _fail(m, "every effect tween must run before the exit")
+	m[0].free()
+	var leaked := tweens.any(func(x: Variant) -> bool: return (x as Tween).is_valid())
+	return { "ok": not leaked and before == [snap1.hash(), snap2.hash()], "error": "a tween outlived the screen, or a snapshot changed" }
