@@ -24,6 +24,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("save_integrity/journey_cleared_on_new_entry", Callable(SaveIntegrityTests, "_test_journey_cleared_on_new_entry"))
 	runner.register_test("save_integrity/old_save_loads_empty_journey", Callable(SaveIntegrityTests, "_test_old_save_loads_empty_journey"))
 	runner.register_test("save_integrity/malformed_journey_repaired", Callable(SaveIntegrityTests, "_test_malformed_journey_repaired"))
+	runner.register_test("save_integrity/old_save_commitment_depth_shows_budget", Callable(SaveIntegrityTests, "_test_old_save_commitment_depth_shows_budget"))
 	runner.register_test("save_integrity/reset_keeps_every_old_key", Callable(SaveIntegrityTests, "_test_reset_keeps_every_old_key"))
 
 static func _logger() -> StructuredLogger:
@@ -453,7 +454,7 @@ static func _journey_runtime() -> FlowRuntime:
 	return runtime
 
 static func _journey_view(data: Dictionary) -> String:
-	return var_to_str({ "stop": data["stop"], "travel_why": data["travel_why"], "effective_steps": data["effective_steps"] })
+	return var_to_str({ "stop": data["stop"], "travel_why": data["travel_why"], "effective_steps": data["effective_steps"], "commitment_depth": data["commitment_depth"] })
 
 ## The real entry path: _lock_map_if_needed, _reset_session_state, snapshot build.
 static func _reenter(ctx: FlowContext) -> Dictionary:
@@ -523,8 +524,8 @@ static func _test_journey_cleared_on_new_entry() -> Dictionary:
 	var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
 	em["party_state"] = StageExploreModel.STATE_ESCAPED  # what handle_return_home writes on success
 	var d := _reenter(runtime.flow_ctx)
-	if str(d["stop"]["kind"]) != "" or str(d["stop"]["echo_id"]) != "" or d["effective_steps"] != d["step_budget"]:
-		return {"ok": false, "error": "entry after return home kept the journey: %s %s" % [d["stop"], d["effective_steps"]]}
+	if str(d["stop"]["kind"]) != "" or str(d["stop"]["echo_id"]) != "" or d["effective_steps"] != d["step_budget"] or d["commitment_depth"] != d["step_budget"]:
+		return {"ok": false, "error": "entry after return home kept the journey: %s %s %s" % [d["stop"], d["effective_steps"], d["commitment_depth"]]}
 	for slot in d["travel_why"]:
 		if str(d["travel_why"][slot]) != "":
 			return {"ok": false, "error": "entry after return home kept why slot %s" % slot}
@@ -534,7 +535,7 @@ static func _test_journey_cleared_on_new_entry() -> Dictionary:
 static func _test_old_save_loads_empty_journey() -> Dictionary:
 	var save := _save_with_explore_map("Old Journey")
 	var emap := _explore_map_of(save)
-	for key in _JOURNEY_KEYS + ["last_effective_steps"]:
+	for key in _JOURNEY_KEYS + ["last_effective_steps", "last_commitment_depth"]:
 		emap.erase(key)
 	_cleanup()
 	_write_raw(TEST_PATH, save)
@@ -543,7 +544,7 @@ static func _test_old_save_loads_empty_journey() -> Dictionary:
 	if not [SaveService.LOAD_LOADED, SaveService.LOAD_RECOVERED].has(str(result.get("status", ""))):
 		return {"ok": false, "error": "old save did not load: %s" % result.get("status", "")}
 	var loaded := _explore_map_of(result["data"])
-	if loaded.get("last_stop") != {} or loaded.get("travel_why") != {} or int(loaded.get("leg_start_length", 0)) != -1 or loaded.has("last_effective_steps"):
+	if loaded.get("last_stop") != {} or loaded.get("travel_why") != {} or int(loaded.get("leg_start_length", 0)) != -1 or loaded.has("last_effective_steps") or loaded.has("last_commitment_depth"):
 		return {"ok": false, "error": "old save repaired wrongly: %s %s %s" % [loaded.get("last_stop"), loaded.get("travel_why"), loaded.get("leg_start_length")]}
 	if str(StageExploreSnapshotBuilder._project_stop(loaded, loaded["party_pos"])["kind"]) != "":
 		return {"ok": false, "error": "old save shows a stop glyph"}
@@ -560,10 +561,11 @@ static func _test_malformed_journey_repaired() -> Dictionary:
 		emap["travel_why"] = 5
 		emap["leg_start_length"] = "far"
 		emap["last_effective_steps"] = "lots"
+		emap["last_commitment_depth"] = [5] if bad is String else -2
 		if not SaveService._apply_additive_defaults_and_repairs(save, _logger(), 0):
 			return {"ok": false, "error": "malformed entry %s did not flag a repair" % [bad]}
 		var fixed := _explore_map_of(save)
-		if fixed["last_stop"] != {} or fixed["travel_why"] != {} or fixed["leg_start_length"] != -1 or fixed.has("last_effective_steps"):
+		if fixed["last_stop"] != {} or fixed["travel_why"] != {} or fixed["leg_start_length"] != -1 or fixed.has("last_effective_steps") or fixed.has("last_commitment_depth"):
 			return {"ok": false, "error": "malformed entry %s not emptied" % [bad]}
 	var save := _save_with_explore_map("Dirty Why")
 	var emap := _explore_map_of(save)
@@ -578,9 +580,33 @@ static func _test_malformed_journey_repaired() -> Dictionary:
 	good_map["travel_why"] = _StopPolicyS5.sanitise_why({"cause": "terrain", "stop_kind": "spotted_ahead"})
 	good_map["leg_start_length"] = 9.0
 	good_map["last_effective_steps"] = 2.0
+	good_map["last_commitment_depth"] = 2.0
 	var copy := var_to_str(good_map)
 	if SaveService._apply_additive_defaults_and_repairs(good, _logger(), 0) or var_to_str(_explore_map_of(good)) != copy:
 		return {"ok": false, "error": "a valid saved entry was changed by repair"}
+	return {"ok": true}
+
+## A save from before D-60 has a journey but no depth: after save, load and entry the row shows the budget.
+static func _test_old_save_commitment_depth_shows_budget() -> Dictionary:
+	var runtime := _journey_runtime()
+	var err := _advance_named(runtime)
+	if not err.is_empty():
+		return {"ok": false, "error": err}
+	if not TraversalModelTests._read_em(runtime, "last_commitment_depth") is int:
+		return {"ok": false, "error": "the Advance did not write last_commitment_depth"}
+	(runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"] as Dictionary).erase("last_commitment_depth")
+	_cleanup()
+	if not SaveService.save_to_file(TEST_PATH, runtime.flow_ctx.save_data, _logger(), 0):
+		_cleanup()
+		return {"ok": false, "error": "save failed"}
+	var result := SaveService.load_from_file(TEST_PATH, _logger(), 0)
+	_cleanup()
+	if str(result.get("status", "")) != SaveService.LOAD_LOADED:
+		return {"ok": false, "error": "load status %s" % result.get("status", "")}
+	runtime.flow_ctx.save_data = result["data"]
+	var d := _reenter(runtime.flow_ctx)
+	if not d["commitment_depth"] is int or d["commitment_depth"] != d["step_budget"] or str(d["stop"]["kind"]).is_empty():
+		return {"ok": false, "error": "old save: depth %s, budget %s, stop %s" % [d["commitment_depth"], d["step_budget"], d["stop"]]}
 	return {"ok": true}
 
 ## No explore_map key the reset kept before S5 is dropped or renamed by it.

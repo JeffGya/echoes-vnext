@@ -1366,8 +1366,8 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 	return repaired
 	
 ## V2-DIRECTIVE-002 design 8a: the saved journey entry. Missing or malformed means empty: no glyph,
-## no chip, no error. `last_effective_steps` has no empty value (absent = the snapshot uses the
-## step budget), so a malformed one is erased, never defaulted. Returns true when it changed the map.
+## no chip, no error. `last_effective_steps` and `last_commitment_depth` have no empty value (absent =
+## the snapshot uses the step budget), so a malformed one is erased, never defaulted. Returns true when it changed the map.
 static func _repair_journey_entry(emap: Dictionary) -> bool:
 	var changed := false
 	if not StageStopPolicyScript.valid_stop(emap.get("last_stop")):
@@ -1386,11 +1386,12 @@ static func _repair_journey_entry(emap: Dictionary) -> bool:
 	if not (leg_v is int or leg_v is float) or int(leg_v) < -1:
 		emap["leg_start_length"] = -1
 		changed = true
-	if emap.has("last_effective_steps"):
-		var steps_v: Variant = emap["last_effective_steps"]
-		if not (steps_v is int or steps_v is float) or int(steps_v) < 0:
-			emap.erase("last_effective_steps")
-			changed = true
+	for key in ["last_effective_steps", "last_commitment_depth"]:
+		if emap.has(key):
+			var steps_v: Variant = emap[key]
+			if not (steps_v is int or steps_v is float) or int(steps_v) < 0:
+				emap.erase(key)
+				changed = true
 	return changed
 
 

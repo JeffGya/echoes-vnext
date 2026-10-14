@@ -329,7 +329,8 @@ static func test_sanctum_fingerprint() -> Dictionary:
 # S3b D-52 F6 then stripped presentation._comment from the payload. Stop kinds cannot move this hash.
 # V2-DIRECTIVE-002 frontend: 18 new stages.presentation keys (D-57); the old hash is 81d5d887...b1ac.
 # V2-DIRECTIVE-002 frontend: party_preview id; preview presentation. The old hash is 31bea0d4...1fa5.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "16239869806080f8ba9f30e52690ed7fe70546f29dd9dc628b9baccbf842afee"
+# V2-DIRECTIVE-002 play fix: commitment_depth (D-60); the old hash is 16239869...afee.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "b4c2a6e7016fdb20bd0a8af88272c6f0bc359b26e8019c4dd8f433ee3d2619d9"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

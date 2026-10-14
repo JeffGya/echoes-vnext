@@ -494,11 +494,18 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"stop":                    _project_stop(explore_map, party_pos),
 			"travel_why":              StageStopPolicyScript.sanitise_why(_dict(explore_map.get("travel_why", {}))),
 			"effective_steps":         int(explore_map.get("last_effective_steps", _step_budget_snap)),
+			"commitment_depth":        _commitment_depth(explore_map, _step_budget_snap),
 			"presentation":            ConfigService.get_stage_presentation_cfg(flow_ctx.config_service),
 		},
 		"actions": actions,
 		"meta": { "t": t },
 	}
+
+
+## Steps the last Advance could commit to; the step row crosses out the rest. A malformed value reads as the budget.
+static func _commitment_depth(explore_map: Dictionary, step_budget: int) -> int:
+	var v: Variant = explore_map.get("last_commitment_depth", step_budget)
+	return clampi(int(v), 0, step_budget) if (v is int or v is float) else step_budget
 
 
 static func _dict(v: Variant) -> Dictionary:

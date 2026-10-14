@@ -247,7 +247,7 @@ Presentation rules:
 2. **Repeat filter (D-38 item 3).** The journey entry does not show the same Echo with the same reason class twice in a row. The filter lives in the journey entry only. The simulation and the counterfactual stay unfiltered.
 3. **Copy rule (D-40 item 4).** A fear or morale reason never reads as a fault of the Echo. Wording is Jeff's.
 4. **Seek payoff (D-40 item 6).** At least one Seek Signs payoff is visible on the board. The wider balance stays under ANSWERS #46.
-5. **Step bar and Advance (D-40 item 8, D-41).** The old mockup look stays: the old Advance button, the big step diamonds, a red cross on each lost step. The bar shows the BASELINE steps (`step_budget`) as diamonds. Steps lost to a shaken party (`step_budget` minus `effective_steps`) are crossed out. The two numbers are shown as shapes: the diamonds are the baseline, the crosses are the loss. A cross is a shape cue, so colour is never the only signal. The step row shows diamonds only. No count text is shown (D-43). The live count label (`StepFractionLabel`, "n/n") is deleted in the build. The bar adds no number and no new text. The live layout is otherwise unchanged. The blank Advance label is a live defect and a separate task, not part of this story.
+5. **Step bar and Advance (D-40 item 8, D-41).** The old mockup look stays: the old Advance button, the big step diamonds, a red cross on each lost step. The bar shows the BASELINE steps (`step_budget`) as diamonds. Steps lost to a shaken party (`step_budget` minus `effective_steps`) are crossed out. D-60: every step the Advance cannot use is crossed out, so the row crosses out `step_budget` minus `commitment_depth` steps (Seek: 6 diamonds, the 6th crossed out). The two numbers are shown as shapes: the diamonds are the baseline, the crosses are the loss. A cross is a shape cue, so colour is never the only signal. The step row shows diamonds only. No count text is shown (D-43). The live count label (`StepFractionLabel`, "n/n") is deleted in the build. The bar adds no number and no new text. The live layout is otherwise unchanged. The blank Advance label is a live defect and a separate task, not part of this story.
 6. **Tint and glyph (D-40 item 11).** `sr-game-artist` names the tint tokens and the glyph rule. `mid-game-designer` authors the data keys. `ui-ux-designer` deletes `_label_for_directive` (`StageExploreScreen.gd:1243`) and `_TINT_BY_ID`.
 7. Snapshot and UI field details are left to `mechanics-developer` and `ui-ux-designer` (D-40 item 9).
 
@@ -283,6 +283,7 @@ Snapshot fields core must provide (backend first; PROPOSED names, `mechanics-dev
 | `travel_why` | Dict: `cause`, `purpose_family`, `route_character`, `stop_kind`, `named_echo_name` (empty when none), `echo_reason_class` | Sanitised. Set per Advance. It is the content of the journey entry. It stays until the next Advance replaces it. It is saved (section 8a). |
 | `step_budget` | int | The Directive baseline. The step bar draws it. |
 | `effective_steps` | int | Steps after readiness. The bar crosses out `step_budget` minus `effective_steps` steps. |
+| `commitment_depth` | int, 0 to `step_budget` | Steps the last Advance could commit to (D-60). The bar crosses out every step past it: `step_budget` minus `commitment_depth`. It equals `step_budget` before the first Advance and after an old-save load. |
 | Contact: `contact_echo_bids` | unchanged shape | Values now carry the scaled bid. |
 | `directive` | `id`, `label`, plus tint and glyph keys read from the Directive data entry | See section 10 and item 6 above. |
 
@@ -299,6 +300,7 @@ The journey entry survives save and load. The `stop` result also survives, so th
 | Schema | No field is removed or renamed. |
 | Review | An `opus` save-schema pass before the build merges. The pass covers the journey entry and `stop` together. |
 | Tests | Round trip (save, load, same entry, same `stop`, glyph returns). Old-save load (no field, empty entry, no glyph, no error). Sanitiser (no ID, no number). |
+| Commitment depth (D-60) | `explore_map.last_commitment_depth`, int. Written by every Advance; carried and cleared like `last_effective_steps`. Missing means absent (the snapshot shows `step_budget`). A malformed or negative value is erased. |
 | Leg-start length (C1, D-48) | One more saved number. It is the plain length from the leg start, and it fixes the detour limit for that leg. It is built in the same save pass as the journey entry. `mechanics-developer` (`opus`) sets its lifetime, its reset rules and its old-save repair rule. |
 
 ## 9. Failure modes

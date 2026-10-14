@@ -518,6 +518,7 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		cause = "terrain"
 	var named_id := str(why.get("decisive_contributor_id", "")) if cause == "echo" else ""
 	explore_map["last_effective_steps"] = int(stance["effective_steps"])
+	explore_map["last_commitment_depth"] = commitment_depth
 	explore_map["last_stop"] = { "kind": stop_kind, "col": int(party_pos["col"]), "row": int(party_pos["row"]), "echo_id": named_id }
 	explore_map["travel_why"] = StageStopPolicyScript.sanitise_why({
 		"cause": cause,

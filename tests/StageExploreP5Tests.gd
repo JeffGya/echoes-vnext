@@ -66,6 +66,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore_p5/dry_runs_not_counted_as_stances", Callable(StageExploreP5Tests, "_t_dry_runs_not_counted_as_stances"))
 	runner.register_test("explore_p5/first_step_never_pauses_for_exposure", Callable(StageExploreP5Tests, "_t_first_step_never_pauses_for_exposure"))
 	runner.register_test("explore_p5/snapshot_effective_steps_follows_readiness", Callable(StageExploreP5Tests, "_t_snapshot_effective_steps_follows_readiness"))
+	runner.register_test("explore_p5/snapshot_commitment_depth_scout_and_seek", Callable(StageExploreP5Tests, "_t_snapshot_commitment_depth_scout_and_seek"))
+	runner.register_test("explore_p5/snapshot_commitment_depth_clamped", Callable(StageExploreP5Tests, "_t_snapshot_commitment_depth_clamped"))
 	runner.register_test("explore_p5/peek_does_not_reveal", Callable(StageExploreP5Tests, "_t_peek_does_not_reveal"))
 	runner.register_test("explore_p5/profileless_directive_advances_with_readiness", Callable(StageExploreP5Tests, "_t_profileless_directive_advances_with_readiness"))
 
@@ -962,6 +964,38 @@ static func _t_snapshot_effective_steps_follows_readiness() -> Dictionary:
 	var d := _snap(runtime)
 	if int(d["effective_steps"]) >= int(d["step_budget"]) or int(d["effective_steps"]) != want:
 		return { "ok": false, "error": "a shaken party must show %d of %d steps, got %s" % [want, int(d["step_budget"]), d["effective_steps"]] }
+	return { "ok": true }
+
+
+## The step row crosses out the steps past `commitment_depth` (D-60). Real factory Echoes, calm, real stance.
+static func _t_snapshot_commitment_depth_scout_and_seek() -> Dictionary:
+	var members := [["n_a", "okofor", 3, 0, 50, 1], ["n_b", "aduro", 3, 0, 50, 2]]
+	for c in [["directive.scout_carefully", 2, 3], ["directive.seek_signs", 5, 6]]:
+		var runtime := TraversalModelTests._cf_runtime(c[0], members, TraversalModelTests._full_rect_terrain(30, 11), [])
+		runtime.flow_ctx.config_service = runtime.config_service
+		var before := _snap(runtime)
+		if before["commitment_depth"] != before["step_budget"]:
+			return { "ok": false, "error": "%s: before the first Advance the depth must equal the budget, got %s of %s" % [c[0], before["commitment_depth"], before["step_budget"]] }
+		var stance := TraversalModelTests._adv_service(runtime)._build_stance(runtime.directive_service.get_active_directive())
+		if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+			return { "ok": false, "error": "%s: the Advance did not move" % c[0] }
+		var d := _snap(runtime)
+		if not d["commitment_depth"] is int or d["commitment_depth"] != c[1] or d["step_budget"] != c[2] or d["commitment_depth"] != int(stance["commitment_depth"]):
+			return { "ok": false, "error": "%s: expected depth %d of %d, got %s of %s (stance %s)" % [c[0], c[1], c[2], d["commitment_depth"], d["step_budget"], stance["commitment_depth"]] }
+	return { "ok": true }
+
+
+## The snapshot depth is an int in 0..step_budget whatever the explore map holds.
+static func _t_snapshot_commitment_depth_clamped() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	runtime.flow_ctx.config_service = runtime.config_service
+	var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+	for c in [[99, -1], [7.0, -1], [-3, 0], ["x", -1]]:
+		em["last_commitment_depth"] = c[0]
+		var d := _snap(runtime)
+		var want: int = int(d["step_budget"]) if c[1] == -1 else c[1]
+		if not d["commitment_depth"] is int or d["commitment_depth"] != want:
+			return { "ok": false, "error": "stored %s gave depth %s, want %d" % [c[0], d["commitment_depth"], want] }
 	return { "ok": true }
 
 

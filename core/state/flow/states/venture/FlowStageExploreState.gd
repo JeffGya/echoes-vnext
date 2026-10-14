@@ -168,7 +168,7 @@ static func carry_journey(old_map: Dictionary, locked: bool) -> Dictionary:
 	var out: Dictionary = { "last_stop": {}, "travel_why": {}, "leg_start_length": -1 }
 	if not locked or str(old_map.get("party_state", "")) == StageExploreModelScript.STATE_ESCAPED:
 		return out
-	for key in ["last_stop", "travel_why", "leg_start_length", "last_effective_steps"]:
+	for key in ["last_stop", "travel_why", "leg_start_length", "last_effective_steps", "last_commitment_depth"]:
 		if old_map.has(key):
 			var v: Variant = old_map[key]
 			out[key] = (v as Dictionary).duplicate(true) if v is Dictionary else v
