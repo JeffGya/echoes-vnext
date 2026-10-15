@@ -324,3 +324,7 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **Glyph corner:** top-left of the portrait, on every card (a named Echo's card and the party card). This moves the glyph from the top-right corner used in the first build.
 - **Echo bar with many Echoes:** the party card is pinned first at the left and does not scroll. Only the Echo cards scroll.
 - Kept from earlier answers (D-60): the live look for the Advance bar and the cards; the lost-step cross style is still open (red X today; the mockup used a small slash).
+
+### D-63. party-card-approved
+**Q:** Does the party card build match what Jeff approved? What does a tap on the party token do when no stop mark exists?
+**A:** Approved (Jeff, 2026-10-15). A tap on the party token with no stop mark opens the last journey entry, like the party card (when no entry exists, nothing happens). The why card opens centred above the whole tapped card, also for Echo cards. The party card label stays the placeholder until Jeff writes the word. The lost-step cross style is still open (red X today; the mockup used a small slash).

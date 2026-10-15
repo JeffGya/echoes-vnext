@@ -37,6 +37,6 @@
 		"echo_named": "{name}: [Jeff's wording: echo named]",
 		"open_why": "[Jeff's wording: open why card]",
 		"close_why": "[Jeff's wording: close why card]",
-		"chip": "[Jeff's wording: party stop]"
+		"party_card_label": "[Jeff's word]"
 	}
 }

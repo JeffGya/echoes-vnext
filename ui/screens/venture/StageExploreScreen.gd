@@ -135,7 +135,7 @@ var _shake_tween:             Tween      = null
 var _cross_tween:             Tween      = null
 # Beat times in seconds from the end of the walk; built per travel snapshot by _build_stop_plan().
 var _stop_plan:               Dictionary = {}
-# What the snapshot says about the Advance button; a walk holds it disabled until input is ready.
+# What the snapshot says about the Advance button; a walk holds it disabled until the walk ends.
 var _advance_allowed:         bool       = true
 var _pending_overlay_data:    Dictionary = {}
 var _pending_overlay_actions: Dictionary = {}
@@ -181,6 +181,7 @@ var _last_paint_key: String = ""
 @onready var _return_btn:         Button         = %ReturnButton
 @onready var _begin_btn:          Button         = %BeginButton
 @onready var _bottom_hud_region:  Control        = %BottomHudRegion
+@onready var _action_bar:         HBoxContainer  = %ActionBar
 @onready var _stage_info:         PanelContainer = $StageInfoPanel
 @onready var _stage_title:        Label          = %StageTitleLabel
 @onready var _obj_title:          Label          = %ObjectiveTitleLabel
@@ -590,14 +591,13 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	var dir_snap: Dictionary = dir_snap_v if dir_snap_v is Dictionary else {}
 	_directive_badge.call("set_directive", dir_snap)
 
-	# ── Step row: baseline diamonds, lost steps crossed out (D-40 item 8, D-43). ──
-	# During a walk the diamonds dim tile by tile; on a travel snapshot the crosses appear in the stop beat.
+	# Step row: baseline diamonds, every step the Advance cannot use crossed out. The walk dims them
+	# tile by tile; on a travel snapshot the crosses appear in the stop beat.
 	_step_budget = int(data.get("step_budget", 0))
 	if _step_budget > 0:
 		_step_budget_row.visible = true
-		var effective := clampi(int(data.get("effective_steps", _step_budget)), 0, _step_budget)
-		_step_progress_bar.call("set_budget", _step_budget, _step_budget - effective)
-		if is_travel and float(_stop_plan.get("shake_at", -1.0)) >= 0.0:
+		_step_progress_bar.call("set_budget", _step_budget, _step_counts(data)[2])
+		if is_travel and float(_stop_plan.get("cross_at", -1.0)) >= 0.0:
 			_step_progress_bar.call("hide_crosses")
 	else:
 		_step_budget_row.visible = false
@@ -1823,6 +1823,15 @@ func _party_token_world() -> Vector2:
 
 # ─── Stop beats: one clock, started by the walk tween ────────────────────────
 
+## [budget, lost to readiness, crossed out]. `commitment_depth` already includes the readiness loss, so
+## crossed >= lost; a snapshot without it falls back to effective_steps.
+func _step_counts(data: Dictionary) -> Array[int]:
+	var budget := maxi(int(data.get("step_budget", 0)), 0)
+	var effective := clampi(int(data.get("effective_steps", budget)), 0, budget)
+	var depth := clampi(int(data.get("commitment_depth", effective)), 0, effective)
+	return [budget, budget - effective, budget - depth]
+
+
 ## Beat times in seconds from the end of the walk. The mark and the pulse are played by RealmShell on
 ## `stop_beat`; the shake and the crosses are played here. Presentation only.
 func _build_stop_plan(data: Dictionary) -> Dictionary:
@@ -1835,15 +1844,19 @@ func _build_stop_plan(data: Dictionary) -> Dictionary:
 	var why: Dictionary = why_v if why_v is Dictionary else {}
 	var has_mark := StopGlyphs.texture(str(stop.get("kind", ""))) != null
 	var named := has_mark and str(why.get("named_echo_name", "")) != "" and str(stop.get("echo_id", "")) != ""
-	var budget := int(data.get("step_budget", 0))
-	var lost := budget - clampi(int(data.get("effective_steps", budget)), 0, maxi(budget, 0)) if budget > 0 else 0
+	var steps := _step_counts(data)
+	var lost: int = steps[1]
+	var crossed: int = steps[2]
 	var t := 0.0 if reduced else _pres("stop_rest_seconds", 0.1)
-	var plan := { "lost": lost, "named": named, "shake_at": -1.0, "mark_at": -1.0, "pulse_at": -1.0 }
+	var plan := { "lost": lost, "crossed": crossed, "named": named, "cross_at": -1.0, "shake_at": -1.0, "mark_at": -1.0, "pulse_at": -1.0 }
 	var any_beat := false
-	if lost > 0:
-		plan["shake_at"] = t
-		var crosses := float(lost - 1) * _pres("cross_stagger_seconds", 0.06) + _pres("cross_in_seconds", 0.12)
-		t += fade if reduced else maxf(_pres("shaken_shake_seconds", 0.22), crosses)
+	if crossed > 0:
+		plan["cross_at"] = t
+		if lost > 0:
+			plan["shake_at"] = t
+		var crosses := float(crossed - 1) * _pres("cross_stagger_seconds", 0.06) + _pres("cross_in_seconds", 0.12)
+		var shake := _pres("shaken_shake_seconds", 0.22) if lost > 0 else 0.0
+		t += fade if reduced else maxf(shake, crosses)
 		any_beat = true
 		if has_mark:
 			t += gap
@@ -1858,7 +1871,9 @@ func _build_stop_plan(data: Dictionary) -> Dictionary:
 	return plan
 
 
+## The walk has ended. Advance is ready now; the stop beats never block a press (a press cuts them).
 func _begin_stop_beats() -> void:
+	_on_input_ready()
 	if _stop_plan.is_empty():
 		return
 	if _stop_tween != null and _stop_tween.is_valid():
@@ -1866,11 +1881,10 @@ func _begin_stop_beats() -> void:
 	_stop_tween = create_tween()
 	var cursor := 0.0
 	var events: Array = []
-	if float(_stop_plan["shake_at"]) >= 0.0:
-		events.append([float(_stop_plan["shake_at"]), _play_shake_beat])
+	if float(_stop_plan["cross_at"]) >= 0.0:
+		events.append([float(_stop_plan["cross_at"]), _play_cross_beat])
 	if float(_stop_plan["mark_at"]) >= 0.0:
 		events.append([float(_stop_plan["mark_at"]), _emit_beat.bind(&"mark")])
-	events.append([float(_stop_plan["ready_at"]), _on_input_ready])
 	if float(_stop_plan["pulse_at"]) >= 0.0:
 		events.append([float(_stop_plan["pulse_at"]), _emit_beat.bind(&"pulse")])
 	for e in events:
@@ -1883,16 +1897,16 @@ func _emit_beat(beat: StringName) -> void:
 	stop_beat.emit(beat)
 
 
-func _play_shake_beat() -> void:
+## Crosses every step the Advance cannot use. Only readiness (lost > 0) also shakes the party.
+func _play_cross_beat() -> void:
 	var reduced := StopMarkMotion.reduced
-	var lost := int(_stop_plan["lost"])
 	_cross_tween = create_tween().set_parallel(true)
 	var cross_in := _pres("reduced_motion_fade_seconds", 0.15) if reduced else _pres("cross_in_seconds", 0.12)
-	for i in lost:
+	for i in int(_stop_plan["crossed"]):
 		var delay := 0.0 if reduced else float(i) * _pres("cross_stagger_seconds", 0.06)
 		_cross_tween.tween_method(Callable(_step_progress_bar, "set_cross_alpha").bind(i), 0.0, 1.0, cross_in) \
 			.set_delay(delay).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	if reduced:
+	if reduced or int(_stop_plan["lost"]) == 0:
 		return
 	var offsets_v: Variant = _presentation.get("shaken_shake_offsets_px", [3, 3, 2, 2])
 	var offsets: Array = offsets_v if offsets_v is Array and not (offsets_v as Array).is_empty() else [3, 3, 2, 2]
@@ -1946,6 +1960,14 @@ func _exit_tree() -> void:
 
 func _is_travelling() -> bool:
 	return _travel_tween != null and _travel_tween.is_valid() and _travel_tween.is_running()
+
+
+## Top edge (viewport y) of the Advance bar and its step row. RealmShell stops the why card above it.
+func advance_bar_top() -> float:
+	var top := _action_bar.get_global_rect().position.y
+	if _step_budget_row.visible:
+		top = minf(top, _step_budget_row.get_global_rect().position.y)
+	return top
 
 
 ## Centres the painted board on the world origin at scale 1 and hands its extent to the camera.

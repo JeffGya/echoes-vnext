@@ -39,10 +39,12 @@ const _ALLY_PANEL_STYLE: StyleBox = preload("res://ui/components/EchoCardAllyAcc
 @onready var ally_badge: Label       = %AllyBadge
 @onready var companion_tag: Label    = %CompanionTag
 @onready var _stop_glyph: TextureRect = %StopGlyph
-@onready var _body_margin: MarginContainer = $VBoxContainer/BodyMargin
+@onready var party_label: Label = %PartyLabel
+@onready var _token_disc: Panel = %TokenDisc
 @onready var _portrait: ColorRect = %PortraitPanel
 
 var _actor_id: String = ""
+var _is_party := false
 ## Set by RealmShell: which bar slot this card fills (kind and actor id), so a snapshot updates it in place.
 var slot_key: String = ""
 # Tells a tap from a drag (same 8 px rule as the board) and ignores the engine's emulated twin of a
@@ -76,9 +78,8 @@ func set_stop_glyph(kind: String, accessible_name: String = "") -> void:
 	_stop_glyph.texture = tex
 	_stop_glyph.visible = tex != null
 	_stop_glyph.modulate = Color.WHITE
-	_body_margin.add_theme_constant_override("margin_right", 42 if tex != null else 6)
-	focus_mode = Control.FOCUS_ALL if tex != null else Control.FOCUS_NONE
-	accessibility_name = accessible_name if tex != null else ""
+	focus_mode = Control.FOCUS_ALL if tex != null or _is_party else Control.FOCUS_NONE
+	accessibility_name = party_label.text if _is_party else (accessible_name if tex != null else "")
 
 
 ## Same holder, new mark: the old shape fades out, the new one is swapped in unseen and settles at its beat.
@@ -99,6 +100,25 @@ func _apply_pending_glyph() -> void:
 func dim_stop_glyph() -> void:
 	_motion.stop()
 	_stop_glyph.modulate.a = 0.5
+
+
+## The party card: the blue token, a short label, no HP or status. Always takes focus and taps.
+func setup_party(label: String) -> void:
+	_is_party = true
+	_actor_id = ""
+	portrait_label.visible = false
+	_token_disc.visible = true
+	hp_bar.visible = false
+	name_label.visible = false
+	status_label.visible = false
+	party_label.visible = true
+	party_label.text = label
+	focus_mode = Control.FOCUS_ALL
+	accessibility_name = label
+
+
+func stop_glyph_rect() -> Rect2:
+	return _stop_glyph.get_global_rect()
 
 
 func has_stop_glyph() -> bool:

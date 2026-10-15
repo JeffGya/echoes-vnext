@@ -5,6 +5,18 @@
 [ext_resource type="FontFile" uid="uid://chwi6asl8nb0w" path="res://assets/fonts/IosevkaCharon-Regular.ttf" id="3_5bj6p"]
 [ext_resource type="FontFile" uid="uid://duxvkgd0jcs8h" path="res://assets/fonts/Spectral-SemiBoldItalic.ttf" id="4_qal5b"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_token"]
+bg_color = Color(0.2, 0.45, 0.9, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 1, 1, 1)
+corner_radius_top_left = 17
+corner_radius_top_right = 17
+corner_radius_bottom_right = 17
+corner_radius_bottom_left = 17
+
 [node name="EchoCardItem" type="PanelContainer" unique_id=470777062]
 custom_minimum_size = Vector2(280, 0)
 offset_right = 130.0
@@ -48,6 +60,38 @@ text = "✕"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="TokenDisc" type="Panel" parent="VBoxContainer/BodyMargin/BodyRow/PortraitPanel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -17.0
+offset_top = -17.0
+offset_right = 17.0
+offset_bottom = 17.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_token")
+
+[node name="TokenLetter" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/PortraitPanel/TokenDisc"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_fonts/font = ExtResource("2_gnycu")
+theme_override_font_sizes/font_size = 20
+text = "P"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="InfoCol" type="VBoxContainer" parent="VBoxContainer/BodyMargin/BodyRow" unique_id=1491086745]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -75,6 +119,15 @@ theme_override_font_sizes/font_size = 14
 text = "HP 128/128"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="PartyLabel" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("3_5bj6p")
+theme_override_font_sizes/font_size = 14
+clip_text = true
 
 [node name="SpiritBadge" type="Label" parent="VBoxContainer/BodyMargin/BodyRow/InfoCol" unique_id=300100001]
 unique_name_in_owner = true
@@ -141,16 +194,13 @@ mouse_filter = 2
 [node name="StopGlyph" type="TextureRect" parent="GlyphOverlay"]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(28, 28)
+custom_minimum_size = Vector2(24, 24)
 layout_mode = 1
-anchors_preset = 1
-anchor_left = 1.0
-anchor_right = 1.0
-offset_left = -36.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = 36.0
-grow_horizontal = 0
+anchors_preset = 0
+offset_left = 1.0
+offset_top = 1.0
+offset_right = 25.0
+offset_bottom = 25.0
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
