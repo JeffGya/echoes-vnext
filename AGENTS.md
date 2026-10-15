@@ -84,14 +84,14 @@ it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are 
 ```bash
 <godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 129 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring`, `stop_short_search` and `directive_char` added since; post-`fingerprint`-suite split — see below.
+The 131 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring`, `stop_short_search`, `directive_char`, `contact_cfg` and `stage_stop_ui` added since; post-`fingerprint`-suite split — see below.
 A `seam`-suite split was also tried, measured to give no speedup, and reverted — `seam` remains
 one suite):
 ```
 actor arbiter archetype bark_popup behavior behavior_arbiter behavior_char bond_trigger
 bridge calling calling_behavior combat combat_baseline combat_initiative
 combat_roundtrip combat_terrain combat_ui consequence contact contact_actor continuity
-conversation_repair cooldown derived directive directive_cfg directive_char divergence divergence_bark
+conversation_repair contact_cfg cooldown derived directive directive_cfg directive_char divergence divergence_bark
 echo_party echofactory economy emotion exclusive_action explore explore_p5 expr
 fingerprint_combat fingerprint_determinism_combat fingerprint_determinism_endure
 fingerprint_determinism_guide_spirit fingerprint_determinism_protect
@@ -104,13 +104,13 @@ movement_arbiter movement_fallback movement_option movement_path movement_style
 objective objective_combat old_echo onboarding passive pending_result prog realm
 realm_prog realm_reward realm_ui recruit retreat reward sanctum.layout sanctum.party
 sanctum.summon sanctum_pulse save_integrity seam shrine sit_res situational skill
-skill_loadout skill_reach skill_unlock stop_short stop_short_search stop_short_wiring
+skill_loadout skill_reach skill_unlock stage_stop_ui stop_short stop_short_search stop_short_wiring
 snapshot snapshot_contract snapshot_fingerprint snapshot_purity social_graph stage
 statinit structure support terrain thread trace traversal unified_resolve vector
 venture_char voice vow weave
 ```
 Added since that capture: `board_camera.bounds board_camera.echo_detail board_camera.input
-board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera` (all in shard9).
+board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera` (all in shard9), `directive_char` (shard5), `contact_cfg` (shard4) and `stage_stop_ui` (shard1).
 Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
 (it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`),
 `fingerprint` (now `fingerprint_combat`, `fingerprint_purify_shrine`, `fingerprint_recover`,
@@ -237,7 +237,7 @@ though the wall-clock is shorter — do not run it alongside anything else that 
 `/tmp/echoes-vnext-*`.
 
 **Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
-`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 129
+`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 131
 live registered suites (regenerated 2026-09-20, updated same day after
 `fingerprint_determinism_self_check` was split into 7 per-mode `fingerprint_determinism_<mode>`
 suites, one shared suite name becoming 7) are split into 9 disjoint sets — every suite appears in
@@ -594,7 +594,7 @@ production code to make its own test pass.
 - **Build structure in `.tscn`** — scripts render values and apply profile values such as margins, columns, visibility, wrap widths, and min/max sizes
 - Never create/reparent the UI hierarchy or construct visual styles programmatically in `.gd`; layout relationships and theme hooks belong in `.tscn`
 - Reusable visual treatments belong in `assets/theme/LivingTreeSystem.tres`; extend the theme instead of restyling the same patterns per scene
-- The responsive base is 1280×720 landscape; desktop starts at 1600×900 and may resize down to 960×540
+- The responsive base is 1280×720 landscape; desktop starts at 1600×900 and may resize down to a minimum layout of 1280×720 logical, with a check at 1920×1080 (decision D-39: the game never runs at 960×540)
 - Responsive means profile recomposition, capped readable UI, and spatial surplus on wide views — not uniform root scaling or scroll containers everywhere
 - `SanctumShell` owns the inset BottomRail via `_cached_nav` — do NOT inject nav into snapshots
 - `RealmShell` owns the inset, capped EchoBar (88 logical units high) — do NOT render it in individual screens
