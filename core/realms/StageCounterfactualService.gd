@@ -281,9 +281,9 @@ func _cause_without_echo(real: Dictionary, target: Dictionary, here: Dictionary,
 ## True when no entered cell can be avoided: without it the goal is unreachable or past the slack.
 func _only_way(real: Dictionary, target: Dictionary, here: Dictionary, walkable: Dictionary) -> bool:
 	var path: Array = real["path"]
-	if path.is_empty():
-		return false
 	var goal := ActiveStageService.stage_integer_cell(target.get("pos", {}))
+	if path.is_empty() or (path.size() == 1 and path[0] == goal):
+		return false
 	var plain_len := (MovementPathServiceScript.shortest_path(here, goal, walkable, {}, {}, {}).get("path", []) as Array).size()
 	var slack := ConfigService.get_movement_slack_cfg(config_service)
 	for cell in path:

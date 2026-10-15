@@ -411,6 +411,7 @@ static func register(runner: CoreTestRunner) -> void:
 	# V2-DIRECTIVE-002 S2e: counterfactual naming, first plan only
 	runner.register_test("traversal/counterfactual_n1_terrain", Callable(TraversalModelTests, "_t_cf_n1_terrain"))
 	runner.register_test("traversal/counterfactual_n2_objective", Callable(TraversalModelTests, "_t_cf_n2_objective"))
+	runner.register_test("traversal/counterfactual_one_step_walk_is_not_terrain", Callable(TraversalModelTests, "_t_cf_one_step_not_terrain"))
 	runner.register_test("traversal/counterfactual_n3_directive", Callable(TraversalModelTests, "_t_cf_n3_directive"))
 	runner.register_test("traversal/counterfactual_n4_party_order_shuffle", Callable(TraversalModelTests, "_t_cf_n4_party_order_shuffle"))
 	runner.register_test("traversal/counterfactual_n5_hidden_content_moved", Callable(TraversalModelTests, "_t_cf_n5_hidden_content_moved"))
@@ -2578,6 +2579,18 @@ static func _t_cf_n2_objective() -> Dictionary:
 	var err := _cf_expect(out, "", "", "objective")
 	if err.is_empty() and str(out["plan"]["target_id"]) != "goal":
 		err = "the plan must target the objective: %s" % [out["plan"]]
+	return { "ok": err.is_empty(), "error": err }
+
+
+# A one-step walk proves neither a lone route nor a refused detour, so the cause is not terrain.
+static func _t_cf_one_step_not_terrain() -> Dictionary:
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 1, 5, 901, true)
+	goal["revealed"] = true
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "aduro", 3, 0, 50, 1]], _full_rect_terrain(14, 11), [goal])
+	var out := _cf_name(runtime)
+	var err := _cf_expect(out, "", "", "objective")
+	if err.is_empty() and (out["plan"]["path"] as Array).size() != 1:
+		err = "the fixture must give a one-step walk: %s" % [out["plan"]]
 	return { "ok": err.is_empty(), "error": err }
 
 

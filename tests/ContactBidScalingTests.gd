@@ -175,9 +175,11 @@ static func _card_vs_sim(directive_id: String) -> Dictionary:
 	roster.append(_echo("echo.a1", "aduro", 10, 1, 10))
 	roster.append(_echo("echo.a2", "aduro", 10, 6, 1000))
 	save["sanctum"]["active_party_ids"] = ["echo.a1", "echo.a2"]
+	TestSaveHarness.remove_save_artifacts(ConversationRepairTests.TEST_SAVE_PATH)
 	var runtime := ConversationRepairTests._make_runtime(save, ConversationRepairTests._make_logger("off"))
 	var snap: Dictionary = runtime.dispatch({ "type": "stage.engage_situation", "situation_id": "sit.t1" })
 	ConversationRepairTests._restore_save(bak)
+	TestSaveHarness.remove_save_artifacts(ConversationRepairTests.TEST_SAVE_PATH)
 	var sim: Dictionary = {}
 	for r_v in FlowStageExploreState._get_current_stage(runtime.flow_ctx).get("explore_map", {}).get("contact_responses", []):
 		sim[str(r_v.get("echo_id", ""))] = str(r_v.get("bid_type", ""))

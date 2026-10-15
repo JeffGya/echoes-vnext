@@ -71,6 +71,8 @@ func _ready() -> void:
 func _sync_chrome_layer_visibility() -> void:
 	if _chrome_layer != null:
 		_chrome_layer.visible = is_visible_in_tree()
+	if not is_visible_in_tree():
+		_why_card.close()
 
 func set_snapshot(snap: Dictionary) -> void:
 	_update_echo_bar(snap)
@@ -374,7 +376,7 @@ func _exit_tree() -> void:
 func _input(event: InputEvent) -> void:
 	if (event is InputEventMouseButton or event is InputEventScreenTouch) and not event.is_pressed():
 		set_deferred("_press_closed_card", false)  # after this release's tap has been handled
-	if not _why_card.is_open():
+	if not is_visible_in_tree() or not _why_card.is_open():
 		return
 	if event.is_action_pressed("ui_cancel"):
 		_why_card.close()

@@ -42,6 +42,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("stage_stop_ui/why_card_above_icon_inside_safe_area_above_advance_bar", Callable(StageStopUITests, "_t_why_place"))
 	runner.register_test("stage_stop_ui/overlay_opens_after_the_mark_lands", Callable(StageStopUITests, "_t_overlay_after_mark"))
 	runner.register_test("stage_stop_ui/token_tap_closes_open_why_card", Callable(StageStopUITests, "_t_token_tap_closes"))
+	runner.register_test("stage_stop_ui/hidden_shell_closes_why_card_and_leaves_cancel", Callable(StageStopUITests, "_t_hidden_shell"))
 	runner.register_test("stage_stop_ui/token_tap_rules", Callable(StageStopUITests, "_t_token_tap_rules"))
 	runner.register_test("stage_stop_ui/same_holder_old_glyph_fades_then_new_settles", Callable(StageStopUITests, "_t_same_holder_fade"))
 	runner.register_test("stage_stop_ui/no_directive_id_literal_in_ui", Callable(StageStopUITests, "_t_no_directive_literal"))
@@ -435,6 +436,27 @@ static func _t_token_tap_closes() -> Dictionary:
 	shell.call("_on_why_requested")
 	if card.is_open():
 		return _fail(m, "second token tap (press closes, release taps) must leave the card closed")
+	m[0].free()
+	return { "ok": true }
+
+
+static func _t_hidden_shell() -> Dictionary:
+	var m := _mount(RealmShellScene)
+	var shell := m[1] as RealmShell
+	var card := shell.get_node("%StageWhyCard") as StageWhyCard
+	_feed(shell, _snap("capacity_spent", ""))
+	shell.call("_on_why_requested")
+	if not card.is_open():
+		return _fail(m, "the card must open before the shell is hidden")
+	shell.visible = false  # AppRoot hides non-target shells the same way
+	if card.is_open():
+		return _fail(m, "hiding the shell must close the why card")
+	var cancel := InputEventAction.new()
+	cancel.action = "ui_cancel"
+	cancel.pressed = true
+	shell.call("_input", cancel)
+	if (m[0] as Viewport).is_input_handled():
+		return _fail(m, "a hidden shell must not handle ui_cancel")
 	m[0].free()
 	return { "ok": true }
 
