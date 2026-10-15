@@ -13,6 +13,33 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 38 — A feature that fires rarely needs a measured rate, not a passing test
+
+**Rule:** When a feature is meant to fire for the player (here: the game names the Echo that decided an Advance), measure how often it fires in real runs before you call it done. Do this before you tune it. Check that a tuning lever can move the output before you run a large matrix of variants.
+**Why:** V2-DIRECTIVE-002 B+C, D-60 and D-65, 2026-10-14 and 2026-10-15. Every test passed. In Jeff's play, 0 of 606 Advances named an Echo. The later matrix of 4 bend variants over 40 slices gave the same named share for every variant: the category bend changed no pool pick (`bend_changed` = 0). Naming followed party state only. Then 137 of 266 proposed names (52%) were dropped by `confirm_walk`.
+**How to apply:** Put a rate probe in the story plan for any feature that depends on a rare condition. Report the rate with the count of runs. Before a variant matrix, run one small slice that shows the lever changes the output. If it does not, stop and report that, not the matrix.
+**Mistake count:** 1
+
+---
+
+### 37 — Ask every ASSUMED line that changes what Jeff sees or feels, before the next step
+
+**Rule:** The orchestrator turns each `ASSUMED` line that changes what Jeff sees or feels into a question. It asks before the next step. A timing that blocks input is stated as "blocks clicks for X seconds" and compared with today's value.
+**Why:** V2-DIRECTIVE-002 B+C, D-60, 2026-10-14. The builders stated their assumptions, as their role says. The orchestrator did not ask Jeff and called the click lock a gain. The Advance button was off about 975 ms after a press (about 240 ms before). At a 0.5 s click rhythm, 22 of 49 clicks were ignored.
+**How to apply:** Read every OPEN block line by line. Sort the `ASSUMED` lines into "changes the player view or feel" and "internal". Ask the first group through Jeff before you dispatch the next step. Never summarise a delay as a gain.
+**Mistake count:** 1
+
+---
+
+### 36 — Check a UI build against the approved mockup and the decisions list before you show it
+
+**Rule:** Every UI brief carries a checklist taken from the approved mockup and the decisions list. Every UI step ends with a screenshot of the build next to the mockup. Jeff approves it before the commit.
+**Why:** V2-DIRECTIVE-002 B+C, D-60 to D-63, 2026-10-14 and 2026-10-15. The first build left the chip far from the cards (it was off screen with 4 or 5 Echoes), opened the why card at the top left, and could not show commitment in the step row. The old Advance button and Echo band were left out of the brief (D-41). The stop glyph then sat in two places (card or chip), which Jeff found inconsistent (D-61). The party card was only approved after sheets in `mockups/v4/`.
+**How to apply:** Before dispatching a UI step, list each mockup item and each related decision (D-41, D-42, D-59). Put the list in the brief. After the build, compare it with the mockup at 1280x720 and 1920x1080. Do not commit until Jeff approves the screenshot.
+**Mistake count:** 1
+
+---
+
 ### 35 — After you change a shared function signature, find every test fixture that calls it by duck typing
 
 **Rule:** When a shared function gets a typed parameter, grep `tests/` for fixtures that fake the argument (a `Mock...` class, an inner class with no `extends`, a plain object with the same method). A typed parameter rejects a duck-typed fake. Then run the suite of every test file that references the changed symbol or the fixture. Choose the filters from that grep, not from memory.

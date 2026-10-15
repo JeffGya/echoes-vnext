@@ -46,6 +46,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore_p5/directive_composite_matches_active",         Callable(StageExploreP5Tests, "_t_directive_composite_matches_active"))
 	runner.register_test("explore_p5/party_preview_emotional_status_valid_tier",  Callable(StageExploreP5Tests, "_t_party_preview_emotional_status_valid_tier"))
 	runner.register_test("explore_p5/party_preview_emotional_status_matches_service", Callable(StageExploreP5Tests, "_t_party_preview_emotional_status_matches_service"))
+	runner.register_test("explore_p5/party_preview_carries_roster_id_for_same_name", Callable(StageExploreP5Tests, "_t_party_preview_carries_roster_id_for_same_name"))
+	runner.register_test("explore_p5/stage_preview_presentation_matches_config", Callable(StageExploreP5Tests, "_t_stage_preview_presentation_matches_config"))
 	runner.register_test("explore_p5/situation_pending_choices_obstacle_nonempty", Callable(StageExploreP5Tests, "_t_situation_pending_choices_obstacle_nonempty"))
 	runner.register_test("explore_p5/situation_pending_choices_structure_nonempty", Callable(StageExploreP5Tests, "_t_situation_pending_choices_structure_nonempty"))
 	runner.register_test("explore_p5/situation_pending_choices_combat_empty",     Callable(StageExploreP5Tests, "_t_situation_pending_choices_combat_empty"))
@@ -57,6 +59,17 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore_p5/travel_snippets_json_contract",              Callable(StageExploreP5Tests, "_t_travel_snippets_json_contract"))
 	runner.register_test("explore_p5/journey_travel_shout_resolves_non_fallback", Callable(StageExploreP5Tests, "_t_journey_travel_shout_resolves_non_fallback"))
 	runner.register_test("explore_p5/anansi_no_snippet_on_plain_advance",         Callable(StageExploreP5Tests, "_t_anansi_no_snippet_on_plain_advance"))
+	runner.register_test("explore_p5/stop_fields_typed_before_and_after_advance", Callable(StageExploreP5Tests, "_t_stop_fields_typed_before_and_after_advance"))
+	runner.register_test("explore_p5/travel_why_names_true_decider", Callable(StageExploreP5Tests, "_t_travel_why_names_true_decider"))
+	runner.register_test("explore_p5/travel_why_sanitiser", Callable(StageExploreP5Tests, "_t_travel_why_sanitiser"))
+	runner.register_test("explore_p5/presentation_has_no_comment_keys", Callable(StageExploreP5Tests, "_t_presentation_has_no_comment_keys"))
+	runner.register_test("explore_p5/dry_runs_not_counted_as_stances", Callable(StageExploreP5Tests, "_t_dry_runs_not_counted_as_stances"))
+	runner.register_test("explore_p5/first_step_never_pauses_for_exposure", Callable(StageExploreP5Tests, "_t_first_step_never_pauses_for_exposure"))
+	runner.register_test("explore_p5/snapshot_effective_steps_follows_readiness", Callable(StageExploreP5Tests, "_t_snapshot_effective_steps_follows_readiness"))
+	runner.register_test("explore_p5/snapshot_commitment_depth_scout_and_seek", Callable(StageExploreP5Tests, "_t_snapshot_commitment_depth_scout_and_seek"))
+	runner.register_test("explore_p5/snapshot_commitment_depth_clamped", Callable(StageExploreP5Tests, "_t_snapshot_commitment_depth_clamped"))
+	runner.register_test("explore_p5/peek_does_not_reveal", Callable(StageExploreP5Tests, "_t_peek_does_not_reveal"))
+	runner.register_test("explore_p5/profileless_directive_advances_with_readiness", Callable(StageExploreP5Tests, "_t_profileless_directive_advances_with_readiness"))
 
 
 # ─── Save-file isolation helpers (mirrors UnifiedResolveTests) ──────────────
@@ -435,6 +448,47 @@ static func _t_party_preview_emotional_status_matches_service() -> Dictionary:
 	return { "ok": true }
 
 
+static func _t_party_preview_carries_roster_id_for_same_name() -> Dictionary:
+	var ctx := _make_ctx_with_real_config()
+	_inject_pending_situation(ctx, SituationModelScript.TYPE_LOOT)
+	var bal: Dictionary = ctx.config_service.get_balance()
+	var summ_cfg: Dictionary = bal.get("data", {}).get("summoning", {})
+	var expr_cfg: Dictionary = bal.get("data", {}).get("maturity_expression", {})
+	var roster: Array = []
+	var ids: Array = []
+	for i in range(2):
+		var echo: Dictionary = EchoFactory.generate("p5_id", "echo." + str(i), i, "summon", summ_cfg, expr_cfg)
+		echo["id"] = "echo_%04d" % (i + 1)
+		echo["name"] = "Same Name"
+		roster.append(echo)
+		ids.append(str(echo["id"]))
+	ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids }
+
+	var preview: Array = StageExploreSnapshotBuilder.build(ctx, 1).get("data", {}).get("party_preview", [])
+	if preview.size() != 2:
+		return { "ok": false, "error": "Expected 2 party_preview rows, got %d" % preview.size() }
+	var got: Array = [str(preview[0].get("id", "")), str(preview[1].get("id", ""))]
+	if got != ids or got[0] == got[1]:
+		return { "ok": false, "error": "party_preview ids expected %s, got %s" % [str(ids), str(got)] }
+	return { "ok": true }
+
+
+static func _t_stage_preview_presentation_matches_config() -> Dictionary:
+	var ctx := _make_ctx_with_real_config()
+	var expected: Dictionary = {}
+	var raw: Dictionary = ctx.config_service.get_balance().get("data", {}).get("stages", {}).get("presentation", {})
+	for key in raw:
+		if not str(key).begins_with("_comment"):
+			expected[key] = raw[key]
+	if expected.is_empty():
+		return { "ok": false, "error": "stages.presentation is empty in balance.json" }
+	var data: Dictionary = FlowStageState.build_snapshot(ctx, 0).get("data", {})
+	var actual: Variant = data.get("presentation", null)
+	if not (actual is Dictionary) or actual != expected:
+		return { "ok": false, "error": "preview presentation differs from config copy" }
+	return { "ok": true }
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Test 5 — obstacle pending situation → situation_pending.choices non-empty, id+label present
 # ═══════════════════════════════════════════════════════════════════════════
@@ -746,4 +800,236 @@ static func _t_anansi_no_snippet_on_plain_advance() -> Dictionary:
 	if not snippet.is_empty():
 		return { "ok": false, "error": "A plain travel advance (no narrative event) must NOT fire an Anansi snippet, got '%s'" % snippet }
 
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S3: stop, travel_why, effective_steps, presentation ────
+
+const _StopPolicyP5 = preload("res://core/movement/StageStopPolicy.gd")
+const _StanceP5 = preload("res://core/movement/StagePartyStance.gd")
+
+
+static func _snap(runtime: FlowRuntime) -> Dictionary:
+	return (StageExploreSnapshotBuilder.build(runtime.flow_ctx, 1) as Dictionary)["data"]
+
+
+static func _t_stop_fields_typed_before_and_after_advance() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	runtime.flow_ctx.config_service = runtime.config_service
+	for phase in ["before", "after"]:
+		if phase == "after" and TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+			return { "ok": false, "error": "the Advance did not move" }
+		var d := _snap(runtime)
+		var stop: Variant = d.get("stop")
+		var why: Variant = d.get("travel_why")
+		if not stop is Dictionary or not why is Dictionary or not d.get("effective_steps") is int or not d.get("presentation") is Dictionary:
+			return { "ok": false, "error": "%s: stop, travel_why, effective_steps or presentation missing or mistyped" % phase }
+		var kind := str((stop as Dictionary).get("kind", "?"))
+		if not (stop as Dictionary).get("col") is int or not (stop as Dictionary).get("row") is int or not (kind == "" or _StopPolicyP5.KINDS.has(kind)):
+			return { "ok": false, "error": "%s: bad stop %s" % [phase, stop] }
+		if (why as Dictionary).keys() != _StopPolicyP5.WHY_SLOTS:
+			return { "ok": false, "error": "%s: travel_why slots %s" % [phase, (why as Dictionary).keys()] }
+		if int(d["effective_steps"]) < 1 or int(d["effective_steps"]) > int(d["step_budget"]):
+			return { "ok": false, "error": "%s: effective_steps %s outside 1..step_budget" % [phase, d["effective_steps"]] }
+		if var_to_str(d["presentation"]) != var_to_str(ConfigService.get_stage_presentation_cfg(runtime.config_service)) or (d["presentation"] as Dictionary).is_empty():
+			return { "ok": false, "error": "%s: presentation is not the stages.presentation copy" % phase }
+		if phase == "before" and kind != "":
+			return { "ok": false, "error": "no stop before the first Advance" }
+		if phase == "after" and kind.is_empty():
+			return { "ok": false, "error": "an Advance that moved must set a stop kind" }
+	return { "ok": true }
+
+
+## D-52 F6: snapshot.presentation holds every numeric timing and no `_comment*` key.
+static func _t_presentation_has_no_comment_keys() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	runtime.flow_ctx.config_service = runtime.config_service
+	var pres: Dictionary = _snap(runtime)["presentation"]
+	var raw: Dictionary = runtime.config_service.get_balance()["data"]["stages"]["presentation"]
+	for key in raw:
+		var is_comment := str(key).begins_with("_comment")
+		if is_comment == pres.has(key):
+			return { "ok": false, "error": "presentation key %s %s" % [key, "leaked" if is_comment else "missing"] }
+		if not is_comment and not _is_positive_number_or_list(pres[key]):
+			return { "ok": false, "error": "presentation.%s is not a positive number or list of them" % key }
+	var offsets: Variant = pres.get("shaken_shake_offsets_px")
+	if not offsets is Array or (offsets as Array).size() != 4 or not _is_positive_number_or_list(offsets):
+		return { "ok": false, "error": "shaken_shake_offsets_px must be an Array of 4 positive numbers: %s" % [offsets] }
+	return { "ok": true }
+
+
+static func _is_positive_number_or_list(v: Variant) -> bool:
+	if v is Array:
+		for item: Variant in v:
+			if not (item is float or item is int) or float(item) <= 0.0:
+				return false
+		return true
+	return (v is float or v is int) and float(v) > 0.0
+
+
+## N7 (design 7d): the Echo named in the why is a true decider (the naming service confirms it), the
+## stop sits on that Echo, and the calm Echo is not named.
+static func _t_travel_why_names_true_decider() -> Dictionary:
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully", TraversalModelTests._cf_tie_members(), TraversalModelTests._full_rect_terrain(30, 11), [])
+	var expect := TraversalModelTests._cf_name(runtime)
+	if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+		return { "ok": false, "error": "the Advance did not move" }
+	var d := _snap(runtime)
+	var why: Dictionary = d["travel_why"]
+	var names: Dictionary = {}
+	for echo: Dictionary in runtime.flow_ctx.save_data["sanctum"]["roster"]:
+		names[str(echo["id"])] = str(echo["name"])
+	var id := str(expect["decisive_contributor_id"])
+	if why["cause"] != "echo" or id.is_empty() or why["named_echo_name"] != names[id] or why["echo_reason_class"] != expect["reason_class"]:
+		return { "ok": false, "error": "why %s does not match the confirmed decider %s" % [why, expect] }
+	if (d["stop"] as Dictionary)["echo_id"] != id:
+		return { "ok": false, "error": "the stop must sit on the named Echo: %s" % [d["stop"]] }
+	if why["named_echo_name"] == names["e_z"]:
+		return { "ok": false, "error": "the calm Echo must not be named" }
+	if why["purpose_family"] != "read" or why["route_character"] != "":
+		return { "ok": false, "error": "a frontier walk has purpose read and no route character: %s" % [why] }
+	return { "ok": true }
+
+
+static func _t_travel_why_sanitiser() -> Dictionary:
+	var dirty := { "cause": "echo_0001", "purpose_family": 3, "route_character": "stage.0", "stop_kind": 2.5,
+		"named_echo_name": 7, "echo_reason_class": "fear", "extra": "x", "weights": { "intel": 1.4 } }
+	var clean: Dictionary = _StopPolicyP5.sanitise_why(dirty)
+	if clean.keys() != _StopPolicyP5.WHY_SLOTS or clean["echo_reason_class"] != "fear":
+		return { "ok": false, "error": "sanitiser kept a bad slot or dropped a good one: %s" % [clean] }
+	if _StopPolicyP5.sanitise_why({ "echo_reason_class": "steadied" })["echo_reason_class"] != "steadied":
+		return { "ok": false, "error": "sanitiser dropped the steadied reason class" }
+	if _StopPolicyP5.sanitise_why({ "purpose_family": "hold" })["purpose_family"] != "":
+		return { "ok": false, "error": "sanitiser kept purpose_family hold" }
+	for slot in ["cause", "purpose_family", "route_character", "stop_kind", "named_echo_name"]:
+		if clean[slot] != "":
+			return { "ok": false, "error": "%s kept a value that is an id or a number: %s" % [slot, clean] }
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully", TraversalModelTests._cf_tie_members(), TraversalModelTests._full_rect_terrain(30, 11), [])
+	TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	var ids: Array = ["e_x", "e_y", "e_z", "realm.01", "stage.0"]
+	var why: Dictionary = _snap(runtime)["travel_why"]
+	for slot in why:
+		var text := str(why[slot])
+		for id in ids:
+			if text.contains(id):
+				return { "ok": false, "error": "slot %s holds an id: %s" % [slot, text] }
+		for ch in text:
+			if ch >= "0" and ch <= "9":
+				return { "ok": false, "error": "slot %s holds a number: %s" % [slot, text] }
+	return { "ok": true }
+
+
+## One Advance builds one counted stance; the naming dry runs count apart (S2e finding).
+static func _t_dry_runs_not_counted_as_stances() -> Dictionary:
+	var runtime := TraversalModelTests._cf_runtime("directive.scout_carefully", TraversalModelTests._cf_tie_members(), TraversalModelTests._full_rect_terrain(30, 11), [])
+	var builds: int = _StanceP5.builds
+	var dry: int = _StanceP5.dry_builds
+	TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	if _StanceP5.builds - builds != 1:
+		return { "ok": false, "error": "expected 1 counted stance, got %d" % (_StanceP5.builds - builds) }
+	if _StanceP5.dry_builds - dry < 2:
+		return { "ok": false, "error": "the naming dry runs must be counted apart, got %d" % (_StanceP5.dry_builds - dry) }
+	var cap: int = int(ConfigService.get_party_stance_cfg(runtime.config_service)["stop"]["pause_cap_per_advance"])
+	if cap < 1:
+		return { "ok": false, "error": "pause_cap_per_advance key must stay in config" }
+	return { "ok": true }
+
+
+## Design 9: an Advance always makes progress. Step 1 enters the exposed cell next to the hostile
+## spur (2,4) without a pause; the pause comes before step 2.
+static func _t_first_step_never_pauses_for_exposure() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	var cells: Array = [[2, 4]]
+	for c in range(14):
+		cells.append([c, 5])
+	var terrain := { "bounds": { "w": 14, "h": 6 }, "bridges": [], "islands": [],
+		"plateaus": [{ "col": 0, "row": 4, "w": 14, "h": 2, "cells": cells }] }
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 2, 4, 900, false)
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 4, 5, 901, true)
+	hostile["revealed"] = true
+	goal["revealed"] = true
+	TraversalModelTests._inject_stage_with_terrain(runtime, terrain, [hostile, goal], { "col": 0, "row": 5 }, 900, 0)
+	var verdict := TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	var stop: Dictionary = TraversalModelTests._read_em(runtime, "last_stop")
+	if verdict != "advanced" or TraversalModelTests._steps_taken(runtime) != 1 or str(stop.get("kind", "")) != "paused_to_read":
+		return { "ok": false, "error": "expected one step then paused_to_read, got %s / %d steps / %s" % [verdict, TraversalModelTests._steps_taken(runtime), stop] }
+	return { "ok": true }
+
+
+## The crossed-out steps in the step bar read `effective_steps`; a shaken party must show fewer than the budget.
+static func _t_snapshot_effective_steps_follows_readiness() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 95, 2)
+	runtime.flow_ctx.config_service = runtime.config_service
+	var want := int(TraversalModelTests._adv_service(runtime)._build_stance(runtime.directive_service.get_active_directive())["effective_steps"])
+	if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+		return { "ok": false, "error": "the Advance did not move" }
+	var d := _snap(runtime)
+	if int(d["effective_steps"]) >= int(d["step_budget"]) or int(d["effective_steps"]) != want:
+		return { "ok": false, "error": "a shaken party must show %d of %d steps, got %s" % [want, int(d["step_budget"]), d["effective_steps"]] }
+	return { "ok": true }
+
+
+## The step row crosses out the steps past `commitment_depth` (D-60). Real factory Echoes, calm, real stance.
+static func _t_snapshot_commitment_depth_scout_and_seek() -> Dictionary:
+	var members := [["n_a", "okofor", 3, 0, 50, 1], ["n_b", "aduro", 3, 0, 50, 2]]
+	for c in [["directive.scout_carefully", 2, 3], ["directive.seek_signs", 5, 6]]:
+		var runtime := TraversalModelTests._cf_runtime(c[0], members, TraversalModelTests._full_rect_terrain(30, 11), [])
+		runtime.flow_ctx.config_service = runtime.config_service
+		var before := _snap(runtime)
+		if before["commitment_depth"] != before["step_budget"]:
+			return { "ok": false, "error": "%s: before the first Advance the depth must equal the budget, got %s of %s" % [c[0], before["commitment_depth"], before["step_budget"]] }
+		var stance := TraversalModelTests._adv_service(runtime)._build_stance(runtime.directive_service.get_active_directive())
+		if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced":
+			return { "ok": false, "error": "%s: the Advance did not move" % c[0] }
+		var d := _snap(runtime)
+		if not d["commitment_depth"] is int or d["commitment_depth"] != c[1] or d["step_budget"] != c[2] or d["commitment_depth"] != int(stance["commitment_depth"]):
+			return { "ok": false, "error": "%s: expected depth %d of %d, got %s of %s (stance %s)" % [c[0], c[1], c[2], d["commitment_depth"], d["step_budget"], stance["commitment_depth"]] }
+	return { "ok": true }
+
+
+## The snapshot depth is an int in 0..step_budget whatever the explore map holds.
+static func _t_snapshot_commitment_depth_clamped() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.scout_carefully", 0, 70)
+	runtime.flow_ctx.config_service = runtime.config_service
+	var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+	for c in [[99, -1], [7.0, -1], [-3, 0], ["x", -1]]:
+		em["last_commitment_depth"] = c[0]
+		var d := _snap(runtime)
+		var want: int = int(d["step_budget"]) if c[1] == -1 else c[1]
+		if not d["commitment_depth"] is int or d["commitment_depth"] != want:
+			return { "ok": false, "error": "stored %s gave depth %s, want %d" % [c[0], d["commitment_depth"], want] }
+	return { "ok": true }
+
+
+## The reveal peek reads the explore map and writes nothing: the find is revealed by the sweep later.
+static func _t_peek_does_not_reveal() -> Dictionary:
+	var find: Dictionary = SituationModelScript.make("find", SituationModelScript.TYPE_NPC, 4, 2, 700, false)
+	var em := { "situations": [find] }
+	var before := var_to_str(em)
+	var cfg := ConfigService.get_party_stance_cfg(TraversalModelTests._make_runtime().config_service)
+	var kind := _StopPolicyP5.classify_reveals(em, ["4,2"], { "npc": "intel" }, { "intel": 1.4 },
+		["spotted_ahead", "paused_to_read"], cfg["stop"], 0.0)
+	if kind != "paused_to_read":
+		return { "ok": false, "error": "fixture: the peek must see the find, got '%s'" % kind }
+	if var_to_str(em) != before or bool(find.get("revealed", false)):
+		return { "ok": false, "error": "the peek changed the map: %s" % [em] }
+	return { "ok": true }
+
+
+## D-14, D-54 N2: a Directive with no directive_profile entry still advances, and readiness still lowers its steps.
+static func _t_profileless_directive_advances_with_readiness() -> Dictionary:
+	var runtime := TraversalModelTests._stance_runtime("directive.synthetic", 95, 2)
+	var cfg := TraversalModelTests._make_directive_cfg()
+	var synthetic: Dictionary = (cfg["data"]["directives"]["directive.scout_carefully"] as Dictionary).duplicate(true)
+	synthetic["id"] = "directive.synthetic"
+	cfg["data"]["directives"] = { "directive.synthetic": synthetic }
+	runtime.directive_service.load_from_config(cfg)
+	runtime.flow_ctx.config_service = runtime.config_service
+	if (ConfigService.get_party_stance_cfg(runtime.config_service)["directive_profile"] as Dictionary).has("directive.synthetic"):
+		return { "ok": false, "error": "fixture: the synthetic Directive must have no profile" }
+	if TraversalModelTests._adv_service(runtime).advance_turn(runtime.directive_service, 0) != "advanced" or TraversalModelTests._steps_taken(runtime) < 1:
+		return { "ok": false, "error": "a profile-less Directive must advance" }
+	var d := _snap(runtime)
+	if str((d["stop"] as Dictionary).get("kind", "")).is_empty() or int(d["effective_steps"]) >= int(d["step_budget"]):
+		return { "ok": false, "error": "expected a stop kind and readiness steps below the budget, got %s / %s of %s" % [d["stop"], d["effective_steps"], d["step_budget"]] }
 	return { "ok": true }

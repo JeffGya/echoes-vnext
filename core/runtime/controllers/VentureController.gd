@@ -156,6 +156,7 @@ extends RefCounted
 ## counts toward the realm's recovery, but earns none of the `"clean"` tier that "S"/"A" give.
 ## Before Phase 8 this path silently used the "F" default, i.e. `"broken"`.
 const NO_COMBAT_GRADE: String = "C"
+const StagePartyStanceScript := preload("res://core/movement/StagePartyStance.gd")
 
 var flow_ctx: FlowContext
 var config_service: ConfigService
@@ -314,7 +315,7 @@ func _situation_resolve_outcome(verdict: Dictionary, t: int) -> FlowActionOutcom
 
 
 ## stage.return_home — party attempts to leave before completing all objectives.
-## Escape check: seeded roll > (40 - directive.escape_bonus) = success.
+## Escape check: seeded roll > (stages.escape_base_threshold - bent escape bonus) = success.
 ## Success → party_state = "escaped", partial intel Ase, transition to the scout-return card.
 ## Failure → return_home_result overlay on the explore snapshot.
 ##
@@ -334,7 +335,9 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 
 	# V2-STAGE-004-P2: directive-driven escape threshold
 	var directive := directive_service.get_active_directive()
-	var escape_threshold := maxi(0, 40 - int(directive.get("escape_bonus", 0)))
+	var escape_bonus: int = StagePartyStanceScript.escape_bonus(
+		_turn_service().read_party_echoes(), directive, ConfigService.get_party_stance_cfg(config_service))
+	var escape_threshold := maxi(0, ConfigService.get_escape_base_threshold(config_service) - escape_bonus)
 
 	var rng := CampaignSeed.get_rng_from(
 		realm_seed,

@@ -34,6 +34,9 @@ const GoalContract = preload("res://core/movement/contracts/MovementGoal.gd")
 const IntentContract = preload("res://core/movement/contracts/MovementIntent.gd")
 const ResultContract = preload("res://core/movement/contracts/MovementResult.gd")
 
+const ExposureMap = preload("res://core/movement/StageExposureMap.gd")
+const PathService = preload("res://core/movement/MovementPathService.gd")
+
 const SCOUT_ID: String = "directive.scout_carefully"
 const SEEK_ID: String = "directive.seek_signs"
 
@@ -74,6 +77,28 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement/stage_party/objective_tie_break_is_numeric_not_lexicographic", Callable(StagePartyMovementTests, "_t_objective_tie_break_is_numeric_not_lexicographic"))
 	runner.register_test("movement/stage_party/frontier_diagonal_not_deprioritised_by_manhattan", Callable(StagePartyMovementTests, "_t_frontier_diagonal_not_deprioritised_by_manhattan"))
 
+	# V2-DIRECTIVE-002 B+C slice S0: config getters and the missing-entry rule.
+	for n in ["party_stance_covers_every_directive", "party_stance_missing_entry_is_neutral", "party_stance_bounds_under_half_gap", "party_stance_reason_classes_count", "stage_presentation_keys_numeric", "contact_cfg_getters_match_shipped_values", "stance_cfg_getters_null_service_empty"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
+	# V2-DIRECTIVE-002 B+C slice S1b: exposure map and route price.
+	for n in ["exposure_empty_map_plain_route", "exposure_hidden_never_counts", "exposure_known_hazard_seam_counts", "exposure_scout_detours_seek_direct", "exposure_never_a_wall", "exposure_costs_are_int_ge_1", "exposure_exclude_id_drops_one_source"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
+	# V2-DIRECTIVE-002 B+C slice S1c: the objective weight in the pool.
+	for n in ["select_target_objective_weight", "select_target_missing_objective_key_neutral"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
+	# V2-DIRECTIVE-002 B+C slice S2b: the party stance.
+	for n in ["stance_ordering_per_dial", "stance_party_order_shuffle_identical", "stance_standing_floor_leans_at_standing_1", "stance_judgment_never_adds_steps", "stance_readiness_lower_only", "stance_all_shaken_party_keeps_one_step", "stance_bond_rule_changes_width", "stance_commitment_never_exceeds_effective_steps", "stance_directive_without_profile_keeps_readiness"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
+	# V2-DIRECTIVE-002 B+C slice S2c: category-weight bend.
+	for n in ["bend_never_inverts_ranking", "bend_breaks_tie_only", "select_signature_backward_compatible", "frontier_tie_break_salt_unchanged", "category_bend_clamped_and_sight_leans_intel"]:
+		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
+
+	# V2-DIRECTIVE-002 B+C slice S2e: shared reachable region (D-46).
+	runner.register_test("movement/stage_party/find_explore_target_region_arg_same_result", Callable(StagePartyMovementTests, "_t_find_explore_target_region_arg_same_result"))
 
 # ---------------------------------------------------------------------------
 # Profile — capacity is the DIRECTIVE step_budget
@@ -1663,3 +1688,611 @@ static func _pass() -> Dictionary:
 
 static func _fail(message: String) -> Dictionary:
 	return {"ok": false, "error": message}
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 B+C slice S0 — stance and contact config getters
+# ---------------------------------------------------------------------------
+
+static func _real_config() -> ConfigService:
+	var cs := ConfigService.new()
+	return cs if cs.load_balance() else null
+
+
+static func _shipped_directives(cs: ConfigService) -> Dictionary:
+	var out: Dictionary = {}
+	var reg: Dictionary = ConfigService.get_directives_cfg(cs)
+	for id: Variant in reg:
+		if reg[id] is Dictionary:
+			out[id] = reg[id]
+	return out
+
+
+## A shipped Directive with no directive_profile entry would silently get the neutral stance.
+## This test makes that a loud failure instead (A5).
+static func _t_party_stance_covers_every_directive() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var dirs: Dictionary = _shipped_directives(cs)
+	if dirs.is_empty():
+		return _fail("no shipped Directives found")
+	for id: Variant in dirs:
+		var entry: Dictionary = ConfigService.get_party_stance_profile(cs, str(id))
+		for key: String in ["commitment_fraction", "stop_willingness", "reveal_stop_kinds"]:
+			if not entry.has(key):
+				return _fail("%s has no party_stance.directive_profile.%s" % [id, key])
+	return _pass()
+
+
+static func _t_party_stance_missing_entry_is_neutral() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	if not ConfigService.get_party_stance_profile(cs, "directive.no_such_thing").is_empty():
+		return _fail("unknown Directive id must give the empty neutral profile")
+	return _pass()
+
+
+static func _t_party_stance_bounds_under_half_gap() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var bounds: Dictionary = ConfigService.get_party_stance_cfg(cs).get("bounds", {})
+	var dirs: Dictionary = _shipped_directives(cs)
+	for key: String in ["exposure_tolerance", "escape_bonus"]:
+		var spread: float = _spread(dirs.values().map(func(d: Dictionary) -> float: return float(d.get(key, 0.0))))
+		if float(bounds.get(key, 0.0)) >= spread / 2.0:
+			return _fail("bound %s must stay under half the Directive gap %s" % [key, spread])
+	var steps: Array = dirs.values().map(func(d: Dictionary) -> float: return float(d.get("step_budget", 0.0)))
+	if float(bounds.get("readiness_steps", 0.0)) >= _spread(steps) / 2.0:
+		return _fail("readiness_steps bound must stay under half the step_budget gap")
+	for key: String in ["commitment_fraction", "stop_willingness"]:
+		var vals: Array = []
+		for id: Variant in dirs:
+			vals.append(float(ConfigService.get_party_stance_profile(cs, str(id)).get(key, 0.0)))
+		if float(bounds.get(key, 0.0)) >= _spread(vals) / 2.0:
+			return _fail("bound %s must stay under half the Directive gap" % key)
+	# category_weight: under half the smallest non-zero gap between two categories in one Directive.
+	var min_gap: float = INF
+	for id: Variant in dirs:
+		var pref: Dictionary = (dirs[id] as Dictionary).get("target_preference", {})
+		var w: Array = pref.values()
+		for i in w.size():
+			for j in range(i + 1, w.size()):
+				var gap: float = absf(float(w[i]) - float(w[j]))
+				if gap > 0.0001:
+					min_gap = minf(min_gap, gap)
+	if float(bounds.get("category_weight", 0.0)) >= min_gap / 2.0:
+		return _fail("category_weight bound must stay under half the smallest category gap %s" % min_gap)
+	return _pass()
+
+
+static func _spread(values: Array) -> float:
+	return float(values.max()) - float(values.min()) if not values.is_empty() else 0.0
+
+
+static func _t_party_stance_reason_classes_count() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var classes: Variant = ConfigService.get_party_stance_cfg(cs).get("counterfactual", {}).get("reason_classes", [])
+	if not classes is Array or (classes as Array).size() != 5:
+		return _fail("reason_classes must list 5 classes, got %s" % str(classes))
+	return _pass()
+
+
+static func _t_stage_presentation_keys_numeric() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var pres: Dictionary = ConfigService.get_stage_presentation_cfg(cs)
+	var seen: int = 0
+	for key: Variant in pres:
+		if str(key).begins_with("_"):
+			continue
+		seen += 1
+		var items: Array = pres[key] if pres[key] is Array else [pres[key]]
+		if items.is_empty():
+			return _fail("presentation.%s must not be an empty list" % key)
+		for item: Variant in items:
+			if not (item is float or item is int) or float(item) <= 0.0:
+				return _fail("presentation.%s must be a positive number or a list of them" % key)
+	if seen == 0:
+		return _fail("presentation block is empty")
+	return _pass()
+
+
+static func _t_contact_cfg_getters_match_shipped_values() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var bid: Dictionary = ConfigService.get_contact_bid_cfg(cs)
+	if int(bid.get("reactive_fear_min", -1)) != 60 or not bid.has("suppression") or not bid.has("boost"):
+		return _fail("contact.bid does not read back the shipped block")
+	var tc: Dictionary = ConfigService.get_contact_turn_count_cfg(cs)
+	if int(tc.get("npc_fear_above", -1)) != 60 or int(tc.get("npc_morale_below", -1)) != 30:
+		return _fail("contact.turn_count_modifiers does not read back the shipped values")
+	if int(ConfigService.get_contact_emotional_fit_cfg(cs).get("low_morale_npc_max", -1)) != 20:
+		return _fail("contact.emotional_fit_modifiers does not read back the shipped values")
+	if ConfigService.get_contact_max_voices_per_turn(cs, 99) != 3:
+		return _fail("contact.max_voices_per_turn must read 3")
+	return _pass()
+
+
+static func _t_stance_cfg_getters_null_service_empty() -> Dictionary:
+	var empty := ConfigService.new()
+	for d: Dictionary in [
+		ConfigService.get_party_stance_cfg(null), ConfigService.get_party_stance_profile(null, "x"),
+		ConfigService.get_stage_presentation_cfg(null), ConfigService.get_contact_bid_cfg(null),
+		ConfigService.get_contact_turn_count_cfg(null), ConfigService.get_contact_emotional_fit_cfg(null),
+		ConfigService.get_party_stance_cfg(empty), ConfigService.get_contact_bid_cfg(empty),
+	]:
+		if not d.is_empty():
+			return _fail("a getter on a null or unloaded service must return {}")
+	if ConfigService.get_contact_max_voices_per_turn(null) != 3 or ConfigService.get_contact_max_voices_per_turn(empty) != 3:
+		return _fail("max_voices_per_turn fallback must be 3 (today's literal)")
+	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 S1b: exposure map and route price
+# ---------------------------------------------------------------------------
+
+static func _exposure_cfg(cs: ConfigService) -> Dictionary:
+	var v: Variant = ConfigService.get_party_stance_cfg(cs).get("exposure", {})
+	return v if v is Dictionary else {}
+
+
+static func _sit(type: String, col: int, row: int, revealed: bool = true, resolved: bool = false, passed: bool = false) -> Dictionary:
+	return {"id": "s", "type": type, "pos": {"col": col, "row": row}, "revealed": revealed, "resolved": resolved, "passed": passed}
+
+
+# Row 4 corridor, cols 0..39, plus a row-0 bypass with orthogonal ramps between cols 2 and 10.
+static func _exposure_board() -> Dictionary:
+	var w: Dictionary = {}
+	for c in range(40):
+		w["%d,4" % c] = true
+	for k in ["2,3", "2,2", "2,1", "2,0", "3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "9,0", "10,0", "10,1", "10,2", "10,3"]:
+		w[k] = true
+	return w
+
+
+static func _t_exposure_empty_map_plain_route() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var cat := ConfigService.get_situation_category_cfg(cs)
+	var cfg := _exposure_cfg(cs)
+	for em: Dictionary in [{}, {"situations": []}, {"situations": [_sit("npc", 6, 4), _sit("loot", 7, 4)]}]:
+		if not ExposureMap.build(em, cat, cfg).is_empty():
+			return _fail("a map with no known hostile must be empty")
+	if not ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, cat, {}).is_empty():
+		return _fail("an absent exposure config must give an empty map")
+	if not ExposureMap.to_terrain_costs({}, 0.3, 4).is_empty():
+		return _fail("an empty map must give no costs")
+	var from := {"col": 0, "row": 4}
+	var to := {"col": 39, "row": 4}
+	var plain: Dictionary = PathService.shortest_path(from, to, _exposure_board(), {}, {}, {})
+	var again: Dictionary = PathService.shortest_path(from, to, _exposure_board(), ExposureMap.to_terrain_costs({}, 0.3, 4), {}, {})
+	return _pass() if plain == again else _fail("empty costs changed the route")
+
+
+static func _t_exposure_hidden_never_counts() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var cat := ConfigService.get_situation_category_cfg(cs)
+	var cfg := _exposure_cfg(cs)
+	for sit: Dictionary in [_sit("combat", 6, 4, false), _sit("combat", 6, 4, true, true), _sit("combat", 6, 4, true, false, true)]:
+		if not ExposureMap.build({"situations": [sit]}, cat, cfg).is_empty():
+			return _fail("a hidden, resolved or passed hostile must not count: %s" % str(sit))
+	var live := ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, cat, cfg)
+	if absf(float(live.get("6,4", 0.0)) - float(cfg["hostile_peak"])) > 0.0001 or live.has("9,4") or not live.has("8,4"):
+		return _fail("a revealed hostile must peak at its cell and stop at hostile_radius: %s" % str(live))
+	return _pass()
+
+
+# D-52 F1: the exposure pause leaves out the hostile the party walks to, and only that one.
+static func _t_exposure_exclude_id_drops_one_source() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var target := _sit("combat", 6, 4)
+	target["id"] = "target"
+	var other := _sit("combat", 30, 4)
+	other["id"] = "other"
+	var got := ExposureMap.build({"situations": [target, other]}, ConfigService.get_situation_category_cfg(cs), _exposure_cfg(cs), "target")
+	return _pass() if not got.has("6,4") and got.has("30,4") else _fail("exclude_id must drop only its own source: %s" % str(got.keys()))
+
+
+static func _t_exposure_known_hazard_seam_counts() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var got := ExposureMap.build({"known_hazards": [{"col": 3, "row": 3}, "junk"]}, {}, _exposure_cfg(cs))
+	return _pass() if got.has("3,3") and not got.has("junk") else _fail("a known hazard must count and a malformed one must be skipped")
+
+
+static func _t_exposure_scout_detours_seek_direct() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var cfg := _exposure_cfg(cs)
+	var dirs := _shipped_directives(cs)
+	var exposure := ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, ConfigService.get_situation_category_cfg(cs), cfg)
+	var from := {"col": 0, "row": 4}
+	var to := {"col": 39, "row": 4}
+	var walk := _exposure_board()
+	var plain_len: int = (PathService.shortest_path(from, to, walk, {}, {}, {})["path"] as Array).size()
+	var slack := ConfigService.get_movement_slack_cfg(cs)
+	var scout_len := -1
+	for id: String in [SCOUT_ID, SEEK_ID]:
+		var costs := ExposureMap.to_terrain_costs(exposure, float((dirs[id] as Dictionary)["exposure_tolerance"]), int(cfg["price_scale"]))
+		var path: Array = PathService.shortest_path(from, to, walk, costs, {}, {})["path"]
+		if not ExposureMap.detour_within_slack(path.size(), plain_len, slack):
+			return _fail("%s priced route is outside the slack envelope" % id)
+		var through := path.any(func(c: Dictionary) -> bool: return int(c["row"]) == 4 and int(c["col"]) == 6)
+		if id == SCOUT_ID and through:
+			return _fail("Scout must detour round the hostile")
+		if id == SEEK_ID and (not through or path.size() != plain_len):
+			return _fail("Seek must go direct")
+		if id == SCOUT_ID:
+			scout_len = path.size()
+	return _pass() if scout_len > plain_len else _fail("Scout detour must be longer than the plain route")
+
+
+static func _t_exposure_never_a_wall() -> Dictionary:
+	var cs := _real_config()
+	if cs == null:
+		return _fail("could not load production balance.json")
+	var exposure := ExposureMap.build({"situations": [_sit("combat", 6, 4)]}, ConfigService.get_situation_category_cfg(cs), _exposure_cfg(cs))
+	var costs := ExposureMap.to_terrain_costs(exposure, 0.0, 1000)
+	var walk := {}
+	for c in range(18):
+		walk["%d,4" % c] = true
+	var r: Dictionary = PathService.shortest_path({"col": 0, "row": 4}, {"col": 17, "row": 4}, walk, costs, {}, {})
+	if not bool(r.get("reachable", false)):
+		return _fail("a heavily priced cell must stay reachable (single lane, no bypass): %s" % str(r.get("reason")))
+	var slack := ConfigService.get_movement_slack_cfg(cs)
+	var limit := 17 + Adapter._slack_envelope(17, slack)
+	if not ExposureMap.detour_within_slack(limit, 17, slack) or ExposureMap.detour_within_slack(limit + 1, 17, slack):
+		return _fail("the slack gate must accept plain + envelope and refuse one more")
+	return _pass()
+
+
+static func _t_exposure_costs_are_int_ge_1() -> Dictionary:
+	var exposure := {"a": 1.0, "b": 0.667, "c": 0.333, "d": 0.0}
+	for tol: float in [-1.0, 0.0, 0.3, 0.8, 1.0, 2.0]:
+		var costs := ExposureMap.to_terrain_costs(exposure, tol, 4)
+		for k: Variant in costs:
+			if not costs[k] is int or int(costs[k]) < 2:
+				return _fail("cost must be an int above 1 (cost-1 cells are omitted): %s at tolerance %s" % [str(costs[k]), tol])
+	if not ExposureMap.to_terrain_costs(exposure, 0.0, 0).is_empty():
+		return _fail("price_scale 0 must give no costs")
+	return _pass() if ExposureMap.to_terrain_costs(exposure, 1.0, 4).is_empty() else _fail("tolerance 1 must give no costs")
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 B+C slice S1c — objective weight joins the pool
+# ---------------------------------------------------------------------------
+
+static func _pool_pair() -> Array:
+	return [
+		{"id": "sit.goal", "pos": {"col": 4, "row": 0}, "type": "npc", "is_objective": true},
+		{"id": "sit.find", "pos": {"col": 3, "row": 0}, "type": "npc"},
+	]
+
+
+static func _t_select_target_objective_weight() -> Dictionary:
+	var field: Dictionary = {"3,0": 3, "4,0": 4}
+	var cat: Dictionary = {"npc": "intel"}
+	var high: String = str(Adapter.select_objective_target(_pool_pair(), field, {"intel": 0.9, "objective": 1.6}, cat).get("id", ""))
+	var low: String = str(Adapter.select_objective_target(_pool_pair(), field, {"intel": 1.4, "objective": 1.2}, cat).get("id", ""))
+	if high != "sit.goal" or low != "sit.find":
+		return _fail("objective weight must rank against the find weight: high=%s low=%s" % [high, low])
+	return _pass()
+
+
+# No `objective` key: the objective scores the neutral weight, so it ties a neutral find and the nearer one wins.
+static func _t_select_target_missing_objective_key_neutral() -> Dictionary:
+	var field: Dictionary = {"3,0": 3, "4,0": 4}
+	var pick: String = str(Adapter.select_objective_target(_pool_pair(), field, {"intel": 1.0}, {"npc": "intel"}).get("id", ""))
+	if pick != "sit.find":
+		return _fail("a missing objective key must act neutral (nearest wins the tie), got %s" % pick)
+	return _pass()
+
+
+# ─── V2-DIRECTIVE-002 S2b: party stance ──────────────────────────────────────
+
+const Stance = preload("res://core/movement/StagePartyStance.gd")
+const _STANCE_DIALS: Array = ["exposure_tolerance", "stop_willingness", "commitment_fraction", "escape_bonus"]
+
+
+static func _stance_env() -> Dictionary:
+	var cs := _real_config()
+	var dirs: Dictionary = _shipped_directives(cs)
+	var scout: Dictionary = (dirs[SCOUT_ID] as Dictionary).duplicate(true)
+	var seek: Dictionary = (dirs["directive.seek_signs"] as Dictionary).duplicate(true)
+	scout["id"] = SCOUT_ID
+	seek["id"] = "directive.seek_signs"
+	return { "data": cs.get_balance().get("data", {}), "cfg": ConfigService.get_party_stance_cfg(cs), "scout": scout, "seek": seek }
+
+
+static func _stance_actor(id: String, calling: String, rank: int, fear: int, morale: int) -> Dictionary:
+	var echo := ActorTests._make_test_echo(id, id)
+	echo["rank"] = rank
+	echo["calling"] = calling
+	echo["xp_total"] = 100 * rank
+	echo["emotion"] = { "morale_current": morale, "fear_current": fear, "fear_base": 15 }
+	return EchoActor.from_echo(echo)
+
+
+static func _stance_of(actors: Array, directive: Dictionary, env: Dictionary, bonds: Array = []) -> Dictionary:
+	var living: Dictionary = {}
+	for a in actors:
+		living[str(a["id"])] = true
+	var echoes: Array = []
+	for a in actors:
+		echoes.append(Stance.read_echo(a, bonds, living, env["data"]))
+	return Stance.build(echoes, directive, env["cfg"])
+
+
+# Parties from calm to shaken, every family and a spread of Standing.
+static func _stance_parties() -> Array:
+	var parties: Array = [[]]
+	for calling in ["okofor", "aduro", "okomfo"]:
+		for rank in [1, 6]:
+			for st in [[0, 70], [30, 50], [50, 40], [90, 5]]:
+				parties.append([_stance_actor("e_" + calling, calling, rank, st[0], st[1])])
+	parties.append([_stance_actor("a", "okofor", 1, 10, 60), _stance_actor("b", "aduro", 6, 60, 30), _stance_actor("c", "okomfo", 3, 90, 5)])
+	return parties
+
+
+static func _t_stance_ordering_per_dial() -> Dictionary:
+	var env := _stance_env()
+	var bounds: Dictionary = env["cfg"]["bounds"]
+	for party: Array in _stance_parties():
+		var sc := _stance_of(party, env["scout"], env)
+		var sk := _stance_of(party, env["seek"], env)
+		for dial in ["exposure_tolerance", "commitment_fraction"]:
+			if float(sk["dials"][dial]) < float(sc["dials"][dial]):
+				return _fail("Seek %s below Scout for a party of %d" % [dial, party.size()])
+		for dial in ["stop_willingness", "escape_bonus"]:
+			if float(sc["dials"][dial]) < float(sk["dials"][dial]):
+				return _fail("Scout %s below Seek for a party of %d" % [dial, party.size()])
+		if int(sk["effective_steps"]) < int(sc["effective_steps"]) or int(sk["commitment_depth"]) < int(sc["commitment_depth"]):
+			return _fail("Seek steps or depth below Scout for a party of %d" % party.size())
+		for st in [sc, sk]:
+			var base: Dictionary = (env["scout"] if st == sc else env["seek"])
+			var prof: Dictionary = env["cfg"]["directive_profile"][base["id"]]
+			var bases := { "exposure_tolerance": float(base["exposure_tolerance"]), "stop_willingness": float(prof["stop_willingness"]),
+				"commitment_fraction": float(prof["commitment_fraction"]), "escape_bonus": float(base["escape_bonus"]) }
+			for dial in _STANCE_DIALS:
+				if absf(float(st["dials"][dial]) - float(bases[dial])) > float(bounds[dial]) + 0.0001:
+					return _fail("%s of %s moved past its bound" % [dial, base["id"]])
+	return _pass()
+
+
+static func _t_stance_party_order_shuffle_identical() -> Dictionary:
+	var env := _stance_env()
+	var party := [_stance_actor("a", "okofor", 1, 10, 60), _stance_actor("b", "aduro", 6, 60, 30), _stance_actor("c", "okomfo", 3, 90, 5)]
+	var rev := party.duplicate()
+	rev.reverse()
+	var rot := [party[1], party[2], party[0]]
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var base := _stance_of(party, d, env)
+		if _stance_of(rev, d, env) != base or _stance_of(rot, d, env) != base:
+			return _fail("party order changed the stance for %s" % d["id"])
+	return _pass()
+
+
+# D-08: a Standing-1 Echo still leans; Standing 6 leans at least as hard and never past the bound.
+static func _t_stance_standing_floor_leans_at_standing_1() -> Dictionary:
+	var env := _stance_env()
+	var bound := float(env["cfg"]["bounds"]["commitment_fraction"])
+	var floor_ := float(env["cfg"]["lean_strength"]["dispositional_floor"])
+	var leans: Array = []
+	for rank in [1, 6]:
+		var e := Stance.read_echo(_stance_actor("e", "aduro", rank, 0, 50), [], {}, env["data"])
+		leans.append(Stance.echo_lean(e, "commitment_fraction", env["cfg"]))
+	if float(leans[0]) < floor_ * bound - 0.0001:
+		return _fail("Standing-1 Edge lean %s is below floor x bound %s" % [leans[0], floor_ * bound])
+	if float(leans[1]) < float(leans[0]) or float(leans[1]) > bound + 0.0001:
+		return _fail("Standing-6 lean %s must sit between Standing-1 lean %s and the bound %s" % [leans[1], leans[0], bound])
+	return _pass()
+
+
+static func _t_stance_judgment_never_adds_steps() -> Dictionary:
+	var env := _stance_env()
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		for rank in range(1, 10):
+			var st := _stance_of([_stance_actor("e", "okomfo", rank, 0, 70)], d, env)
+			if int(st["effective_steps"]) > int(d["step_budget"]):
+				return _fail("rank %d gave %d steps over budget %d" % [rank, st["effective_steps"], d["step_budget"]])
+	return _pass()
+
+
+static func _t_stance_readiness_lower_only() -> Dictionary:
+	var env := _stance_env()
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var calm := _stance_of([_stance_actor("e", "okofor", 3, 0, 80)], d, env)
+		if int(calm["effective_steps"]) != int(d["step_budget"]):
+			return _fail("a calm party must walk the Directive baseline for %s" % d["id"])
+		for party: Array in _stance_parties():
+			if int(_stance_of(party, d, env)["effective_steps"]) > int(d["step_budget"]):
+				return _fail("readiness raised steps above the baseline for %s" % d["id"])
+	return _pass()
+
+
+static func _t_stance_all_shaken_party_keeps_one_step() -> Dictionary:
+	var env := _stance_env()
+	var party := [_stance_actor("a", "okofor", 1, 95, 2), _stance_actor("b", "aduro", 1, 95, 2)]
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var st := _stance_of(party, d, env)
+		if int(st["effective_steps"]) < 1 or int(st["commitment_depth"]) < 1:
+			return _fail("a shaken party must keep one step under %s: %s" % [d["id"], st])
+		if int(st["effective_steps"]) != int(d["step_budget"]) - 1:
+			return _fail("a shaken party loses exactly one step under %s" % d["id"])
+	return _pass()
+
+
+static func _t_stance_bond_rule_changes_width() -> Dictionary:
+	var env := _stance_env()
+	var a := _stance_actor("a", "okofor", 3, 10, 60)
+	var b := _stance_actor("b", "aduro", 3, 10, 60)
+	var bonds := [{ "actor_a": "a", "actor_b": "b", "strength": 80 }]
+	var with_b := _stance_of([a, b], env["scout"], env, bonds)
+	var without := _stance_of([a, b], env["scout"], env, [])
+	var living := { "a": true, "b": true }
+	var w1 := float(Stance.read_echo(a, bonds, living, env["data"])["width"])
+	var w0 := float(Stance.read_echo(a, [], living, env["data"])["width"])
+	if w1 <= w0:
+		return _fail("a living bond must raise width: with %s without %s" % [w1, w0])
+	if with_b == without:
+		return _fail("bonds must reach the stance")
+	return _pass()
+
+
+static func _t_stance_commitment_never_exceeds_effective_steps() -> Dictionary:
+	var env := _stance_env()
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		for party: Array in _stance_parties():
+			var st := _stance_of(party, d, env)
+			if int(st["commitment_depth"]) > int(st["effective_steps"]) or int(st["commitment_depth"]) < 1:
+				return _fail("depth %s outside 1..%s" % [st["commitment_depth"], st["effective_steps"]])
+	return _pass()
+
+
+# D-54 N2: readiness applies to a Directive with no profile; its dials stay at the baselines.
+static func _t_stance_directive_without_profile_keeps_readiness() -> Dictionary:
+	var env := _stance_env()
+	var third: Dictionary = (env["seek"] as Dictionary).duplicate(true)
+	third["id"] = "directive.synthetic_third"
+	var budget := int(third["step_budget"])
+	var base := {"exposure_tolerance": float(third["exposure_tolerance"]), "stop_willingness": 0.0,
+		"commitment_fraction": 1.0, "escape_bonus": float(third.get("escape_bonus", 0.0))}
+	var calm := _stance_of([_stance_actor("e_a", "okofor", 3, 0, 50)], third, env)
+	var shaken := _stance_of([_stance_actor("e_a", "okofor", 3, 90, 10)], third, env)
+	if int(calm["effective_steps"]) != budget or int(calm["commitment_depth"]) != budget:
+		return _fail("a calm party must keep the budget: %s" % calm)
+	if int(shaken["effective_steps"]) >= budget or int(shaken["commitment_depth"]) != int(shaken["effective_steps"]):
+		return _fail("a shaken party must lose steps under a Directive with no profile: %s" % shaken)
+	for st: Dictionary in [calm, shaken]:
+		if st["dials"] != base or not (st["candidates"] as Array).is_empty():
+			return _fail("the dials must equal the Directive baselines %s: %s" % [base, st])
+	return _pass()
+
+
+# ─── V2-DIRECTIVE-002 S2c: category-weight bend ──────────────────────────────
+
+static func _bend_sit(id: String, type: String, col: int) -> Dictionary:
+	return { "id": id, "type": type, "pos": { "col": col, "row": 0 } }
+
+
+# Opposite extreme bend (+bound on `a`, -bound on `b`) never changes a pick when the authored weights differ.
+static func _t_bend_never_inverts_ranking() -> Dictionary:
+	var env := _stance_env()
+	var bound := float(env["cfg"]["bounds"]["category_weight"])
+	var cats: Dictionary = ConfigService.get_situation_category_cfg(_real_config())
+	var type_of: Dictionary = {}
+	for t in cats.keys():
+		type_of[str(cats[t])] = str(t)
+	var field := { "0,0": 0, "1,0": 1, "2,0": 2, "3,0": 3 }
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var w: Dictionary = d["target_preference"]
+		for a in ["intel", "reward", "combat"]:
+			for b in ["intel", "reward", "combat"]:
+				if a == b or is_equal_approx(float(w[a]), float(w[b])):
+					continue
+				var sits := [_bend_sit("a", type_of[a], 3), _bend_sit("b", type_of[b], 1)]
+				var plain := Adapter.select_objective_target(sits, field, w, cats)
+				var bent := Adapter.select_objective_target(sits, field, w, cats, {}, { a: bound, b: -bound })
+				var bent_rev := Adapter.select_objective_target(sits, field, w, cats, {}, { a: -bound, b: bound })
+				if plain["id"] != bent["id"] or plain["id"] != bent_rev["id"]:
+					return _fail("%s: bend changed the pick between %s and %s" % [d["id"], a, b])
+	return _pass()
+
+
+static func _t_bend_breaks_tie_only() -> Dictionary:
+	var cats: Dictionary = ConfigService.get_situation_category_cfg(_real_config())
+	var field := { "0,0": 0, "2,0": 2, "4,0": 4 }
+	var w := { "intel": 0.9, "reward": 0.9 }
+	var sits := [_bend_sit("reward", "loot", 2), _bend_sit("intel", "npc", 4)]
+	if Adapter.select_objective_target(sits, field, w, cats)["id"] != "reward":
+		return _fail("a tie must fall to the nearest")
+	if Adapter.select_objective_target(sits, field, w, cats, {}, { "intel": 0.05 })["id"] != "intel":
+		return _fail("a positive bend must break the tie")
+	if Adapter.select_objective_target(sits, field, w, cats, {}, { "intel": -0.05 })["id"] != "reward":
+		return _fail("a negative bend must keep the nearest")
+	return _pass()
+
+
+static func _t_select_signature_backward_compatible() -> Dictionary:
+	var cats: Dictionary = ConfigService.get_situation_category_cfg(_real_config())
+	var field := { "0,0": 0, "2,0": 2, "4,0": 4 }
+	var w := { "intel": 0.9, "reward": 0.9 }
+	var sits := [_bend_sit("reward", "loot", 2), _bend_sit("intel", "npc", 4)]
+	if Adapter.select_objective_target(sits, field, w, cats) != Adapter.select_objective_target(sits, field, w, cats, {}, {}):
+		return _fail("an empty bend must equal the call without a bend")
+	return _pass()
+
+
+# Frontier ranking is untouched: among equidistant cells the lowest salted hash wins.
+static func _t_frontier_tie_break_salt_unchanged() -> Dictionary:
+	var board: Dictionary = {}
+	for c in 5:
+		for r in 5:
+			board["%d,%d" % [c, r]] = true
+	var ring: Array = [{"col": 4, "row": 2}, {"col": 0, "row": 2}, {"col": 2, "row": 4}, {"col": 2, "row": 0}]
+	for salt in ["s0", "s1", "s2", "s3"]:
+		var want: Dictionary = ring[0]
+		for cell: Dictionary in ring:
+			if Adapter.salted_cell_hash(salt, "%d,%d" % [cell["col"], cell["row"]]) < Adapter.salted_cell_hash(salt, "%d,%d" % [want["col"], want["row"]]):
+				want = cell
+		if Adapter.select_frontier(ring, {"col": 2, "row": 2}, {}, board, salt) != want:
+			return _fail("salt %s: frontier left the hash order" % salt)
+	return _pass()
+
+
+static func _t_category_bend_clamped_and_sight_leans_intel() -> Dictionary:
+	var env := _stance_env()
+	var bound := float(env["cfg"]["bounds"]["category_weight"])
+	var huge := Stance.category_bend({ "a": { "intel": 5.0, "combat": -5.0 }, "b": { "intel": 5.0, "combat": -5.0 } }, env["cfg"])
+	if not is_equal_approx(float(huge["intel"]), bound) or not is_equal_approx(float(huge["combat"]), -bound):
+		return _fail("the bend must clamp to bounds.category_weight: %s" % [huge])
+	var sight: Dictionary = _stance_of([_stance_actor("s", "okomfo", 1, 0, 70)], env["seek"], env)["category_bend"]
+	var edge: Dictionary = _stance_of([_stance_actor("e", "aduro", 1, 0, 70)], env["seek"], env)["category_bend"]
+	if float(sight.get("intel", 0.0)) <= 0.0 or float(edge.get("intel", 0.0)) != 0.0 or float(edge.get("combat", 0.0)) <= 0.0:
+		return _fail("Sight must lean intel, Edge must lean combat only: %s %s" % [sight, edge])
+	return _pass()
+
+
+# ---------------------------------------------------------------------------
+# V2-DIRECTIVE-002 B+C slice S2e — a shared region gives the same pick as no region
+# ---------------------------------------------------------------------------
+
+static func _t_find_explore_target_region_arg_same_result() -> Dictionary:
+	var cs := _real_config()
+	var ctx := FlowContext.new()
+	ctx.realm_id = "realm.01"
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var session := ActiveStageService.new(ctx, cs, logger)
+	var directive: Dictionary = _shipped_directives(cs)[SCOUT_ID]
+	var walkable: Dictionary = {}
+	for c in 12:
+		for r in 9:
+			walkable["%d,%d" % [c, r]] = true
+	var find: Dictionary = SituationModel.make("find", SituationModel.TYPE_NPC, 6, 4, 900, false)
+	find["revealed"] = true
+	var stage := { "index": 0 }
+	for sits in [[], [find]]:
+		var em := { "situations": sits, "party_pos": { "col": 1, "row": 4 }, "last_traveled_origin": { "col": 0, "row": 4 } }
+		var explored := { "0,4": true, "1,4": true, "2,4": true }
+		var region := ActiveStageService.stage_reachable_costs(em["party_pos"], walkable)
+		var plain := session.find_explore_target(em, directive, walkable, explored, stage)
+		var shared := session.find_explore_target(em, directive, walkable, explored, stage, {}, region)
+		if plain.is_empty() or var_to_str(plain) != var_to_str(shared):
+			return _fail("a shared region changed the pick: %s vs %s" % [plain, shared])
+	return _pass()

@@ -19,7 +19,7 @@
 #   14. traversal/fog_projection_only_revealed     — snapshot data.situations has only revealed==true entries
 #   15. traversal/fog_explored_cells_seeded        — explored_cells non-empty after lock (entry vicinity seeded)
 #   16. traversal/fog_growth_per_advance           — explored_cells grows each Advance
-#   17. traversal/fog_scout_wider_than_seek        — Scout lifts more fog per advance than Seek (wide vs narrow radius)
+#   17. traversal/fog_scout_wider_than_seek        — Scout lifts more fog per step walked than Seek (wide vs narrow radius)
 #   18. traversal/fog_frontier_sweep               — repeated advances eventually bring objective cell into explored_cells (no permanently-fogged reachable node)
 #   19. traversal/fog_durability_return_home       — explored_cells + revealed + resolved persist across return_home re-entry
 #   20. traversal/fog_determinism                  — two identical runs produce identical explored_cells
@@ -393,6 +393,43 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("traversal/p5_tier1_hard_stops_on_arrival",         Callable(TraversalModelTests, "_t_p5_tier1_hard_stops_on_arrival"))
 	runner.register_test("traversal/p5_mid_path_situation_parks_party",      Callable(TraversalModelTests, "_t_p5_mid_path_situation_parks_party"))
 	runner.register_test("traversal/p5_passed_situation_walked_through",     Callable(TraversalModelTests, "_t_p5_passed_situation_walked_through"))
+	# V2-DIRECTIVE-002 S1a: one result per Advance, no value moves
+	runner.register_test("traversal/advance_state_identical",       Callable(TraversalModelTests, "_t_advance_state_identical"))
+	runner.register_test("traversal/one_result_per_advance_validates", Callable(TraversalModelTests, "_t_one_result_per_advance_validates"))
+	runner.register_test("traversal/result_cleared_without_move",          Callable(TraversalModelTests, "_t_result_cleared_without_move"))
+	runner.register_test("traversal/exposure_two_route_board_scout_vs_seek", Callable(TraversalModelTests, "_t_exposure_two_route_board_scout_vs_seek"))
+	# V2-DIRECTIVE-002 S2b: one party stance per Advance; a shaken party still moves or names a stop
+	runner.register_test("traversal/one_stance_per_advance",                 Callable(TraversalModelTests, "_t_one_stance_per_advance"))
+	runner.register_test("traversal/all_shaken_party_still_moves_or_names_stop", Callable(TraversalModelTests, "_t_all_shaken_party_still_moves_or_names_stop"))
+	# V2-DIRECTIVE-002 S2c: category-weight bend, K2 tie case
+	runner.register_test("traversal/k2_sight_vs_edge_tie",                   Callable(TraversalModelTests, "_t_k2_sight_vs_edge_tie"))
+	# V2-DIRECTIVE-002 S1c: the objective joins the weighted pool (design 3.1 O1 to O3)
+	runner.register_test("traversal/pool_o1_scout_find_first",          Callable(TraversalModelTests, "_t_pool_o1_scout_find_first"))
+	runner.register_test("traversal/pool_o2_seek_objective_first",      Callable(TraversalModelTests, "_t_pool_o2_seek_objective_first"))
+	runner.register_test("traversal/pool_o3_seek_close_find_then_objective", Callable(TraversalModelTests, "_t_pool_o3_seek_close_find_then_objective"))
+	runner.register_test("traversal/pool_only_objective_revealed",      Callable(TraversalModelTests, "_t_pool_only_objective_revealed"))
+	# V2-DIRECTIVE-002 S2e: counterfactual naming, first plan only
+	runner.register_test("traversal/counterfactual_n1_terrain", Callable(TraversalModelTests, "_t_cf_n1_terrain"))
+	runner.register_test("traversal/counterfactual_n2_objective", Callable(TraversalModelTests, "_t_cf_n2_objective"))
+	runner.register_test("traversal/counterfactual_one_step_walk_is_not_terrain", Callable(TraversalModelTests, "_t_cf_one_step_not_terrain"))
+	runner.register_test("traversal/counterfactual_n3_directive", Callable(TraversalModelTests, "_t_cf_n3_directive"))
+	runner.register_test("traversal/counterfactual_n4_party_order_shuffle", Callable(TraversalModelTests, "_t_cf_n4_party_order_shuffle"))
+	runner.register_test("traversal/counterfactual_n5_hidden_content_moved", Callable(TraversalModelTests, "_t_cf_n5_hidden_content_moved"))
+	runner.register_test("traversal/counterfactual_n6_empty_exposure_plain_route", Callable(TraversalModelTests, "_t_cf_n6_empty_exposure_plain_route"))
+	runner.register_test("traversal/counterfactual_s3_fear_names_frightened", Callable(TraversalModelTests, "_t_cf_s3_fear_names_frightened"))
+	runner.register_test("traversal/counterfactual_p1_named_echo_changes_plan", Callable(TraversalModelTests, "_t_cf_p1_named_echo_changes_plan"))
+	runner.register_test("traversal/counterfactual_tie_pin_lowest_id", Callable(TraversalModelTests, "_t_cf_tie_pin_lowest_id"))
+	runner.register_test("traversal/counterfactual_cap_respected", Callable(TraversalModelTests, "_t_cf_cap_respected"))
+	runner.register_test("traversal/counterfactual_no_state_written", Callable(TraversalModelTests, "_t_cf_no_state_written"))
+	runner.register_test("traversal/counterfactual_name_matches_cause", Callable(TraversalModelTests, "_t_cf_name_matches_cause"))
+	runner.register_test("traversal/counterfactual_depth_without_cut_names_nobody", Callable(TraversalModelTests, "_t_cf_depth_without_cut_names_nobody"))
+	runner.register_test("traversal/counterfactual_depth_cut_names_echo", Callable(TraversalModelTests, "_t_cf_depth_cut_names_echo"))
+	runner.register_test("traversal/counterfactual_named_echo_has_class", Callable(TraversalModelTests, "_t_cf_named_echo_has_class"))
+	runner.register_test("traversal/counterfactual_removed_echo_takes_its_bond_edge", Callable(TraversalModelTests, "_t_cf_removed_echo_takes_its_bond_edge"))
+	runner.register_test("traversal/counterfactual_walk_probe", Callable(TraversalModelTests, "_t_cf_walk_probe"))
+	runner.register_test("traversal/counterfactual_walk_differs_names_nobody", Callable(TraversalModelTests, "_t_cf_walk_differs_names_nobody"))
+	runner.register_test("traversal/counterfactual_walk_equal_keeps_name", Callable(TraversalModelTests, "_t_cf_walk_equal_keeps_name"))
+	runner.register_test("traversal/shared_region_same_naming_and_frontier", Callable(TraversalModelTests, "_t_shared_region_same_naming_and_frontier"))
 
 
 # ─── Test 1 — NO TELEPORT: advance_turn moves ≤ step_budget tiles ─────────────
@@ -1225,73 +1262,34 @@ static func _t_fog_growth_per_advance() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 17 — FOG SCOUT WIDER THAN SEEK: Scout lifts more fog per advance ───
+# ─── Test 17 — FOG SCOUT WIDER THAN SEEK: Scout lifts more fog per step walked ───
 # Scout reveal_radius=3, Seek reveal_radius=1. Both step the same terrain.
-# Over N advances from the same start, Scout must accumulate MORE explored cells.
+# D-50 A2: "wider" is PER STEP. Scout walks fewer steps per Advance, so raw totals say nothing.
 static func _t_fog_scout_wider_than_seek() -> Dictionary:
 	var realm_seed := 200
 	var sit_positions := [{ "col": 25, "row": 15 }]
-
-	# Run Scout for N advances, collect explored_cells size.
-	var runtime_scout := _make_runtime("directive.scout_carefully")
-	_inject_terrain_stage(runtime_scout, realm_seed, 0, sit_positions)
-	var scout_advances: int = 0
-	for _i in range(5):
-		var pv: Variant = _read_em(runtime_scout, "pending_situation_id")
-		if pv != null and str(pv) != "":
-			break
-		runtime_scout.dispatch({ "type": "stage.advance_turn" })
-		scout_advances += 1
-	var scout_ec_size := _read_explored_cells(runtime_scout).size()
-
-	# Run Seek for same N advances on identical terrain.
-	var runtime_seek := _make_runtime("directive.seek_signs")
-	_inject_terrain_stage(runtime_seek, realm_seed, 0, sit_positions)
-	var seek_advances: int = 0
-	for _i in range(5):
-		var pv2: Variant = _read_em(runtime_seek, "pending_situation_id")
-		if pv2 != null and str(pv2) != "":
-			break
-		runtime_seek.dispatch({ "type": "stage.advance_turn" })
-		seek_advances += 1
-	var seek_ec_size := _read_explored_cells(runtime_seek).size()
-
-	# Seek arrives faster (step_budget=6) so may cover more ground in raw cells walked,
-	# BUT Scout's wider radius (3 vs 1) should lift more fog per step.
-	# Robust assertion: Scout's explored_cells must be >= Seek's (wide radius covers nearby cells
-	# Seek misses). If Scout arrived first, it may have fewer advances — accept degenerate case.
-	if scout_ec_size == 0:
-		return { "ok": false, "error": "Scout explored_cells is 0 — fog lift not working at all" }
-	if seek_ec_size == 0:
-		return { "ok": false, "error": "Seek explored_cells is 0 — fog lift not working at all" }
-
-	# Strongest assertion: Scout should have discovered at least as many cells as Seek
-	# (wider radius per step outweighs Seek's extra steps within same N advances).
-	if scout_ec_size < seek_ec_size:
-		# Check if Seek arrived significantly faster (meaning it covered more of the map).
-		# If so, this is expected and we accept the degenerate case.
-		var scout_pending_v: Variant = _read_em(runtime_scout, "pending_situation_id")
-		var seek_pending_v:  Variant = _read_em(runtime_seek,  "pending_situation_id")
-		var seek_arrived := seek_pending_v != null and str(seek_pending_v) != ""
-		if seek_arrived:
-			# Seek arrived at the target — different path covered, not a radius bug.
-			return { "ok": true }
-		# The MIRROR of that case, which the comment above already described as acceptable
-		# but the code never implemented: Scout reached a situation first, so its loop broke
-		# early and it took FEWER advances than Seek. Comparing raw explored-cell totals
-		# across an unequal number of advances says nothing about reveal radius. Before
-		# V2-COMBAT-003 terrain commit 2 this branch was unreachable on the one hard-coded
-		# board (realm_seed 200); the shared-side connectivity change reshaped that board
-		# and Scout now stops first on it. The gap was in the test, not in the fog.
-		if scout_advances < seek_advances:
-			return { "ok": true }
+	var per_step := {}
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		var runtime := _make_runtime(d)
+		_inject_terrain_stage(runtime, realm_seed, 0, sit_positions)
+		var steps: int = 0
+		for _i in range(5):
+			var pv: Variant = _read_em(runtime, "pending_situation_id")
+			if pv != null and str(pv) != "":
+				break
+			runtime.dispatch({ "type": "stage.advance_turn" })
+			steps += _steps_taken(runtime)
+		var cells := _read_explored_cells(runtime).size()
+		if cells == 0 or steps == 0:
+			return { "ok": false, "error": "%s: no fog lifted or no steps walked (cells=%d, steps=%d)" % [d, cells, steps] }
+		per_step[d] = float(cells) / float(steps)
+	# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+	if per_step["directive.scout_carefully"] <= per_step["directive.seek_signs"]:
 		return {
 			"ok": false,
-			"error": "Scout explored_cells (%d) < Seek explored_cells (%d) — Scout should reveal wider per step (radius 3 vs 1)" % [
-				scout_ec_size, seek_ec_size
-			]
+			"error": "Scout cells per step (%.2f) must exceed Seek (%.2f) (radius 3 vs 1)" % [
+				per_step["directive.scout_carefully"], per_step["directive.seek_signs"]]
 		}
-
 	return { "ok": true }
 
 
@@ -1538,12 +1536,14 @@ static func _t_fog_light_bias_seek_engages() -> Dictionary:
 	runtime_seek.dispatch({ "type": "stage.advance_turn" })
 	runtime_scout.dispatch({ "type": "stage.advance_turn" })
 
-	var seek_choice := str(_read_em(runtime_seek, "pending_situation_id"))
+	# V2-DIRECTIVE-002 S3b D-52 F1: Scout now pauses before the loot (in the hostile's zone), so
+	# pending_situation_id is absent and the choice is read from target_situation_id.
+	var seek_choice := _em_str(runtime_seek, "pending_situation_id")
 	if seek_choice.is_empty():
-		seek_choice = str(_read_em(runtime_seek, "target_situation_id"))
-	var scout_choice := str(_read_em(runtime_scout, "pending_situation_id"))
+		seek_choice = _em_str(runtime_seek, "target_situation_id")
+	var scout_choice := _em_str(runtime_scout, "pending_situation_id")
 	if scout_choice.is_empty():
-		scout_choice = str(_read_em(runtime_scout, "target_situation_id"))
+		scout_choice = _em_str(runtime_scout, "target_situation_id")
 
 	if seek_choice != "sit.combat":
 		return {
@@ -1972,13 +1972,14 @@ static func _t_p5_chain_frontier_uses_full_budget() -> Dictionary:
 
 	runtime.dispatch({ "type": "stage.advance_turn" })
 
-	var step_budget := int(runtime.directive_service.get_active_directive().get("step_budget", 6))
+	# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+	var steps_expected := 5
 	var steps := _steps_taken(runtime)
 
-	if steps != step_budget:
+	if steps != steps_expected:
 		return {
 			"ok": false,
-			"error": "Expected chained frontier advance to spend the full step_budget (%d), got %d steps" % [step_budget, steps]
+			"error": "Expected chained frontier advance to spend the commitment depth (%d), got %d steps" % [steps_expected, steps]
 		}
 
 	var ec_after_v: Variant = _read_em(runtime, "explored_cells")
@@ -2099,8 +2100,9 @@ static func _t_p5_passed_situation_walked_through() -> Dictionary:
 		return { "ok": false, "error": "Party should have walked past the passed situation's cell (col 1), stopped at col=%d" % int(pos.get("col", -1)) }
 
 	var steps := _steps_taken(runtime)
-	if steps != 3:
-		return { "ok": false, "error": "Expected full step_budget (3) to be spent walking past the passed node, got %d steps" % steps }
+	# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+	if steps != 2:
+		return { "ok": false, "error": "Expected commitment depth (2) to be spent walking past the passed node, got %d steps" % steps }
 
 	# The passed situation itself must remain unresolved and still marked passed —
 	# walking through it must not silently resolve or un-pass it.
@@ -2119,3 +2121,907 @@ static func _t_p5_passed_situation_walked_through() -> Dictionary:
 		return { "ok": false, "error": "sit.0 missing from explore_map.situations after advance" }
 
 	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S1a: one result per Advance ────────────────────────────
+
+# Characterization replay: each scenario builds a stage, then replays up to ADV_COUNT
+# Advances through StageExploreTurnService directly.
+const ADV_COUNT := 6
+
+# Captured from the pre-S1a code, then re-recorded for S2b and S3.
+# Moved by commitment depth (S2b, D-50: Scout 2, Seek 5) and stop kinds (S3, S3b).
+# The lines hold no snapshot keys, so the new snapshot keys did not move them.
+const ADV_EXPECTED := {
+	"gen42_scout": [
+		"advanced|commitment_spent|9,23>10,24|tc1|fog41:273440436|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|11,25>12,24|tc2|fog53:79100363|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|13,23>14,22|tc3|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|15,21>16,20|tc4|fog67:2050432961|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|17,20>18,20|tc5|fog77:4285513962|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|19,19>20,18|tc6|fog91:911323763|rev[]|pend:|tr:true|tgt:",
+	],
+	"gen42_seek": [
+		"advanced|commitment_spent|8,23>8,24>9,25>10,26>11,27|tc1|fog21:1374295908|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|12,28>13,28>13,27>14,26>14,25|tc2|fog30:2470046059|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|14,24>14,23>14,22>14,21>13,20|tc3|fog42:2020617703|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|12,20>11,21>10,22>11,23>12,24|tc4|fog53:1151302778|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|11,25>10,26>9,27>10,26>11,25|tc5|fog56:3295238824|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|12,24>13,23>14,22>15,21>16,20|tc6|fog60:3120154544|rev[]|pend:|tr:true|tgt:",
+	],
+	"gen100_scout": [
+		"advanced|interrupted|16,17>17,18|tc1|fog35:2796315600|rev[sit.0]|pend:|tr:true|tgt:",
+		# V2-DIRECTIVE-002 S3b D-52 F1: sit.0 is the target and the only hostile, so no pause before 19,16.
+		"advanced|commitment_spent|18,17>19,16|tc2|fog51:402733931|rev[sit.0]|pend:|tr:true|tgt:sit.0",
+		"advanced|interrupted|20,15|tc3|fog54:1485271728|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+	],
+	"gen100_seek": [
+		"advanced|commitment_spent|16,17>17,18>18,19>19,19>20,18|tc1|fog22:3442288560|rev[]|pend:|tr:true|tgt:",
+		"advanced|interrupted|21,19>22,18>22,17>21,16|tc2|fog31:1099322715|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|20,15|tc3|fog36:2279614770|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+	],
+	"corridor_seek": [
+		"advanced|commitment_spent|1,1>2,1>3,1>4,1>5,1|tc1|fog7:1122636189|rev[]|pend:|tr:true|tgt:",
+		"advanced|interrupted|6,1>7,1>8,1>9,1>10,1|tc2|fog12:4235945717|rev[sit.0]|pend:|tr:true|tgt:",
+		"advanced|interrupted|11,1|tc3|fog13:814132961|rev[sit.0]|pend:sit.0|tr:false|tgt:",
+	],
+	"open_scout": [
+		"advanced|commitment_spent|5,6>4,7|tc1|fog69:1110254941|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|3,8>4,9|tc2|fog83:907695501|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|5,9>6,10|tc3|fog90:3316875472|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|7,10>8,9|tc4|fog103:642227979|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|9,8>9,7|tc5|fog109:2258858798|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|9,6>9,5|tc6|fog115:3724010565|rev[]|pend:|tr:true|tgt:",
+	],
+	"rect_seek": [
+		"advanced|commitment_spent|1,2>2,2>3,1>4,0>5,0|tc1|fog19:4224675366|rev[]|pend:|tr:true|tgt:",
+		"advanced|commitment_spent|6,0>7,1>6,2|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
+		"no_target||6,0>7,1>6,2|tc2|fog27:1044381352|rev[]|pend:|tr:true|tgt:",
+	],
+}
+
+
+static func _build_adv_runtime(scenario: String) -> FlowRuntime:
+	var directive := "directive.seek_signs" if scenario.ends_with("_seek") else "directive.scout_carefully"
+	var runtime := _make_runtime(directive)
+	match scenario:
+		"gen42_scout", "gen42_seek":
+			_inject_terrain_stage(runtime, 42, 0, [{ "col": 25, "row": 15 }, { "col": 10, "row": 10 }])
+		"gen100_scout", "gen100_seek":
+			_inject_terrain_stage(runtime, 100, 1, [{ "col": 20, "row": 15 }, { "col": 5, "row": 5 }, { "col": 12, "row": 22 }])
+		"corridor_seek":
+			var sit: Dictionary = SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 11, 1, 900, true)
+			_inject_stage_with_terrain(runtime, _corridor_terrain(14, 3, 1), [sit], { "col": 0, "row": 1 }, 900, 0)
+		"rect_seek":
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(9, 3), [], { "col": 0, "row": 1 }, 500, 0)
+		_:
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(12, 12), [], { "col": 5, "row": 5 }, 500, 0)
+	return runtime
+
+
+static func _adv_service(runtime: FlowRuntime) -> StageExploreTurnService:
+	return StageExploreTurnService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+
+
+# One compact line per Advance: path, stop reason, turn count, fog, reveal order, flags.
+static func _adv_line(runtime: FlowRuntime, verdict: String, reason: String) -> String:
+	var path_parts: Array = []
+	for c_v in (_read_em(runtime, "last_traveled_path") as Array):
+		var c: Dictionary = c_v
+		path_parts.append("%d,%d" % [int(c["col"]), int(c["row"])])
+	var cells: Array = (_read_em(runtime, "explored_cells") as Dictionary).keys()
+	cells.sort()
+	var revealed: Array = []
+	for s_v in (_read_em(runtime, "situations") as Array):
+		var sd: Dictionary = s_v
+		if bool(sd.get("revealed", false)):
+			revealed.append(str(sd.get("id", "")))
+	return "%s|%s|%s|tc%d|fog%d:%d|rev[%s]|pend:%s|tr:%s|tgt:%s" % [
+		verdict, reason, ">".join(path_parts), int(_read_em(runtime, "turn_count")),
+		cells.size(), ",".join(cells).hash(), ",".join(revealed),
+		_em_str(runtime, "pending_situation_id"), _em_str(runtime, "in_transit"),
+		_em_str(runtime, "target_situation_id")]
+
+
+static func _em_str(runtime: FlowRuntime, field: String) -> String:
+	var v: Variant = _read_em(runtime, field)
+	return "" if v == null else str(v)
+
+
+static func _replay(scenario: String) -> Array:
+	var runtime := _build_adv_runtime(scenario)
+	var svc := _adv_service(runtime)
+	var lines: Array = []
+	for i in range(ADV_COUNT):
+		var verdict := svc.advance_turn(runtime.directive_service, i)
+		lines.append(_adv_line(runtime, verdict, str(svc.get_last_result().get("stop_reason", ""))))
+		if verdict != "advanced" or not _em_str(runtime, "pending_situation_id").is_empty():
+			break
+	return lines
+
+
+static func _t_advance_state_identical() -> Dictionary:
+	for sc in ADV_EXPECTED:
+		var got: Array = _replay(sc)
+		var want: Array = ADV_EXPECTED[sc]
+		if got.size() != want.size():
+			return { "ok": false, "error": "%s: %d Advances, expected %d" % [sc, got.size(), want.size()] }
+		for i in range(want.size()):
+			if got[i] != want[i]:
+				return { "ok": false, "error": "%s advance %d moved:\n got  %s\n want %s" % [sc, i, got[i], want[i]] }
+	return { "ok": true }
+
+
+# The kept result validates, and its traversal equals the walked path, for every
+# Advance of every scenario (chains of several frontier legs included).
+static func _t_one_result_per_advance_validates() -> Dictionary:
+	for sc in ADV_EXPECTED:
+		var runtime := _build_adv_runtime(sc)
+		var svc := _adv_service(runtime)
+		for i in range(ADV_COUNT):
+			var verdict := svc.advance_turn(runtime.directive_service, i)
+			var res: Dictionary = svc.get_last_result()
+			if verdict != "advanced":
+				if not res.is_empty():
+					return { "ok": false, "error": "%s: result kept for verdict %s" % [sc, verdict] }
+				break
+			if res.is_empty():
+				return { "ok": false, "error": "%s advance %d: no result kept" % [sc, i] }
+			var v: Dictionary = MovementResult.validate(res)
+			if not bool(v.get("valid", false)):
+				return { "ok": false, "error": "%s advance %d: result invalid: %s" % [sc, i, v] }
+			if res["actual_traversed_cells"] != _read_em(runtime, "last_traveled_path"):
+				return { "ok": false, "error": "%s advance %d: traversed cells differ from last_traveled_path" % [sc, i] }
+			if res["origin"] != _read_em(runtime, "last_traveled_origin"):
+				return { "ok": false, "error": "%s advance %d: origin differs from last_traveled_origin" % [sc, i] }
+			if not _em_str(runtime, "pending_situation_id").is_empty():
+				break
+	return { "ok": true }
+
+
+# A fresh service has no result; an Advance that moves nothing keeps none.
+static func _t_result_cleared_without_move() -> Dictionary:
+	var runtime := _build_adv_runtime("rect_seek")
+	var svc := _adv_service(runtime)
+	if not svc.get_last_result().is_empty():
+		return { "ok": false, "error": "fresh service holds a result" }
+	svc.advance_turn(runtime.directive_service, 0)
+	if svc.get_last_result().is_empty():
+		return { "ok": false, "error": "no result after a moving Advance" }
+	svc.advance_turn(runtime.directive_service, 1)
+	svc.advance_turn(runtime.directive_service, 2)
+	if not svc.get_last_result().is_empty():
+		return { "ok": false, "error": "stale result kept after a no_target Advance" }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S1b: exposure price on a two-route board ───────────────
+
+# Long corridor so the slack envelope (a fraction of the remaining distance) still admits the bypass at every step.
+# Row 4 corridor (cols 0..39) with a row-0 bypass with orthogonal ramps. Objective at 39,4.
+# The hostile at 6,5 is on a non-walkable cell beside the corridor: it prices the row but is not
+# reachable, so it never joins the target pool (D-28) and the objective stays the target.
+static func _exposure_terrain() -> Dictionary:
+	var cells: Array = []
+	for c in range(40):
+		cells.append([c, 4])
+	for k in [[2, 3], [2, 2], [2, 1], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0], [8, 0], [9, 0], [10, 0], [10, 1], [10, 2], [10, 3]]:
+		cells.append(k)
+	return { "bounds": { "w": 40, "h": 6 }, "plateaus": [{ "col": 0, "row": 0, "w": 40, "h": 6, "cells": cells }], "bridges": [], "islands": [] }
+
+
+# Walk up to `advances` Advances; return every entered cell key.
+static func _exposure_walk(directive: String, hostile_revealed: bool, advances: int = 10) -> Array:
+	var runtime := _make_runtime(directive)
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 6, 5, 900, false)
+	hostile["revealed"] = hostile_revealed
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 39, 4, 901, true)
+	goal["revealed"] = true
+	_inject_stage_with_terrain(runtime, _exposure_terrain(), [hostile, goal], { "col": 0, "row": 4 }, 900, 0)
+	var svc := _adv_service(runtime)
+	var walked: Array = []
+	for i in range(advances):
+		if svc.advance_turn(runtime.directive_service, i) != "advanced":
+			break
+		for c_v in (_read_em(runtime, "last_traveled_path") as Array):
+			walked.append("%d,%d" % [int((c_v as Dictionary)["col"]), int((c_v as Dictionary)["row"])])
+		if not _em_str(runtime, "pending_situation_id").is_empty():
+			break
+	return walked
+
+
+static func _t_exposure_two_route_board_scout_vs_seek() -> Dictionary:
+	var straight: Array = []
+	for c in range(1, 40):
+		straight.append("%d,4" % c)
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		# One Advance only: the reveal sweep after it may reveal the hostile for the next one.
+		var hidden := _exposure_walk(d, false, 1)
+		# V2-DIRECTIVE-002 S2b D-50: commitment depth (Scout 2, Seek 5)
+		if hidden != straight.slice(0, hidden.size()) or hidden.size() < 2:
+			return { "ok": false, "error": "%s: a hidden hostile must leave the plain route: %s" % [d, hidden] }
+	var scout := _exposure_walk("directive.scout_carefully", true)
+	if scout.has("6,4") or not scout.has("5,0"):
+		return { "ok": false, "error": "Scout must take the bypass: %s" % [scout] }
+	var seek := _exposure_walk("directive.seek_signs", true)
+	if seek.size() < 6 or seek.slice(0, 6) != straight.slice(0, 6):
+		return { "ok": false, "error": "Seek must go direct: %s" % [seek] }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S1c: objective in the weighted pool ────────────────────
+
+# Open 14x11 board, party at (0,5). Returns the target find_explore_target picks.
+static func _pool_pick(directive_id: String, sits: Array) -> Dictionary:
+	var runtime := _make_runtime(directive_id)
+	_inject_stage_with_terrain(runtime, _full_rect_terrain(14, 11), sits, { "col": 0, "row": 5 }, 900, 0)
+	var stage_v: Variant = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]
+	var stage: Dictionary = stage_v
+	var em: Dictionary = stage["explore_map"]
+	var session := ActiveStageService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+	return session.find_explore_target(
+		em, runtime.directive_service.get_active_directive(),
+		ActiveStageService.explore_walkable(em), em.get("explored_cells", {}), stage)
+
+
+static func _pool_sits(find_col: int, objective_col: int) -> Array:
+	var find: Dictionary = SituationModelScript.make("find", SituationModelScript.TYPE_NPC, find_col, 5, 900, false)
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, objective_col, 5, 901, true)
+	find["revealed"] = true
+	goal["revealed"] = true
+	return [find, goal]
+
+
+# O1: intel 1.4 beats objective 1.2, both inside the envelope (nearest 3, cutoff 5).
+static func _t_pool_o1_scout_find_first() -> Dictionary:
+	var t := _pool_pick("directive.scout_carefully", _pool_sits(3, 5))
+	if str(t.get("id", "")) != "find" or int(t.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_WEIGHTED:
+		return { "ok": false, "error": "Scout must take the find first as a weighted pick: %s" % [t] }
+	return { "ok": true }
+
+
+# O2: same board, Seek objective 1.6 beats intel 0.9.
+static func _t_pool_o2_seek_objective_first() -> Dictionary:
+	var t := _pool_pick("directive.seek_signs", _pool_sits(3, 5))
+	if str(t.get("id", "")) != "goal" or int(t.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_OBJECTIVE:
+		return { "ok": false, "error": "Seek must take the objective with the objective tier: %s" % [t] }
+	return { "ok": true }
+
+
+# O3: objective at 7 is outside the envelope (nearest 2, cutoff 4). The find goes first; the objective is delayed, then reached.
+static func _t_pool_o3_seek_close_find_then_objective() -> Dictionary:
+	var t := _pool_pick("directive.seek_signs", _pool_sits(2, 7))
+	if str(t.get("id", "")) != "find":
+		return { "ok": false, "error": "Seek must take the much closer find first: %s" % [t] }
+	var sits := _pool_sits(2, 7)
+	sits[0]["resolved"] = true
+	var after := _pool_pick("directive.seek_signs", sits)
+	if str(after.get("id", "")) != "goal" or int(after.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_OBJECTIVE:
+		return { "ok": false, "error": "the delayed objective must be reached once the find resolves: %s" % [after] }
+	return { "ok": true }
+
+
+static func _t_pool_only_objective_revealed() -> Dictionary:
+	var sits := _pool_sits(3, 9)
+	sits[0]["revealed"] = false
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		var t := _pool_pick(d, sits)
+		if str(t.get("id", "")) != "goal" or int(t.get("_movement_tier", -1)) != StagePartyMovementAdapter.TIER_OBJECTIVE:
+			return { "ok": false, "error": "%s: a lone objective must be the target: %s" % [d, t] }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S2b: party stance on a real Advance ────────────────────
+
+const StagePartyStanceScript := preload("res://core/movement/StagePartyStance.gd")
+
+
+static func _stance_runtime(directive: String, fear: int, morale: int) -> FlowRuntime:
+	var runtime := _make_runtime(directive)
+	var roster: Array = []
+	var ids: Array = []
+	for i in 2:
+		var echo := ActorTests._make_test_echo("echo_st_%d" % i, "St %d" % i)
+		echo["calling"] = "okofor"
+		echo["emotion"] = { "morale_current": morale, "fear_current": fear, "fear_base": 15 }
+		roster.append(echo)
+		ids.append(echo["id"])
+	runtime.flow_ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids, "bonds": [] }
+	_inject_stage_with_terrain(runtime, _full_rect_terrain(30, 11), [], { "col": 0, "row": 5 }, 900, 0)
+	return runtime
+
+
+static func _t_one_stance_per_advance() -> Dictionary:
+	var runtime := _stance_runtime("directive.scout_carefully", 0, 70)
+	var svc := _adv_service(runtime)
+	var before := StagePartyStanceScript.builds
+	if svc.advance_turn(runtime.directive_service, 0) != "advanced":
+		return { "ok": false, "error": "the Advance did not move" }
+	if StagePartyStanceScript.builds - before != 1:
+		return { "ok": false, "error": "expected one stance for one Advance, got %d" % (StagePartyStanceScript.builds - before) }
+	return { "ok": true }
+
+
+static func _t_all_shaken_party_still_moves_or_names_stop() -> Dictionary:
+	for d in ["directive.scout_carefully", "directive.seek_signs"]:
+		var runtime := _stance_runtime(d, 95, 2)
+		var verdict := _adv_service(runtime).advance_turn(runtime.directive_service, 0)
+		if verdict != "advanced" or _steps_taken(runtime) < 1:
+			return { "ok": false, "error": "%s: a shaken party must still step once on an open board (%s, %d steps)" % [d, verdict, _steps_taken(runtime)] }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S2c: K2 tie case (design 7b) ───────────────────────────
+
+static func _k2_pick(calling: String) -> String:
+	var runtime := _make_runtime("directive.seek_signs")
+	var echo := ActorTests._make_test_echo("echo_k2", "K2")
+	echo["calling_origin"] = calling
+	echo["calling"] = calling
+	echo["emotion"] = { "morale_current": 70, "fear_current": 0, "fear_base": 15 }
+	runtime.flow_ctx.save_data["sanctum"] = { "roster": [echo], "active_party_ids": ["echo_k2"], "bonds": [] }
+	var reward: Dictionary = SituationModelScript.make("reward", SituationModelScript.TYPE_LOOT, 3, 5, 900, false)
+	var intel: Dictionary = SituationModelScript.make("intel", SituationModelScript.TYPE_NPC, 5, 5, 901, false)
+	reward["revealed"] = true
+	intel["revealed"] = true
+	_inject_stage_with_terrain(runtime, _full_rect_terrain(14, 11), [reward, intel], { "col": 0, "row": 5 }, 900, 0)
+	var stage: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]
+	var em: Dictionary = stage["explore_map"]
+	var svc := _adv_service(runtime)
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var bend: Dictionary = svc._build_stance(directive)["category_bend"]
+	var session := ActiveStageService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+	return str(session.find_explore_target(em, directive, ActiveStageService.explore_walkable(em), em.get("explored_cells", {}), stage, bend).get("id", ""))
+
+
+static func _t_k2_sight_vs_edge_tie() -> Dictionary:
+	var sight := _k2_pick("okomfo")
+	var edge := _k2_pick("aduro")
+	if sight != "intel":
+		return { "ok": false, "error": "a Sight party must break the tie to intel, got '%s'" % sight }
+	if edge != "reward":
+		return { "ok": false, "error": "an Edge party must keep the nearest (reward), got '%s'" % edge }
+	return { "ok": true }
+
+
+# ─── V2-DIRECTIVE-002 S2e: counterfactual naming, first plan only (design 4, 7d, D-46) ──
+
+const CF_SCOUT := "directive.scout_carefully"
+const CF_SEEK := "directive.seek_signs"
+
+
+# members: [id, calling, rank, fear, morale, summon_index]. Real factory Echoes; every pair bonded
+# through SocialGraphService so Judgment carries the bond term (design 2 rule 5).
+static func _cf_runtime(directive: String, members: Array, terrain: Dictionary, sits: Array) -> FlowRuntime:
+	var runtime := _make_runtime(directive)
+	_cf_setup(runtime, members, terrain, sits)
+	return runtime
+
+
+# Replaces the party and the stage of `runtime`.
+static func _cf_setup(runtime: FlowRuntime, members: Array, terrain: Dictionary, sits: Array) -> void:
+	var data: Dictionary = runtime.config_service.get_balance()["data"]
+	var roster: Array = []
+	var ids: Array = []
+	for m: Array in members:
+		var echo: Dictionary = EchoFactory.generate("cf-test", "campaign.summon.%d" % int(m[5]), int(m[5]), "summon", data["summoning"])
+		echo["id"] = m[0]
+		echo["calling"] = m[1]
+		echo["calling_origin"] = m[1]
+		echo["rank"] = m[2]
+		echo["xp_total"] = 100 * int(m[2])
+		echo["emotion"] = { "morale_current": m[4], "fear_current": m[3], "fear_base": 15 }
+		roster.append(echo)
+		ids.append(m[0])
+	var bonds: Array = []
+	for i in ids.size():
+		for j in range(i + 1, ids.size()):
+			bonds = SocialGraphService.apply_score_delta(bonds, ids[i], ids[j], 40, data["sanctum"]["bond_thresholds"], runtime.logger, 0)
+	runtime.flow_ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids, "bonds": bonds }
+	_inject_stage_with_terrain(runtime, terrain, sits, { "col": 0, "row": 5 }, 900, 0)
+
+
+static func _cf_svc(runtime: FlowRuntime) -> StageCounterfactualService:
+	return StageCounterfactualService.new(runtime.flow_ctx, runtime.config_service, runtime.logger)
+
+
+static func _cf_name(runtime: FlowRuntime) -> Dictionary:
+	return _cf_svc(runtime).name_deciders(runtime.directive_service.get_active_directive(), 0)
+
+
+# Independent plan for a given party: full target pick, no shared region, no fixed target.
+static func _cf_plan(runtime: FlowRuntime, echoes: Array) -> Dictionary:
+	var stage: Dictionary = (runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0] as Dictionary).duplicate(true)
+	var em: Dictionary = stage["explore_map"]
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var walkable := ActiveStageService.explore_walkable(em)
+	var explored: Dictionary = em["explored_cells"]
+	ActiveStageService.lift_fog_at_cell(em["party_pos"], int(directive["reveal_radius"]), walkable, explored)
+	var stance := StagePartyStanceScript.build(echoes, directive, ConfigService.get_party_stance_cfg(runtime.config_service))
+	return _cf_svc(runtime).plan_first_leg(em, directive, stance, walkable, explored, stage)
+
+
+static func _cf_party(runtime: FlowRuntime, exclude: String = "") -> Array:
+	return StagePartyStanceScript.read_party(runtime.flow_ctx.save_data, runtime.config_service.get_balance()["data"], exclude)
+
+
+static func _cf_neutral(runtime: FlowRuntime, id: String, field: String, value: Variant) -> Array:
+	var party := _cf_party(runtime)
+	for e: Dictionary in party:
+		if str(e["id"]) == id:
+			e[field] = value
+	return party
+
+
+static func _cf_expect(out: Dictionary, named: String, reason: String, cause: String) -> String:
+	if str(out["decisive_contributor_id"]) != named or str(out["reason_class"]) != reason or str(out["cause"]) != cause:
+		return "expected named '%s' reason '%s' cause '%s', got %s" % [named, reason, cause, out]
+	return ""
+
+
+static func _cf_goal_sits() -> Array:
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 9, 5, 901, true)
+	goal["revealed"] = true
+	return [goal]
+
+
+# N1: a one-cell corridor. No Echo can change the route; terrain decided.
+static func _t_cf_n1_terrain() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "okomfo", 3, 0, 50, 1]], _corridor_terrain(30, 11, 5), [])
+	var err := _cf_expect(_cf_name(runtime), "", "", "terrain")
+	return { "ok": err.is_empty(), "error": err }
+
+
+# N2: only the objective is revealed and every Echo gives the same plan.
+static func _t_cf_n2_objective() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "aduro", 3, 0, 50, 1]], _full_rect_terrain(14, 11), _cf_goal_sits())
+	var out := _cf_name(runtime)
+	var err := _cf_expect(out, "", "", "objective")
+	if err.is_empty() and str(out["plan"]["target_id"]) != "goal":
+		err = "the plan must target the objective: %s" % [out["plan"]]
+	return { "ok": err.is_empty(), "error": err }
+
+
+# A one-step walk proves neither a lone route nor a refused detour, so the cause is not terrain.
+static func _t_cf_one_step_not_terrain() -> Dictionary:
+	var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 1, 5, 901, true)
+	goal["revealed"] = true
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "aduro", 3, 0, 50, 1]], _full_rect_terrain(14, 11), [goal])
+	var out := _cf_name(runtime)
+	var err := _cf_expect(out, "", "", "objective")
+	if err.is_empty() and (out["plan"]["path"] as Array).size() != 1:
+		err = "the fixture must give a one-step walk: %s" % [out["plan"]]
+	return { "ok": err.is_empty(), "error": err }
+
+
+# N3: identical Echoes; the plan differs between Scout and Seek, and the Directive is the cause.
+static func _t_cf_n3_directive() -> Dictionary:
+	var plans: Array = []
+	for d in [CF_SCOUT, CF_SEEK]:
+		var runtime := _cf_runtime(d, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "okofor", 3, 0, 50, 0]], _full_rect_terrain(30, 11), [])
+		var out := _cf_name(runtime)
+		var err := _cf_expect(out, "", "", "directive")
+		if not err.is_empty():
+			return { "ok": false, "error": "%s: %s" % [d, err] }
+		plans.append(out["plan"])
+	if not _cf_svc(_make_runtime()).plans_differ(plans[0], plans[1]):
+		return { "ok": false, "error": "Scout and Seek must give different first plans: %s" % [plans] }
+	return { "ok": true }
+
+
+# Tie case: two equally frightened Echoes each decide (the party mean falls from shaken to uneasy
+# without either); the calm one does not. Lowest id wins the tie (D-47 J3).
+static func _cf_tie_members() -> Array:
+	return [["e_z", "okofor", 3, 0, 50, 2], ["e_y", "aduro", 3, 90, 50, 1], ["e_x", "aduro", 3, 90, 50, 1]]
+
+
+static func _t_cf_n4_party_order_shuffle() -> Dictionary:
+	var a := _cf_name(_cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(30, 11), []))
+	var m := _cf_tie_members()
+	m.reverse()
+	var b := _cf_name(_cf_runtime(CF_SCOUT, m, _full_rect_terrain(30, 11), []))
+	if var_to_str(a) != var_to_str(b):
+		return { "ok": false, "error": "party order changed the naming:\n%s\n%s" % [a, b] }
+	return { "ok": true }
+
+
+# N5: a hidden hostile on the route or far away gives the same plan and the same name.
+static func _t_cf_n5_hidden_content_moved() -> Dictionary:
+	var outs: Array = []
+	for pos in [[1, 5], [12, 9]]:
+		var sits := _cf_goal_sits()
+		sits.append(SituationModelScript.make("hidden", SituationModelScript.TYPE_COMBAT, pos[0], pos[1], 902, false))
+		outs.append(var_to_str(_cf_name(_cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(14, 11), sits))))
+	if outs[0] != outs[1]:
+		return { "ok": false, "error": "hidden content changed the first plan or the name:\n%s\n%s" % outs }
+	return { "ok": true }
+
+
+# N6: no exposure source gives the plain shortest route.
+static func _t_cf_n6_empty_exposure_plain_route() -> Dictionary:
+	var runtime := _cf_runtime(CF_SEEK, [["e_a", "aduro", 3, 0, 50, 0]], _full_rect_terrain(14, 11), _cf_goal_sits())
+	var plan: Dictionary = _cf_name(runtime)["plan"]
+	var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+	var plain: Array = MovementPathService.shortest_path({ "col": 0, "row": 5 }, { "col": 9, "row": 5 }, ActiveStageService.explore_walkable(em)).get("path", [])
+	if plan["path"] != plain.slice(0, plan["path"].size()) or plan["path"].is_empty():
+		return { "ok": false, "error": "expected the plain route %s, got %s" % [plain, plan["path"]] }
+	return { "ok": true }
+
+
+# S3: the same Echo calm and frightened. Frightened: fewer steps; named, reason fear. Calm: not named.
+static func _t_cf_s3_fear_names_frightened() -> Dictionary:
+	var calm := _cf_name(_cf_runtime(CF_SCOUT, [["e_a", "okomfo", 3, 0, 50, 0]], _full_rect_terrain(30, 11), []))
+	var afraid := _cf_name(_cf_runtime(CF_SCOUT, [["e_a", "okomfo", 3, 80, 50, 0]], _full_rect_terrain(30, 11), []))
+	if not str(calm["decisive_contributor_id"]).is_empty():
+		return { "ok": false, "error": "a calm Echo that changes nothing must not be named: %s" % [calm] }
+	if int(afraid["plan"]["commitment_depth"]) >= int(calm["plan"]["commitment_depth"]):
+		return { "ok": false, "error": "fear must shorten the first plan: calm %s afraid %s" % [calm["plan"], afraid["plan"]] }
+	var err := _cf_expect(afraid, "e_a", "fear", "echo")
+	return { "ok": err.is_empty(), "error": err }
+
+
+# P1 (on Seek, see the S2e report): Edge at high morale commits deeper than Anchor and Sight;
+# the Edge Echo is named, and removing it changes the plan.
+static func _t_cf_p1_named_echo_changes_plan() -> Dictionary:
+	var party_a := _cf_runtime(CF_SEEK, [["e_a", "okofor", 1, 0, 50, 0], ["e_s", "okomfo", 1, 0, 50, 1]], _full_rect_terrain(14, 11), _cf_goal_sits())
+	var party_b := _cf_runtime(CF_SEEK, [["e_e", "aduro", 1, 0, 100, 2]], _full_rect_terrain(14, 11), _cf_goal_sits())
+	var a := _cf_name(party_a)
+	var b := _cf_name(party_b)
+	if not _cf_svc(party_a).plans_differ(a["plan"], b["plan"]):
+		return { "ok": false, "error": "the two parties must give different plans: %s / %s" % [a["plan"], b["plan"]] }
+	var err := _cf_expect(b, "e_e", "morale", "echo")
+	if err.is_empty() and not _cf_svc(party_b).plans_differ(b["plan"], _cf_plan(party_b, _cf_party(party_b, "e_e"))):
+		err = "removing the named Echo must change the plan"
+	return { "ok": err.is_empty(), "error": err }
+
+
+static func _t_cf_tie_pin_lowest_id() -> Dictionary:
+	var out := _cf_name(_cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(30, 11), []))
+	if out["contributor_ids"] != ["e_x", "e_y"]:
+		return { "ok": false, "error": "both frightened Echoes decide, the calm one does not: %s" % [out] }
+	var err := _cf_expect(out, "e_x", "fear", "echo")
+	return { "ok": err.is_empty(), "error": err }
+
+
+# Five candidates plus four reason classes with a dry run; "steadied" needs none.
+static func _t_cf_cap_respected() -> Dictionary:
+	var members := [["e_1", "okofor", 3, 70, 50, 0], ["e_2", "aduro", 3, 70, 50, 1], ["e_3", "okomfo", 3, 70, 50, 2],
+		["e_4", "okofor", 3, 70, 50, 3], ["e_5", "aduro", 3, 0, 50, 4]]
+	var runtime := _cf_runtime(CF_SCOUT, members, _full_rect_terrain(30, 11), [])
+	var cf: Dictionary = ConfigService.get_party_stance_cfg(runtime.config_service)["counterfactual"]
+	var cap: int = members.size() + int(cf["extra_replans_per_reason_class"]) * (cf["reason_classes"] as Array).size()
+	var out := _cf_name(runtime)
+	if str(out["cause"]) != "echo" or int(out["dry_runs"]) != 9 or int(out["dry_runs"]) > cap:
+		return { "ok": false, "error": "expected a named Echo after 9 dry runs (cap %d), got %s" % [cap, out] }
+	return { "ok": true }
+
+
+static func _t_cf_no_state_written() -> Dictionary:
+	var sits := _cf_goal_sits()
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 5, 7, 903, false)
+	hostile["revealed"] = true
+	sits.append(hostile)
+	var runtime := _cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(14, 11), sits)
+	var before := var_to_str(runtime.flow_ctx.save_data)
+	var em_before := var_to_str(runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"])
+	var out := _cf_name(runtime)
+	if str(out["cause"]) != "echo":
+		return { "ok": false, "error": "fixture must name an Echo so every dry run kind runs: %s" % [out] }
+	if var_to_str(runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]) != em_before:
+		return { "ok": false, "error": "naming wrote to explore_map" }
+	if var_to_str(runtime.flow_ctx.save_data) != before or runtime.flow_ctx.save_request:
+		return { "ok": false, "error": "naming wrote to the save or requested a save" }
+	return { "ok": true }
+
+
+# N7: every named Echo is a true decider, every other candidate is not, the reason class alone
+# changes the plan, and a wrong class (calling) does not. A wrong reason fails here.
+static func _t_cf_name_matches_cause() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, _cf_tie_members(), _full_rect_terrain(30, 11), [])
+	var svc := _cf_svc(runtime)
+	var out := _cf_name(runtime)
+	var real := _cf_plan(runtime, _cf_party(runtime))
+	if var_to_str(real) != var_to_str(out["plan"]):
+		return { "ok": false, "error": "the shared-region plan differs from an independent plan:\n%s\n%s" % [real, out["plan"]] }
+	for id in ["e_x", "e_y", "e_z"]:
+		var changed := svc.plans_differ(real, _cf_plan(runtime, _cf_party(runtime, id)))
+		if changed != (out["contributor_ids"] as Array).has(id):
+			return { "ok": false, "error": "%s: removal changes the plan = %s, named = %s" % [id, changed, out["contributor_ids"]] }
+	var named := str(out["decisive_contributor_id"])
+	if str(out["reason_class"]) != "fear" or not svc.plans_differ(real, _cf_plan(runtime, _cf_neutral(runtime, named, "fear", 0.0))):
+		return { "ok": false, "error": "the reason must be fear and neutralising fear must change the plan: %s" % [out] }
+	if svc.plans_differ(real, _cf_plan(runtime, _cf_neutral(runtime, named, "family", ""))):
+		return { "ok": false, "error": "calling alone must not change this plan" }
+	return { "ok": true }
+
+
+static func _cf_qa_members() -> Array:
+	return [["e_a", "okofor", 1, 0, 50, 0], ["e_f", "aduro", 6, 0, 95, 5]]
+
+
+# Path, stop cell and kind, and steps of one live Advance. The stop echo_id comes from the naming.
+static func _cf_live(directive: String, members: Array, terrain: Dictionary, sits: Array) -> String:
+	var runtime := _cf_runtime(directive, members, terrain, sits)
+	_adv_service(runtime).advance_turn(runtime.directive_service, 0)
+	var stop: Dictionary = (_read_em(runtime, "last_stop") as Dictionary).duplicate()
+	stop.erase("echo_id")
+	return var_to_str([_read_em(runtime, "last_traveled_path"), stop, _read_em(runtime, "last_effective_steps")])
+
+
+# D-54 S1, QA case: depth 5 or 6, but the walk stops on the hostile in 5 steps either way.
+static func _t_cf_depth_without_cut_names_nobody() -> Dictionary:
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 5, 4, 902, false)
+	hostile["revealed"] = true
+	var sits: Array = [SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 12, 5, 901, true), hostile]
+	sits[0]["revealed"] = true
+	var m := _cf_qa_members()
+	var live := _cf_live(CF_SEEK, m, _full_rect_terrain(20, 11), sits)
+	for alone in [[m[0]], [m[1]]]:
+		if _cf_live(CF_SEEK, alone, _full_rect_terrain(20, 11), sits) != live:
+			return { "ok": false, "error": "fixture: the live walk must not change without %s" % [alone] }
+	var runtime := _cf_runtime(CF_SEEK, m, _full_rect_terrain(20, 11), sits)
+	var out := _cf_name(runtime)
+	var depths := {}
+	for id in ["", "e_a", "e_f"]:
+		depths[int(_cf_plan(runtime, _cf_party(runtime, id))["commitment_depth"])] = true
+	if depths.size() < 2:
+		return { "ok": false, "error": "fixture: removing an Echo must change the depth: %s" % [depths] }
+	if not str(out["decisive_contributor_id"]).is_empty() or str(out["cause"]) == "echo":
+		return { "ok": false, "error": "a depth that does not cut the walk must not name an Echo: %s" % [out] }
+	return { "ok": true }
+
+
+# D-54 S1: the objective lies past the depth, so the depth cuts the walk and a depth-only change still names an Echo.
+static func _t_cf_depth_cut_names_echo() -> Dictionary:
+	var runtime := _cf_runtime(CF_SEEK, _cf_qa_members(), _full_rect_terrain(14, 11), _cf_goal_sits())
+	var out := _cf_name(runtime)
+	var named := str(out["decisive_contributor_id"])
+	if str(out["cause"]) != "echo" or named.is_empty():
+		return { "ok": false, "error": "a depth that cuts the walk must name an Echo: %s" % [out] }
+	var real: Dictionary = out["plan"]
+	var without := _cf_plan(runtime, _cf_party(runtime, named))
+	if without["effective_steps"] != real["effective_steps"] or without["commitment_depth"] == real["commitment_depth"]:
+		return { "ok": false, "error": "fixture: only the depth may differ: %s / %s" % [real, without] }
+	return { "ok": true }
+
+
+# D-54 S2: every named Echo carries a reason class. Some Echoes decide only through the party mean.
+static func _t_cf_named_echo_has_class() -> Dictionary:
+	var pool := {
+		"e_a": ["e_a", "okofor", 1, 0, 50, 0], "e_b": ["e_b", "aduro", 1, 0, 50, 1], "e_c": ["e_c", "okomfo", 1, 0, 50, 2],
+		"e_d": ["e_d", "okomfo", 6, 50, 50, 3], "e_e": ["e_e", "okofor", 6, 80, 20, 4], "e_f": ["e_f", "aduro", 6, 0, 95, 5],
+		"e_g": ["e_g", "okomfo", 1, 45, 80, 6], "e_h": ["e_h", "aduro", 3, 30, 30, 7],
+	}
+	var parties := [["e_a", "e_h"], ["e_b", "e_h"], ["e_c", "e_h"], ["e_a", "e_e"], ["e_a", "e_f"], ["e_d", "e_g"]]
+	var named := 0
+	var steadied := 0
+	for d in [CF_SCOUT, CF_SEEK]:
+		for board in ["corridor", "goal"]:
+			for ids: Array in parties:
+				var members := [pool[ids[0]], pool[ids[1]]]
+				var runtime := _cf_runtime(d, members, _corridor_terrain(30, 11, 5), []) if board == "corridor" \
+					else _cf_runtime(d, members, _full_rect_terrain(14, 11), _cf_goal_sits())
+				var out := _cf_name(runtime)
+				if str(out["cause"]) != "echo":
+					continue
+				named += 1
+				if str(out["reason_class"]).is_empty():
+					return { "ok": false, "error": "%s %s %s: a named Echo has no reason class: %s" % [d, board, ids, out] }
+				if str(out["reason_class"]) == "steadied":
+					steadied += 1
+	if named == 0 or steadied == 0:
+		return { "ok": false, "error": "fixture: expected named Echoes and a steadied one, got named %d steadied %d" % [named, steadied] }
+	return { "ok": true }
+
+
+# D-26: the Echo left out of a dry run takes its bond edges with it. The bonded partner reads a lower
+# Judgment than in the full party, the same as when it stands alone, and so leans less.
+static func _t_cf_removed_echo_takes_its_bond_edge() -> Dictionary:
+	var runtime := _cf_runtime(CF_SCOUT, [["e_a", "okofor", 3, 0, 50, 0], ["e_b", "okofor", 3, 0, 50, 1]], _full_rect_terrain(14, 11), [])
+	var data: Dictionary = runtime.config_service.get_balance()["data"]
+	var full := _cf_party(runtime)
+	var without := _cf_party(runtime, "e_a")
+	if without.size() != 1 or str(without[0]["id"]) != "e_b":
+		return { "ok": false, "error": "removal must leave only e_b: %s" % [without] }
+	var alone := StagePartyStanceScript.read_echo(SanctumService.get_party_actors_static(runtime.flow_ctx.save_data)[1], [], { "e_b": true }, data)
+	if float(without[0]["width"]) >= float(full[1]["width"]) or float(without[0]["width"]) != float(alone["width"]):
+		return { "ok": false, "error": "e_b width: full %s, without e_a %s, alone %s" % [full[1]["width"], without[0]["width"], alone["width"]] }
+	var cfg := ConfigService.get_party_stance_cfg(runtime.config_service)
+	if StagePartyStanceScript.echo_lean(without[0], "escape_bonus", cfg) >= StagePartyStanceScript.echo_lean(full[1], "escape_bonus", cfg):
+		return { "ok": false, "error": "the lost bond edge must lower the lean of e_b" }
+	return { "ok": true }
+
+
+# ─── D-55: a name only when the base plan is the real walk ───────────────────
+
+static func _cf_board(runtime: FlowRuntime, board: String) -> void:
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 6, 5, 902, false)
+	hostile["revealed"] = true
+	match board:
+		"exposure":
+			var goal: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 39, 4, 901, true)
+			goal["revealed"] = true
+			_inject_stage_with_terrain(runtime, _exposure_terrain(), [hostile, goal], { "col": 0, "row": 4 }, 900, 0)
+		"open":
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(30, 11), [hostile], { "col": 0, "row": 5 }, 900, 0)
+		"qa", "qa2", "qa3":
+			var hpos: Array = {"qa": [5, 4], "qa2": [4, 6], "qa3": [3, 3]}[board]
+			hostile["pos"] = { "col": hpos[0], "row": hpos[1] }
+			var g: Dictionary = SituationModelScript.make("goal", SituationModelScript.TYPE_NPC, 12, 5, 901, true)
+			g["revealed"] = true
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(20, 11), [g, hostile], { "col": 0, "row": 5 }, 900, 0)
+		_:
+			var sits := _cf_goal_sits()
+			sits.append(hostile)
+			_inject_stage_with_terrain(runtime, _full_rect_terrain(14, 11), sits, { "col": 0, "row": 5 }, 900, 0)
+
+
+# One live Advance with debug logs on: the proposed naming and the fallback come from the log.
+static func _cf_live_advance(runtime: FlowRuntime, svc: StageExploreTurnService, t: int) -> Dictionary:
+	runtime.logger.set_level("debug")
+	runtime.logger.clear()
+	var verdict := svc.advance_turn(runtime.directive_service, t)
+	var out := { "verdict": verdict, "pre_cause": "", "plan": {}, "fell_back": false }
+	for e: Dictionary in runtime.logger.get_logs():
+		if str(e.get("type", "")) == "stage.counterfactual.named":
+			out["pre_cause"] = str(e["data"]["cause"])
+			out["plan"] = e["data"]["plan"]
+		elif str(e.get("type", "")) == "stage.counterfactual.walk_differs":
+			out["fell_back"] = true
+	out["named"] = str((_read_em(runtime, "last_stop") as Dictionary).get("echo_id", ""))
+	out["cause"] = str((_read_em(runtime, "travel_why") as Dictionary).get("cause", ""))
+	out["path"] = _read_em(runtime, "last_traveled_path")
+	out["stop"] = str(svc.get_last_result().get("stop_reason", ""))
+	out["steps"] = int(_read_em(runtime, "last_effective_steps"))
+	return out
+
+
+# Independent of plan_is_walk: the plan cells open the walk, in order, and the stop agrees.
+static func _cf_plan_matches(plan: Dictionary, a: Dictionary) -> bool:
+	var path: Array = plan["path"]
+	var walk: Array = a["path"]
+	if int(plan["effective_steps"]) != int(a["steps"]) or walk.size() < path.size():
+		return false
+	for i in path.size():
+		if int(path[i]["col"]) != int(walk[i]["col"]) or int(path[i]["row"]) != int(walk[i]["row"]):
+			return false
+	return str(plan["stop_kind"]) == (str(a["stop"]) if walk.size() == path.size() else "reached_destination")
+
+
+static func _cf_probe_parties() -> Array:
+	var pool := {
+		"e_a": ["e_a", "okofor", 1, 0, 50, 0], "e_b": ["e_b", "aduro", 1, 0, 50, 1], "e_c": ["e_c", "okomfo", 1, 0, 50, 2],
+		"e_d": ["e_d", "okomfo", 6, 50, 50, 3], "e_e": ["e_e", "okofor", 6, 80, 20, 4], "e_f": ["e_f", "aduro", 6, 0, 95, 5],
+		"e_g": ["e_g", "okomfo", 1, 45, 80, 6], "e_h": ["e_h", "aduro", 3, 30, 30, 7],
+	}
+	var out: Array = []
+	for ids: Array in [["e_a", "e_h"], ["e_b", "e_h"], ["e_c", "e_h"], ["e_a", "e_e"], ["e_a", "e_f"], ["e_d", "e_g"],
+			["e_f"], ["e_e"], ["e_g"], ["e_b", "e_f"], ["e_c", "e_d"], ["e_e", "e_g"], ["e_a", "e_b", "e_c"], ["e_d", "e_f", "e_h"]]:
+		var m: Array = []
+		for id in ids:
+			m.append(pool[id])
+		out.append(m)
+	return out
+
+
+# 14 parties, 6 boards, both Directives, up to 3 Advances each (Jeff asked for the fallback rate).
+# Every live name has a base plan equal to the real walk; every fallback dropped a proposed name
+# whose plan differs from the walk.
+static func _t_cf_walk_probe() -> Dictionary:
+	var proposed := 0
+	var fell_back := 0
+	for d in [CF_SCOUT, CF_SEEK]:
+		for board in ["goal", "exposure", "open", "qa", "qa2", "qa3"]:
+			for members: Array in _cf_probe_parties():
+				var runtime := _cf_runtime(d, members, _full_rect_terrain(14, 11), [])
+				_cf_board(runtime, board)
+				var svc := _adv_service(runtime)
+				for i in 3:
+					var a := _cf_live_advance(runtime, svc, i)
+					if a["verdict"] != "advanced":
+						break
+					var where := "%s %s %s Advance %d" % [d, board, members.map(func(m: Array) -> String: return m[0]), i]
+					if a["pre_cause"] == "echo":
+						proposed += 1
+					if a["fell_back"]:
+						fell_back += 1
+						if a["pre_cause"] != "echo" or not a["named"].is_empty() or a["cause"] == "echo" \
+								or _cf_plan_matches(a["plan"], a):
+							return { "ok": false, "error": "%s: a fallback must drop a proposed name of a plan that is not the walk: %s" % [where, a] }
+					elif not a["named"].is_empty() and not _cf_plan_matches(a["plan"], a):
+						return { "ok": false, "error": "%s: named %s but the plan is not the walk: %s" % [where, a["named"], a] }
+					if not _em_str(runtime, "pending_situation_id").is_empty():
+						break
+	if fell_back == 0 or proposed == fell_back:
+		return { "ok": false, "error": "fixture: expected kept names and fallbacks, got proposed %d fell back %d" % [proposed, fell_back] }
+	return { "ok": true }
+
+
+# The QA case: the model goes through 3,4, the live walk through 3,5. A name is proposed and dropped.
+static func _t_cf_walk_differs_names_nobody() -> Dictionary:
+	var runtime := _cf_runtime(CF_SEEK, (_cf_probe_parties()[0] as Array), _full_rect_terrain(14, 11), [])
+	_cf_board(runtime, "qa")
+	var a := _cf_live_advance(runtime, _adv_service(runtime), 0)
+	if a["pre_cause"] != "echo" or _cf_plan_matches(a["plan"], a):
+		return { "ok": false, "error": "fixture: a name must be proposed for a plan that is not the walk: %s" % [a] }
+	if not a["named"].is_empty() or not a["cause"] in ["terrain", "objective", "situation", "party", "directive"]:
+		return { "ok": false, "error": "a plan that is not the walk must name nobody, with a cause without a name: %s" % [a] }
+	return { "ok": true }
+
+
+# The model is the walk: the live Advance keeps the name the pre-walk naming gives.
+static func _t_cf_walk_equal_keeps_name() -> Dictionary:
+	var expected := str(_cf_name(_cf_runtime(CF_SEEK, _cf_qa_members(), _full_rect_terrain(14, 11), _cf_goal_sits()))["decisive_contributor_id"])
+	var runtime := _cf_runtime(CF_SEEK, _cf_qa_members(), _full_rect_terrain(14, 11), _cf_goal_sits())
+	var a := _cf_live_advance(runtime, _adv_service(runtime), 0)
+	if a["fell_back"] or not _cf_plan_matches(a["plan"], a):
+		return { "ok": false, "error": "fixture: the plan must be the walk: %s" % [a] }
+	if expected.is_empty() or a["named"] != expected or a["cause"] != "echo":
+		return { "ok": false, "error": "expected the live name '%s', got %s" % [expected, a] }
+	return { "ok": true }
+
+
+# A 20x11 board with a wall at column 6 (rows 0 to 8): the way east bends through the bottom rows.
+static func _cf_wall_terrain() -> Dictionary:
+	var cells: Array = []
+	for c in range(20):
+		for r in range(11):
+			if c != 6 or r > 8:
+				cells.append([c, r])
+	return { "bounds": { "w": 20, "h": 11 }, "plateaus": [{ "col": 0, "row": 0, "w": 20, "h": 11, "cells": cells }], "bridges": [], "islands": [] }
+
+
+static func _cf_region_boards() -> Array:
+	var hostile: Dictionary = SituationModelScript.make("hostile", SituationModelScript.TYPE_COMBAT, 4, 5, 902, false)
+	hostile["revealed"] = true
+	var hidden: Dictionary = SituationModelScript.make("hidden", SituationModelScript.TYPE_COMBAT, 3, 5, 903, false)
+	var find: Dictionary = SituationModelScript.make("find", SituationModelScript.TYPE_NPC, 12, 2, 904, false)
+	find["revealed"] = true
+	return [
+		[_full_rect_terrain(30, 11), []],
+		[_corridor_terrain(30, 11, 5), []],
+		[_full_rect_terrain(14, 11), _cf_goal_sits()],
+		[_full_rect_terrain(30, 11), _cf_goal_sits() + [hostile]],
+		[_full_rect_terrain(30, 11), [hidden, find]],
+		[_cf_wall_terrain(), _cf_goal_sits()],
+	]
+
+
+# 12 parties over 6 boards, both Directives: a reachable region handed in by the caller gives the same
+# naming as one built inside, and select_frontier gives the same cell with or without it.
+static func _t_shared_region_same_naming_and_frontier() -> Dictionary:
+	var callings := ["okofor", "aduro", "okomfo", "kra_soro"]
+	var seen := { "echo": 0, "frontier": 0, "pool": 0 }
+	var runtimes := [_make_runtime(CF_SCOUT), _make_runtime(CF_SEEK)]
+	var boards := _cf_region_boards()
+	for p in 12:
+		var b: Array = boards[p % boards.size()]
+		for runtime: FlowRuntime in runtimes:
+			var members: Array = []
+			for k in 1 + p % 5:
+				members.append(["e_%d" % k, callings[(k + p) % 4], 1 + (k * 2 + p) % 6, (k * 37 + p * 23) % 100, (k * 29 + p * 17) % 100, k + p])
+			_cf_setup(runtime, members, b[0], (b[1] as Array).duplicate(true))
+			var directive := runtime.directive_service.get_active_directive()
+			var em: Dictionary = runtime.flow_ctx.save_data["realms"]["realm.01"]["stages"][0]["explore_map"]
+			var region := ActiveStageService.stage_reachable_costs(em["party_pos"], ActiveStageService.explore_walkable(em))
+			var own := _cf_svc(runtime).name_deciders(directive, 0)
+			var shared := _cf_svc(runtime).name_deciders(directive, 0, region)
+			if var_to_str(own) != var_to_str(shared):
+				return { "ok": false, "error": "%s party %d: the shared region changed the naming:\n%s\n%s" % [directive["id"], p, own, shared] }
+			seen["echo"] += 1 if str(own["cause"]) == "echo" else 0
+			seen["frontier" if str(own["plan"]["target_id"]).is_empty() else "pool"] += 1
+	for b: Array in boards:
+		var walkable := ActiveStageService.explore_walkable({ "terrain": b[0] })
+		var cells: Array = []
+		for key in walkable:
+			var parts := str(key).split(",")
+			cells.append({ "col": int(parts[0]), "row": int(parts[1]) })
+		for from: Dictionary in [cells[0], cells[cells.size() / 2], cells[cells.size() - 1]]:
+			var with_region := StagePartyMovementAdapter.select_frontier(cells, from, {}, walkable, "salt",
+				ActiveStageService.stage_reachable_costs(from, walkable))
+			if with_region != StagePartyMovementAdapter.select_frontier(cells, from, {}, walkable, "salt"):
+				return { "ok": false, "error": "select_frontier from %s changed with the region" % [from] }
+	if seen["echo"] == 0 or seen["frontier"] == 0 or seen["pool"] == 0:
+		return { "ok": false, "error": "fixture must cover a named Echo, a frontier and a pool target: %s" % [seen] }
+	return { "ok": true }
+

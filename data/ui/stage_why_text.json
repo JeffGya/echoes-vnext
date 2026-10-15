@@ -1,0 +1,41 @@
+{
+	"_status": "FINAL (Jeff, 2026-10-15). Keys that start with an underscore are notes, not text. {name} in a value is replaced by the Echo's display name. A missing key shows nothing. Rule: no number and no id in any text.",
+	"stop": {
+		"arrived_at": "They have arrived at a destination.",
+		"capacity_spent": "They can take no more steps.",
+		"interrupted": "Something has stopped them.",
+		"spotted_ahead": "They notice something curious.",
+		"paused_to_read": "They see something worth pausing for.",
+		"no_route": "There is no way on from here."
+	},
+	"cause": {
+		"echo": "They are leading the way.",
+		"terrain": "The path knows only one direction.",
+		"objective": "Their purpose lies before them.",
+		"situation": "They recall this. This problem is known.",
+		"party": "Everyone agrees on this path.",
+		"directive": "The keeper's direction is honoured."
+	},
+	"purpose": {
+		"advance": "They keep moving forward.",
+		"reposition": "This is a better place to move from.",
+		"read": "They are looking around."
+	},
+	"route": {
+		"direct": "No hesitation. They go straight at it.",
+		"skirted": "It is not worth it. Better to avoid the known danger."
+	},
+	"echo_reason": {
+		"calling": "{name} is following their calling.",
+		"temperament": "{name} is following their nature.",
+		"fear": "{name}'s nerves are on edge.",
+		"morale": "{name}'s spirit is low.",
+		"steadied": "The group has given {name} some motivation back."
+	},
+	"ui": {
+		"echo_named": "{name} makes this call.",
+		"open_why": "Tell me why they stopped.",
+		"close_why": "Close",
+		"party_card_label": "The party"
+	}
+}

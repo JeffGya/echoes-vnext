@@ -7,6 +7,7 @@ extends RefCounted
 # Response generation, resonance scoring, NPC reaction, outcome resolution, social effects.
 
 # Stat textures derived from dominant stat (used on response card chip)
+const _StagePartyStance := preload("res://core/movement/StagePartyStance.gd")
 const _STAT_TEXTURE_BY_DOMINANT: Dictionary = {
 	"atk":   "forceful",
 	"def":   "grounding",
@@ -76,7 +77,8 @@ static func generate_responses(
 	cfg: Dictionary,
 	response_data: Dictionary,
 	t: int,
-	bid_state: Dictionary = {}  # echo_id -> bid_type ("alignment"/"reactive"/"")
+	bid_state: Dictionary = {},
+	resonance_bonus: float = 0.0
 ) -> Array:
 	var results: Array = []
 	var contact_role := str(contact.get("role", ""))
@@ -108,7 +110,7 @@ static func generate_responses(
 		var resonance_score := compute_turn_score_from_virtue(
 			virtue_alignment, contact_virtue_primary, contact_virtue_secondary,
 			contact_disposition, contact_fear, contact_morale,
-			emotional_status, cfg, contact_role
+			emotional_status, cfg, contact_role, resonance_bonus
 		)
 
 		# Stat texture from dominant stat
@@ -168,7 +170,8 @@ static func compute_turn_score_from_virtue(
 	contact_morale: int,
 	emotional_status: String,
 	cfg: Dictionary,
-	contact_role: String = ""
+	contact_role: String = "",
+	resonance_bonus: float = 0.0
 ) -> float:
 	var weights_v: Variant = cfg.get("resonance_weights", {})
 	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
@@ -181,7 +184,8 @@ static func compute_turn_score_from_virtue(
 		disposition, contact_fear, contact_morale, emotional_status, cfg, contact_role
 	)
 
-	return clampf(virtue_score + emotional_fit, 0.0, 1.2)
+	# The bonus joins the sum before the clamp so the range stays 0 to 1.2.
+	return clampf(virtue_score + emotional_fit + resonance_bonus, 0.0, 1.2)
 
 
 # Virtue resonance: primary=1.0, adjacent=0.7, two_steps=0.4, opposite=0.1
@@ -284,19 +288,19 @@ static func _compute_emotional_fit(
 				base += float(mods.get("proud", {}).get("condescension", -0.3) if mods.get("proud", null) is Dictionary else -0.3)
 
 	# High-fear NPC bonus/penalty
-	if contact_fear >= 60:
+	if contact_fear >= int(mods.get("high_fear_npc_min", 60)):
 		if band in ["grounded", "strained"]:
 			base += float(mods.get("high_fear_grounding_bonus", 0.1))
 		elif band == "broken" and contact_role == "charge":
 			# Near-collapse echo resonates with frightened NPC — like recognises like
-			base += 0.2
+			base += float(mods.get("high_fear_broken_charge_bonus", 0.2))
 		elif band == "grounded" and disposition == "bold":
 			base += float(mods.get("high_fear_aggressive_penalty", -0.15))
 
 	# Morale bonus for near-collapse speaker with broken NPC morale
-	if contact_morale <= 20:
+	if contact_morale <= int(mods.get("low_morale_npc_max", 20)):
 		if band == "broken":
-			base += 0.1  # resonance of shared vulnerability
+			base += float(mods.get("low_morale_broken_bonus", 0.1))
 
 	return base
 
@@ -455,7 +459,11 @@ static func get_social_effects(
 # Returns Dict keyed by echo_id -> bid_type ("alignment" / "reactive" / "")
 # "alignment" = calling/vector naturally fits this NPC role
 # "reactive"  = high-fear echo reacting emotionally
-static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dictionary) -> Dictionary:
+# The one bid rule: the simulation and the snapshot card both call it. width_by_id: echo id ->
+# Judgment width (`party_widths`); a missing id is 0.0 (neutral). A Directive effect applies only
+# when its strength reaches apply_threshold; an empty bid_cfg section means it always applies.
+static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dictionary, bid_cfg: Dictionary = {}, width_by_id: Dictionary = {}) -> Dictionary:
+	var reactive_fear_min := int(bid_cfg.get("reactive_fear_min", 60))
 	var bids: Dictionary = {}
 	var contact_role := str(contact.get("role", ""))
 	var suppressed_callings_v: Variant = dir_fx.get("bid_suppression", [])
@@ -469,34 +477,46 @@ static func compute_bids(party_echoes: Array, contact: Dictionary, dir_fx: Dicti
 		var calling := str(echo.get("calling", ""))
 		if calling.is_empty():
 			calling = str(echo.get("calling_origin", ""))
-
-		# Suppression
-		if calling in suppressed_callings:
-			bids[echo_id] = ""
-			continue
-
 		var emo_v: Variant = echo.get("emotion", {})
 		var emo: Dictionary = emo_v if emo_v is Dictionary else {}
 		var fear_current := int(emo.get("fear_current", 0))
+		var width := float(width_by_id.get(echo_id, 0.0))
 
-		# Reactive bid: high-fear echo
-		if fear_current >= 60:
+		var suppressed := calling in suppressed_callings and _effect_applies(bid_cfg.get("suppression", {}), width, fear_current)
+		# Reactive before suppression: a frightened Echo speaks from fear unless suppression still holds.
+		if fear_current >= reactive_fear_min and not suppressed:
 			bids[echo_id] = "reactive"
-			continue
-
-		# Alignment bid
-		if _is_calling_aligned(calling, contact_role):
+		elif suppressed:
+			bids[echo_id] = ""
+		elif _is_calling_aligned(calling, contact_role):
 			bids[echo_id] = "alignment"
-			continue
-
-		# Directive boost
-		if calling in boosted_callings:
+		elif calling in boosted_callings and _effect_applies(bid_cfg.get("boost", {}), width, fear_current):
 			bids[echo_id] = "alignment"
-			continue
-
-		bids[echo_id] = ""
+		else:
+			bids[echo_id] = ""
 
 	return bids
+
+
+## Strength of one Directive bid effect on one Echo: falls as Judgment width and fear rise.
+static func bid_strength(width: float, fear: int, judgment_weight: float, fear_weight: float) -> float:
+	return 1.0 - judgment_weight * width - fear_weight * float(fear) / 100.0
+
+
+## Judgment width per party Echo id, from the stage reader (real bonds, same as combat).
+static func party_widths(save_data: Dictionary, cfg_data: Dictionary) -> Dictionary:
+	var widths: Dictionary = {}
+	for e: Dictionary in _StagePartyStance.read_party(save_data, cfg_data):
+		widths[str(e.get("id", ""))] = float(e.get("width", 0.0))
+	return widths
+
+
+static func _effect_applies(effect_cfg_v: Variant, width: float, fear: int) -> bool:
+	var effect_cfg: Dictionary = effect_cfg_v if effect_cfg_v is Dictionary else {}
+	if effect_cfg.is_empty():
+		return true
+	return bid_strength(width, fear, float(effect_cfg.get("judgment_weight", 0.0)), float(effect_cfg.get("fear_weight", 0.0))) \
+		>= float(effect_cfg.get("apply_threshold", 0.0))
 
 
 # ──────────────────────────────────────────────────────────────────────────────

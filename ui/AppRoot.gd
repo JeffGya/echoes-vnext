@@ -21,6 +21,7 @@ const SpatialModeGoalTestsScript := preload("res://tests/SpatialModeGoalTests.gd
 const StagePartyMovementTestsScript := preload("res://tests/StagePartyMovementTests.gd")
 const CombatObjectiveLabelTestsScript := preload("res://tests/CombatObjectiveLabelTests.gd")
 const PaceUITestsScript := preload("res://tests/PaceUITests.gd")
+const StageStopUITestsScript := preload("res://tests/StageStopUITests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
 @onready var renderer: UISnapshotRenderer = %UISnapshotRenderer
@@ -545,6 +546,7 @@ func _run_tests(parts: Array) -> void:
 	CombatTokenPresentationTests.register(runner)
 	CombatObjectiveLabelTestsScript.register(runner)
 	PaceUITestsScript.register(runner)
+	StageStopUITestsScript.register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
 	MaturityExpressionTests.register(runner)  # V2-PROG-006
@@ -617,6 +619,8 @@ func _run_tests(parts: Array) -> void:
 	GuidanceBarkTests.register(runner)  # V2-COMBAT-003 phase 9: TEMPORARY bark surface for the Echo's answer to guidance (V2-COMBAT-004 removes it)
 	ConversationRepairTests.register(runner)  # V2-PROG-012 Phase 8: conversation repairs (npc_line overwrite, storyweight truncation)
 	DirectiveCharacterizationTests.register(runner)  # V2-DIRECTIVE-002 phase A: Directive accessor, registry lists, guard, no-literal scan
+	ContactConfigLiteralTests.register(runner)  # V2-DIRECTIVE-002 S4a: contact literals read config
+	ContactBidScalingTests.register(runner)  # V2-DIRECTIVE-002 S4b: contact bids scale by Judgment and fear
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables
 	BarkPopupLayerTests.register(runner)  # V2-PROG-012 playtest fix: combat_divergence bark visual distinctness
 	FlowFingerprintTests.register(runner)  # V2-INFRA-003: seven resolution-mode characterization fingerprints

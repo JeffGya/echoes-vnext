@@ -324,7 +324,10 @@ Analysis:
 - V2-STAGE-004 Phase 5 (2026-07-09) tightened two traversal edges: **frontier chaining** (tier-3 frontier targets lift fog per step and re-target `nearest_unexplored` until `step_budget` is spent, so an advance now binds to the directive budget instead of stopping ~`reveal_radius`+1 tiles out) and **mid-path stop** (stepping onto an unresolved, un-passed situation parks the party for resolution — walking onto a situation always triggers the resolution flow). Pass/resolved invariants preserved.
 - V2-STAGE-004 Phase 4 (final phase — story now fully Done) closed the last gap between `ConversationService`/`SituationResolutionService` (STAGE-003) and combat: a good `temporary_ally` conversation outcome now auto-joins the next fight (`ContactActorBuilder`), a failed Claimant routes straight into real combat, and a failed non-objective Charge leaves a one-time pressure marker consumed by the next PROTECT/ENDURE encounter. A pre-existing Phase 3c soft-lock was folded in and fixed: `guide_spirit` was missing from `SituationResolutionService._ASYNC_OBJ_TYPES`, so a guide_spirit OBJECTIVE fell through to flavor text and never completed. Directive state and intel remain the two live seams called out below — Phase 4 did not touch either.
 - V2-COMBAT-002 Slice 5 (2026-07-21) corrected a convention seam in traversal: a traveled path now holds **destinations only** and excludes the cell departed from, matching the movement contracts' path-excludes-origin rule. The pre-move cell is carried by the new additive `traveled_origin` / `last_traveled_origin` fields; on-screen animation, ghost trail, and step-diamond count are unchanged, and the save change is additive. Live exploration **routing** is deliberately untouched — the dormant `StagePartyMovementAdapter` holds the corrected edge and tie-break rules until the Slice-6 cutover, so `StageTerrain.nearest_unexplored` / `next_step` and `FlowRuntime._find_explore_target` tiers 1–2 still carry their known directional bias. See `docs/integration-map.md` for the Slice-6 carry-forward list.
-- The biggest live seam is directive state split between canonical and legacy paths.
+- V2-DIRECTIVE-002 phases B+C (built 2026-10-15, draft PR #107) make one Advance profile-sensitive. `StagePartyStance` turns the Directive baseline plus the Echo leans into dials. `StageExposureMap` prices routes by known hostile situations. `StageStopPolicy` names six stop kinds. `StageCounterfactualService` names the deciding Echo, and only when the model plan equals the real walk. The result is saved as `last_stop`, `travel_why`, `last_effective_steps`, `last_commitment_depth` and `leg_start_length` (additive, repaired on load). Contact bids now scale by Judgment and fear, and the contact literals read config.
+- Open in this area: 52% of proposed Echo names are dropped by `confirm_walk` (target 15% or less), and naming for calm and own parties is rare. Both are follow-ups for Jeff to scope. `leg_start_length` has no writer yet (the C1 detour rule, D-48).
+- The legacy-versus-canonical Directive state seam (phase A) is closed. See section B below.
+- Before phase A, the biggest live seam was directive state split between canonical and legacy paths.
 - intel exists, but cost, aftermath, and multi-channel acquisition are still underdeveloped.
 - stage summary meaning and actual objective meaning still partially diverge.
 
@@ -439,7 +442,7 @@ Analysis:
 - The shell model is one of the best reuse patterns in the repo.
 - The biggest weak points are:
 - `StageExploreScreen` carrying too many jobs — V2-STAGE-004 Phase 5 extracted several presentation concerns into dedicated venture components (`StepProgressBar`, `DirectiveBadge`, `GhostFootprintLayer`), but the screen still owns board/fog/situation/travel-beat orchestration
-- fragmented echo presentation across screens
+- fragmented echo presentation across screens (phases B+C add the stop glyph and a party card to `EchoCardItem`; `StageWhyCard`, `StageWhyText`, `StopGlyphs` and `StopMarkMotion` are new reusable components, and the stop wording lives in `data/ui/stage_why_text.json`, read directly by `ui/`)
 - script-built sanctum UI pieces that should be scene components
 - legacy fallback renderer still expecting Array actions
 
@@ -485,7 +488,7 @@ Why it matters:
 
 > **Note 2026-10-10 (V2-DIRECTIVE-002 recon):** The legacy `flow.active_directive` readers are not in `FlowRuntime.gd`. They are in `core/runtime/controllers/ContactController.gd` (2), `core/realms/ContactConversationService.gd` (1) and `core/realms/SituationEngagementService.gd` (1). Nothing writes that key, so they always see `directive.scout_carefully`. V2-DIRECTIVE-002 phase A fixes this.
 
-> **Update 2026-10-11 (V2-DIRECTIVE-002 phase A done):** The legacy readers are removed. All readers now use `DirectiveService.active_id` / `resolve` (with `ConfigService.get_directives_cfg`) over `stage_context.active_directive_id`. Phases B+C (profile sensitivity, stage expression) and D (combat expression) are pending. The hazard input stays a seam only (D-02).
+> **Update 2026-10-11 (V2-DIRECTIVE-002 phase A done, merged in PR #106):** The legacy readers are removed. All readers now use `DirectiveService.active_id` / `resolve` (with `ConfigService.get_directives_cfg`) over `stage_context.active_directive_id`. Phases B+C (profile sensitivity, stage expression) and D (combat expression) are pending. The hazard input stays a seam only (D-02).
 
 ### C. Emotion Has Two Live Models
 

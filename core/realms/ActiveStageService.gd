@@ -209,11 +209,17 @@ static func explore_walkable(explore_map: Dictionary) -> Dictionary:
 # `radius` (Chebyshev) of `cell` to `explored_cells` (mutated in place). Pure/deterministic.
 # Called per movement step so frontier chaining's adapter replan sees the freshly
 # explored cells. Same rule as the former post-loop batch (union of per-cell lifts).
-static func lift_fog_at_cell(cell: Dictionary, radius: int, walkable: Dictionary, explored_cells: Dictionary) -> void:
+## Returns the keys this lift added (not explored before), for the stop peek.
+static func lift_fog_at_cell(cell: Dictionary, radius: int, walkable: Dictionary, explored_cells: Dictionary) -> Array:
+	var added: Array = []
 	var fog_cells := StageTerrainScript.cells_within_radius(cell, radius, walkable)
 	for fc_v in fog_cells:
 		var fc: Dictionary = fc_v if fc_v is Dictionary else {}
-		explored_cells["%d,%d" % [int(fc.get("col", 0)), int(fc.get("row", 0))]] = true
+		var key := "%d,%d" % [int(fc.get("col", 0)), int(fc.get("row", 0))]
+		if not explored_cells.has(key):
+			added.append(key)
+		explored_cells[key] = true
+	return added
 
 
 # V2-STAGE-004-P5: mid-path stop predicate. Returns true when `cell` holds a situation the
@@ -384,11 +390,10 @@ func stage_movement_salt(stage: Dictionary) -> String:
 # StageTerrain.nearest_unexplored / next_step ordering.
 #
 # Priority:
-#   Tier 1 — nearest DISCOVERED unresolved OBJECTIVE situation (BFS distance),
-#             excluding nodes where passed==true (player skipped them; let them explore).
-#   Tier 2 — best DISCOVERED unresolved non-objective situation scored by directive
-#             target_preference[category], excluding passed==true nodes,
-#             and reachable within the adapter's bounded slack.
+#   Tier 1/2 — one weighted pool (D-28): every DISCOVERED unresolved, unpassed situation,
+#             objective or not, scored by directive target_preference inside the adapter's
+#             bounded slack. The objective scores target_preference["objective"]. Tag is
+#             TIER_OBJECTIVE when the pick is an objective, else TIER_WEIGHTED.
 #   Tier 3 — FRONTIER: adapter-selected walkable cell not yet in explored_cells.
 #             Returns synthetic { "id": "", "pos": <cell>, "is_frontier": true }.
 #   Tier 4 — FRONTIER EXHAUSTED (select_frontier returned {}, i.e. no reachable frontier):
@@ -403,58 +408,40 @@ func find_explore_target(
 	directive: Dictionary,
 	walkable: Dictionary,
 	explored_cells: Dictionary,
-	stage: Dictionary
+	stage: Dictionary,
+	bend: Dictionary = {},
+	region_costs: Dictionary = {}
 ) -> Dictionary:
 	var sits_v: Variant = explore_map.get("situations", [])
 	var situations: Array = sits_v if sits_v is Array else []
 	var party_pos_v: Variant = explore_map.get("party_pos", { "col": 0, "row": 0 })
 	var party_pos: Dictionary = party_pos_v if party_pos_v is Dictionary else { "col": 0, "row": 0 }
-	var dist_from_party: Dictionary = stage_reachable_costs(party_pos, walkable)
+	# `region_costs`: stage_reachable_costs(party_pos, walkable), shared by a caller that picks many times from one cell.
+	var dist_from_party: Dictionary = region_costs if not region_costs.is_empty() else stage_reachable_costs(party_pos, walkable)
 	var category_map := ConfigService.get_situation_category_cfg(config_service)
 	var slack_config := ConfigService.get_movement_slack_cfg(config_service)
 
-	# ---- Tier 1: discovered, unresolved OBJECTIVE situations (not passed) ----
-	var tier1_candidates: Array = []
-	for sit_v in situations:
-		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
-		if bool(sit.get("resolved", false)):
-			continue
-		if not bool(sit.get("is_objective", false)):
-			continue
-		if not bool(sit.get("revealed", false)):
-			continue  # undiscovered — fog; not targetable
-		if bool(sit.get("passed", false)):
-			continue  # player skipped it — do not re-target until Tier 4
-		tier1_candidates.append(sit)
-	var best_obj_sit := StagePartyMovementAdapterScript.select_objective_target(
-		tier1_candidates, dist_from_party, {}, category_map, slack_config
-	)
-	if not best_obj_sit.is_empty():
-		best_obj_sit["_movement_tier"] = StagePartyMovementAdapterScript.TIER_OBJECTIVE
-		best_obj_sit["is_frontier"] = false
-		return best_obj_sit
-
-	# ---- Tier 2: discovered, unresolved non-objective situations (directive-biased, not passed) ----
 	var target_pref_v: Variant = directive.get("target_preference", {})
 	var target_pref: Dictionary = target_pref_v if target_pref_v is Dictionary else {}
 
-	var tier2_candidates: Array = []
+	var pool_candidates: Array = []
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
 			continue
-		if bool(sit.get("is_objective", false)):
-			continue  # handled in Tier 1
 		if not bool(sit.get("revealed", false)):
 			continue  # undiscovered — fog; not targetable
 		if bool(sit.get("passed", false)):
-			continue  # player skipped it; never re-target non-objective passed nodes
-		tier2_candidates.append(sit)
+			continue  # player skipped it; objectives return in Tier 4, others never
+		pool_candidates.append(sit)
 	var best_sit := StagePartyMovementAdapterScript.select_objective_target(
-		tier2_candidates, dist_from_party, target_pref, category_map, slack_config
+		pool_candidates, dist_from_party, target_pref, category_map, slack_config, bend
 	)
 	if not best_sit.is_empty():
-		best_sit["_movement_tier"] = StagePartyMovementAdapterScript.TIER_WEIGHTED
+		best_sit["_movement_tier"] = (
+			StagePartyMovementAdapterScript.TIER_OBJECTIVE if bool(best_sit.get("is_objective", false))
+			else StagePartyMovementAdapterScript.TIER_WEIGHTED
+		)
 		best_sit["is_frontier"] = false
 		return best_sit
 
@@ -473,7 +460,8 @@ func find_explore_target(
 		party_pos,
 		stage_party_heading(explore_map),
 		walkable,
-		stage_movement_salt(stage)
+		stage_movement_salt(stage),
+		dist_from_party
 	)
 	if not frontier_cell.is_empty():
 		return {

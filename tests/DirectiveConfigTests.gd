@@ -128,6 +128,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_cfg/integrity_rejects_all_nonpositive_weights", Callable(DirectiveConfigTests, "_t_integrity_rejects_all_nonpositive_weights"))
 	runner.register_test("directive_cfg/integrity_rejects_untranslated_keys", Callable(DirectiveConfigTests, "_t_integrity_rejects_untranslated_keys"))
 	runner.register_test("directive_cfg/integrity_accepts_partial_translation", Callable(DirectiveConfigTests, "_t_integrity_accepts_partial_translation"))
+	runner.register_test("directive_cfg/resonance_key_renamed", Callable(DirectiveConfigTests, "_t_resonance_key_renamed"))
+	runner.register_test("directive_cfg/subtree_getters_match_full_copy", Callable(DirectiveConfigTests, "_t_subtree_getters_match_full_copy"))
 
 
 # ─── Test 1 — scout step_budget == 3 after load_from_config ─────────────────
@@ -415,3 +417,51 @@ static func _t_integrity_accepts_partial_translation() -> Dictionary:
 	if not DirectiveService.validate_config_integrity(directives_cfg, _actor_cfg_for_integrity(), null, 0):
 		return { "ok": false, "error": "expected validate_config_integrity to return true — survival_bias is positive and translated (actor.idle row)" }
 	return { "ok": true }
+
+
+static func _t_resonance_key_renamed() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load balance.json" }
+	var seek: Dictionary = (ConfigService.get_directives_cfg(cs)["directive.seek_signs"] as Dictionary).duplicate(true)
+	var fx: Dictionary = seek["contact_effects"]
+	if not fx.has("conversation_resonance_bonus"):
+		return { "ok": false, "error": "shipped Seek entry lacks conversation_resonance_bonus" }
+	if not DirectiveService.validate_entry_schema({ "directive.seek_signs": seek }, null, 0):
+		return { "ok": false, "error": "new key was rejected" }
+	fx["witness_resonance_bonus"] = fx["conversation_resonance_bonus"]
+	if DirectiveService.validate_entry_schema({ "directive.seek_signs": seek }, null, 0):
+		return { "ok": false, "error": "old key witness_resonance_bonus was accepted" }
+	return { "ok": true }
+
+
+class _OverrideBalance extends ConfigService:
+	func get_balance() -> Dictionary:
+		return { "data": { "stages": { "situation_category": { "npc": "find" } } } }
+
+
+# The subtree getters copy only their subtree: equal to the full copy, a caller edit never reaches the
+# next read, and a subclass that overrides get_balance() is still read through it.
+static func _t_subtree_getters_match_full_copy() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var data: Dictionary = cs.get_balance()["data"]
+	var pairs := [
+		[ConfigService.get_party_stance_cfg(cs), data["stages"]["party_stance"]],
+		[ConfigService.get_situation_category_cfg(cs), data["stages"]["situation_category"]],
+		[ConfigService.get_movement_slack_cfg(cs), data["combat"]["movement"]["slack"]],
+		[ConfigService.get_balance_data(cs), data],
+	]
+	for i in pairs.size():
+		if (pairs[i][0] as Dictionary).is_empty() or pairs[i][0] != pairs[i][1]:
+			return { "ok": false, "error": "getter %d differs from the full copy" % i }
+	var edited := ConfigService.get_party_stance_cfg(cs)
+	(edited["bounds"] as Dictionary).clear()
+	edited["leans"] = {}
+	if ConfigService.get_party_stance_cfg(cs) != data["stages"]["party_stance"]:
+		return { "ok": false, "error": "a caller edit reached the loaded config" }
+	if ConfigService.get_situation_category_cfg(_OverrideBalance.new()) != { "npc": "find" }:
+		return { "ok": false, "error": "an overridden get_balance() was not read" }
+	return { "ok": true }
+

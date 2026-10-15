@@ -1,6 +1,9 @@
 [gd_scene format=3 uid="uid://bwm4aksecsiyy"]
 
 [ext_resource type="Script" uid="uid://c7smmm40nja3b" path="res://ui/shells/RealmShell.gd" id="1_realmshell"]
+[ext_resource type="PackedScene" uid="uid://cfpuypq3we4w1" path="res://ui/components/EchoCardItem.tscn" id="2_card"]
+[ext_resource type="PackedScene" path="res://ui/components/StageWhyCard.tscn" id="3_why"]
+
 [node name="RealmShell" type="Control" unique_id=257620160]
 layout_mode = 3
 anchors_preset = 15
@@ -30,7 +33,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="EchoBarFrame" type="MarginContainer" parent="ChromeLayer/ChromeRoot"]
+[node name="EchoBarFrame" type="HBoxContainer" parent="ChromeLayer/ChromeRoot"]
 unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = -1
@@ -41,12 +44,19 @@ offset_top = -104.0
 offset_right = 1264.0
 offset_bottom = -16.0
 grow_vertical = 0
+theme_override_constants/separation = 32
+alignment = 1
+
+[node name="PartyCard" parent="ChromeLayer/ChromeRoot/EchoBarFrame" instance=ExtResource("2_card")]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(168, 58)
+layout_mode = 2
 
 [node name="EchoBarScroll" type="ScrollContainer" parent="ChromeLayer/ChromeRoot/EchoBarFrame"]
 unique_name_in_owner = true
 clip_contents = true
 layout_mode = 2
-size_flags_horizontal = 3
 size_flags_vertical = 3
 horizontal_scroll_mode = 1
 vertical_scroll_mode = 0
@@ -58,3 +68,12 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 16
 alignment = 1
+
+[node name="StageWhyCard" parent="ChromeLayer/ChromeRoot" instance=ExtResource("3_why")]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 96.0
+offset_right = 376.0
+offset_bottom = 96.0

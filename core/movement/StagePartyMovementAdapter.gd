@@ -1,8 +1,5 @@
 # res://core/movement/StagePartyMovementAdapter.gd
-# V2-COMBAT-002 Slice 5 (Unit A) — PURE + DORMANT stage-party movement adapter.
-#
-# Bridges STAGE EXPLORATION onto the slice-1..4 movement contracts. Nothing in
-# production calls this file: it is consumed at the slice-6 cutover.
+# Pure adapter that bridges stage exploration onto the movement contracts.
 #
 # ---------------------------------------------------------------------------
 # THE ONE PARTY TOKEN
@@ -291,8 +288,10 @@ const FNV_MASK_32: int = 0xffffffff
 ## inflated the party's pace and hid the bad config. It yields capacity 1 plus an
 ## authored_override naming `directive.step_budget` as its source, which is the
 ## seam MovementProfile.validate requires at capacity 1. The upper cap stays 6.
-static func build_profile(directive: Dictionary) -> Dictionary:
-	var step_budget: int = int(directive.get("step_budget", DEFAULT_STEP_BUDGET))
+## `effective_steps` >= 0 replaces the Directive's `step_budget` (the party stance lowers it).
+static func build_profile(directive: Dictionary, effective_steps: int = -1) -> Dictionary:
+	var step_budget: int = effective_steps if effective_steps >= 0 \
+		else int(directive.get("step_budget", DEFAULT_STEP_BUDGET))
 	var capacity: int = clampi(step_budget, MIN_EXPRESSIBLE_CAPACITY, MAX_EXPRESSIBLE_CAPACITY)
 	var source_terms: Array = [{
 		"source": CAPACITY_SOURCE,
@@ -657,18 +656,19 @@ static func _build_step_events(origin: Dictionary, path: Array, stop_reason: Str
 ## Distances come from MovementPathService.reachable_cost_region, so the shared
 ## two-solid-corners diagonal rule applies. When `walkable` is the legacy
 ## all-walkable sentinel (empty) the board is unbounded and BFS cannot terminate,
-## so chebyshev distance stands in.
+## so chebyshev distance stands in. `region_costs`: that region's costs, when the caller has it.
 static func select_frontier(
 	candidates: Array,
 	party_pos: Dictionary,
 	heading: Dictionary,
 	walkable: Dictionary,
-	salt: String = ""
+	salt: String = "",
+	region_costs: Dictionary = {}
 ) -> Dictionary:
 	var party: Dictionary = _cell_of(party_pos)
-	var costs: Dictionary = {}
+	var costs: Dictionary = region_costs
 	var use_bfs: bool = not walkable.is_empty()
-	if use_bfs:
+	if use_bfs and costs.is_empty():
 		# Capacity == cell count: an upper bound on any in-region distance, so
 		# nothing reachable is ever truncated away.
 		var region: Dictionary = MovementPathService.reachable_cost_region(
@@ -803,7 +803,8 @@ static func select_objective_target(
 	dist_field: Dictionary,
 	weights: Dictionary,
 	category_map: Dictionary,
-	slack_config: Dictionary = {}
+	slack_config: Dictionary = {},
+	bend: Dictionary = {}
 ) -> Dictionary:
 	# Pass 1 — keep the reachable candidates and find the nearest distance, which
 	# anchors the slack envelope.
@@ -840,6 +841,8 @@ static func select_objective_target(
 		var situation: Dictionary = entry["situation"] as Dictionary
 		var rank: Array = [
 			-_target_weight(situation, weights, category_map),
+			# Party bend: below the authored weight, so it only breaks an exact tie (D-44).
+			-float(bend.get(_target_category(situation, category_map), 0.0)),
 			distance,
 			str(situation.get("id", "")),
 			# Criteria 5-6 (D57): numeric col, then row. See the docblock above for
@@ -938,9 +941,13 @@ static func _target_weight(
 	weights: Dictionary,
 	category_map: Dictionary
 ) -> float:
-	var situation_type: String = str(situation.get("type", ""))
-	var category: String = str(category_map.get(situation_type, DEFAULT_SITUATION_CATEGORY))
-	return float(weights.get(category, DEFAULT_TARGET_WEIGHT))
+	return float(weights.get(_target_category(situation, category_map), DEFAULT_TARGET_WEIGHT))
+
+
+static func _target_category(situation: Dictionary, category_map: Dictionary) -> String:
+	if bool(situation.get("is_objective", false)):
+		return "objective"
+	return str(category_map.get(str(situation.get("type", "")), DEFAULT_SITUATION_CATEGORY))
 
 
 # ---------------------------------------------------------------------------

@@ -47,10 +47,16 @@ extends RefCounted
 const FlowStageExploreStateScript      := preload("res://core/state/flow/states/venture/FlowStageExploreState.gd")
 const MovementPathServiceScript        := preload("res://core/movement/MovementPathService.gd")
 const StagePartyMovementAdapterScript  := preload("res://core/movement/StagePartyMovementAdapter.gd")
+const StageExposureMapScript           := preload("res://core/movement/StageExposureMap.gd")
+const StagePartyStanceScript           := preload("res://core/movement/StagePartyStance.gd")
+const StageStopPolicyScript            := preload("res://core/movement/StageStopPolicy.gd")
 
 var flow_ctx: FlowContext
 var config_service: ConfigService
 var logger: StructuredLogger
+# The one MovementResult of the latest advance_turn. {} when no leg produced an intent.
+# Internal: not in the snapshot, not in the save.
+var last_result: Dictionary = {}
 
 
 func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _logger: StructuredLogger) -> void:
@@ -91,6 +97,26 @@ func _voice_service() -> NarrativeVoiceService:
 	return NarrativeVoiceService.new(flow_ctx, config_service, logger)
 
 
+## One stance per Advance. Echoes are the saved party views; bonds are the real save bonds (D-26).
+func _build_stance(directive: Dictionary, echoes: Array = [], stance_cfg: Dictionary = {}) -> Dictionary:
+	return StagePartyStanceScript.build(
+		echoes if not echoes.is_empty() else read_party_echoes(), directive,
+		stance_cfg if not stance_cfg.is_empty() else ConfigService.get_party_stance_cfg(config_service))
+
+
+## The current party as `read_echo` dicts (shared by the Advance stance and the return-home escape bend).
+func read_party_echoes() -> Array:
+	var cfg_data: Dictionary = {}
+	if config_service != null:
+		var data_v: Variant = config_service.get_balance().get("data", {})
+		cfg_data = data_v if data_v is Dictionary else {}
+	return StagePartyStanceScript.read_party(flow_ctx.save_data, cfg_data)
+
+
+func get_last_result() -> Dictionary:
+	return last_result
+
+
 ## The body of FlowRuntime._handle_stage_advance_turn(), moved verbatim minus its four
 ## snapshot tails. Returns a status the caller maps to an outcome:
 ##   "no_stage"      — no active stage           → rebuild + refresh
@@ -108,6 +134,7 @@ func _voice_service() -> NarrativeVoiceService:
 ## `directive_service` is a parameter rather than a constructor dependency so the directive is
 ## resolved at exactly the pre-extraction point: AFTER the no-stage and not-exploring guards.
 func advance_turn(directive_service: DirectiveService, t: int) -> String:
+	last_result = {}
 	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
 	if stage.is_empty():
 		logger.debug(t, "stage.advance.no_stage", "advance_turn: no active stage", {})
@@ -124,7 +151,6 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 
 	# V2-STAGE-004-P2: resolve directive once for this turn
 	var directive := directive_service.get_active_directive()
-	var step_budget := int(directive.get("step_budget", DirectiveService.DEFAULT_STEP_BUDGET))
 	# V2-STAGE-004 Phase 2.5: reveal_radius replaces passive_reveal_radius as the primary fog lever.
 	# Both directives always reveal (radius is the differentiator — Scout wide, Seek narrow).
 	var reveal_radius := int(directive.get("reveal_radius", directive.get("passive_reveal_radius", 2)))
@@ -159,12 +185,23 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	# ActiveStageService (see this file's header). Built ONCE here and reused by the
 	# movement loop below — the constructor only assigns three fields and writes nothing.
 	var _session := ActiveStageService.new(flow_ctx, config_service, logger)
-	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage)
+	var stance_cfg := ConfigService.get_party_stance_cfg(config_service)
+	var echoes := read_party_echoes()
+	var stance := _build_stance(directive, echoes, stance_cfg)
+	var bend: Dictionary = stance["category_bend"]
+	# One reachable region from the start cell: the first pick, the naming and the first in-loop pick share it.
+	var start_region := ActiveStageService.stage_reachable_costs(explore_map["party_pos"], walkable)
+	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend, start_region)
 
 	if target.is_empty():
 		# All walkable cells explored and no discovered unresolved situations — nothing left.
 		logger.debug(t, "stage.advance.no_target", "advance_turn: no target found (all explored, all resolved)", {})
 		return "no_target"
+
+	# Who decided the first plan. Read-only dry runs, so it runs before any write below.
+	var counterfactual := StageCounterfactualService.new(flow_ctx, config_service, logger)
+	var why: Dictionary = counterfactual.name_deciders(directive, t, start_region)
+	var first_is_frontier := bool(target.get("is_frontier", false))
 
 	# One explore-turn consumed per Advance call
 	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
@@ -191,13 +228,50 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 
 	var stepped: Array = []
 	var steps := 0
+	var effective_steps := int(stance["effective_steps"])
+	var commitment_depth := int(stance["commitment_depth"])
+	var profile := StagePartyMovementAdapterScript.build_profile(directive, effective_steps)
+	# Exposure is constant inside one Advance: reveal, resolve and pass only change after the loop.
+	var exposure_cfg_v: Variant = stance_cfg.get("exposure", {})
+	var exposure_cfg: Dictionary = exposure_cfg_v if exposure_cfg_v is Dictionary else {}
+	var category_map := ConfigService.get_situation_category_cfg(config_service)
+	var tolerance := float((stance["dials"] as Dictionary)["exposure_tolerance"])
+	var exposure := StageExposureMapScript.build(explore_map, category_map, exposure_cfg)
+	var pause_exposure := exposure
+	var pause_exposure_target := ""
+	var terrain_costs := StageExposureMapScript.to_terrain_costs(exposure, tolerance, int(StageExposureMapScript.cfg_num(exposure_cfg, "price_scale")))
+	# Stop knobs (design 3a). A Directive with no profile has no stop_willingness and lists no
+	# stop kinds: no find stops it.
+	var stop_cfg_v: Variant = stance_cfg.get("stop", {})
+	var stop_cfg: Dictionary = stop_cfg_v if stop_cfg_v is Dictionary else {}
+	var profiles_v: Variant = stance_cfg.get("directive_profile", {})
+	var profile_v: Variant = (profiles_v as Dictionary).get(str(directive.get("id", "")), {}) if profiles_v is Dictionary else {}
+	var stop_profile: Dictionary = profile_v if profile_v is Dictionary else {}
+	var reveal_kinds_v: Variant = stop_profile.get("reveal_stop_kinds", [])
+	var reveal_kinds: Array = reveal_kinds_v if reveal_kinds_v is Array else []
+	var weights_v: Variant = directive.get("target_preference", {})
+	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
+	var stop_willingness := float((stance["dials"] as Dictionary)["stop_willingness"])
+	var width_sum := 0.0
+	for e in echoes:
+		width_sum += float((e as Dictionary).get("width", 0.0))
+	var party_width := width_sum / maxf(echoes.size(), 1)
+	var reveal_kind := ""
+	var at_target := false
+	var first_detour_refused := false
+	var route_character := ""
+	var first_goal: Dictionary = {}
+	var first_intent: Dictionary = {}
+	var first_target_id := ""
+	var final_reason := ""
 	var _heading_origin_v: Variant = explore_map.get("last_traveled_origin", {})
 	var _heading_origin: Dictionary = _heading_origin_v if _heading_origin_v is Dictionary else {}
-	while steps < step_budget:
+	while steps < commitment_depth:
 		var here: Dictionary = ActiveStageService.stage_integer_cell(explore_map.get("party_pos", {}))
 		explore_map["party_pos"] = here.duplicate()
 		explore_map["last_traveled_origin"] = _heading_origin.duplicate(true)
-		target = _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage)
+		target = _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend,
+			start_region if steps == 0 else {})
 		if target.is_empty():
 			break
 		target_pos_v = target.get("pos", { "col": 0, "row": 0 })
@@ -205,19 +279,32 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		is_frontier = bool(target.get("is_frontier", false))
 		target_sit_id = str(target.get("id", ""))
 		target_tier = int(target.get("_movement_tier", StagePartyMovementAdapterScript.TIER_FRONTIER))
+		if first_intent.is_empty():
+			first_target_id = target_sit_id
 		if int(here.get("col", 0)) == int(target_pos.get("col", 0)) \
 				and int(here.get("row", 0)) == int(target_pos.get("row", 0)):
 			break
 
-		var profile := StagePartyMovementAdapterScript.build_profile(directive)
-		var goal := StagePartyMovementAdapterScript.build_goal(explore_map, target, target_tier, walkable)
-		var route := MovementPathServiceScript.shortest_path(here, target_pos, walkable, {}, {}, {})
+		var is_first_leg := first_intent.is_empty()
+		var goal := first_goal
+		if is_first_leg:
+			goal = StagePartyMovementAdapterScript.build_goal(explore_map, target, target_tier, walkable)
+		var route := MovementPathServiceScript.shortest_path(here, target_pos, walkable, terrain_costs, {}, {})
+		if not terrain_costs.is_empty() and bool(route.get("reachable", false)):
+			var plain := MovementPathServiceScript.shortest_path(here, target_pos, walkable, {}, {}, {})
+			if not StageExposureMapScript.detour_within_slack(
+					(route.get("path", []) as Array).size(), (plain.get("path", []) as Array).size(),
+					ConfigService.get_movement_slack_cfg(config_service)):
+				route = plain
+				if is_first_leg:
+					first_detour_refused = true
+			elif is_first_leg and not is_frontier:
+				route_character = "skirted" if route.get("path", []) != plain.get("path", []) else "direct"
 		if not bool(route.get("reachable", false)):
-			var no_route_intent := StagePartyMovementAdapterScript.build_intent(profile, goal, [], here)
-			if not no_route_intent.is_empty():
-				StagePartyMovementAdapterScript.build_result(
-					here, [], "no_route", [], no_route_intent, goal, goal.get("declared_fallback", {}) as Dictionary
-				)
+			if is_first_leg:
+				first_goal = goal
+				first_intent = StagePartyMovementAdapterScript.build_intent(profile, goal, [], here)
+			final_reason = "no_route"
 			break
 
 		var route_path_v: Variant = route.get("path", [])
@@ -225,9 +312,11 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		if route_path.is_empty():
 			break
 
-		var intent := StagePartyMovementAdapterScript.build_intent(profile, goal, route_path, here)
-		if intent.is_empty():
-			break
+		if is_first_leg:
+			first_goal = goal
+			first_intent = StagePartyMovementAdapterScript.build_intent(profile, goal, route_path, here)
+			if first_intent.is_empty():
+				break
 
 		var nxt_v: Variant = route_path[0]
 		var nxt: Dictionary = nxt_v if nxt_v is Dictionary else {}
@@ -238,31 +327,62 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 			break
 		var step_reaches_target := int(nxt.get("col", 0)) == int(target_pos.get("col", 0)) \
 			and int(nxt.get("row", 0)) == int(target_pos.get("row", 0))
+		nxt = ActiveStageService.stage_integer_cell(nxt)
+		# Pause before a highly exposed cell. Never on the first step (an Advance always moves). The
+		# hostile the party walks to is not a source: only exposure the party did not choose pauses.
+		if pause_exposure_target != target_sit_id:
+			pause_exposure_target = target_sit_id
+			pause_exposure = StageExposureMapScript.build(explore_map, category_map, exposure_cfg, target_sit_id)
+		if steps > 0 and StageStopPolicyScript.exposure_pause(
+				float(pause_exposure.get("%d,%d" % [int(nxt["col"]), int(nxt["row"])], 0.0)), tolerance,
+				stop_willingness, StageExposureMapScript.cfg_num(exposure_cfg, "pause_trigger")):
+			reveal_kind = "paused_to_read"
+			final_reason = "interrupted"
+			break
 		_heading_origin = {
 			"col": int(here.get("col", 0)),
 			"row": int(here.get("row", 0)),
 		}
-		nxt = ActiveStageService.stage_integer_cell(nxt)
 		explore_map["party_pos"] = nxt.duplicate()
 		stepped.append(nxt.duplicate())
 		steps += 1
 		# Lift fog around every newly entered cell (per-step so the next adapter
 		# frontier replan sees the updated explored set).
-		ActiveStageService.lift_fog_at_cell(nxt, reveal_radius, walkable, explored_cells)
+		var added_keys := ActiveStageService.lift_fog_at_cell(nxt, reveal_radius, walkable, explored_cells)
 		var step_blocks := ActiveStageService.situation_blocks_step(explore_map, nxt, target_sit_id)
-		var stop_reason := "capacity_spent"
+		var stop_reason := "capacity_spent" if commitment_depth >= effective_steps else "commitment_spent"
 		if step_blocks:
 			stop_reason = "interrupted"
 		elif step_reaches_target:
 			stop_reason = "reached_destination"
-		StagePartyMovementAdapterScript.build_result(here, [nxt], stop_reason, [], intent, goal)
+		final_reason = stop_reason
 		# V2-STAGE-004-P5 (mid-path stop): walking the party ONTO an unresolved, un-passed
 		# situation (revealed OR hidden — reveal-on-arrival) ends the advance there so the
 		# normal engagement popup fires. Passed nodes are walked through (no prompt) unless
 		# this is exactly the node deliberately re-targeted via Tier-4 (target_sit_id match).
 		# The post-loop reveal sweep + arrival check set pending_situation_id.
 		if step_blocks:
+			at_target = not target_sit_id.is_empty() and nxt == target_pos
 			break
+		# A stop kind ends the Advance (D-46); unspent steps are lost. The sweep below still reveals the find.
+		reveal_kind = StageStopPolicyScript.classify_reveals(explore_map, added_keys, category_map, weights, reveal_kinds, stop_cfg, party_width)
+		if reveal_kind != "":
+			final_reason = "interrupted"
+			break
+
+	why = counterfactual.confirm_walk(why, {
+		"target_id": first_target_id, "path": stepped, "stop_kind": final_reason,
+		"effective_steps": effective_steps, "commitment_depth": commitment_depth,
+	}, t)
+
+	var pause_cap := int(StageExposureMapScript.cfg_num(stop_cfg, "pause_cap_per_advance"))
+	assert(pause_cap <= 0 or (1 if reveal_kind == "paused_to_read" else 0) <= pause_cap)
+
+	if not first_intent.is_empty() and not final_reason.is_empty():
+		var fallback: Dictionary = first_goal.get("declared_fallback", {}) as Dictionary if final_reason == "no_route" else {}
+		last_result = StagePartyMovementAdapterScript.build_result(
+			_origin_cell, stepped, final_reason, [], first_intent, first_goal, fallback
+		)
 
 	# V2-STAGE-004-P2 / V2-COMBAT-002 slice 5: stash the path walked this turn for the UI
 	# chained-tween animation.
@@ -389,6 +509,26 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	if _objective_revealed:
 		_voice_service().fire_anansi_snippet(explore_map, "objective_revealed", t)
 
+	var stop_kind := StageStopPolicyScript.kind_for(final_reason, reveal_kind, at_target)
+	if stop_kind.is_empty() and arrived:
+		stop_kind = "arrived_at"
+	var cause := str(why.get("cause", ""))
+	# Naming is first-plan only (D-46), so only a first-leg refusal may name terrain (D-52 F5).
+	if cause != "echo" and first_detour_refused:
+		cause = "terrain"
+	var named_id := str(why.get("decisive_contributor_id", "")) if cause == "echo" else ""
+	explore_map["last_effective_steps"] = int(stance["effective_steps"])
+	explore_map["last_commitment_depth"] = commitment_depth
+	explore_map["last_stop"] = { "kind": stop_kind, "col": int(party_pos["col"]), "row": int(party_pos["row"]), "echo_id": named_id }
+	explore_map["travel_why"] = StageStopPolicyScript.sanitise_why({
+		"cause": cause,
+		"purpose_family": "read" if first_is_frontier else str(first_goal.get("purpose", "advance")),
+		"route_character": "" if first_is_frontier else ("direct" if route_character.is_empty() else route_character),
+		"stop_kind": stop_kind,
+		"named_echo_name": _echo_name(named_id),
+		"echo_reason_class": str(why.get("reason_class", "")) if cause == "echo" else "",
+	})
+
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 	flow_ctx.request_save("stage.advance_turn")
@@ -399,7 +539,17 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 		"is_frontier":        is_frontier,
 		"arrived":            arrived,
 		"steps_taken":        steps,
+		"stop_kind":          stop_kind,
 		"turn_count":         int(explore_map.get("turn_count", 0)),
 		"explored_count":     explored_cells.size(),
 	})
 	return "advanced"
+
+
+func _echo_name(echo_id: String) -> String:
+	if echo_id.is_empty():
+		return ""
+	for a in SanctumService.get_party_actors_static(flow_ctx.save_data):
+		if str(a.get("id", "")) == echo_id:
+			return str(a.get("name", ""))
+	return ""

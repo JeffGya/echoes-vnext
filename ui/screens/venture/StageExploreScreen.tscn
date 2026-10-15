@@ -327,20 +327,22 @@ theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1.0)
 text = "Steps"
 vertical_alignment = 1
 
-[node name="StepProgressBar" type="Control" parent="BottomHudRegion/StepBudgetRow" unique_id=5100000002]
+[node name="StepBarShake" type="Control" parent="BottomHudRegion/StepBudgetRow"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 24)
 layout_mode = 2
 mouse_filter = 2
-script = ExtResource("5_stepbar")
 
-[node name="StepFractionLabel" type="Label" parent="BottomHudRegion/StepBudgetRow" unique_id=5100000003]
+[node name="StepProgressBar" type="Control" parent="BottomHudRegion/StepBudgetRow/StepBarShake" unique_id=5100000002]
 unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.784, 0.663, 0.431, 1.0)
-text = "0/0"
-vertical_alignment = 1
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("5_stepbar")
 
 [node name="ActionBar" type="HBoxContainer" parent="BottomHudRegion" unique_id=101491474]
 unique_name_in_owner = true

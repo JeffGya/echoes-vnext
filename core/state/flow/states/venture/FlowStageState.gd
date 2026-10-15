@@ -173,6 +173,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# V2-VOW-002: passive mantra + condition hint for atmospheric display on stage overview.
 			# Shape: { vow_id, vow_name, proverb_twi, proverb_en, tier, condition_status, condition_hint } or {}.
 			"active_vow": _build_active_vow_with_hint(flow_ctx),
+			"presentation":      ConfigService.get_stage_presentation_cfg(flow_ctx.config_service),
 		},
 		"actions": actions,
 		"meta": { "t": t },

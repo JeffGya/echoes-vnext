@@ -29,6 +29,26 @@ Background: the session first planned V2-COMBAT-004. Its dependencies V2-DIRECTI
 | D-21 | contract-edits-and-follow-ups | Approved by Jeff: AGENTS.md alarm change, `directive_char` added to the shard map in `scripts/run-tests-sharded.sh` (shard5), suite count 128 to 129 in AGENTS.md, and the four contact-window findings filed in `follow-ups.md` (not fixed). | 2026-10-11 |
 | D-22 | contact-window-issues-separate-story | The four contact-window findings (raw calling ids on Echo cards, fourth card below the fold, colour-only bid badge, weak contrast on "Hear Them Out") are a separate story for later. They are not part of V2-DIRECTIVE-002. They are filed in `follow-ups.md`. No Notion story is created until Jeff asks. | 2026-10-11 |
 | D-23 | pr106-review-fixes | PR #106 review (Codex): (P1) the `data.directives` subtree is read by `ConfigService.get_directives_cfg`, not by `DirectiveService`; `directives_cfg_of` and `resolve_active` are removed and all callers migrated (AGENTS.md owner rule). (P2) the entry guard requires `pros` and `cons` to hold 2 or more non-empty strings, because the picker has two fixed slots per list. Both fixed under the Auto-fix authorization. | 2026-10-11 |
+| D-24 | rename-resonance-bonus | Rename `witness_resonance_bonus` to `conversation_resonance_bonus` when phase B+C wires it. The effect (+0.1 on the turn resonance score of every conversation under Seek Signs, PROPOSED DEFAULT) is not limited to witness contacts. The data entry, `CONTACT_EFFECT_KEYS` in `DirectiveService`, the tests and the docs change in the same step. No reader exists today, so no consumer needs migrating. | 2026-10-11 |
+| D-25 | bond-interrupt-seam-only (Q1) | Phase B+C defines the stop-kind slot for a bond interrupt only. No trigger is built. A NEW Foundation backlog story, "Stage bond interrupt", owns the trigger. Jeff: this is part of the core work. Story text is drafted for Jeff's approval before any Notion write. | 2026-10-11 |
+| D-26 | stage-judgment-includes-bonds (Q2) | Stage Judgment equals combat Judgment, bond-support term included. AMENDS D-03: bonds are an interrupt AND enter stage routes quietly through Judgment. Stage tests build Echoes with real bonds. | 2026-10-11 |
+| D-27 | readiness-lowers-only (Q3) | Party readiness (fear and morale bands) may only LOWER effective steps. A calm party walks the Directive baseline. | 2026-10-11 |
+| D-28 | objective-joins-weighted-pool (Q4) | The `objective` weight (Scout 1.2, Seek 1.6) joins the Tier 2 weighted pool inside the slack envelope. Tier 1 no longer pre-empts every find. Scout prefers a nearby intel find to the objective; Seek prefers the objective but may take a much closer find first. An objective outside the envelope is delayed, not lost (Tier 4 stays). Moves recorded stage values with one named cause. mid-game-designer tunes the weights. | 2026-10-11 |
+| D-29 | stop-triggers (Q5) | Scout stops for any new find. Seek stops only for an objective or a hostile situation. Pauses per Advance are measured on shipped boards. A cap or merged reveals is added if Scout feels slow. | 2026-10-11 |
+| D-30 | bonus-before-clamp (Q7) | The +0.1 conversation resonance bonus applies before the clamp to 1.2. The range 0 to 1.2 holds. | 2026-10-11 |
+| D-31 | bridges-deferred-to-hazard-story (Q8) | Bridges are NOT counted as exposure in B+C (default, not Jeff's decision: whether bridges are exposed depends on where hazards go). A NEW backlog story, "Stage hazards and exposure", owns hazards on the stage map and this decision. It fills the D-02 gap. Text drafted for Jeff's approval. | 2026-10-11 |
+| D-32 | why-line-on-demand (Q9) | The stage "why" line shows ON DEMAND ONLY (against the recommendation). A stop marker stays visible after every Advance. The on-demand surface also serves as the persistent journey entry, so keyboard and screen-reader users can read it. The trigger (tap the marker, the party token or a button) is designed by ui-ux-designer and approved by Jeff with the design. D-12 stays: a why line plus a visible route and stop difference. | 2026-10-11 |
+| D-33 | reactive-threshold-to-config (Q10) | The reactive-bid fear threshold 60 moves to config with the same value. Project rule (ANSWERS #83): no hard-coded tunable values; they live in config unless there is a documented reason. | 2026-10-11 |
+| D-34 | picker-wording-now (Q11) | Jeff rewrote the two picker description lines (2026-10-11). They go into `data/balance.json` (`data.directives.<id>.description`) in the data step, character for character:
+Scout Carefully: "Watch your step before you move. Proceed with patience. Do not ask more than needed and return back safely"
+Seek Signs: "There is much to discover. Push ahead, stay alert but beware the danger. Wanting too much can cost."
+Not yet applied to data. Scout line corrected by Jeff on 2026-10-11 ("your step"; "of the run" removed). | 2026-10-11 |
+| D-35 | identity-reuses-combat-tables (Q12) | Stage identity leans reuse `MovementStyleService` tables. No new multiplier layer and no stage-only table. | 2026-10-11 |
+| D-36 | two-stop-kinds-different-names (N1) | Keep both stop kinds. Internal names proposed: `arrived_at` (walked into a situation), `spotted_ahead` (the walk revealed an objective or hostile), `paused_to_read`. Player wording is Jeff's. | 2026-10-11 |
+| D-37 | walk-time-to-config (N3) | The 0.5 s stage walk time moves to config. game-feel-developer measures and proposes a timing in the frontend step. Jeff approves it after seeing it. | 2026-10-11 |
+| D-38 | review-items-1-3 | Design 12b items 1 to 3. (1) Picture first: path, stop marker per stop kind (six shapes) and a portrait pulse for a named Echo; Jeff chose option 1 after the mockup `mockups/stage-stop-marker-mockup.html`. (2) A short visible beat when a shaken party's steps drop; game-feel-developer proposes it, Jeff approves after seeing it. (3) A repeat filter on naming: the same Echo and reason are not shown twice in a row, in the journey entry only; the sim and the counterfactual stay unfiltered. | 2026-10-11 |
+| D-39 | target-screens-touch-first | Target devices: mobile smartphone, tablet and laptop, landscape mostly, at least 1080 (Jeff). B+C screens are designed and checked at 1280x720 logical (the existing responsive base) and 1920x1080. The 960x540 check is dropped for B+C. Design is touch-first: no hover, 48 unit tap targets, thumb reach, phone safe edges. AGENTS.md still says desktop windows may shrink to 960x540; that contract is NOT changed here (open item for Jeff). | 2026-10-11 |
+| D-40 | review-items-4-to-16 | Design 12b items 4 to 16. (4) A copy rule: fear and morale reasons never read as a fault of the Echo. (5) Measure pauses per Advance and why frequency on shipped boards before values are authored (a long run through the main chat). (6) Make at least one Seek Signs payoff visible on the board; the wider balance stays under ANSWERS #46. (7) When the Directive alone decided, the journey entry shows "Directive" as the cause (against the recommendation; wording is Jeff's). (8) The step bar shows the baseline (maximum) steps; steps lost to a shaken party are scratched out (crossed, a shape cue). The snapshot carries baseline and effective steps. (9) Snapshot and UI field details are left to mechanics-developer and ui-ux-designer. (10) The why opens by tapping the stop marker; the party token is an alias. (11) sr-game-artist names tint tokens and the glyph rule; mid-game-designer authors the data keys; ui-ux-designer deletes `_label_for_directive` and `_TINT_BY_ID`. (14) Other timing literals in the stage screen move to config in the same pass. (15) The ANSWERS #83 sweep covers only the lines B+C edits; the rest goes on a follow-up list. (16) The journey entry IS saved (against the recommendation): an additive save field with a repair rule, an opus save-schema pass, no field removed or renamed. | 2026-10-11 |
 
 ---
 
@@ -129,3 +149,216 @@ Background: the session first planned V2-COMBAT-004. Its dependencies V2-DIRECTI
 ### D-23. pr106-review-fixes
 **Q:** Codex flagged two items on PR #106. What was done?
 **A:** Both were valid and fixed. P1: a balance subtree getter belongs on `ConfigService` (AGENTS.md lines 479-484); the new `ConfigService.get_directives_cfg` has the same shape as `get_bond_thresholds_cfg`. P2: `validate_entry_schema` now rejects a `pros` or `cons` list with fewer than two entries or any non-string or empty element. No recorded value moved.
+
+### D-24. rename-resonance-bonus
+**Q:** What should the key `witness_resonance_bonus` be called once it is wired?
+**A:** `conversation_resonance_bonus` (Jeff accepted the recommendation). Allowed under the AGENTS.md exception: the value had no reader, so no consumer is migrated. Do the rename in the phase B+C backend step, with the guard key list, the data entry, tests and docs in one change.
+
+### D-25 to D-37. design questions Q1 to Q12 and N1, N3
+Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Reasons given:
+- Q1: "I rather not have things floating around." The bond interrupt gets a Foundation story. "This is part of the core work we need."
+- Q2: chose same Judgment as combat, bonds included (not the recommendation). This amends D-03.
+- Q4: asked what the `objective` weight was meant to do. Code and docs show it is a fourth category in `target_preference` that tier 1 bypasses. After a worked example, Jeff chose to let it join the pool.
+- Q8: "This depends on whether the hazards are also on bridges or not. I can't answer this now." A new story owns it.
+- Q9: chose on demand only (not the recommendation).
+- Q10: "I would rather not have hardcoded values whenever possible. These should live in config unless there is a good reason."
+- N1: "Keep both kinds but tweak wording so it does not feel so similar."
+- N3: "Move to config and let game feel developer measure and propose a timing, that I can approve after seeing."
+
+### D-38. review-items-1-3
+**Q:** Items 1 to 3 of design section 12b (review proposals).
+**A:** Item 1: option 1 after seeing the mockup. Item 2: yes, a short beat. Item 3: yes, a presentation-only repeat filter. The artist's three small assumptions (a faint ring stays on the portrait until the next move; terracotta for 'no way'; where the last-journey entry sits) stay open as frontend details.
+
+### D-39. target-screens-touch-first
+**Q:** What is the smallest landscape size B+C must be designed for?
+**A:** Jeff: "The game will never be run at 950x540. It will always be a mobile smartphone, tablet or laptop. 1080 at least. Landscape mostly." Keep the 1280x720 logical base as the smallest layout and also check 1920x1080. Drop 960x540 for B+C. Touch-first rules apply. The AGENTS.md rule (resize down to 960x540) is a repo contract and is not edited without Jeff's yes.
+
+### D-40. review-items-4-to-16
+**Q:** The remaining open items of design section 12b.
+**A:** Answered one at a time on 2026-10-11 (see the row above). Choices against the recommendation: item 7 (show 'Directive' as the cause), item 8 (show max steps with lost steps crossed out; the review had advised no baseline ghosts), item 16 (the journey entry is saved). Item 8 consequence: the step bar needs both numbers. Item 16 consequence: a save-schema change; mechanics-developer decides the field name and lifetime (cleared on a new stage entry is the proposal) and runs the save pass as opus.
+
+### D-41. mockup-v3-approved
+**Q:** Which look and motion does the stage stop mockup (`mockups/v3/`) fix for the build?
+**A:** Jeff approved v3 on 2026-10-12 and said the build can continue. His choices, with his reasons:
+- The stick with the icon and the circle are not wanted. He wanted something subtler that the player can recall at any time, that follows show-don't-tell, and where a click gives more detail.
+- **Marker style 3 (Echo bar glyph) is approved.** The board shows nothing extra. A small kind glyph sits on the named Echo's card. A tap on the card or the glyph opens the why card. This replaces the stop marker head, pole and ring of D-38 item 1 and D-40 items 10 and 14. The six stop kinds stay six shapes (D-36).
+- Jeff prefers the OLD mockup's Advance button, step icons (big diamonds, red cross for lost steps) and Echo band. Improvements 5 and 10 of the v3 list are not used. D-40 item 8 stays: both numbers shown, lost steps crossed out.
+- The shaken run gets the little shake back (D-38 item 2): token and step bar, about 0.22 s, 2 to 3 small oscillations, then still, off under reduced motion. Timing is a PROPOSAL for `game-feel-developer` to measure and Jeff to approve (D-37).
+- The board must use real stage maps, not an invented square board. Source: `mockups/review/real-stage-maps.json`.
+- Tapping an Echo card opens nothing today, so the card tap is free for the why. Jeff confirmed this.
+- The Advance button label is blank in the live game. Jeff confirmed a real defect. It is a separate task, not part of this story.
+**Consequences:** `design.md` sections 3a, 8, 8a, 12a and 13 need an edit (marker form, trigger, hit areas, no-Echo-named case). Style 3 needs a home when no Echo is named (open: asked to Jeff). The `stop` field must survive save and load so the glyph returns after a reload (mechanics-developer decides; opus save pass with the journey entry).
+
+### D-42. no-echo-named-party-chip
+**Q:** Style 3 shows the stop glyph on the named Echo's card. Where does it go when a stop names no Echo (Directive cause, shaken party, edge stop)?
+**A:** A party chip (Jeff, 2026-10-12, the recommended option). A small chip beside the Echo cards holds the glyph. It exists only when no Echo is named. A tap opens the why card. The chip is new UI: `ui-ux-designer` places it so it stays inside the safe area and does not cover the Echo cards.
+
+### D-43. design-approved-and-step-count-removed
+**Q:** Is the updated `design.md` (D-00 to D-42) the spec for the B+C build? Does the live step count text (n/n) stay?
+**A:** Jeff approved `design.md` on 2026-10-12 (the recommended option). The count text is removed: the step row shows diamonds only, with lost steps crossed out. This keeps design item 5 (no second number) and D-40 item 8. `design.md` section 8 rule 5 and section 13 row 17 follow this answer (the designer edits them). Next: ask Jeff before setting Notion Spec State to Locked.
+
+### D-44. numbers-step-answers
+**Q1:** Design test K2 (a Seek party with a Sight Echo picks an intel find over a combat find) conflicts with design section 3 E1 (a party bend never flips the authored ranking). Which wins?
+**A1:** The ranking holds (Jeff, 2026-10-12, the recommended option). A bend only decides ties. The category-weight bound stays under half the smallest gap (0.09 against a gap of 0.2). K2 is rewritten to use a tie case (reward against intel at 0.9 each, or Scout objective against reward at 1.2 each).
+**Q2:** Where do the per-Directive party numbers live?
+**A2:** In `data.stages.party_stance.directive_profile.<id>` (Jeff, the recommended option). No core change. A new Directive needs an entry in `data.directives` and one in `party_stance`. The Directive entry schema is not extended.
+**Numbers:** authored as PROPOSED DEFAULT in `data/balance.json`, table in `numbers.md`. Jeff owns the final values.
+
+### D-45. pause-cap-and-probe
+**Q:** What is `pause_cap_per_advance` (most stops in one Advance)?
+**A:** 2 (Jeff, 2026-10-12, the recommended option). Evidence: the pause probe ran on 3 seeds, realm.01 and realm.02, all shipped stages, both Directives, authored baselines only (605 / 907 / 513 Scout Advances and 466 / 638 / 405 Seek Advances). Pauses per Advance: Scout mean 0.12 to 0.19, max 2; Seek mean 0.04 to 0.06, max 2 once, else 1. Advances with 3 or more pauses: 0%. A cap of 2 never binds on shipped boards today. It is a safety cap for the party bends the backend adds. Why would show on 14% to 22% (Scout) and 14% to 20% (Seek) of Advances (a lower bound: Echo-named and Directive-cause whys are not measurable yet). Probe limits: no party bends, every situation ignored, prologue realm not covered. Re-measure after the backend lands.
+
+### D-46. pause-ends-advance-and-first-plan-naming
+**Q1 (J2):** When the party pauses for a find, does the Advance end there?
+**A1:** Yes (Jeff, 2026-10-12, the recommended option). A stop returns control and unspent steps are lost (movement model 11.7, 11.9). There is at most one pause per Advance. `pause_cap_per_advance` (D-45, value 2) therefore has no job today. It stays as an unused safety key, or the backend drops it: `mechanics-developer` reports which in the plan. The probe's 'steps cut by pause' column shows the cost (Scout about 0.17 steps per Advance).
+**Q2 (J1):** How does the game name the deciding Echo?
+**A2:** First-plan-only (Jeff, the recommended option). Compare only the first plan, with the reachable region shared through one optional argument. An Echo is named only when removing them changes that first plan. A full re-walk costs about 3.8 s per Advance on large maps (V2-INFRA-010 evidence).
+
+### D-47. backend-plan-answers-j3-to-j6
+**Q:** The four open items of `backend-plan.md` section 5.
+**A:** (J3) Ship the lowest-id pick for a tied naming (Jeff, recommended). (J4) The stage snapshot carries a copy of `stages.presentation`; the UI reads the snapshot only (recommended). (J5) Move the three 'voices per contact turn' literals (3) to a new key `data.contact.max_voices_per_turn` = 3, and read the existing `party_max_size` for the snapshot check of 5; same values (recommended). (J6) Move the two NPC turn-score numbers (0.2 and 0.1) and the morale limit 20 in `ConversationService` to config; same values (recommended). (J7) Follows D-46: the reachable region is shared through one minimal optional argument in `find_explore_target`. All moves keep today's behaviour (ANSWERS #83).
+
+### D-48. detour-limit-rule-and-terrain-cause
+**Q1:** The stage re-plans every step and the detour limit (slack envelope) shrinks with the distance left, so a Scout detour can fail late and the party walks into a hostile. Which rule?
+**A1:** Keep the per-step rule (option B) as committed in S1b, and build C1 later (Jeff, 2026-10-12, the recommended option). C1 fixes the limit per leg from the plain length when the destination was chosen. It needs one saved number, so it joins the journey-entry save change (S5, one `opus` save-schema pass). Option A (per Advance) is not built: it does not fix a flip that falls between Advances. Evidence: `slack-gate-options.md`; on a real map with a placed hostile, 2 true flips in 395 Scout journeys; most bad journeys (38 of 40) never fitted a detour at all (a cliff that neither A nor C1 changes). The designer's Python copy of the route search is not the engine: re-check with the engine before authoring any value.
+**Q2:** Record a terrain cause when a detour is refused?
+**A2:** Yes (Jeff, the recommended option). The journey entry records that the terrain forced the route, so the why never gives a false Directive reason. Wording is Jeff's. Work lands in S3 (cause value) and S5 (saved field).
+
+### D-49. pool-rule-accepted-with-watch-note
+**Q:** After S1c, a revealed hostile that is the nearest candidate can pull a cautious Scout away from a far objective (the objective lies outside the slack envelope, so the weights never decide). Accept the pool rule (D-28) as built, or guard it?
+**A:** Accept as is (Jeff, 2026-10-12), and leave a note in V2-STAGE-010 and in other stories that add content which could make it appear. Evidence: the pool probe on 3 seeds, realm.01 and realm.02, both Directives (720 to 880 Advances per Directive per seed). Eligible Advances (objective revealed and reachable at the start): 9 to 15 per Directive per seed. Diverted to a hostile: 0 in all runs. Diverted to a non-objective at all: 2 (both Scout, one reward and one intel, lost by weight). Limits: the walk follows the S1c rule; counts are made at Advance start only. The attribution in the code: the envelope filter runs before the weight rank (`StagePartyMovementAdapter.select_objective_target`, pass 2). Watch note: any story that adds hostile content or hazards near routes (V2-STAGE-010, V2-STAGE-101, V2-STAGE-102) must re-run the pool probe (`docs/stories/v2-directive-002/probes/pool_probe.gd.txt`; copy it out and rename to .gd to run) and re-judge.
+
+### D-50. commitment-numbers-and-fog-meaning
+**Q1:** Which commitment numbers and rounding does the stage Advance use? S2b attribution (opus) proved commitment depth alone moved five traversal tests: Scout 3 x 0.5 rounds to 2 steps, Seek 6 x 0.85 rounds to 5. Scout 0.5 sits exactly on the 1-step and 2-step boundary: any net negative lean gives 1 step.
+**A1:** Option A' (Jeff, 2026-10-12, the recommended option): keep `roundi` and Seek 0.85; raise the Scout base `commitment_fraction` to 0.6 (range 0.5 to 0.7), so Scout is 2 steps under every lean. Smoke on 8 real stage walks (seed 101): Scout steps per Advance 2.78 to 1.88, cells revealed per Advance 11.28 to 7.73, Advances to the objective 11.5 to 16.8; Seek 4.61 to 4.20 steps, 11.39 to 10.07 cells, 12.2 to 17.8 Advances. The numbers stay PROPOSED DEFAULT; the in-game test decides.
+**Q2:** Does 'Scout reveals wider' mean per step or per Advance?
+**A2:** Per step (Jeff, the recommended option). The fog test compares cells revealed per step (Scout about 4.1 against Seek about 2.4 on real stages). Scout is careful: fewer steps, each one reveals more.
+**Effect on tests:** the five traversal tests are re-recorded after the attribution (cause: commitment depth, proved by running with fraction 1.0 and by byte-compare with the pre-S2b commit). `fog_scout_wider_than_seek` changes meaning to per step.
+**Findings kept open:** a Scout reveal radius change altered a Seek walk in one smoke variant (mechanism not traced); the stale '(radius 3 vs 1)' fog-test comment.
+
+### D-51. frontier-route-character-deferred
+**Q:** Slice S2c listed a frontier `route_character` rank key in `select_frontier` (Scout prefers cells that keep the road home explored; Seek prefers continuing the heading) with no weights and no config keys. Build it in this phase?
+**A:** Defer (Jeff, 2026-10-12, the recommended option). Evidence in `route-character-options.md` (sr-game-designer): the design goals are met by commitment depth, fog per step (D-50), exposure, the category bend and stops (D-45); the frontier rank would only choose between two fog-edge cells; Seek's heading preference already exists as shared code; a live-stage re-record would be large. Revisit with V2-STAGE-010 (hazards): there definition C (low added exposure) matches the one-exposure-input rule (D-05). Consequence: `travel_why.route_character` has no frontier source and stays empty on frontier walks. The worked-example counts came from a Python copy of the search, not the engine: re-check before any value is authored.
+
+### D-52. s3-findings-answers
+**Q:** The opus review of S3 left findings F1 to F7 (follow-ups.md). Jeff decided on 2026-10-13 (all the recommended options):
+**A:**
+- **F1:** exempt the whole route when the target is the exposure source. If the party walks to the hostile on purpose, there is no exposure pause on the way. A pause happens only for exposure the party did not choose. The first-step exemption stays (design 9: an Advance always makes progress).
+- **F2:** `reveal_stop_kinds` is the switch, also for `spotted_ahead`. The code reads the list, so a data-only Directive can turn the stop off (ANSWERS #81). Both shipped Directives keep it on.
+- **F4:** the party width for the noise filter is the mean `interpretation_width`.
+- **F5:** the terrain cause overrides only when the FIRST leg refused a detour, to match first-plan-only naming (D-46).
+- **F3 (doc fix):** D-36 defines `arrived_at` as 'walked into a situation'; design 3a defines it as 'target reached' and the code follows 3a. The D-36 wording is superseded here: `arrived_at` = target reached; `met something` (reason `interrupted`) = entered a non-target unresolved situation.
+- **F6 (defect):** strip `_comment*` keys from the `presentation` snapshot key. The stage fingerprint moves once more.
+- **F7:** accepted as is. The player kind tells the two meanings of the shared reason `interrupted` apart.
+**Work:** slice S3b (opus): F1, F2, F5, F6 in code with one named cause per moved value.
+
+### D-53. journey-entry-lifetime-approved
+**Q:** Lifetime and reset rules for the saved journey entry (`last_stop`, `travel_why`, `last_effective_steps`), proposed in the S5 report?
+**A:** Approved (Jeff, 2026-10-13). First entry of a stage: empty. Return from combat or a contact, or a reload: kept. After a successful return home (`party_state` escaped), then a later entry: cleared. Final objective won, then re-entry: kept. The next Advance, including a retarget: replaced. Return home failed: kept. Stage switch: each stage keeps its own entry. The plan rule 'carry only when `locked`' is replaced by the `party_state` rule (the lock always runs before the reset). Open follow-ups: an encounter retreat does not set `escaped`; a carried `last_effective_steps` can exceed a new `step_budget` after a Directive change; the stale comment at `FlowStageExploreState.gd:91-94`.
+
+### D-54. qa-backend-findings-answers
+**Q:** The opus QA pass over the combined backend (no blockers, 7 should-fix, 9 notes) left decisions. Jeff answered on 2026-10-13:
+**A:**
+- **S1 (false Echo name):** depth counts only when it cuts the path. A different commitment depth is material only when the depth is less than the steps to the stop. Design 4 rule 8 is amended accordingly.
+- **S2 (named Echo without a reason class):** add a fifth reason class for the 'steadied the party' case (the Echo is named only because they lift the party mean). Token: `steadied` (internal; the wording is Jeff's). The class list stays in config.
+- **N2 (readiness):** readiness applies to every Directive, also one with no `directive_profile` entry (D-13, D-27). A profile-less Directive stays neutral for the dials, not for readiness. A5 is amended.
+- **Fix list:** S3 (add the four missing guard tests), S6 (move the escape base threshold 40 to config, same value), S4 (drop the unused `replan_cap_per_effective_step` key and the design 4 rule 3 promise; the loop is already bounded), S7 and the stale comments and doc rows (commit `StageStopPolicy.gd.uid`; fix the READER PENDING markers, the DORMANT header, plan and numbers.md rows). Comments follow the AGENTS.md rule: fewer comments; delete noise comments while fixing stale ones.
+- **Not selected:** S5 (shard map entry for `contact_cfg` and the `AGENTS.md` suite count 129 to 130). It waits for the docs pass; `AGENTS.md` needs Jeff's yes. N1, N3 to N6 and N8 are noted and not fixed now.
+**Order:** package A (opus: S1, S2, N2), package B (S3 tests, S6, S4), package C (S7 and comments and docs). One commit each.
+
+### D-55. naming-check-and-advance-speed
+**Q1:** The naming test runs use a small model of the walk. The model base plan can differ from the real walk (QA note N1). What do we do?
+**A1:** Option 2 (Jeff, 2026-10-13). Before naming an Echo, compare the model base plan with the real walk. If they differ, name nobody; the cause shows without a name. The model is not extended (option 3 not chosen). Package D builds it.
+**Q2:** Speed. The measurement (M2 Mac, headless, 1152 Advances, 576 on/off pairs; walk identical in all pairs): whole dispatch mean 321 to 346 ms (Scout) and 463 to 562 ms (Seek); worst 5% about 600 ms (Scout) and about 1 s (Seek); max 1276 ms. Naming alone 71 to 104 ms mean (grows with party size); share of the dispatch 15% to 30%. The step loop is the main cost (Seek without naming 341 to 364 ms; one path search about 58 to 70 ms; 5 to 6 searches per Advance). A phone or tablet is slower.
+**A2:** Trim now and schedule V2-INFRA-010 (Jeff, the recommended option). A short package E trims the naming cost. Target: naming under 50 ms mean and mean Advance under 500 ms with 5 Echoes (desktop, headless). Threads are not used (Jeff: only if it helps; the main chain is sequential). V2-INFRA-010 (a cheaper path search) is scheduled after this story; the Notion edit needs Jeff's yes and a preview first.
+
+### D-56. dropped-names-accepted
+**Q:** The naming check drops 13% of proposed names on test boards with a hostile near the start (6.5% of Advances), all from equal-cost route ties under per-step replanning. Accept, or match the live tie rule in the model?
+**A:** Accept the drop rate (Jeff, 2026-10-13, the recommended option). A wrong name never appears. The cause shows without a name. The model is not changed. Package E (speed) starts next.
+
+### D-57. frontend-timings-approved
+**Q:** The game-feel timing proposal (`timings-proposal.md`): approve as starting values? Overlay wait? Reduced motion?
+**A:** (Jeff, 2026-10-13, all recommended options)
+- **Timings:** approved as starting values. They go into `stages.presentation` as PROPOSED DEFAULT. Jeff tunes them in the game after the build. First tests: the shake size, the glyph overshoot, the pulse peak, the 0.85 s input-ready point.
+- **O1:** the contact, situation and choice overlays wait 0.35 s (`overlay_hold_seconds`) so the glyph lands first.
+- **O2:** a reduced-motion setting is NOT in this story. The code reads one flag that defaults to off, and each effect has its reduced form ready. A later settings story adds the switch.
+- **O3 (open):** is a still pressed button enough when the Advance tail is about 1 s or more on a phone? Decide after a phone measurement.
+- Reserved keys `shaken_shake_delay_seconds` and `shaken_shake_oscillations` are replaced by `stop_rest_seconds` and `shaken_shake_offsets_px` (nothing read the old names).
+
+### D-58. directive-badge-one-neutral-colour
+**Q:** The Directive badge has no colour data (the per-Directive colour code was removed from the UI). One neutral colour, or a colour per Directive in config?
+**A:** One neutral colour (Jeff, 2026-10-14, the recommended option). The badge keeps its dark pill and the label from the snapshot. The optional `directive.tint` read stays in the UI and stays unused. A new Directive needs no colour work.
+**Open backend items from the UI build (F1):** add an Echo `id` to each `party_preview` row of the stage snapshot (the UI matches the named Echo by display name today); add the `presentation` key to the preview snapshot (`flow.stage`, built in FlowStageState). Both are small core changes; they may move snapshot fingerprints.
+
+### D-59. frontend-qa-answers
+**Q:** The frontend QA pass (no blockers; 5 should-fix, 13 notes) left decisions. Jeff answered on 2026-10-14:
+**A:**
+- **Chip place (S1, S2):** no new decision. D-42 and design 8.1 item 3 already settle it: the chip sits beside the Echo cards, inside the safe area, never covers a card, never shrinks a card below its minimum width. The build broke this with 4 or 5 Echoes (the chip was off screen) and shifted the cards by 36 px. The fix follows D-42: reserve a fixed slot beside the cards, always inside the safe area, so the cards never shift. The cards scroll in the remaining width. `ui-ux-designer` places it.
+- **Overlay hold (S3):** wait for the mark. The contact, situation and choice overlays open after the stop beat ends (the beat plan `ready_at`), so the mark always lands first. This replaces the fixed 0.35 s hold of D-57 O1.
+- **Token tap (N3):** a second tap on the party token closes the why card; a tap outside the card closes it too (design 8.1).
+- **Small fixes:** fix the single-quote gap of the Directive-literal test (also scan `.tscn`), the two stale comments, the doubled focus colour (one shared source) and the same-holder fade.
+- **Not now:** S4 (walk reduced-motion form; D-57 O2 stands: no switch in this story), N2 (the double-press guard has no headless test; the windowed probe shows it works), S5 (docs: part of the docs pass), the close button (kept: the design 'no button' means no opener button).
+
+### D-60. play-test-findings-answers
+**Context:** Jeff played the build on 2026-10-14 (his terminal log shows about one Advance per second). The measurement is in `play-findings-report.md`. Findings: the Advance button is off about 975 ms after a press (calm) and about 1200 ms (shaken), against about 240 ms before the motion step; at a 0.5 s click rhythm 22 of 49 clicks are ignored; the chip sits far from the cards; the why card opens at the top left; the step row cannot show commitment (the snapshot carries no commitment depth); 0 of 606 real Advances named an Echo.
+**Process note:** the builders stated their assumptions (they followed their role rule). The orchestrator did not turn the UX-changing `ASSUMED` lines into questions for Jeff, summarised the click lock as a gain, left the old Advance button and the old Echo band out of the F1 brief (D-41), and did not compare the build with the approved mockup. From now on: every `ASSUMED` line that changes what Jeff sees or feels is asked before the next step; UI briefs carry a mockup checklist; every UI step ends with a build-next-to-mockup screenshot that Jeff approves before the commit; a timing that blocks input is stated as 'blocks clicks for X seconds' and compared with today.
+**A:**
+- **Click lock:** Advance is ready again when the walk ends. It is off only during the compute and the walk (about 0.75 s). The stop beats after the walk (glyph settle, pulse, shake, cross-outs, snippet) never block a click; a press cuts them. This replaces the 0.85 s input-ready point of D-57 and `timings-proposal.md`.
+- **Step row:** keep the baseline diamonds. Cross out every step the Advance cannot use: lost to readiness or cut by commitment. Seek with capacity 6 and commitment 5 shows 6 diamonds with the 6th crossed out. This amends D-40 item 8 and D-43. It needs the commitment depth in the stage snapshot (additive; carried and repaired like `last_effective_steps`).
+- **Look:** keep the live look. The old mockup's narrow Advance button and dark Echo band (D-41) are NOT built. D-41 is amended: only the step icons of the old mockup are used. The blank Advance label stays its own task.
+- **Why card place:** it opens right above the tapped glyph, card or chip, inside the safe area, and it does not cover the Advance button. This replaces design 8.1 item 4 ('inside the board area').
+- **Chip and glyph place (follows the approved mockup, D-42):** the chip sits directly left of the cards (about 58 px gap), in the same centred group, with a slot that is always reserved so the cards never shift; with a long party the chip stays pinned at the left of the scroll area. The glyph sits on the portrait corner of the named card.
+**Open:** the Echo naming rarely fires (0 of 606 Advances). Jeff decides next (stronger party bends, or accept).
+
+### D-61. glyph-always-on-a-card
+**Q:** The stop glyph sat on the named Echo's card when an Echo was named, and in a chip beside the cards when none was named. Jeff found this inconsistent (2026-10-15). Where should it sit?
+**A:** Option B: always on a card (Jeff). The chip becomes a first 'party card' in the Echo bar with the card look. The stop glyph sits on the named Echo's card, or on the party card when no Echo is named. This amends D-41 and D-42 (the chip is a card now) and D-59 (chip place). The party card exists on the stage screen at all times (the glyph shows only after a stop). Open details Jeff approves on a mockup before any code: the party card width (same as an Echo card or compact), what its portrait shows (the blue party token 'P' is a candidate), its label (player text: Jeff's wording), what a tap does when no mark exists, and how it behaves with 5 Echoes (6 cards, scroll, pinned first).
+
+### D-62. party-card-details
+**Q:** Details of the party card (D-61), shown on the sheets in `mockups/v4/` (Jeff, 2026-10-15):
+**A:**
+- **Width:** V3, compact with a short label (about 168 wide, 58 high). The label is one short word of 13 characters or fewer, at about 14 px. The word is Jeff's wording (placeholder in the text bank until he writes it).
+- **Portrait:** the blue party token 'P' from the board (no party icon art exists).
+- **Tap with no stop mark:** open the last journey entry if one exists. If no entry exists, nothing happens.
+- **Gap:** about 32 px between the party card and the first Echo card (a visible separation; other cards stay 16 px apart).
+- **Glyph corner:** top-left of the portrait, on every card (a named Echo's card and the party card). This moves the glyph from the top-right corner used in the first build.
+- **Echo bar with many Echoes:** the party card is pinned first at the left and does not scroll. Only the Echo cards scroll.
+- Kept from earlier answers (D-60): the live look for the Advance bar and the cards; the lost-step cross style is still open (red X today; the mockup used a small slash).
+
+### D-63. party-card-approved
+**Q:** Does the party card build match what Jeff approved? What does a tap on the party token do when no stop mark exists?
+**A:** Approved (Jeff, 2026-10-15). A tap on the party token with no stop mark opens the last journey entry, like the party card (when no entry exists, nothing happens). The why card opens centred above the whole tapped card, also for Echo cards. The party card label stays the placeholder until Jeff writes the word. The lost-step cross style is still open (red X today; the mockup used a small slash).
+
+### D-64. cross-style-config-key-party-word
+**Q:** Which cross style marks a lost step? Is the config key `chip_settle_seconds` renamed? What is the party card word?
+**A:** (Jeff, 2026-10-15)
+- **Lost-step cross:** red X. It stays as built. The mockup's small slash is dropped.
+- **Config key `chip_settle_seconds`:** keep the name. No rename.
+- **Party card word:** "The party" (9 characters, inside the 13-character limit). It replaces the placeholder in `data/ui/stage_why_text.json` (`party_card_label`).
+
+### D-65. bend-strength-keep-v0
+**Q:** The bend matrix (4 variants, 40 slices) showed no difference in who is named. Which variant does Jeff choose?
+**A:** Option 1: keep V0 (Jeff, 2026-10-15). No number changes. `data/balance.json` stays as it is.
+- **Evidence:** named share is identical in V0, V3, V1 and V2. The category bend changed no pool pick (`bend_changed` = 0). Naming follows party state: stressed mixed parties 26 to 55%, all other sets 0%.
+- **Open finding (not in this decision):** 137 of 266 proposed names (52%) are dropped by `confirm_walk`. The target was 15% or less. Naming for calm parties and your own party is also open. Both stay as follow-ups for Jeff to scope.
+- **Speed:** worst mean Advance 222 ms, worst 95th percentile 417 ms. Both are under 500 ms. No multithreading work.
+
+### D-66. wording-questions-answered
+**Q:** Three questions from the proposed-wording report.
+**A:** (Jeff, 2026-10-15)
+1. **`cause.directive`:** the word "Directive" is NOT allowed in player text. The voice rule stands. The design text for the Cause row (section 8) and rule 7 (section 4) must change to match. The line names the order in plain words, with no code word.
+2. **`purpose.hold`:** an agent checks whether `hold` can reach the player. The result decides if the line is needed.
+3. **New route keys ("cautious", "only way"):** not added. The data keeps `direct` and `skirted`. No schema change.
+
+### D-67. purpose-hold-removed
+**Q:** Can `hold` reach the player as a stop purpose?
+**A:** Option 2 (Jeff, 2026-10-15): `hold` is removed from the allowed stop purposes (`StageStopPolicy.PURPOSES`) and `purpose.hold` is removed from `data/ui/stage_why_text.json`. `hold` is reachable only in a broken stage state. Movement code is unchanged.
+
+### D-68. why-card-wording-final
+**Q:** Which wording goes into `data/ui/stage_why_text.json`?
+**A:** Jeff's column D lines, with these fixes (Jeff, 2026-10-15): "lies" for "lays"; "This problem is known"; two short sentences for the two route lines; present tense for `cause.directive`, `ui.echo_named`, `stop.paused_to_read` and `stop.capacity_spent`.
+- **Spelling:** UK ("honoured").
+- **"Keeper":** the word Echoes use for the player. It is allowed in player text.
+- **"Purpose" in `cause.objective`:** allowed. It means the Echoes' purpose.
+- **`steadied` line:** has no `{name}:` prefix, on purpose.
+- **`purpose.hold`:** no line (D-67).

@@ -89,6 +89,7 @@
 | 80 | board-drag-pans-one-to-one | Mouse drag, finger drag and Space+drag pan 1:1 on every board camera (Sanctum, Combat, Stage). Trackpad two-finger pan keeps 2.5x | 2026-10-03 |
 | 81 | directive-is-data-only-to-add | A new Directive is added as a data entry plus tests, with no logic change. No Directive id literal or substring match in `core/` logic. Unlock stays `unlock_condition: always` until V2-DIRECTIVE-003 | 2026-10-10 |
 | 82 | directive-profile-inputs | Profile inputs that may bend a Directive: Calling family, virtue domains (through the identity state only), Standing/Judgment, fear, morale. Bonds are an interrupt only. Vows and equipment wait for their own stories | 2026-10-10 |
+| 83 | tunables-live-in-config | Tunable values live in `data/balance.json`, not hard-coded in `core/` or `ui/`, unless there is a documented reason (for example a contract floor that code and contract must share). Applies to new work and to code a story touches | 2026-10-11 |
 
 ---
 
@@ -832,5 +833,15 @@
 **A:** Calling family, the ten virtue domains (only through the implemented identity state, never as a new direct multiplier layer), Standing/maturity band and Judgment, fear and morale. Bonds act as an interrupt only (rescue or abandon). Vows wait for V2-VOW-002. Equipment waits for V2-ITEM-003. Contrast is required at every Standing; higher Standing widens reinterpretation, never obedience.
 **Source:** Jeff, 2026-10-10 (V2-DIRECTIVE-002 planning; decisions.md D-03, D-08)
 **Date:** 2026-10-10
+**Amended 2026-10-13:** D-26 amends this entry: stage Judgment includes bond support (bonds are not an interrupt only); the bond interrupt is V2-BOND-004 (D-25).
+
+---
+
+### 83. tunables-live-in-config
+
+**Q:** Where do tunable values live, for example the fear threshold 60 for a reactive bid or the 0.5 s stage walk time?
+**A:** In `data/balance.json`, not hard-coded in `core/` or `ui/`, unless there is a documented reason (for example a contract floor that code and the movement contract must share). A story that touches code with a hard-coded tunable lists it and either moves it to config or states why it stays. Jeff: "I would rather not have hardcoded values whenever possible. These should live in config unless there is a good reason for having them hardcoded."
+**Source:** Jeff, 2026-10-11 (V2-DIRECTIVE-002 design question Q10; decisions.md D-33)
+**Date:** 2026-10-11
 
 ---

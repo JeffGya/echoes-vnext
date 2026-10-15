@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Stage stop marker v3: current, old mockup, new mockup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+@font-face{font-family:"Spectral";src:url("assets/Spectral-Regular.ttf");font-weight:400}
+@font-face{font-family:"Spectral";src:url("assets/Spectral-Bold.ttf");font-weight:700}
+@font-face{font-family:"Spectral";src:url("assets/Spectral-SemiBoldItalic.ttf");font-weight:600;font-style:italic}
+@font-face{font-family:"Iosevka Charon";src:url("assets/IosevkaCharon-Regular.ttf")}
+@font-face{font-family:"Madimi One";src:url("assets/MadimiOne-Regular.ttf")}
+:root{--ground:#120E0C;--parch:#F3E7D3;--ink:#3D2817;--gold:#D4AF37;--step:#C8A96E;--cream:#F5F1E7;--char:#2A2A3A;--badge:#0B1020}
+*{box-sizing:border-box}
+body{margin:0;background:#17151a;color:#d9d2c3;font:15px/1.4 "Spectral",serif}
+.page{padding:18px 24px 48px;min-width:1330px}
+h1{font:20px "Madimi One",sans-serif;margin:0 0 10px;color:#e8dcc4;font-weight:400}
+.strip{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;margin:0 0 12px;font-size:13px}
+.grp{display:flex;gap:4px;align-items:center}
+.lbl{color:#8d8678;margin-right:4px}
+.strip button,.strip select{font:13px "Spectral",serif;color:#d9d2c3;background:#24211f;border:1px solid #4a4339;border-radius:6px;padding:4px 10px;cursor:pointer}
+.strip button.on{background:#d4af37;color:#3d2817;border-color:#d4af37}
+.strip button:focus-visible,.strip select:focus-visible,.chg input:focus-visible{outline:2px solid #d4af37;outline-offset:2px}
+#holder{position:relative}
+#frame{position:absolute;left:0;top:0;transform-origin:0 0;overflow:hidden;background:var(--ground);font-family:"Spectral",serif;color:var(--cream)}
+.abs{position:absolute}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+.t{position:absolute;width:128px;height:96px;background:url("assets/sanctum_tile_floor_clay_base_128x96.png") 0 0/256px 192px no-repeat;pointer-events:none}
+.t.br{filter:url(#bridgeTint);opacity:.55}
+.t.fg{filter:brightness(0);opacity:.65}
+.s1{transform-origin:0 0}
+.hud{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:15px}
+.hud.cur,.hud.nw{background:rgba(243,231,211,.96);border:2px solid rgba(160,125,62,.72);border-radius:16px 5px 12px 8px;color:var(--ink);box-shadow:0 2px 5px rgba(0,0,0,.35)}
+.hud.old{background:rgba(26,39,30,.88);border:2px solid rgba(200,169,110,.7);border-radius:8px;color:#F5E6D3}
+.hud b{font-weight:700;font-size:16px}
+.hud .mono{font:15px "Iosevka Charon",monospace;margin-left:-60px}
+.badge{height:36px;width:204px;display:flex;align-items:center;gap:8px;font-size:13px}
+.badge.nw{background:var(--badge);border-radius:6px;color:#CFD3E0;overflow:hidden;padding-right:10px}
+.badge.nw i.bar{width:4px;align-self:stretch;background:#7AB5C8}
+.badge.nw i.dia{width:9px;height:9px;background:#6FA8DC;transform:rotate(45deg)}
+.badge.old{background:rgba(26,39,30,.9);border:2px solid #7AB5C8;border-radius:6px;color:#F5E6D3;font-size:14px;padding-left:6px}
+.badge.old i.bar{width:6px;height:24px;background:#7AB5C8}
+.badge.old i.dia{width:9px;height:9px;background:#7AB5C8;transform:rotate(45deg)}
+.jbox{width:196px;height:48px;border:2px solid #C8A96E;border-radius:8px;background:rgba(26,39,30,.92);display:flex;align-items:center;gap:12px;padding-left:14px;font-size:14px;color:#F5E6D3}
+.snippet{text-align:center;font-size:15px;color:var(--cream);opacity:0;line-height:60px;height:60px;text-shadow:0 1px 3px rgba(0,0,0,.85);width:560px}
+.stepsrow{display:flex;align-items:center;justify-content:center;gap:10px;height:32px;color:var(--step);font-size:14px;letter-spacing:.3px;width:100%}
+.stepsrow .ds{display:flex;gap:10px}
+.stepsrow .cnt{position:relative;width:34px;height:20px;font-size:14px}
+.stepsrow .cnt span{position:absolute;left:0;top:0;opacity:0}
+.dd{position:relative}
+.dd>div{position:absolute;left:0;top:0}
+.adv{border:1px solid rgba(116,90,39,.72);border-radius:10px;background:var(--gold);color:var(--ink);font:700 20px "Spectral",serif;box-shadow:0 2px 5px rgba(0,0,0,.4);cursor:pointer;height:56px}
+.adv.old{background:rgba(200,169,110,.9);border:0;border-radius:8px;color:#2A2A3A;font:16px "Spectral",serif;box-shadow:none;height:48px;width:180px}
+.adv:focus-visible,.home:focus-visible{outline:3px solid var(--cream);outline-offset:2px}
+.home{background:var(--gold);color:var(--ink);font:700 20px "Spectral",serif;border:0;height:56px;width:140px;clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px);cursor:pointer}
+.pill{display:flex;align-items:center;background:#DED2C0;border:4px solid var(--gold);border-radius:34px;height:58px;padding:0 10px;gap:6px}
+.echo{position:relative;display:flex;align-items:center;gap:8px;width:204px;height:46px;border-radius:10px}
+.echo .sq{width:40px;height:46px;background:#2C2E36;color:#8f8a80;font:15px "Iosevka Charon",monospace;display:flex;align-items:center;justify-content:center;flex:none}
+.echo .nm{font:16px "Iosevka Charon",monospace;color:var(--ink);line-height:1.15}
+.echo .sts{font:italic 600 14px "Spectral",serif;color:#2E8B57;line-height:1.1}
+.echo .sts.shk{color:#9A5A12}
+.ring{position:absolute;inset:-4px;border-radius:12px;border:2px solid rgba(61,40,23,.7);opacity:0;pointer-events:none}
+.band{background:#1A271E;border-top:2px solid rgba(200,169,110,.6);width:100%;height:88px}
+.por{position:absolute;width:52px;height:52px;border-radius:50%;background:#3D5A47;border:2px solid #C8A96E}
+.por .rr{position:absolute;border-radius:50%;opacity:0;pointer-events:none}
+.pnm{position:absolute;font-size:11px;color:#F5E6D3;text-align:center;width:80px}
+.why{position:absolute;width:360px;padding:12px 16px;opacity:0;display:none;z-index:20}
+.why.nw{background:rgba(243,231,211,.96);border:2px solid rgba(160,125,62,.72);border-radius:16px 5px 12px 8px;color:var(--ink);box-shadow:0 3px 8px rgba(0,0,0,.4)}
+.why.old{width:350px;background:rgba(26,39,30,.96);border:2px solid #C8A96E;border-radius:8px;color:#F5E6D3}
+.why .r{display:flex;align-items:center;gap:10px;min-height:34px;font-size:15px}
+.why.old .r{min-height:44px}
+.why .r+.r{border-top:1px solid rgba(160,125,62,.28)}
+.why.old .r+.r{border-top:1px solid rgba(200,169,110,.25)}
+.why .g{width:28px;height:28px;flex:none;display:flex;align-items:center;justify-content:center}
+.why .dot{width:6px;height:6px;background:#A07D3E;transform:rotate(45deg)}
+.why .chip{width:26px;height:26px;background:#2C2E36;color:var(--cream);font:11px "Iosevka Charon",monospace;display:flex;align-items:center;justify-content:center}
+.dpill{display:inline-flex;align-items:center;gap:6px;height:24px;padding-right:10px;background:var(--badge);border-radius:6px;overflow:hidden;font-size:13px;color:#CFD3E0}
+.dpill i.bar{width:4px;align-self:stretch;background:#7AB5C8}
+.dpill.old{border:2px solid #7AB5C8;background:#1A271E;color:#F5E6D3}
+.hit{position:absolute;background:transparent;border:0;padding:0;cursor:pointer;z-index:15}
+.hit:focus-visible{outline:2px dashed var(--cream);outline-offset:2px}
+.bubble{position:absolute;background:#2F7D4F;color:var(--cream);font-size:14px;padding:6px 12px;border-radius:10px;opacity:0;white-space:nowrap;border:1px solid rgba(0,0,0,.35)}
+.token{position:absolute;width:50px;height:50px;border-radius:50%;background:#3373E6;border:3px solid rgba(18,14,12,.85);color:#fff;font:700 20px "Spectral",serif;display:flex;align-items:center;justify-content:center;margin:-25px 0 0 -25px}
+.cap{font-size:13px;color:#8d8678;margin:10px 0 0;min-height:20px}
+.chg{margin-top:14px;display:none;max-width:900px}
+.chg.show{display:block}
+.chg h2{font:16px "Madimi One",sans-serif;margin:0 0 6px;font-weight:400;color:#e8dcc4}
+.chg label{display:flex;gap:8px;align-items:center;font-size:14px;padding:2px 0;cursor:pointer}
+.chg .btns{margin-top:6px}
+.chg button{font:13px "Spectral",serif;color:#d9d2c3;background:#24211f;border:1px solid #4a4339;border-radius:6px;padding:3px 10px;cursor:pointer;margin-right:6px}
+#errs{display:none;position:fixed;left:0;bottom:0;background:#900;color:#fff;font:12px monospace;padding:6px;z-index:99}
+#testout{display:none;position:fixed;right:0;top:0;background:#fff;color:#000;font:13px monospace;padding:8px;z-index:99;white-space:pre}
+body.shot{background:#120E0C}
+body.shot .page{padding:0;min-width:0}
+body.shot .chrome{display:none}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="bridgeTint" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values=".87 0 0 0 0  0 .58 0 0 0  0 0 .24 0 0  0 0 0 1 0"/></filter></svg>
+<div id="errs"></div><div id="testout"></div>
+<div class="page">
+  <div class="chrome">
+    <h1>Stage stop marker: current game, old mockup, new mockup</h1>
+    <div class="strip">
+      <div class="grp"><span class="lbl">Mode</span><span id="gMode"></span></div>
+      <div class="grp"><span class="lbl">Map</span><span id="gMap"></span></div>
+      <div class="grp"><span class="lbl">Run</span><span id="gRun"></span></div>
+      <div class="grp"><span class="lbl">Marker style</span><span id="gMS"></span></div>
+      <div class="grp"><span class="lbl">Stop kind</span><select id="selKind" aria-label="Stop kind"></select></div>
+      <div class="grp"><button id="bReplay">Replay</button><button id="bPause">Pause</button><button id="bSlow" aria-pressed="false">0.25x</button></div>
+      <div class="grp"><span class="lbl">Size</span><span id="gSize"></span></div>
+    </div>
+  </div>
+  <div class="chrome"><p class="cap" id="msNote" style="margin:0 0 10px"></p></div>
+  <div id="holder"><div id="frame"></div></div>
+  <div class="chrome">
+    <p class="cap" id="cap"></p>
+    <div class="chg" id="chg"><h2>What changed</h2><div id="chgList"></div><div class="btns"><button id="bAllOn">All on</button><button id="bAllOff">All off (old mockup)</button></div></div>
+  </div>
+</div>
+<script src="assets/maps.js"></script>
+<script>
+(function(){
+const errs=document.getElementById('errs');
+window.addEventListener('error',e=>{errs.style.display='block';errs.textContent+=(e.message||'error')+' @'+(e.lineno||'')+' ';});
+window.addEventListener('unhandledrejection',e=>{errs.style.display='block';errs.textContent+='promise: '+e.reason+' ';});
+
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const P=new URLSearchParams(location.hash.slice(1));
+const SHOT=P.get('shot')==='1',TEST=P.get('test')==='1';
+if(SHOT)document.body.classList.add('shot');
+
+const WJ="[Jeff's wording]",SNIPPET='Some ground was walked so often it forgot it was ground.';
+const Z=1.3;
+const IMPROVE=[
+ ['hud','1. Top bar: the parchment card of the live game, not a dark box.'],
+ ['journey','2. No journey box on the board. The entry lives in the why card.'],
+ ['marker','3. A quiet mark instead of the old marker: no pole, no ring. Four styles (Marker style).'],
+ ['settle','4. The mark settles once (0.25 s). It does not pop in.'],
+ ['cross','6. Lost steps are scratched out in the same beat as the mark.'],
+ ['badge','7. Directive badge: plain dark pill, as in the live game.'],
+ ['why','8. Why card: parchment, four rows, one column.'],
+ ['snippet','9. Snippet and pulse wait for the mark (start at 0.9 s).'],
+ ['shake','11. Shaken beat: a short small shake of the token and the step bar (PROPOSAL, 0.22 s).']
+];
+const MSNOTE={
+ 1:'Style 1, Rim badge: a small kind shape sits on the rim of the party token. You read: the party stopped, and the shape says how.',
+ 2:'Style 2, Floor stamp: a scuffed kind shape is pressed into the ground beside the party. You read: the party stopped here, and the shape says how.',
+ 3:'Style 3, Echo bar glyph: the board shows nothing extra. A small kind shape sits on the named Echo card, or on a blue party chip when no Echo is named. You read: who held the party, and how it stopped.',
+ 4:'Style 4, Last footprint: the final footprint of the trail takes the kind shape. You read: the path ended in this way.'
+};
+const MSPICK='My preference (one line): style 1, because it sits on the thing the player already looks at, needs no new place to learn, and works when no Echo is named.';
+const KINDS={arrived:'Arrived',spent:'Spent',met:'Met something',spotted:'Spotted ahead',paused:'Paused to read',noway:'No way'};
+const RUNS={
+ calm:{label:'Calm, named Echo',kind:'paused',named:1,cause:'echo',cap:'Calm stop. One Echo is named.'},
+ directive:{label:'Directive cause',kind:'arrived',named:-1,cause:'directive',cap:'The Directive alone decided. The cause shows as Directive.'},
+ shaken:{label:'Shaken',kind:'spent',named:-1,cause:'party',shaken:true,cap:'Shaken party. Two steps are lost. The Echo cards read Shaken.'},
+ edge:{label:'Edge stop',kind:'met',named:-1,cause:'terrain',edge:true,cap:''}
+};
+const ECHOES=[['Sena','SE'],['Ama','AM'],['Kweku','KW']];
+
+const flags={};IMPROVE.forEach(i=>flags[i[0]]=true);
+let st={mode:P.get('m')||'new',map:Number(P.get('map')||2),run:P.get('s')||'calm',kind:P.get('k')||'',size:P.get('z')==='1080'?1080:720,why:P.get('why')==='1',ms:[1,2,3,4].includes(Number(P.get('ms')))?Number(P.get('ms')):1};
+if(P.get('off'))P.get('off').split(',').forEach(k=>{if(k in flags)flags[k]=false;});
+if(!RUNS[st.run])st.run='calm';
+let rate=1,paused=false,anims=[],cardAnim=null,tEnd=0,settleAt=850,timer=null;
+
+/* ---------- marker shapes (kind specific) ---------- */
+const DK='#1A271E',CH='#2A2A3A',CR='#F5E6D3';
+function shape(k){
+  return {
+   arrived:{c:'#D4AF37',sh:p=>'<circle r="20" '+p+'/>',gl:'<circle r="11" stroke="'+CR+'" stroke-width="2.5" fill="none"/><circle r="5" fill="#C8A96E"/>'},
+   spent:{c:'#A07D3E',sh:p=>'<rect x="-21" y="-18" width="42" height="36" rx="14" '+p+'/>',gl:'<rect x="-12" y="-10" width="24" height="5" rx="2" fill="'+CR+'"/><rect x="-12" y="-2" width="16" height="5" rx="2" fill="'+CR+'"/><rect x="-12" y="6" width="8" height="5" rx="2" fill="'+CR+'"/>'},
+   met:{c:'#FFF8DC',sh:p=>'<polygon points="22,0 11,19.1 -11,19.1 -22,0 -11,-19.1 11,-19.1" '+p+'/>',gl:'<path d="M-15,-9 L-7,0 L-15,9 M15,-9 L7,0 L15,9" stroke="'+CR+'" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle r="3.5" fill="#C8A96E"/>'},
+   spotted:{c:'#7AB5C8',sh:p=>'<polygon points="-20,-18 4,-18 24,0 4,18 -20,18" '+p+'/>',gl:'<path d="M-12,-9 L-3,0 L-12,9 M0,-9 L9,0 L0,9" stroke="'+CR+'" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'},
+   paused:{c:'#7AB5C8',dash:'6 4',sh:p=>'<rect x="-25" y="-15" width="50" height="30" rx="15" '+p+'/>',gl:'<rect x="-9" y="-8" width="5.5" height="16" rx="2" fill="'+CR+'"/><rect x="3.5" y="-8" width="5.5" height="16" rx="2" fill="'+CR+'"/>'},
+   noway:{c:'#C85A54',sh:p=>'<polygon points="20.3,8.4 8.4,20.3 -8.4,20.3 -20.3,8.4 -20.3,-8.4 -8.4,-20.3 8.4,-20.3 20.3,-8.4" '+p+'/>',gl:'<circle r="10" stroke="'+CR+'" stroke-width="2.5" fill="none"/><path d="M-7,-7 L7,7" stroke="'+CR+'" stroke-width="2.5" fill="none" stroke-linecap="round"/>'}
+  }[k];
+}
+function head(k,calm){
+  const s=shape(k),col=typeof calm==='string'?calm:(calm?'#D4AF37':s.c),dash=(calm===false&&s.dash)?' stroke-dasharray="'+s.dash+'"':'';
+  return s.sh('fill="'+DK+'" stroke="'+CH+'" stroke-width="8" stroke-linejoin="round"'+dash)+
+         s.sh('fill="'+DK+'" stroke="'+col+'" stroke-width="4" stroke-linejoin="round"'+dash)+s.gl;
+}
+function miniHead(k,calm,px){return '<svg width="'+px+'" height="'+px+'" viewBox="-30 -30 60 60" aria-hidden="true">'+head(k,calm)+'</svg>';}
+
+/* marker group, drawn in screen px around the cell centre (0,0) */
+function markerSVG(k,calm,side,ray){
+  const s=shape(k);
+  let g='<svg width="420" height="320" viewBox="-210 -230 420 320" style="position:absolute;left:-210px;top:-230px;overflow:visible" aria-hidden="true">';
+  if(!calm){
+    const rx=48,ry=24,hx=43,hy=-58,col=s.c,rd=s.dash?' stroke-dasharray="7 5"':'';
+    g+='<ellipse rx="'+rx+'" ry="'+ry+'" fill="none" stroke="'+CH+'" stroke-width="6.5"/>'+
+       '<ellipse rx="'+rx+'" ry="'+ry+'" fill="'+col+'" fill-opacity=".16" stroke="'+col+'" stroke-width="3"'+rd+'/>'+
+       (k==='met'?'<ellipse rx="'+rx*.8+'" ry="'+ry*.8+'" fill="none" stroke="'+col+'" stroke-width="2"/>':'')+
+       (k==='noway'?'<path d="M'+(-rx*.7)+','+ry*.7+' L'+rx*.7+','+(-ry*.7)+'" stroke="'+col+'" stroke-width="3"/>':'')+
+       (k==='spotted'&&ray?'<line x1="0" y1="0" x2="'+ray[0]+'" y2="'+ray[1]+'" stroke="#7AB5C8" stroke-width="3" stroke-dasharray="8 7"/><ellipse cx="'+ray[0]+'" cy="'+ray[1]+'" rx="30" ry="15" fill="none" stroke="#7AB5C8" stroke-width="2.5"/>':'')+
+       '<line x1="43" y1="10.7" x2="43" y2="-33.8" stroke="'+CR+'" stroke-width="3" stroke-linecap="round"/>'+
+       '<g transform="translate('+hx+','+hy+') scale(1.1)">'+head(k,false)+'</g>';
+  }
+  return g+'</svg>';
+}
+
+/* quiet marks: no pole, no ring, no text. Kind is carried by the silhouette and the inner shape. */
+function stampSVG(k,px){
+  const s=shape(k);
+  return '<g transform="scale(1,.6)">'+s.sh('fill="rgba(18,14,12,.4)" stroke="rgba(18,14,12,.8)" stroke-width="7" stroke-linejoin="round"')+
+    s.sh('fill="none" stroke="#EADBB9" stroke-opacity=".9" stroke-width="3" stroke-linejoin="round"')+
+    '<g opacity=".9">'+s.gl+'</g></g>';
+}
+function printSVG(k){
+  const s=shape(k);
+  return s.sh('fill="#3373E6" stroke="rgba(0,0,0,.7)" stroke-width="3" stroke-linejoin="round"')+s.gl;
+}
+
+/* ---------- step diamonds ---------- */
+function diamond(w,h,fill,stroke,sw,extra){
+  return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" aria-hidden="true"><polygon points="'+w/2+',1 '+(w-1)+','+h/2+' '+w/2+','+(h-1)+' 1,'+h/2+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'" stroke-linejoin="round"/>'+(extra||'')+'</svg>';
+}
+
+/* ---------- helpers ---------- */
+const frame=document.getElementById('frame'),holder=document.getElementById('holder');
+function el(tag,cls,parent,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;if(parent)parent.appendChild(e);return e;}
+function A(e,kf,o){
+  o=Object.assign({fill:'both',easing:'ease-out'},o);
+  if(RM){kf=kf.map(f=>{const g=Object.assign({},f);delete g.transform;return g;});if(o.rmStep)o.easing='steps(1,end)';o.duration=Math.min(o.duration||1,1);}
+  const a=e.animate(kf,o);a.pause();a.currentTime=0;a.playbackRate=rate;anims.push(a);return a;
+}
+function setRate(){anims.forEach(a=>a.playbackRate=rate);if(cardAnim)cardAnim.playbackRate=rate;}
+const cheb=(a,b)=>Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]));
+const cellXY=(c,r)=>[64*(c+r)+64,32*(r-c)+32];
+
+/* camera: exponential follow of the token (BoardCamera: lerp speed 5 per second) */
+function camKeyframes(pts,walkMs,total){
+  const frames=[];let cam=pts[0].slice();
+  const n=pts.length-1,seg=walkMs/n;
+  for(let t=0;t<=total;t+=1000/60){
+    let tk;
+    if(t>=walkMs)tk=pts[n];else{const i=Math.min(n-1,Math.floor(t/seg)),f=(t-i*seg)/seg;tk=[pts[i][0]+(pts[i+1][0]-pts[i][0])*f,pts[i][1]+(pts[i+1][1]-pts[i][1])*f];}
+    cam=[cam[0]+(tk[0]-cam[0])*Math.min(1,5/60),cam[1]+(tk[1]-cam[1])*Math.min(1,5/60)];
+    frames.push([t,cam.slice()]);
+  }
+  frames.push([total,pts[n].slice()]);
+  return frames;
+}
+
+/* ---------- build ---------- */
+function effective(){
+  const mode=st.mode;
+  if(mode==='cur')return {cur:true,hud:true,journey:true,marker:false,settle:false,steps:true,cross:false,badge:true,why:false,snippet:false,bottom:true};
+  const o={cur:false,steps:false,bottom:false};IMPROVE.forEach(i=>o[i[0]]=(mode==='new')?flags[i[0]]:false);return o;
+}
+
+function build(){
+  frame.innerHTML='';anims.forEach(a=>{try{a.cancel()}catch(e){}});anims=[];tEnd=0;cardAnim=null;
+  const F=effective(),R=RUNS[st.run],kind=st.kind||R.kind,M=MAPS[st.map-1];
+  const wide=st.size===1080,W=wide?1536:1280,H=wide?864:720,sc=wide?1.25:1;
+  frame.style.width=W+'px';frame.style.height=H+'px';frame.style.transform='scale('+sc+')';
+  holder.style.width=(W*sc)+'px';holder.style.height=(H*sc)+'px';
+  const safeB=H-228;
+
+  /* path and camera */
+  const path=[M.start_cell].concat(M.first_advance.path),n=path.length-1,seg=500/n;
+  const wp=path.map(p=>cellXY(p[0],p[1]));
+  const stopW=wp[n];
+  const ax=R.edge?W-110:W/2,ay=R.edge?H-242:H/2-2;
+  const camTotal=1500,camF=camKeyframes(wp,500,camTotal);
+  const camTf=c=>'translate('+(ax-Z*c[0])+'px,'+(ay-Z*c[1])+'px) scale('+Z+')';
+
+  const world=el('div','',frame);world.id='world';
+  world.style.transform=camTf(stopW);
+  A(world,camF.map(f=>({transform:camTf(f[1]),offset:f[0]/camTotal})),{duration:camTotal,easing:'linear',rmStep:true});
+  const scr=(w)=>[ax+Z*(w[0]-stopW[0]),ay+Z*(w[1]-stopW[1])]; // final screen pos of a world point
+
+  /* sets */
+  const key=(c,r)=>c+','+r;
+  const walk=new Set(M.walkable.map(p=>key(p[0],p[1]))),bridge=new Set(M.bridge_cells.map(p=>key(p[0],p[1])));
+  const rev0=new Set(M.revealed_turn0.map(p=>key(p[0],p[1]))),revA=new Set(M.revealed_after_advance.map(p=>key(p[0],p[1])));
+  const vis=(c,r,cams)=>cams.some(cam=>{const x=ax+Z*(64*(c+r)+64-cam[0]),y=ay+Z*(32*(r-c)+32-cam[1]);return x>-150&&x<W+150&&y>-130&&y<H+130;});
+  const cams=[wp[0],stopW];
+  const cells=M.walkable.filter(p=>vis(p[0],p[1],cams)).sort((a,b)=>(a[1]-a[0])-(b[1]-b[0])||(a[0]+a[1])-(b[0]+b[1]));
+  const L1=el('div','',world),L2=el('div','',world),L3=el('div','',world),L4=el('div','',world);
+  const lift=(c,r)=>{for(let k=1;k<=n;k++){if(cheb([c,r],path[k])<=3)return k;}return n;};
+  const liftEnd=new Set();
+  cells.forEach(p=>{
+    const c=p[0],r=p[1],[x,y]=cellXY(c,r),k=key(c,r);
+    const place=e=>{e.style.left=(x-64)+'px';e.style.top=(y-34)+'px';};
+    place(el('div','t',L1));
+    if(bridge.has(k))place(el('div','t br',L2));
+    if(!rev0.has(k)){
+      const f=el('div','t fg',L3);place(f);
+      if(revA.has(k)){const kk=lift(c,r);A(f,[{opacity:.65},{opacity:0}],{delay:kk*seg,duration:350,easing:'ease-out'});}
+    }
+  });
+
+  /* footprints (ghost trail), situations */
+  const MS=(F.marker&&!F.cur)?st.ms:0;
+  path.slice(0,n).forEach((p,i)=>{
+    if(MS===4&&i===n-1)return;
+    const w=wp[i],f=el('div','abs',L4,'<svg width="44" height="24" viewBox="0 0 30 16"><ellipse cx="8" cy="10" rx="6" ry="3.4" fill="#3373E6" stroke="rgba(0,0,0,.65)" stroke-width="1.2"/><ellipse cx="22" cy="5" rx="6" ry="3.4" fill="#3373E6" stroke="rgba(0,0,0,.65)" stroke-width="1.2"/></svg>');
+    f.style.cssText+=';left:'+w[0]+'px;top:'+w[1]+'px;margin:-12px 0 0 -22px;transform:scale('+1/Z+');opacity:0';
+    A(f,[{opacity:0},{opacity:.85}],{delay:(i+1)*seg,duration:140});
+  });
+  M.visible_situations_after_advance.forEach(s=>{
+    const w=cellXY(s.pos[0],s.pos[1]);
+    const e=el('div','abs',L4,s.is_objective
+      ?'<svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="21" fill="#408CD9" fill-opacity=".92" stroke="#12203a" stroke-width="2"/><circle cx="28" cy="28" r="25" fill="none" stroke="#D4AF37" stroke-width="3"/></svg>'
+      :'<svg width="52" height="52" viewBox="0 0 52 52"><polygon points="26,3 49,26 26,49 3,26" fill="#408CD9" fill-opacity=".92" stroke="#12203a" stroke-width="3" stroke-linejoin="round"/></svg>');
+    e.style.cssText+=';left:'+w[0]+'px;top:'+w[1]+'px;margin:-28px 0 0 -28px;transform:scale('+1/Z+')';
+    if(M.visible_situations_turn0.length===0)A(e,[{opacity:0},{opacity:1}],{delay:n*seg+60,duration:300});
+  });
+
+  /* token and shadow (screen-size px, world position) */
+  const tkw=el('div','abs',L4);tkw.style.cssText+=';left:'+wp[0][0]+'px;top:'+wp[0][1]+'px;width:0;height:0';
+  const tki=el('div','abs',tkw);tki.style.cssText+=';left:0;top:0;transform:scale('+1/Z+');transform-origin:0 0';
+  tki.innerHTML='<div class="abs shk" style="left:0;top:0"><div class="abs" style="left:-20px;top:12px;width:40px;height:16px;border-radius:50%;background:rgba(0,0,0,.38)"></div><div class="token">P</div></div>';
+  const SHAKE=[0,-3,3,-2,2,0].map((x,i)=>({transform:'translateX('+x+'px)',offset:i/5}));
+  const doShake=F.shake&&R.shaken&&!RM;
+  if(doShake)A(tki.firstChild,SHAKE,{delay:600,duration:220,easing:'linear'});
+  A(tkw,wp.map((p,i)=>({transform:'translate('+(p[0]-wp[0][0])+'px,'+(p[1]-wp[0][1])+'px)',offset:i/n})),{duration:500,easing:'linear',rmStep:true});
+
+  /* stop marker in the world */
+  const arrX=wp[n-1][0],side=F.marker?(arrX>stopW[0]?-1:1):1;
+  let hs=[43,-58],hr=26;
+  if(MS===1){hs=[side*24,-24];hr=22;}
+  if(MS===2){hs=[side*50,16];hr=28;}
+  if(MS===3||MS===4){hs=[side*25,-22];hr=0;}
+  const stopS0=[ax,ay];
+  let mk=null,markC=null,markR=0,markBox=null;
+  const settleKf=(sc)=>[{opacity:0,transform:'scale('+.95*sc+')'},{opacity:1,transform:'scale('+1.1*sc+')',offset:.6},{opacity:1,transform:'scale('+sc+')'}];
+  if(!F.cur){
+    mk=el('div','abs',L4);mk.style.cssText+=';left:'+stopW[0]+'px;top:'+stopW[1]+'px;width:0;height:0;transform:scale('+1/Z+');transform-origin:0 0;opacity:0';
+    if(MS===1){
+      mk.setAttribute('data-mark','ms1');
+      mk.innerHTML='<svg width="80" height="80" viewBox="-40 -40 80 80" style="position:absolute;left:-40px;top:-40px;overflow:visible" aria-hidden="true"><g transform="translate('+side*24+',-24) scale(.85)">'+head(kind,true)+'</g></svg>';
+      markC=[ax+side*24,ay-24];markR=22;markBox=[Math.min(ax-25,ax+side*46),ay-46,Math.max(ax+25,ax+side*46),ay+25];
+    }else if(MS===2){
+      mk.setAttribute('data-mark','ms2');
+      mk.innerHTML='<svg width="120" height="80" viewBox="-60 -40 120 80" style="position:absolute;left:-60px;top:-40px;overflow:visible" aria-hidden="true"><g transform="translate('+side*50+',16) scale(1.1)">'+stampSVG(kind)+'</g></svg>';
+      markC=[ax+side*50,ay+16];markR=28;markBox=[Math.min(ax-25,ax+side*50-28),ay-25,Math.max(ax+25,ax+side*50+28),ay+30];
+    }else if(MS===4){
+      mk.setAttribute('data-mark','ms4');
+      const w=wp[n-1];
+      mk.style.left=w[0]+'px';mk.style.top=w[1]+'px';
+      mk.innerHTML='<svg width="80" height="80" viewBox="-40 -40 80 80" style="position:absolute;left:-40px;top:-40px;overflow:visible" aria-hidden="true"><g transform="scale(.82)">'+printSVG(kind)+'</g></svg>';
+      markC=scr(w);markR=20;markBox=[markC[0]-26,markC[1]-26,markC[0]+26,markC[1]+26];
+    }else if(MS===3){
+      mk.style.display='none';
+    }else{
+      let ray=null;
+      const obj=M.objective_cells[0];if(obj){const ow=cellXY(obj[0],obj[1]),dx=ow[0]-stopW[0],dy=ow[1]-stopW[1],len=Math.hypot(dx,dy),k=Math.min(1,150/(len*Z));ray=[dx*Z*k,dy*Z*k];}
+      mk.innerHTML=markerSVG(kind,false,side,ray);
+    }
+    if(MS===4){
+      A(mk,settleKf(1/Z),{delay:F.settle?600:500,duration:F.settle?250:60,easing:'ease-out'});
+    }else if(F.settle)A(mk,settleKf(1/Z),{delay:600,duration:250,easing:'ease-out'});
+    else A(mk,[{opacity:0},{opacity:1}],{delay:500,duration:60,easing:'linear'});
+  }
+
+  /* bubble */
+  const bub=el('div','bubble',frame,WJ);
+  const stopS=stopS0;
+  bub.style.left=(stopS[0]+(F.marker?-side*70:70)-62)+'px';bub.style.top=(stopS[1]-92)+'px';
+  A(bub,[{opacity:0},{opacity:1,offset:.07},{opacity:1,offset:.87},{opacity:0}],{duration:3000,easing:'linear',delay:20});
+
+  /* ----- UI ----- */
+  const hudK=F.hud?(F.cur?'cur':'nw'):'old';
+  const hudW=wide?720:620;
+  const hud=el('div','hud abs '+hudK,frame,'<b>Turn 0</b><span class="mono">Objectives: 0 / 1</span><span>Exploring</span>');
+  hud.style.cssText+=';left:16px;top:16px;width:'+hudW+'px';
+
+  const bdK=F.badge?'nw':'old';
+  const bd=el('div','badge abs '+bdK,frame,'<i class="bar"></i><i class="dia"></i><span>Scout Carefully</span>');
+  bd.style.left=(W-16-204)+'px';bd.style.top=(F.badge?26:64)+'px';
+
+  if(!F.journey){const jb=el('div','jbox abs',frame,'<svg width="18" height="14" viewBox="0 0 18 14"><path d="M1,2 h16 M1,7 h16 M1,12 h10" stroke="#F5E6D3" stroke-width="3" stroke-linecap="round"/></svg><span>'+WJ+'</span>');jb.style.left='16px';jb.style.top='84px';}
+
+  const sn=el('div','snippet abs',frame,SNIPPET);
+  sn.style.left=((W-560)/2)+'px';sn.style.top='140px';
+  const sd=F.snippet?900:0;
+  A(sn,[{opacity:0},{opacity:1,offset:.4/3},{opacity:1,offset:2.5/3},{opacity:0}],{delay:sd,duration:3000,easing:'linear'});
+
+  /* step bar */
+  const base=F.cur?3:5,lostN=(R.shaken&&!F.cur)?2:0,spentN=n;
+  const dw=F.steps?28:20,dh=F.steps?18:20;
+  const rowY=F.bottom?H-216:H-210;
+  const sr=el('div','stepsrow abs',frame,'<span>Steps</span><span class="ds"></span>');
+  sr.style.left='0';sr.style.top=rowY+'px';
+  const ds=sr.querySelector('.ds');
+  if(doShake)A(sr,SHAKE,{delay:600,duration:220,easing:'linear'});
+  for(let i=0;i<base;i++){
+    const d=el('div','dd',ds);d.style.cssText='width:'+dw+'px;height:'+dh+'px';
+    const fil=el('div','',d,F.cur?diamond(28,18,'#C8A96E','rgba(0,0,0,.55)',1.5):F.steps?diamond(28,18,'#C8A96E','rgba(0,0,0,.55)',1.5):diamond(20,20,'#C8A96E','#C8A96E',2));
+    const spentSvg=F.steps?diamond(28,18,'rgba(77,77,92,.7)','rgba(0,0,0,.55)',1.5):diamond(20,20,'rgba(26,39,30,.9)','rgba(200,169,110,.55)',2);
+    if(i<spentN){
+      const sp=el('div','',d,spentSvg);sp.style.opacity=0;
+      A(sp,[{opacity:0},{opacity:1}],{delay:(i+1)*seg,duration:120});
+      if(!F.steps)A(fil,[{opacity:1},{opacity:0}],{delay:(i+1)*seg,duration:120});
+    }else if(i>=base-lostN){
+      const lostSvg=F.steps
+        ?diamond(28,18,'#4D4D5C','rgba(0,0,0,.55)',1.5,'<path d="M5 16 L23 2" stroke="#120E0C" stroke-width="4.5" stroke-linecap="round"/><path d="M5 16 L23 2" stroke="#F5F1E7" stroke-width="2" stroke-linecap="round"/>')
+        :diamond(20,20,'rgba(26,39,30,.9)','rgba(200,169,110,.55)',2,'<path d="M3,3 L17,17 M17,3 L3,17" stroke="#C85A54" stroke-width="3" stroke-linecap="round"/>');
+      const lo=el('div','',d,lostSvg);
+      if(F.cross){lo.style.opacity=0;A(lo,[{opacity:0},{opacity:1}],{delay:600,duration:200});A(fil,[{opacity:1},{opacity:0}],{delay:600,duration:200});}
+      else fil.style.opacity=0;
+    }
+  }
+  if(F.cur){
+    const cnt=el('div','cnt',sr);
+    const D=600;
+    for(let k=0;k<=3;k++){
+      const s2=el('span','',cnt,(3-k)+'/3');
+      const on=k*seg,off=(k+1)*seg,v0=k===0?1:0;
+      const kf=[{opacity:v0,offset:0}];
+      if(k>0){kf.push({opacity:0,offset:on/D});kf.push({opacity:1,offset:(on+1)/D});}
+      if(k<3){kf.push({opacity:1,offset:off/D});kf.push({opacity:0,offset:(off+1)/D});}
+      kf.push({opacity:k<3?0:1,offset:1});
+      A(s2,kf,{duration:D,easing:'linear'});
+    }
+  }
+
+  /* bottom */
+  const advY=F.bottom?H-172:H-168;
+  const adv=el('button','adv abs'+(F.bottom?'':' old'),frame,'Advance');
+  if(F.bottom){adv.style.cssText+=';left:16px;top:'+advY+'px;width:'+(W-16-140-12-16)+'px';
+    const hm=el('button','home abs',frame,'Return Home');hm.style.left=(W-16-140)+'px';hm.style.top=advY+'px';}
+  else{adv.style.left=(W/2-90)+'px';adv.style.top=advY+'px';}
+  adv.onclick=()=>{if(!adv.disabled)play();};
+  A(adv,[{opacity:1},{opacity:.65,offset:.02},{opacity:.65,offset:.95},{opacity:1}],{duration:1400,easing:'linear'});
+  A(adv,[{transform:'scale(1)'},{transform:'scale(.97)',offset:.5},{transform:'scale(1)'}],{duration:90,easing:'ease-out'});
+
+  const pulseAt=F.snippet?900:500;
+  let markBox3=null;
+  const namedFx=(host,rect,noRest)=>{
+    const rest=el('div',rect?'ring':'rr',host),pls=el('div',rect?'ring':'rr',host);
+    let outer=null;
+    if(!rect){
+      rest.style.cssText='inset:-6px;border:2px solid rgba(212,175,55,.55)';pls.style.cssText='inset:-6px;border:3px solid #D4AF37';
+      outer=el('div','rr',host);outer.style.cssText='inset:-12px;border:2px solid rgba(212,175,55,.4)';
+    }
+    A(pls,[{opacity:.95,transform:'scale(1)'},{opacity:0,transform:'scale(1.1)'}],{delay:pulseAt,duration:500,easing:'ease-out'});
+    if(outer)A(outer,[{opacity:.9,transform:'scale(1)'},{opacity:0,transform:'scale(1.18)'}],{delay:pulseAt,duration:500,easing:'ease-out'});
+    if(!noRest)A(rest,[{opacity:0},{opacity:1}],{delay:pulseAt+400,duration:300});else rest.remove();
+  };
+  if(F.bottom){
+    const pw=el('div','abs',frame);pw.style.cssText='left:0;width:'+W+'px;top:'+(H-104)+'px;display:flex;justify-content:center;pointer-events:none';
+    const pill=el('div','pill',pw);
+    ECHOES.forEach((e,i)=>{
+      const en=el('div','echo',pill,'<div class="sq">'+e[1]+'</div><div><div class="nm">'+e[0]+'</div><div class="sts '+(R.shaken&&!F.cur?'shk':'')+'">'+(R.shaken&&!F.cur?'Shaken':'Whole')+'</div></div>');
+      if(i===R.named&&!F.cur)namedFx(en,true);
+    });
+  }else{
+    const bd2=el('div','band abs',frame);bd2.style.left='0';bd2.style.top=(H-88)+'px';
+    ECHOES.forEach((e,i)=>{
+      const cx=W/2+(i-1)*120,cy=H-46;
+      const p=el('div','por',frame,'<svg width="48" height="48" viewBox="0 0 48 48" style="position:absolute;left:0;top:0"><circle cx="24" cy="19" r="8.3" fill="#F5E6D3" fill-opacity=".55"/><path d="M8.4,43.5 Q24,21.4 39.6,43.5" fill="#F5E6D3" fill-opacity=".55"/></svg>');
+      p.style.left=(cx-26)+'px';p.style.top=(cy-26)+'px';
+      const nm=el('div','pnm',frame,e[0]);nm.style.left=(cx-40)+'px';nm.style.top=(cy+27)+'px';
+      if(i===R.named)namedFx(p,false,MS===3);
+    });
+    if(MS===3){
+      const gp=R.named>=0?[W/2+(R.named-1)*120+22,H-46-22]:[W/2-232,H-46];
+      const col=R.named>=0?true:'#3373E6';
+      const gl=el('div','abs',frame,miniHead(kind,col,R.named>=0?40:56));
+      const gs=R.named>=0?40:56;
+      gl.style.cssText+=';left:'+(gp[0]-gs/2)+'px;top:'+(gp[1]-gs/2)+'px;pointer-events:none;opacity:0';
+      gl.setAttribute('data-mark','ms3');
+      A(gl,settleKf(1),{delay:600,duration:250,easing:'ease-out'});
+      markBox3=[gp[0]-24,gp[1]-24,gp[0]+24,gp[1]+24];
+    }
+  }
+
+  /* hit areas: kept inside the safe area, never smaller than 48 */
+  const hits=[];let clamped=false,x0=0,y0=0,x1=0,y1=0;
+  const addHit=(box,label,free)=>{
+    let [a0,b0,a1,b1]=box;const raw=box.map(Math.round);
+    const loX=free?0:16,hiX=free?W:W-16,loY=free?0:84,hiY=free?H:safeB;
+    a0=Math.max(a0,loX);b0=Math.max(b0,loY);a1=Math.min(a1,hiX);b1=Math.min(b1,hiY);
+    if(a1-a0<48){const c=(a0+a1)/2;a0=Math.max(loX,c-24);a1=Math.min(hiX,a0+48);a0=a1-48;}
+    if(b1-b0<48){const c=(b0+b1)/2;b0=Math.max(loY,c-24);b1=Math.min(hiY,b0+48);b0=b1-48;}
+    if(raw[0]!==Math.round(a0)||raw[1]!==Math.round(b0)||raw[2]!==Math.round(a1)||raw[3]!==Math.round(b1))clamped=true;
+    const h=el('button','hit',frame);h.setAttribute('aria-label',label);h.setAttribute('aria-expanded','false');
+    h.style.cssText+=';left:'+a0+'px;top:'+b0+'px;width:'+(a1-a0)+'px;height:'+(b1-b0)+'px;pointer-events:none;'+(F.cur?'display:none':'');
+    hits.push(h);if(hits.length===1){x0=a0;y0=b0;x1=a1;y1=b1;}return h;
+  };
+  const hxA=stopS[0]+hs[0],hyA=stopS[1]+hs[1];
+  if(MS===0)addHit([Math.min(stopS[0]-25,hxA-hr),Math.min(stopS[1]-25,hyA-hr),Math.max(stopS[0]+25,hxA+hr),Math.max(stopS[1]+25,hyA+hr)],WJ);
+  else if(MS===1||MS===2)addHit(markBox,WJ);
+  else{addHit([stopS[0]-25,stopS[1]-25,stopS[0]+25,stopS[1]+25],WJ);
+    if(MS===3)addHit(markBox3,WJ,true);else addHit(markBox,WJ);}
+  const hit=hits[0];
+
+  /* gap to the nearest other mark on the board (circle approximation) */
+  let gap=null;
+  if(markC&&MS){
+    const others=[];
+    path.slice(0,n).forEach((p,i)=>{if(MS===4&&i===n-1)return;others.push([scr(wp[i]),22]);});
+    M.visible_situations_after_advance.filter(sx=>!(sx.pos[0]===path[n][0]&&sx.pos[1]===path[n][1])).forEach(sx=>others.push([scr(cellXY(sx.pos[0],sx.pos[1])),28]));
+    gap=Math.round(Math.min.apply(null,others.map(o=>Math.hypot(o[0][0]-markC[0],o[0][1]-markC[1])-o[1]-markR)));
+  }
+
+  /* why card */
+  const why=el('div','why '+(F.why?'nw':'old'),frame);
+  const cause=R.cause==='directive'
+    ?'<span class="dpill '+(F.why?'':'old')+'"><i class="bar"></i><span>Directive</span></span>'
+    :R.cause==='echo'?'<span class="chip">'+ECHOES[R.named][1]+'</span><span>'+WJ+'</span>':'<span>'+WJ+'</span>';
+  if(F.why){
+    why.innerHTML='<div class="r"><span class="g"><i class="dot"></i></span><span>'+WJ+'</span></div><div class="r"><span class="g"><i class="dot"></i></span><span>'+WJ+'</span></div><div class="r"><span class="g">'+miniHead(kind,true,26)+'</span><span>'+WJ+'</span></div><div class="r"><span class="g"></span>'+cause+'</div>';
+  }else{
+    const ic1='<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="#F5E6D3" stroke-width="2"/><circle cx="10" cy="10" r="2.5" fill="#F5E6D3"/></svg>';
+    const ic2='<svg width="22" height="20" viewBox="0 0 22 20"><path d="M1,12 q6,-14 9,-4 t9,-6" fill="none" stroke="#F5E6D3" stroke-width="2.5" stroke-linecap="round"/></svg>';
+    const ic4='<svg width="22" height="20" viewBox="0 0 22 20"><path d="M2,10 h14 M11,4 l7,6 l-7,6" fill="none" stroke="#F5E6D3" stroke-width="2.5" stroke-linecap="round"/></svg>';
+    let h='<div class="r"><span class="g">'+ic1+'</span><span>'+WJ+'</span></div><div class="r"><span class="g">'+ic2+'</span><span>'+WJ+'</span></div><div class="r"><span class="g">'+miniHead(kind,false,26)+'</span><span>'+WJ+'</span></div>';
+    h+='<div class="r"><span class="g">'+ic4+'</span>'+(R.cause==='directive'?cause:'<span>'+WJ+'</span>')+'</div>';
+    if(R.cause==='echo')h+='<div class="r"><span class="g"><span class="chip" style="border-radius:50%">'+ECHOES[R.named][1]+'</span></span><span>'+WJ+'</span></div>';
+    why.innerHTML=h;
+  }
+  why.style.display='block';const wh=why.offsetHeight,ww=why.offsetWidth;why.style.display='none';
+  const rightX=Math.max(hxA+hr,stopS[0]+25)+16,leftX=Math.min(hxA-hr,stopS[0]-25)-16-ww;
+  let wx=hs[0]>0?rightX:leftX;
+  if(wx<16||wx+ww>W-16)wx=hs[0]>0?leftX:rightX;
+  wx=Math.max(16,Math.min(W-16-ww,wx));
+  const wy=Math.max(84,Math.min(safeB-wh,hyA-30));
+  why.style.left=wx+'px';why.style.top=wy+'px';
+
+  function openWhy(open){
+    if(cardAnim)cardAnim.cancel();
+    if(open){
+      why.style.display='block';hits.forEach(h=>h.setAttribute('aria-expanded','true'));
+      cardAnim=why.animate(RM?[{opacity:0},{opacity:1}]:[{opacity:0,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],{duration:RM?1:150,easing:'ease-out',fill:'forwards'});
+    }else{
+      hits.forEach(h=>h.setAttribute('aria-expanded','false'));
+      cardAnim=why.animate(RM?[{opacity:1},{opacity:0}]:[{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(4px)'}],{duration:RM?1:120,easing:'ease-in',fill:'forwards'});
+      const a=cardAnim;a.onfinish=()=>{if(cardAnim===a)why.style.display='none';};
+    }
+    cardAnim.playbackRate=rate;if(paused)cardAnim.pause();
+  }
+  const isOpen=()=>hit.getAttribute('aria-expanded')==='true';
+  hits.forEach(h=>{h.onpointerdown=()=>{if(!RM&&mk&&mk.firstChild&&MS!==3)mk.firstChild.animate([{transform:'scale(1)'},{transform:'scale(.95)'},{transform:'scale(1)'}],{duration:160,easing:'ease-out'});};
+    h.onclick=e=>{e.stopPropagation();openWhy(!isOpen());};});
+  frame.onpointerdown=e=>{if(isOpen()&&!why.contains(e.target)&&!hits.some(h=>h.contains(e.target)))openWhy(false);};
+  document.onkeydown=e=>{if(e.key==='Escape'&&isOpen())openWhy(false);};
+
+  /* master clock */
+  const master=frame.animate([{opacity:1},{opacity:1}],{duration:3900,fill:'both'});
+  master.pause();master.currentTime=0;master.playbackRate=rate;anims.push(master);tEnd=3900;
+  let tDone=false;
+  if(timer)clearInterval(timer);
+  timer=setInterval(()=>{
+    if(!document.body.contains(frame)||master.playState==='idle')return;
+    const t=master.currentTime||0;
+    hits.forEach(h=>h.style.pointerEvents=(t>=settleAt||tDone)&&!F.cur?'auto':'none');
+    adv.disabled=!(t>=1400||tDone);
+  },50);
+  frame._ctl={openWhy:openWhy,setDone:()=>{tDone=true;if(!F.cur)hits.forEach(h=>h.style.pointerEvents='auto');adv.disabled=false;},hit:hit,hits:hits,gap:gap,MS:MS,why:why,adv:adv,master:master};
+
+  const caps=[];
+  if(R.cap&&!F.cur)caps.push(R.cap);
+  if(F.cur)caps.push('Current game: no stop marker, no cause, no crossed-out steps. The step count is the live one.');
+  if(gap!==null)caps.push('Gap from the mark to the nearest other board mark: about '+gap+' px (limit 24).');
+  if(R.edge&&!F.cur)caps.push('Edge stop: the camera has the party low and right. The tap area is '+(clamped?'cut back to':'already inside')+' the safe area (x '+Math.round(x0)+' to '+Math.round(x1)+', y '+Math.round(y0)+' to '+Math.round(y1)+', '+Math.round(x1-x0)+' x '+Math.round(y1-y0)+').');
+  document.getElementById('cap').textContent=caps.join(' ');
+}
+
+function play(){
+  anims.forEach(a=>{a.currentTime=0;a.playbackRate=rate;if(!paused)a.play();else a.pause();});
+  document.querySelectorAll('.adv').forEach(b=>b.disabled=true);
+  document.querySelectorAll('.hit').forEach(b=>b.style.pointerEvents='none');
+  const w=document.querySelector('.why');if(w)w.style.display='none';
+}
+function freeze(t){anims.forEach(a=>{a.pause();a.currentTime=t;});if(frame._ctl)frame._ctl.setDone();}
+function openWhyNow(){const w=document.querySelector('.why'),hs=document.querySelectorAll('.hit');w.style.display='block';w.style.opacity=1;hs.forEach(h=>h.setAttribute('aria-expanded','true'));}
+function run(){
+  build();
+  const T=P.get('t');
+  if(T!==null){freeze(T==='end'?tEnd:Number(T));if(st.why)openWhyNow();}
+  else if(SHOT){freeze(tEnd);if(st.why)openWhyNow();}
+  else play();
+}
+
+/* ---------- strip ---------- */
+function seg(id,items,cur,cb){
+  const g=document.getElementById(id);g.innerHTML='';
+  items.forEach(([k,l])=>{const b=document.createElement('button');b.textContent=l;b.setAttribute('data-k',k);if(String(k)===String(cur))b.className='on';b.onclick=()=>cb(k);g.appendChild(b);});
+}
+function sync(){
+  seg('gMode',[['cur','Current game'],['old','Old mockup'],['new','New mockup']],st.mode,k=>{st.mode=k;sync();run();});
+  seg('gMap',[[1,'1'],[2,'2'],[3,'3'],[4,'4']],st.map,k=>{st.map=Number(k);sync();run();});
+  seg('gMS',[1,2,3,4].map(k=>[k,String(k)]),st.ms,k=>{st.ms=Number(k);sync();run();});
+  const msOn=st.mode==='new'&&flags.marker;
+  document.querySelectorAll('#gMS button').forEach(b=>b.disabled=!msOn);
+  document.getElementById('msNote').textContent=msOn?MSNOTE[st.ms]+' '+MSPICK:'Marker style works in the New mockup when improvement 3 is on.';
+  seg('gRun',Object.keys(RUNS).map(k=>[k,RUNS[k].label]),st.run,k=>{st.run=k;st.kind='';sync();run();});
+  seg('gSize',[['720','1280x720'],['1080','1920x1080']],String(st.size),k=>{st.size=Number(k);sync();run();});
+  const sel=document.getElementById('selKind');
+  if(!sel.options.length)Object.keys(KINDS).forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=KINDS[k];sel.appendChild(o);});
+  sel.value=st.kind||RUNS[st.run].kind;
+  sel.disabled=st.mode==='cur';
+  document.getElementById('chg').classList.toggle('show',st.mode==='new');
+}
+(function(){
+  const l=document.getElementById('chgList');
+  IMPROVE.forEach(i=>{
+    const lab=document.createElement('label');lab.innerHTML='<input type="checkbox" data-f="'+i[0]+'" checked> <span>'+i[1]+'</span>';
+    lab.querySelector('input').onchange=e=>{flags[i[0]]=e.target.checked;sync();run();};
+    l.appendChild(lab);
+  });
+  const setAll=v=>{IMPROVE.forEach(i=>flags[i[0]]=v);l.querySelectorAll('input').forEach(c=>c.checked=v);sync();run();};
+  document.getElementById('bAllOn').onclick=()=>setAll(true);
+  document.getElementById('bAllOff').onclick=()=>setAll(false);
+  IMPROVE.forEach(i=>{l.querySelector('[data-f="'+i[0]+'"]').checked=flags[i[0]];});
+})();
+document.getElementById('selKind').onchange=e=>{st.kind=e.target.value;run();};
+document.getElementById('bReplay').onclick=()=>{paused=false;document.getElementById('bPause').textContent='Pause';run();};
+document.getElementById('bPause').onclick=function(){
+  paused=!paused;this.textContent=paused?'Play':'Pause';
+  anims.forEach(a=>{if(paused)a.pause();else if(a.currentTime<a.effect.getComputedTiming().endTime)a.play();});
+  if(cardAnim)paused?cardAnim.pause():cardAnim.play();
+};
+document.getElementById('bSlow').onclick=function(){
+  rate=rate===1?.25:1;this.classList.toggle('on',rate!==1);this.setAttribute('aria-pressed',String(rate!==1));setRate();
+};
+
+sync();run();
+
+/* ---------- in-page self test (#test=1): checks controls without waiting for time ---------- */
+if(TEST){
+  const out=document.getElementById('testout');out.style.display='block';
+  const res=[];const ok=(n,c)=>res.push((c?'PASS ':'FAIL ')+n);
+  try{
+    const q=s=>document.querySelector(s),all=s=>[...document.querySelectorAll(s)];
+    const clickSeg=(g,k)=>q('#'+g+' [data-k="'+k+'"]').click();
+    ok('autoplay runs',anims.some(a=>a.playState==='running'));
+    q('#bPause').click();ok('pause holds every animation',anims.every(a=>a.playState!=='running'));
+    q('#bPause').click();ok('play resumes',anims.some(a=>a.playState==='running'));
+    q('#bSlow').click();ok('0.25x sets rate on all',anims.every(a=>a.playbackRate===.25));
+    q('#bSlow').click();ok('1x restores rate',anims.every(a=>a.playbackRate===1));
+    clickSeg('gMode','cur');ok('mode current: no marker',all('svg[viewBox="-210 -230 420 320"]').length===0&&q('.stepsrow .cnt'));
+    clickSeg('gMode','old');ok('mode old: marker, journey box, no count',all('svg[viewBox="-210 -230 420 320"]').length===1&&!!q('.jbox')&&!q('.stepsrow .cnt'));
+    clickSeg('gMode','new');ok('mode new: quiet mark, no old marker, no journey box',all('[data-mark]').length===1&&all('svg[viewBox="-210 -230 420 320"]').length===0&&!q('.jbox'));
+    q('[data-f="journey"]').click();ok('toggle journey off shows box',!!q('.jbox'));
+    q('[data-f="journey"]').click();ok('toggle journey on hides box',!q('.jbox'));
+    clickSeg('gMap',4);ok('map 4 builds tiles',all('.t').length>50);
+    clickSeg('gMap',2);
+    freeze(1000);const c=frame._ctl;
+    ok('hit enabled after settle',c.hit.style.pointerEvents==='auto');
+    c.hit.click();ok('tap marker opens why',c.hit.getAttribute('aria-expanded')==='true'&&c.why.style.display==='block');
+    frame.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));ok('tap outside closes why',c.hit.getAttribute('aria-expanded')==='false');
+    clickSeg('gRun','edge');ok('edge run builds',!!q('.hit'));
+    clickSeg('gSize','1080');ok('1920 size scales frame',frame.style.transform==='scale(1.25)');
+    clickSeg('gSize','720');
+    /* ---- round 4 checks ---- */
+    clickSeg('gMode','new');
+    const MARKS=['ms1','ms2','ms3','ms4'],gaps=[];
+    for(let m=1;m<=4;m++){
+      clickSeg('gMS',m);
+      ok('marker style '+m+' builds one mark, no stick, no ring',all('[data-mark="'+MARKS[m-1]+'"]').length===1&&all('[data-mark] ellipse, [data-mark] line').length===0);
+    }
+    const sig={};
+    for(let m=1;m<=4;m++){clickSeg('gMS',m);sig[m]=Object.keys(KINDS).map(k=>{st.kind=k;run();return q('[data-mark]').innerHTML;});}
+    st.kind='';
+    ok('each style draws six different shapes for six kinds',[1,2,3,4].every(m=>new Set(sig[m]).size===6));
+    for(let m of [1,2,4]){clickSeg('gMS',m);for(let mp=1;mp<=4;mp++){clickSeg('gMap',mp);gaps.push(m+'/'+mp+':'+frame._ctl.gap);}}
+    clickSeg('gMap',2);
+    ok('gap to other marks is 24 px or more (styles 1,2,4 on 4 maps: '+gaps.join(' ')+')',gaps.every(g=>Number(g.split(':')[1])>=24));
+    for(let m=1;m<=4;m++){clickSeg('gMS',m);freeze(1000);const hs=frame._ctl.hits;
+      ok('style '+m+': '+hs.length+' tap area(s), each 48 x 48 or larger',hs.every(h=>h.offsetWidth>=48&&h.offsetHeight>=48));
+      hs[hs.length-1].click();ok('style '+m+': tap on the mark area opens the why card',frame._ctl.why.style.display==='block');
+      frame.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));
+      hs[0].click();ok('style '+m+': tap on the token re-opens it',frame._ctl.why.style.display==='block'&&hs.every(h=>h.getAttribute('aria-expanded')==='true'));
+      frame.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));}
+    clickSeg('gMS',1);
+    ok('no looping animation in New (all finite, 1 iteration)',anims.every(a=>a.effect.getComputedTiming().iterations===1));
+    clickSeg('gRun','shaken');
+    const shk=anims.filter(a=>a.effect.target&&(a.effect.target.classList.contains('shk')||a.effect.target.classList.contains('stepsrow'))&&a.effect.getKeyframes().some(k=>k.transform&&k.transform!=='none'&&k.transform.indexOf('translateX')===0));
+    ok('shaken run: shake on token and step bar (2 animations)',shk.length===2);
+    const tm=shk[0].effect.getComputedTiming();
+    ok('shake: once, 0.2 to 0.25 s, starts with the cross-out',tm.iterations===1&&tm.duration>=200&&tm.duration<=250&&tm.delay===600);
+    const tx=t=>{shk.forEach(a=>{a.pause();a.currentTime=t;});return new DOMMatrixReadOnly(getComputedStyle(shk[0].effect.target).transform).m41;};
+    ok('shake moves mid-way (+/- 1 to 3 px) and is still after the end',Math.abs(tx(600+44))>=1&&Math.abs(tx(600+44))<=3&&tx(1000)===0&&tx(5000)===0);
+    clickSeg('gRun','calm');
+    ok('calm run: no shake',anims.filter(a=>a.effect.target&&a.effect.target.classList.contains('shk')&&a.effect.getKeyframes().length>2).length===0);
+    ok('New keeps the old Advance, old steps and old Echo band',!!q('.adv.old')&&!q('.home')&&!q('.pill')&&!!q('.band')&&!!q('.stepsrow svg[width="20"]'));
+    clickSeg('gMode','old');ok('Marker style is off in the Old mockup',all('#gMS button').every(b=>b.disabled));
+    clickSeg('gMode','new');
+    ok('no page errors',errs.style.display!=='block');
+  }catch(e){res.push('FAIL exception '+e.message);}
+  out.textContent=res.join('\n');
+}
+})();
+</script>
+</body>
+</html>

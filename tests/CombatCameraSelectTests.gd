@@ -541,7 +541,7 @@ static func _t_echo_card_tap_selects_actor() -> Dictionary:
 	var bar := realm.get_node("%EchoBar") as HBoxContainer
 	var cards: Array = []
 	for child in bar.get_children():
-		if not child.is_queued_for_deletion():
+		if child is EchoCardItem and not child.is_queued_for_deletion():
 			cards.append(child)
 	if cards.size() < 2:
 		vp.free()
@@ -910,7 +910,7 @@ static func _t_dead_actor_board_card_and_row_do_nothing() -> Dictionary:
 			i += 1
 	var cards: Array = []
 	for child in (fx["realm"] as RealmShell).get_node("%EchoBar").get_children():
-		if not child.is_queued_for_deletion():
+		if child is EchoCardItem and not child.is_queued_for_deletion():
 			cards.append(child)
 	var card := cards[card_index] as Control
 	var scroll := (fx["realm"] as RealmShell).get_node("%EchoBarScroll") as ScrollContainer
@@ -2167,7 +2167,7 @@ static func _card_fixture() -> Dictionary:
 	var scroll := realm.get_node("%EchoBarScroll") as ScrollContainer
 	var cards: Array = []
 	for child in (realm.get_node("%EchoBar") as HBoxContainer).get_children():
-		if not child.is_queued_for_deletion():
+		if child is EchoCardItem and not child.is_queued_for_deletion():
 			cards.append(child)
 	if cards.size() < 3 or scroll.get_h_scroll_bar().max_value <= scroll.get_h_scroll_bar().page:
 		(fx["viewport"] as SubViewport).free()
@@ -2329,7 +2329,7 @@ static func _frame_end(realm: RealmShell) -> void:
 static func _live_cards(realm: RealmShell) -> Array:
 	var out: Array = []
 	for child in (realm.get_node("%EchoBar") as Node).get_children():
-		if not child.is_queued_for_deletion():
+		if child is EchoCardItem and not child.is_queued_for_deletion():
 			out.append(child)
 	return out
 

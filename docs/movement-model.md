@@ -1400,6 +1400,8 @@ Unspent capacity or commitment never persists across a combat, situation, save/l
 
 The last Movement Result may be retained for the current snapshot/presentation, but must not replay after load.
 
+*Note 2026-10-13: D-41/D-53: the stop mark and the journey entry are saved and carried across enter(); the last result itself is not replayed.*
+
 ### 11.10 Stage-to-combat approach handoff
 
 The final stage Movement Result produces a truthful `EncounterApproach` payload.
@@ -1467,6 +1469,8 @@ Before the player commits an Advance, the snapshot should show a non-mutating br
 - expected commitment posture.
 
 It does not reveal hidden targets or guarantee an exact path. Decision-critical discoveries may still interrupt it.
+
+*Note 2026-10-13: D-12 narrows the preview to the stop mark after the Advance; no pre-commit route preview.*
 
 ---
 

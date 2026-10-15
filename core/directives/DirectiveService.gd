@@ -51,7 +51,7 @@ const OPTIONAL_KEYS: Array = ["contact_effects"]
 ## contact_effects key -> value kind. A new effect kind needs a reader in code, so it is listed here.
 const CONTACT_EFFECT_KEYS: Dictionary = {
 	"bid_suppression": "array", "bid_boost": "array",
-	"witness_resonance_bonus": "number", "guide_reveal_bonus": "number",
+	"conversation_resonance_bonus": "number", "guide_reveal_bonus": "number",
 }
 
 const _REGISTRY: Dictionary = {

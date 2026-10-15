@@ -139,6 +139,79 @@ static func get_directives_cfg(config_service: ConfigService) -> Dictionary:
 	return dir_v if dir_v is Dictionary else {}
 
 
+## Walks `data.<path...>`; returns {} when the service is null or any step is missing or not a Dictionary.
+## Copies only the subtree: get_balance() deep-copies the whole file, and these getters run many
+## times per Advance. A subclass that overrides get_balance() keeps being read through it.
+static func _data_subtree(config_service: ConfigService, path: Array) -> Dictionary:
+	if config_service == null:
+		return {}
+	var root: Dictionary = config_service._balance if config_service.get_script() == ConfigService else config_service.get_balance()
+	var node: Variant = root.get("data", {})
+	for key in path:
+		if not node is Dictionary:
+			return {}
+		node = (node as Dictionary).get(key, {})
+	return (node as Dictionary).duplicate(true) if node is Dictionary else {}
+
+
+## data.stages.party_stance — V2-DIRECTIVE-002 party-stance numbers; {} when absent (neutral stance).
+static func get_party_stance_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["stages", "party_stance"])
+
+
+## data.stages.party_stance.directive_profile.<directive_id>. {} for an id with no entry: the neutral stance.
+static func get_party_stance_profile(config_service: ConfigService, directive_id: String) -> Dictionary:
+	var profiles_v: Variant = get_party_stance_cfg(config_service).get("directive_profile", {})
+	var entry_v: Variant = (profiles_v as Dictionary).get(directive_id, {}) if profiles_v is Dictionary else {}
+	return entry_v if entry_v is Dictionary else {}
+
+
+## data.stages.escape_base_threshold — the return-home roll succeeds when roll > base - escape bonus.
+static func get_escape_base_threshold(config_service: ConfigService, fallback: int = 40) -> int:
+	if config_service == null:
+		return fallback
+	return int(_data_subtree(config_service, ["stages"]).get("escape_base_threshold", fallback))
+
+
+## data.stages.presentation — stage screen timings in seconds; {} when absent. `_comment*` keys are
+## dropped: this dict rides the snapshot as-is (D-52 F6).
+static func get_stage_presentation_cfg(config_service: ConfigService) -> Dictionary:
+	var out: Dictionary = {}
+	var cfg := _data_subtree(config_service, ["stages", "presentation"])
+	for key in cfg:
+		if not str(key).begins_with("_comment"):
+			out[key] = cfg[key]
+	return out
+
+
+## The whole `data` subtree of balance.json; {} when absent.
+static func get_balance_data(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, [])
+
+
+## data.contact.bid — contact bid thresholds and Judgment/fear weights; {} when absent.
+
+static func get_contact_bid_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["contact", "bid"])
+
+
+## data.contact.turn_count_modifiers — NPC fear and morale limits for the contact turn count; {} when absent.
+static func get_contact_turn_count_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["contact", "turn_count_modifiers"])
+
+
+## data.contact.emotional_fit_modifiers — emotional-fit and NPC turn-score numbers; {} when absent.
+static func get_contact_emotional_fit_cfg(config_service: ConfigService) -> Dictionary:
+	return _data_subtree(config_service, ["contact", "emotional_fit_modifiers"])
+
+
+## data.contact.max_voices_per_turn — most Echoes that speak in one contact turn.
+static func get_contact_max_voices_per_turn(config_service: ConfigService, fallback: int = 3) -> int:
+	if config_service == null:
+		return fallback
+	return int(_data_subtree(config_service, ["contact"]).get("max_voices_per_turn", fallback))
+
+
 ## data.sanctum.party_max_size — the party slot cap.
 ## PR #61 review: this was read longhand at two sites with identical guards and the same
 ## default of 5 — SanctumController._get_party_max_size and
@@ -338,16 +411,7 @@ static func get_threads_cfg(config_service: ConfigService) -> Dictionary:
 ## ActiveStageService: it is a plain "read a named subtree of balance.json", which
 ## the established rule places here beside get_bond_thresholds_cfg and friends.
 static func get_situation_category_cfg(config_service: ConfigService) -> Dictionary:
-	if config_service == null:
-		return {}
-	var balance_v: Variant = config_service.get_balance()
-	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var stages_v: Variant = data.get("stages", {})
-	var stages: Dictionary = stages_v if stages_v is Dictionary else {}
-	var category_v: Variant = stages.get("situation_category", {})
-	return category_v if category_v is Dictionary else {}
+	return _data_subtree(config_service, ["stages", "situation_category"])
 
 
 ## data.combat.objective_modes — per-mode objective tuning (recover / protect / endure /
@@ -427,18 +491,7 @@ static func get_voice_cfg(config_service: ConfigService) -> Dictionary:
 ## off FlowRuntime (private _stage_movement_slack_config), same rationale as
 ## get_situation_category_cfg above.
 static func get_movement_slack_cfg(config_service: ConfigService) -> Dictionary:
-	if config_service == null:
-		return {}
-	var balance_v: Variant = config_service.get_balance()
-	var balance: Dictionary = balance_v if balance_v is Dictionary else {}
-	var data_v: Variant = balance.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	var combat_v: Variant = data.get("combat", {})
-	var combat: Dictionary = combat_v if combat_v is Dictionary else {}
-	var movement_v: Variant = combat.get("movement", {})
-	var movement: Dictionary = movement_v if movement_v is Dictionary else {}
-	var slack_v: Variant = movement.get("slack", {})
-	return slack_v if slack_v is Dictionary else {}
+	return _data_subtree(config_service, ["combat", "movement", "slack"])
 
 
 ## data.summoning.birth_stats + data.actor.enemy_types — the two-key `cfg` dict that
