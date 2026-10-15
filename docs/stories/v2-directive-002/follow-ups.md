@@ -94,3 +94,6 @@ Owner: phase B+C, which edits the same guard.
 - One isolated naming maximum is 220 ms (5 Echoes, Scout), probably a terrain-cause Advance where `_only_way` runs one path search per path cell. Not measured apart.
 - The `_data_subtree` check `get_script() == ConfigService` keeps test subclasses that override `get_balance()` working (LESSONS #35). Do not remove it.
 - The new equivalence test `traversal/shared_region_same_naming_and_frontier` costs about 4.5 s of suite time.
+
+## Found in PR 107 review (2026-10-16)
+- `ConversationRepairTests._restore_save` (`tests/ConversationRepairTests.gd:64`) restores only the primary save file. Boot and dispatch can leave `.pending_*`, `.tmp` and `.bak*` files beside it (AGENTS.md lines 151-158). Seven callers in that suite use it. `StageExploreP5Tests` and `UnifiedResolveTests` have their own primary-only helpers. Risk is low: each process has its own save folder. Fix: call `TestSaveHarness.remove_save_artifacts` inside the helpers. This is a separate story. `ContactBidScalingTests` is already fixed at its own call site (commit 9776aac).
