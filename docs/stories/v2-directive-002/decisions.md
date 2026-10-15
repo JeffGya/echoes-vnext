@@ -313,3 +313,14 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-61. glyph-always-on-a-card
 **Q:** The stop glyph sat on the named Echo's card when an Echo was named, and in a chip beside the cards when none was named. Jeff found this inconsistent (2026-10-15). Where should it sit?
 **A:** Option B: always on a card (Jeff). The chip becomes a first 'party card' in the Echo bar with the card look. The stop glyph sits on the named Echo's card, or on the party card when no Echo is named. This amends D-41 and D-42 (the chip is a card now) and D-59 (chip place). The party card exists on the stage screen at all times (the glyph shows only after a stop). Open details Jeff approves on a mockup before any code: the party card width (same as an Echo card or compact), what its portrait shows (the blue party token 'P' is a candidate), its label (player text: Jeff's wording), what a tap does when no mark exists, and how it behaves with 5 Echoes (6 cards, scroll, pinned first).
+
+### D-62. party-card-details
+**Q:** Details of the party card (D-61), shown on the sheets in `mockups/v4/` (Jeff, 2026-10-15):
+**A:**
+- **Width:** V3, compact with a short label (about 168 wide, 58 high). The label is one short word of 13 characters or fewer, at about 14 px. The word is Jeff's wording (placeholder in the text bank until he writes it).
+- **Portrait:** the blue party token 'P' from the board (no party icon art exists).
+- **Tap with no stop mark:** open the last journey entry if one exists. If no entry exists, nothing happens.
+- **Gap:** about 32 px between the party card and the first Echo card (a visible separation; other cards stay 16 px apart).
+- **Glyph corner:** top-left of the portrait, on every card (a named Echo's card and the party card). This moves the glyph from the top-right corner used in the first build.
+- **Echo bar with many Echoes:** the party card is pinned first at the left and does not scroll. Only the Echo cards scroll.
+- Kept from earlier answers (D-60): the live look for the Advance bar and the cards; the lost-step cross style is still open (red X today; the mockup used a small slash).
