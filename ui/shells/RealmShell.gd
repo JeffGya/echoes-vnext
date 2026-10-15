@@ -298,14 +298,14 @@ func _has_journey_entry() -> bool:
 	return _stop_why.values().any(func(v: Variant) -> bool: return str(v) != "")
 
 
-## The party token is an alias for the mark. Its tap fires on release; a press that just closed the
+## The party token is an alias for the party card: the mark, else the last journey entry. Its tap fires on release; a press that just closed the
 ## card already made the net result "closed", so the release must not open it again.
 func _on_why_requested() -> void:
 	if _press_closed_card:
 		_press_closed_card = false
 		return
-	if _stop_holder != null and not _mark_hidden and not _why_card.is_open():
-		_why_opener = _stop_holder
+	if not _mark_hidden and not _why_card.is_open() and (_stop_holder != null or _has_journey_entry()):
+		_why_opener = _stop_holder if _stop_holder != null else _party_card
 		_why_card.open(_stop_why)
 		_place_why_card()
 

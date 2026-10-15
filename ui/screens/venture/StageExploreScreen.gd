@@ -32,7 +32,7 @@ signal advance_started
 signal why_requested
 ## A travel snapshot arrived. Fires before RealmShell draws the stop mark, so the mark can wait for its beat.
 signal travel_started
-## A stop beat is due: `&"mark"` (the glyph or chip appears) or `&"pulse"` (the named Echo's portrait).
+## A stop beat is due: `&"mark"` (the glyph appears) or `&"pulse"` (the named Echo's portrait).
 signal stop_beat(beat: StringName)
 
 # ─── Tile constants ───────────────────────────────────────────────────────────

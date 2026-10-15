@@ -42,6 +42,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("stage_stop_ui/why_card_above_icon_inside_safe_area_above_advance_bar", Callable(StageStopUITests, "_t_why_place"))
 	runner.register_test("stage_stop_ui/overlay_opens_after_the_mark_lands", Callable(StageStopUITests, "_t_overlay_after_mark"))
 	runner.register_test("stage_stop_ui/token_tap_closes_open_why_card", Callable(StageStopUITests, "_t_token_tap_closes"))
+	runner.register_test("stage_stop_ui/token_tap_rules", Callable(StageStopUITests, "_t_token_tap_rules"))
 	runner.register_test("stage_stop_ui/same_holder_old_glyph_fades_then_new_settles", Callable(StageStopUITests, "_t_same_holder_fade"))
 	runner.register_test("stage_stop_ui/no_directive_id_literal_in_ui", Callable(StageStopUITests, "_t_no_directive_literal"))
 
@@ -394,6 +395,27 @@ static func _t_why_place() -> Dictionary:
 				if error != "":
 					return _fail(m, "%s: %s" % [where, error])
 				m[0].free()
+	return { "ok": true }
+
+
+static func _t_token_tap_rules() -> Dictionary:
+	var m := _mount(RealmShellScene)
+	var shell := m[1] as RealmShell
+	var card := shell.get_node("%StageWhyCard") as StageWhyCard
+	var empty := _snap("", "")
+	empty["data"]["travel_why"] = {}
+	var cases := {
+		"mark": [_snap("capacity_spent", ""), true],
+		"no mark, entry exists": [_snap("", ""), true],
+		"no mark, no entry": [empty, false],
+	}
+	for name in cases:
+		_feed(shell, cases[name][0])
+		shell.call("_on_why_requested")
+		if card.is_open() != cases[name][1]:
+			return _fail(m, "token tap, %s: open state must be %s" % [name, str(cases[name][1])])
+		card.close()
+	m[0].free()
 	return { "ok": true }
 
 

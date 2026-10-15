@@ -1,6 +1,6 @@
 class_name StopMarkMotion
 extends RefCounted
-## Motion for one stop mark (a glyph on an Echo card, or the party chip). Presentation only.
+## Motion for one stop mark (a glyph on an Echo card, or a card). Presentation only.
 ## `target` is the control that appears, settles and is pressed; `host` also dims on a press.
 ## `reduced` is the one reduced-motion flag. A settings story will set it; nothing sets it today.
 
