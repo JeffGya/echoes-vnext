@@ -328,3 +328,10 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-63. party-card-approved
 **Q:** Does the party card build match what Jeff approved? What does a tap on the party token do when no stop mark exists?
 **A:** Approved (Jeff, 2026-10-15). A tap on the party token with no stop mark opens the last journey entry, like the party card (when no entry exists, nothing happens). The why card opens centred above the whole tapped card, also for Echo cards. The party card label stays the placeholder until Jeff writes the word. The lost-step cross style is still open (red X today; the mockup used a small slash).
+
+### D-64. cross-style-config-key-party-word
+**Q:** Which cross style marks a lost step? Is the config key `chip_settle_seconds` renamed? What is the party card word?
+**A:** (Jeff, 2026-10-15)
+- **Lost-step cross:** red X. It stays as built. The mockup's small slash is dropped.
+- **Config key `chip_settle_seconds`:** keep the name. No rename.
+- **Party card word:** "The party" (9 characters, inside the 13-character limit). It replaces the placeholder in `data/ui/stage_why_text.json` (`party_card_label`).
