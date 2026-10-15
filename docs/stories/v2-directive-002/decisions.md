@@ -349,3 +349,7 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 1. **`cause.directive`:** the word "Directive" is NOT allowed in player text. The voice rule stands. The design text for the Cause row (section 8) and rule 7 (section 4) must change to match. The line names the order in plain words, with no code word.
 2. **`purpose.hold`:** an agent checks whether `hold` can reach the player. The result decides if the line is needed.
 3. **New route keys ("cautious", "only way"):** not added. The data keeps `direct` and `skirted`. No schema change.
+
+### D-67. purpose-hold-removed
+**Q:** Can `hold` reach the player as a stop purpose?
+**A:** Option 2 (Jeff, 2026-10-15): `hold` is removed from the allowed stop purposes (`StageStopPolicy.PURPOSES`) and `purpose.hold` is removed from `data/ui/stage_why_text.json`. `hold` is reachable only in a broken stage state. Movement code is unchanged.

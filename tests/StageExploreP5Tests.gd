@@ -899,6 +899,8 @@ static func _t_travel_why_sanitiser() -> Dictionary:
 		return { "ok": false, "error": "sanitiser kept a bad slot or dropped a good one: %s" % [clean] }
 	if _StopPolicyP5.sanitise_why({ "echo_reason_class": "steadied" })["echo_reason_class"] != "steadied":
 		return { "ok": false, "error": "sanitiser dropped the steadied reason class" }
+	if _StopPolicyP5.sanitise_why({ "purpose_family": "hold" })["purpose_family"] != "":
+		return { "ok": false, "error": "sanitiser kept purpose_family hold" }
 	for slot in ["cause", "purpose_family", "route_character", "stop_kind", "named_echo_name"]:
 		if clean[slot] != "":
 			return { "ok": false, "error": "%s kept a value that is an id or a number: %s" % [slot, clean] }
