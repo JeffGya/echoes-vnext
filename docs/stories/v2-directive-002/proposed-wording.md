@@ -2,7 +2,7 @@
 
 **PROPOSALS ONLY. Jeff decides all wording.**
 
-Status: proposal. No file is edited. `data/ui/stage_why_text.json` still holds the placeholders.
+Status: FINAL wording is in `data/ui/stage_why_text.json` (D-68). This file keeps the proposals and Jeff's column D for history. The JSON file wins if they differ.
 
 ## How to read this file
 
@@ -28,47 +28,47 @@ Status: proposal. No file is edited. `data/ui/stage_why_text.json` still holds t
 
 ## 1. `stop` — card title (why the walk ended)
 
-| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |
-|---|---|---|---|---|
-| `stop.arrived_at` | The party reached its target. | They reached the place. | They got where they were going. | This was the place. They stopped. |
-| `stop.capacity_spent` | The party used all its steps for this walk. | They ran out of steps. | Their legs were done for the day. | That was as far as they could go. |
-| `stop.interrupted` | The party met a situation it had not resolved. | They ran into something. | They came across something and stopped. | Something was in the way. |
-| `stop.spotted_ahead` | The walk showed a decisive goal or danger ahead. | They saw something ahead. | Something important was ahead. They stopped. | Something ahead. They had to decide. |
-| `stop.paused_to_read` | The walk showed a minor find, or a risky next step. | They stopped to take a closer look. | Something caught their eye, so they stopped. | They checked it before going on. |
-| `stop.no_route` | No route could be found from this point. | There was no way on from here. | They could not find a way through. | No way through. They stopped. |
+| key | What it means in plain words | A (plain) | B (warmer) | C (drier) | D my edit |
+|---|---|---|---|---|---|
+| `stop.arrived_at` | The party reached its target. | They reached the place. | They got where they were going. | This was the place. They stopped. | They have arrived at a destination.
+| `stop.capacity_spent` | The party used all its steps for this walk. | They ran out of steps. | Their legs were done for the day. | That was as far as they could go. | No more steps can be taken.
+| `stop.interrupted` | The party met a situation it had not resolved. | They ran into something. | They came across something and stopped. | Something was in the way. | Something has stopped them.
+| `stop.spotted_ahead` | The walk showed a decisive goal or danger ahead. | They saw something ahead. | Something important was ahead. They stopped. | Something ahead. They had to decide. | They notice something curious.
+| `stop.paused_to_read` | The walk showed a minor find, or a risky next step. | They stopped to take a closer look. | Something caught their eye, so they stopped. | They checked it before going on. | Something worth pausing for has been seen.
+| `stop.no_route` | No route could be found from this point. | There was no way on from here. | They could not find a way through. | No way through. They stopped. | There is no way on from here.
 
 Note: `spotted_ahead` is the heavier stop. `paused_to_read` is the lighter stop. The lines show that difference.
 
 ## 2. `cause` — who decided the way (row on the why card)
 
-| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |
-|---|---|---|---|---|
-| `cause.echo` | One named Echo decided the way. The next row names them. | One Echo made the call. | One of them really wanted this way. | One of them chose it. |
-| `cause.terrain` | The ground left only one way to go. | The ground left only one way. | The land gave them no other choice. | There was only one way through. |
-| `cause.objective` | The goal of the walk fixed the way. | Their goal lay in this direction. | The goal they came for was this way. | The goal was this way. No other reason. |
-| `cause.situation` | A known situation on the road fixed the way. | Something they already knew about was here. | They knew about trouble on this route. | A known problem shaped the way. |
-| `cause.party` | The whole group decided. No single Echo did. | The whole group chose this together. | Everyone in the group leaned this way. | The group went this way. Nobody pushed. |
-| `cause.directive` | The order alone decided. No Echo did. | They went the way they were asked. | They did what they were told to do. | That was the order. They followed it. |
+| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |D my edit |
+|---|---|---|---|---|---|
+| `cause.echo` | One named Echo decided the way. The next row names them. | One Echo made the call. | One of them really wanted this way. | One of them chose it. | They are leading the way.
+| `cause.terrain` | The ground left only one way to go. | The ground left only one way. | The land gave them no other choice. | There was only one way through. | The path knows only one direction.
+| `cause.objective` | The goal of the walk fixed the way. | Their goal lay in this direction. | The goal they came for was this way. | The goal was this way. No other reason. | Their purpose lays before them.
+| `cause.situation` | A known situation on the road fixed the way. | Something they already knew about was here. | They knew about trouble on this route. | A known problem shaped the way. | They recall this. This is problem is known.
+| `cause.party` | The whole group decided. No single Echo did. | The whole group chose this together. | Everyone in the group leaned this way. | The group went this way. Nobody pushed. | Everyone agrees on this path.
+| `cause.directive` | The order alone decided. No Echo did. | They went the way they were asked. | They did what they were told to do. | That was the order. They followed it. | The keeper's direction was honored.
 
 Note on `cause.directive`: the design says this row shows the word "Directive". The voice rule bans that word in player text. The lines above avoid it. Jeff must decide. See OPEN.
 
 ## 3. `purpose` — what the party was doing (row on the why card)
 
-| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |
-|---|---|---|---|---|
-| `purpose.advance` | The party moved toward its goal. | They pushed on toward the goal. | They were heading for the goal. | They kept moving forward. |
-| `purpose.reposition` | The party moved to a better spot. | They moved to a better spot. | They were getting into position. | They shifted where they stood. |
-| `purpose.read` | The party looked around and searched the area. | They were looking around. | They were looking further ahead. | They were checking the area. |
-| `purpose.hold` | The party stayed in place. | They stayed where they were. | They held their ground. | They kept still and waited. |
+| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |D my edit |
+|---|---|---|---|---|---|
+| `purpose.advance` | The party moved toward its goal. | They pushed on toward the goal. | They were heading for the goal. | They kept moving forward. | They keep moving forward.
+| `purpose.reposition` | The party moved to a better spot. | They moved to a better spot. | They were getting into position. | They shifted where they stood. | This is a better place to move from.
+| `purpose.read` | The party looked around and searched the area. | They were looking around. | They were looking further ahead. | They were checking the area. | They are looking around.
+| `purpose.hold` | The party stayed in place. | They stayed where they were. | They held their ground. | They kept still and waited. | They are holding their ground.
 
 Note on `purpose.hold`: MEANING UNCLEAR. The design (section 8, "Purpose") lists three families: Read, Advance, Reposition. The code allows four values, and `hold` is the fourth. See OPEN.
 
 ## 4. `route` — how the party went (row on the why card)
 
-| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |
-|---|---|---|---|---|
-| `route.direct` | The party took the straight way. | They took the direct way. | They went straight at it. | No detour. They went straight through. |
-| `route.skirted` | The party went around a known danger. | They went around the danger. | They went around the trouble carefully. | They avoided the known danger. |
+| key | What it means in plain words | A (plain) | B (warmer) | C (drier) | D my edit |
+|---|---|---|---|---|---|
+| `route.direct` | The party took the straight way. | They took the direct way. | They went straight at it. | No detour. They went straight through. | No hesitation, they are going straight at it.
+| `route.skirted` | The party went around a known danger. | They went around the danger. | They went around the trouble carefully. | They avoided the known danger. | It is not worth it, better avoid the known danger.
 
 Note: the design also lists "cautious" and "only way" as route wording. No key exists for them in the JSON or the code. The "only way" case is covered by `cause.terrain`. See OPEN.
 
@@ -76,21 +76,21 @@ Note: the design also lists "cautious" and "only way" as route wording. No key e
 
 The `{name}: ` prefix stays on every line.
 
-| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |
-|---|---|---|---|---|
-| `echo_reason.calling` | The Echo's calling shaped the choice. | {name}: This is what they are good at. | {name}: This is their kind of work. | {name}: They always go for this sort of thing. |
-| `echo_reason.temperament` | The Echo's own nature shaped the choice. | {name}: That is just how they are. | {name}: That is their nature. | {name}: They have always moved like this. |
-| `echo_reason.fear` | The Echo's fear shaped the choice. Fear is never the Echo's fault. | {name}: The road made them uneasy. | {name}: Their nerves were on edge. | {name}: They did not like the look of the road. |
-| `echo_reason.morale` | The Echo's low morale shaped the choice. Low morale is never the Echo's fault. | {name}: They were worn down today. | {name}: Their spirits were low. | {name}: They had nothing left for more. |
-| `echo_reason.steadied` | The Echo followed the group's mood, not their own. | {name}: The others kept them steady. | {name}: The group's calm rubbed off on them. | {name}: They went along with the group. |
+| key | What it means in plain words | A (plain) | B (warmer) | C (drier) | D my edit |
+|---|---|---|---|---|---|
+| `echo_reason.calling` | The Echo's calling shaped the choice. | {name}: This is what they are good at. | {name}: This is their kind of work. | {name}: They always go for this sort of thing. | {name} is following their calling.
+| `echo_reason.temperament` | The Echo's own nature shaped the choice. | {name}: That is just how they are. | {name}: That is their nature. | {name}: They have always moved like this. | {name} is following their nature.
+| `echo_reason.fear` | The Echo's fear shaped the choice. Fear is never the Echo's fault. | {name}: The road made them uneasy. | {name}: Their nerves were on edge. | {name}: They did not like the look of the road. | {name}'s nerves are on edge.
+| `echo_reason.morale` | The Echo's low morale shaped the choice. Low morale is never the Echo's fault. | {name}: They were worn down today. | {name}: Their spirits were low. | {name}: They had nothing left for more. | {name}'s spirit is low. 
+| `echo_reason.steadied` | The Echo followed the group's mood, not their own. | {name}: The others kept them steady. | {name}: The group's calm rubbed off on them. | {name}: They went along with the group. | The group has given {name} some motivation back.
 
 ## 6. `ui` — screen-reader names (not visible text)
 
-| key | What it means in plain words | A (plain) | B (warmer) | C (drier) |
-|---|---|---|---|---|
-| `ui.echo_named` | Fallback row. An Echo is named but has no reason class. The design says this should not happen. | {name}: They had a reason for this. | {name}: This one was their call. | {name}: They made this choice. |
-| `ui.open_why` | Screen-reader name of the stop mark. Tapping it opens the why card. | Why did they stop? | Tell me why they stopped. | Why they stopped |
-| `ui.close_why` | Screen-reader name of the close control on the why card. | Close | Hide this | Done |
+| key | What it means in plain words | A (plain) | B (warmer) | C (drier) | D my edit |
+|---|---|---|---|---|---|
+| `ui.echo_named` | Fallback row. An Echo is named but has no reason class. The design says this should not happen. | {name}: They had a reason for this. | {name}: This one was their call. | {name}: They made this choice. | {name} made this call.
+| `ui.open_why` | Screen-reader name of the stop mark. Tapping it opens the why card. | Why did they stop? | Tell me why they stopped. | Why they stopped | Tell me why they stopped.
+| `ui.close_why` | Screen-reader name of the close control on the why card. | Close | Hide this | Done | Close
 
 Note: `ui.open_why` and `ui.close_why` are read by a screen reader. They are not printed on screen. Jeff may still want them to match the visible text.
 

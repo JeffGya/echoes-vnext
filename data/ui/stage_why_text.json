@@ -1,41 +1,41 @@
 {
-	"_status": "PLACEHOLDER. Every value is Jeff's wording to fill. Keys that start with an underscore are notes, not text. {name} in a value is replaced by the Echo's display name. A missing key shows nothing. Rule: no number and no id in any text.",
+	"_status": "FINAL (Jeff, 2026-10-15). Keys that start with an underscore are notes, not text. {name} in a value is replaced by the Echo's display name. A missing key shows nothing. Rule: no number and no id in any text.",
 	"stop": {
-		"arrived_at": "[Jeff's wording: stop arrived_at]",
-		"capacity_spent": "[Jeff's wording: stop capacity_spent]",
-		"interrupted": "[Jeff's wording: stop interrupted]",
-		"spotted_ahead": "[Jeff's wording: stop spotted_ahead]",
-		"paused_to_read": "[Jeff's wording: stop paused_to_read]",
-		"no_route": "[Jeff's wording: stop no_route]"
+		"arrived_at": "They have arrived at a destination.",
+		"capacity_spent": "They can take no more steps.",
+		"interrupted": "Something has stopped them.",
+		"spotted_ahead": "They notice something curious.",
+		"paused_to_read": "They see something worth pausing for.",
+		"no_route": "There is no way on from here."
 	},
 	"cause": {
-		"echo": "[Jeff's wording: cause echo]",
-		"terrain": "[Jeff's wording: cause terrain]",
-		"objective": "[Jeff's wording: cause objective]",
-		"situation": "[Jeff's wording: cause situation]",
-		"party": "[Jeff's wording: cause party]",
-		"directive": "[Jeff's wording: cause directive]"
+		"echo": "They are leading the way.",
+		"terrain": "The path knows only one direction.",
+		"objective": "Their purpose lies before them.",
+		"situation": "They recall this. This problem is known.",
+		"party": "Everyone agrees on this path.",
+		"directive": "The keeper's direction is honoured."
 	},
 	"purpose": {
-		"advance": "[Jeff's wording: purpose advance]",
-		"reposition": "[Jeff's wording: purpose reposition]",
-		"read": "[Jeff's wording: purpose read]"
+		"advance": "They keep moving forward.",
+		"reposition": "This is a better place to move from.",
+		"read": "They are looking around."
 	},
 	"route": {
-		"direct": "[Jeff's wording: route direct]",
-		"skirted": "[Jeff's wording: route skirted]"
+		"direct": "No hesitation. They go straight at it.",
+		"skirted": "It is not worth it. Better to avoid the known danger."
 	},
 	"echo_reason": {
-		"calling": "{name}: [Jeff's wording: echo reason calling]",
-		"temperament": "{name}: [Jeff's wording: echo reason temperament]",
-		"fear": "{name}: [Jeff's wording: echo reason fear]",
-		"morale": "{name}: [Jeff's wording: echo reason morale]",
-		"steadied": "{name}: [Jeff's wording: echo reason steadied]"
+		"calling": "{name} is following their calling.",
+		"temperament": "{name} is following their nature.",
+		"fear": "{name}'s nerves are on edge.",
+		"morale": "{name}'s spirit is low.",
+		"steadied": "The group has given {name} some motivation back."
 	},
 	"ui": {
-		"echo_named": "{name}: [Jeff's wording: echo named]",
-		"open_why": "[Jeff's wording: open why card]",
-		"close_why": "[Jeff's wording: close why card]",
+		"echo_named": "{name} makes this call.",
+		"open_why": "Tell me why they stopped.",
+		"close_why": "Close",
 		"party_card_label": "The party"
 	}
 }

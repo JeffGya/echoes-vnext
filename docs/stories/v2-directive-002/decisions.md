@@ -353,3 +353,12 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-67. purpose-hold-removed
 **Q:** Can `hold` reach the player as a stop purpose?
 **A:** Option 2 (Jeff, 2026-10-15): `hold` is removed from the allowed stop purposes (`StageStopPolicy.PURPOSES`) and `purpose.hold` is removed from `data/ui/stage_why_text.json`. `hold` is reachable only in a broken stage state. Movement code is unchanged.
+
+### D-68. why-card-wording-final
+**Q:** Which wording goes into `data/ui/stage_why_text.json`?
+**A:** Jeff's column D lines, with these fixes (Jeff, 2026-10-15): "lies" for "lays"; "This problem is known"; two short sentences for the two route lines; present tense for `cause.directive`, `ui.echo_named`, `stop.paused_to_read` and `stop.capacity_spent`.
+- **Spelling:** UK ("honoured").
+- **"Keeper":** the word Echoes use for the player. It is allowed in player text.
+- **"Purpose" in `cause.objective`:** allowed. It means the Echoes' purpose.
+- **`steadied` line:** has no `{name}:` prefix, on purpose.
+- **`purpose.hold`:** no line (D-67).
