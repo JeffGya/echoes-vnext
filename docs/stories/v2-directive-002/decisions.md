@@ -342,3 +342,10 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **Evidence:** named share is identical in V0, V3, V1 and V2. The category bend changed no pool pick (`bend_changed` = 0). Naming follows party state: stressed mixed parties 26 to 55%, all other sets 0%.
 - **Open finding (not in this decision):** 137 of 266 proposed names (52%) are dropped by `confirm_walk`. The target was 15% or less. Naming for calm parties and your own party is also open. Both stay as follow-ups for Jeff to scope.
 - **Speed:** worst mean Advance 222 ms, worst 95th percentile 417 ms. Both are under 500 ms. No multithreading work.
+
+### D-66. wording-questions-answered
+**Q:** Three questions from the proposed-wording report.
+**A:** (Jeff, 2026-10-15)
+1. **`cause.directive`:** the word "Directive" is NOT allowed in player text. The voice rule stands. The design text for the Cause row (section 8) and rule 7 (section 4) must change to match. The line names the order in plain words, with no code word.
+2. **`purpose.hold`:** an agent checks whether `hold` can reach the player. The result decides if the line is needed.
+3. **New route keys ("cautious", "only way"):** not added. The data keeps `direct` and `skirted`. No schema change.
