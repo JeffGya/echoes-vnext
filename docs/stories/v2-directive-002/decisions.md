@@ -335,3 +335,10 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **Lost-step cross:** red X. It stays as built. The mockup's small slash is dropped.
 - **Config key `chip_settle_seconds`:** keep the name. No rename.
 - **Party card word:** "The party" (9 characters, inside the 13-character limit). It replaces the placeholder in `data/ui/stage_why_text.json` (`party_card_label`).
+
+### D-65. bend-strength-keep-v0
+**Q:** The bend matrix (4 variants, 40 slices) showed no difference in who is named. Which variant does Jeff choose?
+**A:** Option 1: keep V0 (Jeff, 2026-10-15). No number changes. `data/balance.json` stays as it is.
+- **Evidence:** named share is identical in V0, V3, V1 and V2. The category bend changed no pool pick (`bend_changed` = 0). Naming follows party state: stressed mixed parties 26 to 55%, all other sets 0%.
+- **Open finding (not in this decision):** 137 of 266 proposed names (52%) are dropped by `confirm_walk`. The target was 15% or less. Naming for calm parties and your own party is also open. Both stay as follow-ups for Jeff to scope.
+- **Speed:** worst mean Advance 222 ms, worst 95th percentile 417 ms. Both are under 500 ms. No multithreading work.
