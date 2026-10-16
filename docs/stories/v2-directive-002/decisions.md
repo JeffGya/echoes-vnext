@@ -456,3 +456,9 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 | Seek, fear 50 | 258 | 234 | 6 | 3 | 1 |
 
   Mixed decisions are 1 to 2 percent of Echo passes. The Directive exposure term and the fear lean decide 0 (Scout) or 1 (Seek) decision in about 260. The effect is real on the boards (D-80) and almost never asked for in these fights. The cause is the input (how often a fight offers an exposure choice), not the weights. Whether real stages offer more choices is not known. This is a follow-up question for Jeff, not a blocker for slices 3 and 4 (D-79).
+
+### D-81. proceed-slice-3-and-make-state-systems-matter
+**Q:** The count (D-80) shows exposure choices are 1 to 2 percent of Echo decisions in the 7 fixed fights. Proceed with slice 3? Should exposure matter more?
+**A:** (Jeff, 2026-10-17) Proceed with slice 3 as designed (D-70). And yes, exposure should matter more: "we want fear, judgement, moral and other systems to actually have an effect." So:
+- Slice 3 (Judgment scale on exposure acceptance) is built now, with unit tests and one recorded-value run. No more probes (D-79).
+- A designer studies how the Echo state systems (fear, Judgment/Standing, morale, and the other state inputs the arbiter already reads) can have a felt effect on movement, beyond the exposure channel alone. The study starts from `exposure-lever-study.md` and the D-80 count. It proposes options for Jeff. It changes nothing. The result decides a new slice or story. It is in the scope of the pillar (Echoes show growth and emotion in how they move).
