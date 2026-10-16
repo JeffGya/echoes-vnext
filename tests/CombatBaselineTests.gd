@@ -339,6 +339,7 @@ const COMBAT_EMOTION_HASHES: Array = [
 # the FlowFingerprintTests PURIFY_SHRINE round_ended move). Indices 0-3 stay byte-identical,
 # diverging from index 4, with one round removed.
 # Re-recorded: cell_search.enabled true. 8 rounds held; indices 3, 5, 6 and 7 moved.
+# Re-recorded: Scout route exposure acceptance x weight 17. 8 rounds held; indices 6 and 7 moved.
 const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"bd2de7301aa35102d31bc447af0046a9d6cc8432f4bf5358f5a3db9deeed639e",
 	"725ca32c64d227aac4c49c29180c72e03bd29032fde35554ae95930d4b4300c1",
@@ -346,8 +347,8 @@ const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 	"f353c3c4f67b934bc7a2df2b97ece4aa8dd93993ee07d6a3464f922dac4e0440",
 	"ec47d1d3bcf2cd56211c23adfda4854480edee472c082de468555720fd7b94d5",
 	"f983e61a9bd36747242ccb73c0dab5f88db3d415c6f2f396286cd3bf70276bc5",
-	"d7f12b6f3a095e40efc64d3a5fba02a77b08cdcf0e7bc12b9aa93470c6e2b90a",
-	"9c4110f02b20be8285d26b92d23cdd4eadaa24e94020686797bea8208ae0f1b3",
+	"1e9162f2dd364a2da7a3e7f8ed2cfa28cebc56b3ede49d3503e870a8587102b4",
+	"97607db6a29f9671bb0e0b7f1a3ea0849a27a5c5b013d649dae5216b61a80c16",
 ]
 # Phase 2d: 2 -> 3 rounds, both existing hashes byte-identical and one appended. The recover
 # cell is further from the party on the larger map, so the hold takes one more round to finish.

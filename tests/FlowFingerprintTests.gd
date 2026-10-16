@@ -734,7 +734,8 @@ static func test_combat() -> Dictionary:
 # Pace bonus re-record: par 6.58, round 8, ratio 1.22 -> partial, fraction 0.77, +2 Ase.
 # ase 55 -> 57, ekwan 7, rank S. FINAL gains the pace keys; SAVE moves with ase. ROUNDS held.
 # Re-recorded: stop_short.enabled true, then cell_search.enabled true (ROUNDS and FINAL moved).
-const PURIFY_SHRINE_ROUNDS_HASH := "871ee66b2a87eedb2d721327729f1fb96d8e6c1c13195abe65aa29e2966ae945"
+# Re-recorded: Scout route exposure acceptance (tolerance 0.3 - offset 0.5) x weight 17 changes 2 Scout moves. ROUNDS moved; FINAL, SAVE held.
+const PURIFY_SHRINE_ROUNDS_HASH := "9fb438c5ee7cba26bb6ec93f4b28898723e37f42328fb6044a6be0d4f7fc3cc6"
 const PURIFY_SHRINE_FINAL_HASH  := "24c3b92582022ad8558bb323c5e9f7513126b8f1bb04308648d003a1eebcf7e8"
 const PURIFY_SHRINE_SAVE_HASH   := "930439633fdb06e3230da43ce270f90c35b86e4f6cb60f46f953bfb19aa282d4"
 
