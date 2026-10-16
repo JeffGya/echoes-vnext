@@ -122,7 +122,8 @@ static func _setup_encounter(
 	seed_tag: String,
 	guide_mode: String = "",
 	guide_joins: String = "",
-	rank_overrides: Dictionary = {}
+	rank_overrides: Dictionary = {},
+	directive_id: String = ""
 ) -> Dictionary:
 	# Shared harness: clears the primary save AND SaveService's backup chain beside it.
 	# Primary-only deletion let boot() recover a previous run's campaign. See
@@ -136,6 +137,9 @@ static func _setup_encounter(
 	runtime.boot()
 	var flow_ctx: FlowContext = runtime.flow_ctx
 	var t: int = 0
+
+	if not directive_id.is_empty():
+		runtime.dispatch({ "type": "directive.select", "directive_id": directive_id })
 
 	flow_ctx.realm_id = "realm.01"
 	var rm: Dictionary = RealmService.get_or_create("realm.01", flow_ctx, t)
@@ -425,9 +429,10 @@ static func _run_mode_fingerprint(
 	seed_tag: String,
 	guide_mode: String = "",
 	guide_joins: String = "",
-	max_rounds: int = 30
+	max_rounds: int = 30,
+	directive_id: String = ""
 ) -> Dictionary:
-	var env: Dictionary = _setup_encounter(mode, seed_tag, guide_mode, guide_joins)
+	var env: Dictionary = _setup_encounter(mode, seed_tag, guide_mode, guide_joins, {}, directive_id)
 	if env.is_empty():
 		return { "ok": false, "error": "setup failed for mode %s (realm/encounter_ctx not created)" % mode }
 	var runtime: FlowRuntime = env["runtime"]
