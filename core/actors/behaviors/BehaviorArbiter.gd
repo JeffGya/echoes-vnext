@@ -1343,10 +1343,21 @@ func _validate_spatial_config() -> Dictionary:
 			return _movement_failure("unexpected_spatial_config_field", "movement_cfg.spatial_utility.%s" % key)
 	if float(config["cap"]) <= 0.0:
 		return _movement_failure("non_positive_spatial_cap", "movement_cfg.spatial_utility.cap")
+	if _movement_cfg.has("exposure_acceptance"):
+		var block: Variant = _movement_cfg["exposure_acceptance"]
+		if not block is Dictionary:
+			return _movement_failure("invalid_exposure_acceptance_config", "movement_cfg.exposure_acceptance")
+		var offset: Variant = (block as Dictionary).get("offset", null)
+		if not (offset is int or offset is float) or not is_finite(float(offset)):
+			return _movement_failure("invalid_exposure_acceptance_offset", "movement_cfg.exposure_acceptance.offset")
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
 
 func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
+	if directive.has("exposure_tolerance"):
+		var tolerance: Variant = directive["exposure_tolerance"]
+		if not (tolerance is int or tolerance is float) or not is_finite(float(tolerance)):
+			return _movement_failure("invalid_directive_tolerance", "context.directive.exposure_tolerance")
 	if not directive.has("intent_weights"):
 		return {"valid": true, "intent": {}, "reason": "", "field": ""}
 	if not directive["intent_weights"] is Dictionary:
@@ -1362,6 +1373,16 @@ func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
 		if not (value is int or value is float) or not is_finite(float(value)):
 			return _movement_failure("invalid_directive_weight", "context.directive.intent_weights.%s" % key)
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
+## Route acceptance of exposure: Directive `exposure_tolerance` minus the configured offset.
+## 0.0 (neutral) when the tolerance or the `exposure_acceptance` config block is absent.
+## `intent_weights.exposure_acceptance` is not read here; it serves action choice only.
+func _exposure_acceptance(directive: Dictionary) -> float:
+	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
+	if not directive.has("exposure_tolerance") or not block is Dictionary or not (block as Dictionary).has("offset"):
+		return 0.0
+	return clampf(float(directive["exposure_tolerance"]) - float((block as Dictionary)["offset"]), -1.0, 1.0)
 
 
 ## `out_parts`, when a non-null Dictionary is passed, receives this call's own
@@ -1411,9 +1432,7 @@ func _spatial_utility(
 	var avoid_overcommit: float = clampf(
 		float(weights.get("avoid_overcommit", 0.0)), -1.0, 1.0
 	)
-	var exposure_acceptance: float = clampf(
-		float(weights.get("exposure_acceptance", 0.0)), -1.0, 1.0
-	)
+	var exposure_acceptance: float = _exposure_acceptance(directive)
 	var ally_protection: float = clampf(
 		float(weights.get("ally_protection_bias", 0.0)), -1.0, 1.0
 	)

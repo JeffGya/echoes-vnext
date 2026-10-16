@@ -19,6 +19,8 @@
 #   noacc   directive_exposure_acceptance_weight = 0 only
 #   nocoh   cohesion_weight = 0
 #   nocon   congestion_weight = 0
+#   scout   active Directive = directive.scout_carefully (the default; explicit for sweeps)
+#   seek    active Directive = directive.seek_signs
 # Tokens combine with commas, and `<spatial_utility key>=<float>` sweeps a weight to any value:
 #   seek,directive_exposure_acceptance_weight=20
 #
@@ -131,6 +133,8 @@ static func _apply_arm(runtime: FlowRuntime, arm: String) -> void:
 				cfg["cohesion_weight"] = 0.0
 			"nocon":
 				cfg["congestion_weight"] = 0.0
+			"scout":
+				_set_directive(runtime, "directive.scout_carefully")
 			"seek":
 				_set_directive(runtime, "directive.seek_signs")
 			"seeknoacc":
@@ -214,10 +218,7 @@ static func _cell(cell: Dictionary) -> String:
 	return "%d,%d" % [int(cell.get("col", 0)), int(cell.get("row", 0))]
 
 
-## exposure_acceptance is authored only on directive.seek_signs, so the default
-## directive.scout_carefully leaves directive_exposure_acceptance_weight inert even once
-## exposure is live. Switching the active directive separates "structurally inert" from
-## "not exercised by this fixture".
+## Switches the active Directive, so a sweep can compare Scout and Seek on the same encounter.
 static func _set_directive(runtime: FlowRuntime, directive_id: String) -> void:
 	var save_data: Dictionary = runtime.flow_ctx.save_data
 	if not (save_data.get("stage_context", null) is Dictionary):

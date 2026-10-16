@@ -26,6 +26,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_char/entry_schema_guard", Callable(DirectiveCharacterizationTests, "_t_entry_schema_guard"))
 	runner.register_test("directive_char/degenerate_weights_warn_only", Callable(DirectiveCharacterizationTests, "_t_degenerate_weights_warn_only"))
 	runner.register_test("directive_char/picker_description_matches_config", Callable(DirectiveCharacterizationTests, "_t_picker_description"))
+	runner.register_test("directive_char/synthetic_directive_reaches_acceptance", Callable(DirectiveCharacterizationTests, "_t_synthetic_directive_reaches_acceptance"))
 	runner.register_test("directive_char/no_directive_id_literal_in_core", Callable(DirectiveCharacterizationTests, "_t_no_id_literal_in_core"))
 
 
@@ -219,6 +220,27 @@ static func _t_third_drives_bids_and_approach() -> Dictionary:
 	var got := str(_engage(THIRD, "combat", Callable(DirectiveCharacterizationTests, "_plant_third"))["approach_id"])
 	if got != THIRD:
 		return { "ok": false, "error": "expected encounter_approach.directive_id '%s', got '%s'" % [THIRD, got] }
+	return { "ok": true }
+
+
+# A data-only Directive (D-14): a new tolerance reaches route acceptance with no logic change.
+static func _t_synthetic_directive_reaches_acceptance() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load balance.json" }
+	var movement: Dictionary = cs.get_balance()["data"]["combat"]["movement"]
+	var cfg: Dictionary = movement["spatial_utility"]
+	var offset: float = float(movement["exposure_acceptance"]["offset"])
+	var third := _third_entry(ConfigService.get_directives_cfg(cs))
+	third["exposure_tolerance"] = 0.65
+	var arbiter := BehaviorArbiter.new({}, movement)
+	var option := { "objective_progress": 0.0, "cohesion": 0.0, "exposure": 1.0, "congestion": 0.0, "commitment": 0, "capacity": 4 }
+	var parts := {}
+	arbiter._spatial_utility({ "urgency": 0.0, "purpose": "advance" }, option, third, cfg, parts)
+	var expected: float = float(cfg["directive_exposure_acceptance_weight"]) * (0.65 - offset)
+	var got: float = float((parts["parts"] as Dictionary)["directive_exposure_acceptance"])
+	if not is_equal_approx(got, expected):
+		return { "ok": false, "error": "synthetic tolerance 0.65 gave term %s, expected %s" % [got, expected] }
 	return { "ok": true }
 
 

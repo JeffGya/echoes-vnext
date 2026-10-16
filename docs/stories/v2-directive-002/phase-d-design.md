@@ -17,7 +17,7 @@ Phase D has four parts. Each part is one named cause of change (section 10).
 3. Judgment scale: Judgment scales the Directive part of acceptance down. A seasoned Echo leans on its own exposure habit (D-70 J2 C).
 4. The Directive is a third stop-short cause beside fear and identity. Judgment lowers it (D-69 Q3, Q4, Q5).
 
-The acceptance weight rises to a probe-measured value in the range 8 to 14 (D-70 J1).
+The acceptance weight rises to 17 (D-73). D-73 replaces the D-70 J1 range (8 to 14). The probe sweep covered 0, 2, 8, 11, 14, 17, 19.
 Fear lowers Judgment, and we accept that (D-70 J3).
 The Judgment floors are 0.6 and `interpretation_swing_max` stays 2.0 (D-70 J4).
 Seek rarely has a Directive stop (D-70 J5).
@@ -118,7 +118,7 @@ Inputs, resolved once per Echo per turn (they do not change between candidates):
 | `fear` | `max(fear, fear_base)` of the actor | The same expression that `style_inputs.fear` uses (`BehaviorArbiter.gd:774`) and that `derive_expression` uses for `fear_pressure` (`MaturityExpressionService.gd:186`). |
 | `ramp(fear)` | `clamp((fear - fear_start) / (fear_full - fear_start), 0, 1)` | Same shape as `StagePartyStance.echo_lean` (`fear_lean`). `fear_start` 20 and `fear_full` 70 from `data.stages.party_stance.state_ramps` (see 2b). |
 | `fear_bound` | 0.12 (PROPOSED DEFAULT) | Combat-owned config key. Start equals the stage bound `bounds.exposure_tolerance` 0.12. |
-| `weight` | `directive_exposure_acceptance_weight`, probe-measured in 8 to 14 | EXISTS in `spatial_utility`. |
+| `weight` | `directive_exposure_acceptance_weight`, 17 (D-73; the D-70 J1 range 8 to 14 is replaced) | EXISTS in `spatial_utility`. |
 
 Order of operations:
 
@@ -143,7 +143,7 @@ The own habit. "A seasoned Echo uses its own exposure habit" needs no new term.
 The habit already exists: movement style alignment (`_style_alignment`, which reads Calling family, virtue vectors, fear and morale; `style_inputs` has no Judgment key).
 When the Judgment scale shrinks `D`, the habit decides more of the final choice. See question O2.
 
-What each Echo gets (ILLUSTRATIVE J values; real values come from probe step 3; weight 11 is an illustrative mid-range weight):
+What each Echo gets (ILLUSTRATIVE J values; real values come from probe step 3; the slopes use weight 11, an illustrative value from the first version; the shipped weight is 17 (D-73)):
 
 | Echo | J | Scale | Scout `D_scaled` | Scout `F` | Scout acceptance | Scout slope on exposure | Seek `D_scaled` | Seek `F` | Seek acceptance | Seek slope on exposure |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -171,9 +171,11 @@ Effect size of the weight (unchanged from the first version). The term is `weigh
 | 8 | -7.5 | -3.8 | Visible contrast likely. |
 | 11 | -8.0 | -3.0 | |
 | 14 | -8.6 | -2.1 | |
+| 17 (shipped, D-73) | -9.1 | -1.3 | Seek still pays for exposure (slope below 0). The probe showed the term changes decisions from weight 14 up. |
 | 20 | -9.7 | -0.5 | Seek nearly treats exposure as free. Too far. |
 
-Rule to protect: `weight x max(acceptance) < |exposure_weight|`. The largest possible acceptance is `max(T) - offset` at J = 0 and no fear (+0.3), so 14 x 0.3 = 4.2 < 6.0. Above the rule, exposure becomes an attractor for Seek (combat-003 section 22.4: "a sign switch on exposure").
+Rule to protect: `weight x max(acceptance) < |exposure_weight|`. The largest possible acceptance is `max(T) - offset` at J = 0 and no fear (+0.3), so 17 x 0.3 = 5.1 < 6.0 at the shipped weight 17 (D-73). Above the rule, exposure becomes an attractor for Seek (combat-003 section 22.4: "a sign switch on exposure").
+At weight 17 the rule fails for any Directive with `exposure_tolerance` of 0.853 or more (0.5 + 6/17). The test `directive_cfg/exposure_acceptance_never_attractor` catches a new Directive that does this (D-73).
 Phase D adds a config-integrity test for this rule (section 6).
 
 ### 2b. Where the fear ramp comes from (the same shape, one source)
@@ -363,7 +365,7 @@ Each test lands in the slice named in section 10.
 
 | # | Contrast | Expected difference | Test name (proposed) | Slice |
 |---|---|---|---|---|
-| C1 | Scout vs Seek, same Echo, Standing 1, route into exposure | Acceptance -0.184 vs +0.276 (illustrative). The Seek route score is higher on an exposed option. Seek takes the exposed option where Scout takes the lower one (two-option fixture). | `movement_arbiter/acceptance_scout_vs_seek_exposed_option` | 1 |
+| C1 | Scout vs Seek, same Echo, Standing 1, route into exposure | Acceptance -0.2 vs +0.3 in slice 1 (Judgment is not in yet); -0.184 vs +0.276 once the Judgment scale lands (illustrative). The Seek route score is higher on an exposed option. Seek takes the exposed option where Scout takes the lower one (two-option fixture). | `movement_arbiter/acceptance_scout_vs_seek_exposed_option` | 1 |
 | C2 | Scout vs Seek, same Echo, stop cause | Scout strength > Seek strength for every benefit. Seek below `min_cause_strength` for observe. | `stop_short/directive_cause_scout_stronger_than_seek` | 4 |
 | C3 | Standing 1 vs Standing 6, same Calling, Scout | Directive strength falls as J rises; never below `floor_s x base x affinity`; never above `base x affinity`. | `stop_short/directive_cause_falls_with_judgment` | 4 |
 | C4 | Same pair, anchor Calling | The winning cause flips from Directive to identity as J rises. | `stop_short/directive_cause_yields_to_identity_at_higher_judgment` | 4 |
@@ -417,7 +419,7 @@ Standing 1 failure check: C6 and J1 together must show contrast at Standing 1 wi
 | `data.combat.movement.exposure_acceptance.offset` | Offset in `D = T - offset` | New sibling block of `spatial_utility`. Not in the closed block. |
 | `data.combat.movement.exposure_acceptance.judgment_floor` | `floor_a` | Range 0.55 to 0.6. Must be >= 0.5. |
 | `data.combat.movement.exposure_acceptance.fear_lean_bound` | `fear_bound` | Combat-owned. Start equals the stage bound 0.12. Must satisfy F6. |
-| `data.combat.movement.spatial_utility.directive_exposure_acceptance_weight` | Weight of the acceptance term | EXISTS (2.0). Raised to a probe value in 8 to 14 (D-70 J1). Not a new key. |
+| `data.combat.movement.spatial_utility.directive_exposure_acceptance_weight` | Weight of the acceptance term | EXISTS (2.0). Raised to 17 (D-73, which replaces the D-70 J1 range 8 to 14). Not a new key. |
 | `data.stages.party_stance.state_ramps.fear_start` / `fear_full` | Fear ramp | EXIST (20, 70). Read-only shared. Not copied. |
 | `data.actor.stop_short.directive.affinity.guard` | Affinity per benefit | Large. |
 | `data.actor.stop_short.directive.affinity.hold` | Affinity per benefit | Large. |
@@ -438,7 +440,7 @@ No new Directive key (ANSWERS #81). The `_comment` fields use the project rule t
 
 | # | Question | Answer | Where it lands in this note |
 |---|---|---|---|
-| J1 | Acceptance weight | Raise to a probe-measured value in 8 to 14 | 2a, slice 1 |
+| J1 | Acceptance weight | Raise to 17 (D-73 replaces the range 8 to 14) | 2a, slice 1 |
 | J2 | Acceptance matures or reacts to fear | BOTH: fear lean (B) and Judgment scale (C), inside phase D | 2a, 2b, 3, 4, 10 |
 | J3 | A frightened Echo follows the Directive more | Accept. One Judgment value. | 4 (fear paths) |
 | J4 | Reinterpretation depth against the budget | Floors 0.55 to 0.6 (start 0.6). `interpretation_swing_max` stays 2.0. | 3 |
@@ -505,7 +507,7 @@ Use shipped boards, production construction, Echo-only, fixed seeds, a clean sav
 | 3 | Real Judgment per Standing (1 to 9) for the shipped starter Echoes, with and without fear and bonds | Replaces the illustrative J values. Sets `floor_a`, `floor_s` choices inside 0.55 to 0.6. | 3 |
 | 4 | Directive-cause share of all stops, by Standing and Calling family, under Scout | Proves the pillar: share falls, identity share rises, with Standing. | 4 |
 | 5 | Stops per Echo per fight, Scout and Seek | Detect spam (Scout) and dead feature (Seek). | 4 |
-| 6 | Acceptance weight sweep (2, 8, 11, 14) with the base map only | Picks the weight (D-70 J1). Count changed route choices, as combat-003 did. | 1 |
+| 6 | Acceptance weight sweep (0, 2, 8, 11, 14, 17, 19) with the base map only | Picked the weight 17 (D-73; the first list was 2, 8, 11, 14). Count changed route choices, as combat-003 did. | 1 |
 | 7 | Whether an edge Echo's stop rate under Scout changes between Standing 1, 6, 9 | Checks that edge growth is visible (D-70 J4). | 4 |
 | 8 | Hash moves per slice, each with one named cause | D-69 Q1 attribution. | each |
 | 9 | Fear counterfactual: acceptance with fear lean on and off, for Echoes at fear 0, 20, 45, 70. Also with F-d (style fear) on and off. | Sizes F-b against F-a and F-d. Decides O1. | 2 |
@@ -538,7 +540,7 @@ No two slices land together. Re-records run one after another (no parallel re-re
 
 | Slice | Cause | Code changes | Contrast tests that land with it | Can Scout fingerprint hashes move? |
 |---|---|---|---|---|
-| 1 | Base acceptance map (`T - offset`) and the new weight | `exposure_acceptance.offset`, weight value, acceptance from `T` in `_spatial_utility` | C1, C12, C13 (acceptance half) | YES. Scout acceptance goes from the intent weight (shipped) to -0.184. Any Scout fixture that chooses between routes with different exposure can change. If the hashes include the score trace, every route candidate moves. The probe (step 6) says which. |
+| 1 | Base acceptance map (`T - offset`) and the new weight | `exposure_acceptance.offset`, weight value, acceptance from `T` in `_spatial_utility` | C1, C12, C13 (acceptance half) | YES. Scout acceptance goes from the intent weight (shipped) to -0.2 (Judgment is not in yet; -0.184 is the later illustrative value). Any Scout fixture that chooses between routes with different exposure can change. If the hashes include the score trace, every route candidate moves. The probe (step 6) says which. |
 | 2 | Fear lean | `fear_lean_bound`, shared ramp helper, fear argument | F1 to F8, C14 | ONLY IF a fingerprint fixture holds an Echo at or above `fear_start` (20), or with `fear_base` at or above 20. If every fixture is calm, the hashes do not move. A "no move" is a valid and recorded result for this slice. |
 | 3 | Judgment scale on acceptance | `judgment_floor` (acceptance), `judgment` argument in `_spatial_utility` | J1 to J9 | YES, in nearly every Scout fixture with a route choice. Fixture Judgment is above 0 whenever Standing or bonds are above the floor. A `judgment` of 0.3 default in a fixture also scales. |
 | 4 | Directive stop cause, with its Judgment scale | `CAUSE_ROWS` row, ctx tolerance field, stop affinities, `floor_s` | C2 to C11, C13 (stop half) | YES, where a Scout fixture holds a stop-short decision with a candidate guard, hold or observe cause at or above 0.15. Fixtures with stop-short disabled do not move. |

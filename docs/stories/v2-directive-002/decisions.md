@@ -77,6 +77,7 @@ Not yet applied to data. Scout line corrected by Jeff on 2026-10-11 ("your step"
 ### D-05. revive-exposure-tolerance
 **Q:** `exposure_tolerance` is authored on both Directives (0.3 and 0.8) and read by nothing. What now?
 **A:** Revive it as the one exposure input for stage. Combat phase D can feed the same key into `directive_exposure_acceptance`.
+- **Amended by D-69 Q2:** `exposure_tolerance` drives movement; `intent_weights.exposure_acceptance` stays for action choice, so two exposure inputs remain.
 
 ### D-06. pair-only
 **Q:** Do Press the Path and Hold the Circle belong here?
@@ -404,3 +405,17 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **Row order:** the Directive row goes after fear and identity in `CAUSE_ROWS`. The Echo's own cause wins a tie.
 - **Approval:** `phase-d-design.md` and `phase-d-numbers.md` are approved as the build basis. Slice 1 starts (base exposure rule and weight). Slices 2, 3 and 4 follow, one at a time, with a re-record and an `opus` attribution after each.
 - **Still open:** Q6 (player text for the Directive stop cause), after the code exists. Final values of the weight, the fear bound, the floors and the affinities come from the probe runs.
+
+### D-73. exposure-weight-17
+**Q:** Which exposure weight ships in slice 1? The probe sweep (14 runs of 7 fixed combat fixtures, 2026-10-16) showed the term is silent below weight 14.
+**A:** 17 (Jeff, 2026-10-16, the recommended option). PROPOSED DEFAULT. It is inside the legal limit (weight x acceptance < 6: Seek 17 x 0.3 = 5.1, Scout 17 x 0.2 = 3.4).
+- **Evidence (differing moves vs weight 0, the term off):** Scout 0 of 384 at weights 2, 8 and 11; 2 at 14, 17 and 19 (`purify_shrine`). Seek 0 of 355 at 2 to 14; 16 at 17 and 19 (14 in `endure`, 2 in `purify_shrine`). Weight 19 adds nothing over 17.
+- **Limits:** the probe plays 7 fixed fights. The effect is still small at 17 because the base exposure cost (`exposure_weight` -6.0) is large. A stronger felt difference may need a change to that base cost. That is a larger design change and is not in phase D.
+- D-73 replaces the D-70 J1 probe range (8 to 14) and the D-72 start value 11.
+- Limit: at weight 17 the exposure term becomes an attractor for any Directive with exposure_tolerance of 0.853 or more (0.5 + 6/17). The config-integrity test (`directive_cfg/exposure_acceptance_never_attractor`) catches a new Directive that breaks this.
+
+### D-74. seek-fingerprint-suite-and-qa-fixes
+**Q:** (Q-A) Should a Seek combat fingerprint suite come before slices 2 to 4? And what happens to the QA findings after slice 1?
+**A:** (Jeff, 2026-10-16)
+- **Q-A:** yes. Add a Seek combat fingerprint suite BEFORE slices 2 to 4, so each slice shows its effect on Seek in a saved value. The probe showed Seek moving in two fixed fights: `endure` and `purify_shrine`. The suite is built next, as a new suite.
+- **QA fixes:** QA findings 4, 5, 6 and 8 are fixed together with slice 1.

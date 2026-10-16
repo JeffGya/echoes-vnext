@@ -28,7 +28,7 @@
 				"target_preference": { "intel": 1.4, "objective": 1.2, "combat": 0.4, "reward": 1.2 },
 				"precise_intel_bias": 25,
 				"exposure_tolerance": 0.3,
-				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Read by StagePartyStance; bent by data.stages.party_stance (D-05).",
+				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Stage: read by StagePartyStance and bent by data.stages.party_stance (D-05). Combat: BehaviorArbiter reads this raw value, unbent, as route acceptance = exposure_tolerance - data.combat.movement.exposure_acceptance.offset (D-69 Q1).",
 				"escape_bonus": 20,
 				"intel_retention": true,
 				"intel_retention_bonus": 1.5,
@@ -41,6 +41,7 @@
 				"id": "directive.seek_signs",
 				"label": "Seek Signs",
 				"description": "There is much to discover. Push ahead, stay alert but beware the danger. Wanting too much can cost.",
+				"_comment_intent_exposure_acceptance": "intent_weights.exposure_acceptance serves action choice only (melee, guard, idle rows). Route scoring reads exposure_tolerance, offset by data.combat.movement.exposure_acceptance.offset, since D-69.",
 				"intent_weights": {
 					"clue_seeking_priority": 0.40,
 					"reporting_priority":    0.30,
@@ -63,7 +64,7 @@
 				"target_preference": { "intel": 0.9, "objective": 1.6, "combat": 1.4, "reward": 0.9 },
 				"precise_intel_bias": 75,
 				"exposure_tolerance": 0.8,
-				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Read by StagePartyStance; bent by data.stages.party_stance (D-05).",
+				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Stage: read by StagePartyStance and bent by data.stages.party_stance (D-05). Combat: BehaviorArbiter reads this raw value, unbent, as route acceptance = exposure_tolerance - data.combat.movement.exposure_acceptance.offset (D-69 Q1).",
 				"escape_bonus": 0,
 				"intel_retention": false,
 				"intel_retention_bonus": 1.0,
@@ -1693,7 +1694,11 @@
 				}
 			},
 			"movement": {
-				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. Two traps. (1) directive_exposure_acceptance_weight is DELIBERATELY INERT, not unfinished: the term is weight x directive.intent_weights.exposure_acceptance x exposure, and exposure_acceptance is authored only on directive.seek_signs, so on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing. (2) exposure is binary in a fight, because _exposure divides controlled edges by a route that is one or two cells long, so exposure_weight is a flat penalty on a boolean, not a slope. Measurements and sweeps: docs/stories/v2-combat-003/handoff.md section 22. All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
+				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. (1) directive_exposure_acceptance_weight (V2-DIRECTIVE-002 phase D slice 1): the term is weight x acceptance x exposure, and acceptance = directive.exposure_tolerance - exposure_acceptance.offset (Scout -0.2, Seek +0.3), read from the active Directive entry. directive.intent_weights.exposure_acceptance no longer feeds this term; it still feeds action choice. A Directive with no exposure_tolerance gives acceptance 0. The value 17.0 is PROPOSED DEFAULT (D-73); the phase D probe sweep checks it. Keep weight x max acceptance below abs(exposure_weight). (2) exposure is a fraction in a fight: _exposure divides controlled edges by the route length, so a one-cell route gives 0 or 1 and a longer route can give 0.5. Older measurements and sweeps: docs/stories/v2-combat-003/handoff.md section 22 (weight then inert). All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
+				"exposure_acceptance": {
+					"_comment": "PROPOSED DEFAULT. Sibling of spatial_utility so the closed spatial_utility schema stays unchanged. offset: combat acceptance of exposure = Directive exposure_tolerance - offset (D-69 Q1). 0.5 sits between the shipped tolerances 0.3 and 0.8. A missing block gives acceptance 0.",
+					"offset": 0.5
+				},
 				"spatial_utility": {
 					"cap": 28.0,
 					"urgency_weight": 4.0,
@@ -1705,7 +1710,7 @@
 					"commitment_weight": -2.0,
 					"directive_objective_advance_weight": 4.0,
 					"directive_avoid_overcommit_weight": 2.0,
-					"directive_exposure_acceptance_weight": 2.0,
+					"directive_exposure_acceptance_weight": 17.0,
 					"directive_ally_protection_weight": 2.0,
 					"directive_threat_interception_weight": 2.0
 				},

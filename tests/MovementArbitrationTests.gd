@@ -38,6 +38,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/hostile_control_still_restrains", _t_hostile_control_still_restrains)
 	runner.register_test("movement_arbiter/avoid_overcommit_stays_proportionate", _t_avoid_overcommit_stays_proportionate)
 	runner.register_test("movement_arbiter/commitment_ratio_ignores_hostile_surcharge", _t_commitment_ratio_ignores_hostile_surcharge)
+	runner.register_test("movement_arbiter/acceptance_scout_vs_seek_exposed_option", _t_acceptance_scout_vs_seek_exposed_option)
+	runner.register_test("movement_arbiter/acceptance_missing_tolerance_is_neutral", _t_acceptance_missing_tolerance_is_neutral)
+	runner.register_test("movement_arbiter/acceptance_rejects_non_finite_inputs", _t_acceptance_rejects_non_finite_inputs)
 
 
 ## The winner also carries the score decomposition DecisionTrace reads
@@ -377,7 +380,9 @@ static func _t_spatial_base_terms() -> Dictionary:
 
 
 static func _t_spatial_directive_terms() -> Dictionary:
-	var arbiter := BehaviorArbiter.new({}, _spatial_cfg())
+	var movement_cfg: Dictionary = _spatial_cfg()
+	movement_cfg["exposure_acceptance"] = {"offset": 0.0}
+	var arbiter := BehaviorArbiter.new({}, movement_cfg)
 	var cfg: Dictionary = _spatial_cfg()["spatial_utility"]
 	var option: Dictionary = {"objective_progress": 0.5, "cohesion": 0.0, "exposure": 0.5, "congestion": 0.0, "commitment": 1, "capacity": 4}
 	var cases: Array = [
@@ -391,15 +396,22 @@ static func _t_spatial_directive_terms() -> Dictionary:
 		var case: Array = case_value as Array
 		var goal: Dictionary = {"urgency": 0.0, "purpose": str(case[1])}
 		var base: float = arbiter._spatial_utility(goal, option, {}, cfg)
-		var with_weight: float = arbiter._spatial_utility(goal, option, {"intent_weights": {str(case[0]): 1.0}}, cfg)
+		var with_weight: float = arbiter._spatial_utility(goal, option, _weighted(str(case[0]), 1.0), cfg)
 		if not is_equal_approx(with_weight - base, float(case[2])):
 			return _fail("Directive term %s was not exact: %s" % [str(case[0]), with_weight - base])
-		var positive_clamp: float = arbiter._spatial_utility(goal, option, {"intent_weights": {str(case[0]): 999.0}}, cfg)
-		var negative: float = arbiter._spatial_utility(goal, option, {"intent_weights": {str(case[0]): -1.0}}, cfg)
-		var negative_clamp: float = arbiter._spatial_utility(goal, option, {"intent_weights": {str(case[0]): -999.0}}, cfg)
+		var positive_clamp: float = arbiter._spatial_utility(goal, option, _weighted(str(case[0]), 999.0), cfg)
+		var negative: float = arbiter._spatial_utility(goal, option, _weighted(str(case[0]), -1.0), cfg)
+		var negative_clamp: float = arbiter._spatial_utility(goal, option, _weighted(str(case[0]), -999.0), cfg)
 		if not is_equal_approx(positive_clamp, with_weight) or not is_equal_approx(negative_clamp, negative):
 			return _fail("Directive term %s did not clamp at +/-1 before the utility cap" % str(case[0]))
 	return _pass()
+
+
+## Acceptance reads `exposure_tolerance` (offset 0 here); the other four terms read intent_weights.
+static func _weighted(key: String, value: float) -> Dictionary:
+	if key == "exposure_acceptance":
+		return {"exposure_tolerance": value}
+	return {"intent_weights": {key: value}}
 
 
 static func _t_spatial_clamp_indicators() -> Dictionary:
@@ -897,6 +909,86 @@ static func _t_commitment_ratio_ignores_hostile_surcharge() -> Dictionary:
 	if not is_equal_approx(exposed_term, clean_term):
 		return _fail("Commitment term still differs by hostile exposure alone: exposed %s, clean %s" \
 			% [exposed_term, clean_term])
+	return _pass()
+
+
+## Shipped movement config and Directive entries: the acceptance map is read from both.
+static func _shipped_movement_and_directives() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	return {
+		"movement": ((cs.get_balance().get("data", {}) as Dictionary).get("combat", {}) as Dictionary).get("movement", {}),
+		"directives": ConfigService.get_directives_cfg(cs),
+	}
+
+
+static func _exposed_option(progress: float) -> Dictionary:
+	return {"objective_progress": progress, "cohesion": 0.0, "exposure": 1.0, "congestion": 0.0, "commitment": 0, "capacity": 4}
+
+
+static func _t_acceptance_scout_vs_seek_exposed_option() -> Dictionary:
+	var shipped: Dictionary = _shipped_movement_and_directives()
+	var movement: Dictionary = shipped["movement"] as Dictionary
+	var directives: Dictionary = shipped["directives"] as Dictionary
+	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
+	var offset: float = float((movement["exposure_acceptance"] as Dictionary)["offset"])
+	var weight: float = float(cfg["directive_exposure_acceptance_weight"])
+	var arbiter := BehaviorArbiter.new({}, movement)
+	var goal: Dictionary = {"urgency": 0.0, "purpose": "advance"}
+	# Progress gain that exactly cancels the exposure cost, so only the Directive terms decide.
+	var cancel: float = -float(cfg["exposure_weight"]) / float(cfg["objective_progress_weight"])
+	var exposed: Dictionary = _exposed_option(cancel)
+	var results: Dictionary = {}
+	for id: String in ["directive.scout_carefully", "directive.seek_signs"]:
+		var directive: Dictionary = directives[id] as Dictionary
+		var parts: Dictionary = {}
+		var value: float = arbiter._spatial_utility(goal, exposed, directive, cfg, parts)
+		var expected: float = weight * (float(directive["exposure_tolerance"]) - offset)
+		if not is_equal_approx(float((parts["parts"] as Dictionary)["directive_exposure_acceptance"]), expected):
+			return _fail("%s acceptance term %s != weight x (tolerance - offset) %s" % [id, (parts["parts"] as Dictionary)["directive_exposure_acceptance"], expected])
+		results[id] = value
+	if float(results["directive.scout_carefully"]) >= 0.0:
+		return _fail("Scout should refuse the exposed option (utility %s)" % results["directive.scout_carefully"])
+	if float(results["directive.seek_signs"]) <= 0.0:
+		return _fail("Seek should take the exposed option (utility %s)" % results["directive.seek_signs"])
+	return _pass()
+
+
+static func _t_acceptance_missing_tolerance_is_neutral() -> Dictionary:
+	var shipped: Dictionary = _shipped_movement_and_directives()
+	var movement: Dictionary = shipped["movement"] as Dictionary
+	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
+	var goal: Dictionary = {"urgency": 0.0, "purpose": "advance"}
+	var exposed: Dictionary = _exposed_option(0.5)
+	var arbiter := BehaviorArbiter.new({}, movement)
+	var base: float = arbiter._spatial_utility(goal, exposed, {}, cfg)
+	# A Directive with no exposure_tolerance, even with the old intent weight set.
+	var no_tolerance: Dictionary = {"intent_weights": {"exposure_acceptance": 1.0}}
+	if not is_equal_approx(arbiter._spatial_utility(goal, exposed, no_tolerance, cfg), base):
+		return _fail("A Directive with no exposure_tolerance must give acceptance 0")
+	# A tolerance but no exposure_acceptance block (old fixtures): neutral, not an error.
+	var bare := BehaviorArbiter.new({}, {"spatial_utility": cfg})
+	var tolerant: Dictionary = {"exposure_tolerance": 0.8}
+	if not is_equal_approx(bare._spatial_utility(goal, exposed, tolerant, cfg), base):
+		return _fail("A missing exposure_acceptance block must give acceptance 0")
+	return _pass()
+
+
+static func _t_acceptance_rejects_non_finite_inputs() -> Dictionary:
+	var movement: Dictionary = (_shipped_movement_and_directives()["movement"] as Dictionary).duplicate(true)
+	var arbiter := BehaviorArbiter.new({}, movement)
+	for bad: Variant in [NAN, INF, "0.3"]:
+		if bool(arbiter._validate_spatial_directive({"exposure_tolerance": bad})["valid"]):
+			return _fail("exposure_tolerance %s was accepted" % str(bad))
+	if not bool(arbiter._validate_spatial_directive({"exposure_tolerance": 0.3})["valid"]):
+		return _fail("A finite exposure_tolerance was rejected")
+	if not bool(arbiter._validate_spatial_config()["valid"]):
+		return _fail("The shipped movement config was rejected")
+	for bad_offset: Variant in [NAN, INF, "0.5", null]:
+		(movement["exposure_acceptance"] as Dictionary)["offset"] = bad_offset
+		var bad_arbiter := BehaviorArbiter.new({}, movement)
+		if bool(bad_arbiter._validate_spatial_config()["valid"]):
+			return _fail("offset %s was accepted" % str(bad_offset))
 	return _pass()
 
 
