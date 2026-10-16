@@ -362,3 +362,16 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **"Purpose" in `cause.objective`:** allowed. It means the Echoes' purpose.
 - **`steadied` line:** has no `{name}:` prefix, on purpose.
 - **`purpose.hold`:** no line (D-67).
+
+## Phase D (combat expression and stop-short Directive cause)
+
+### D-69. phase-d-design-answers
+**Q:** Five design questions from the phase D recon (read-only report, 2026-10-16).
+**A:** (Jeff, 2026-10-16)
+1. **Exposure map (Q1):** option A. Combat acceptance = `exposure_tolerance` minus 0.5 (Scout -0.2, Seek +0.3). The offset is a config key (ANSWERS #83). Scout moves the recorded hashes, so an `opus` agent attributes each move.
+2. **Old number (Q2):** option A. `intent_weights.exposure_acceptance` stays for action choice (melee, guard, idle rows). Tolerance drives movement only. Two exposure inputs remain, and the docs say so (D-05 is amended).
+3. **Stop favour (Q3):** option A. The Directive stop cause is `(1 - exposure_tolerance) x affinity[benefit]`. Guard and hold get a larger affinity. Observe gets a small affinity. No new Directive key (ANSWERS #81). The numbers are PROPOSED DEFAULT in config.
+4. **Standing (Q4):** option B (Jeff chose against the advice). Judgment scales the Directive stop cause down: higher Standing obeys less. The scaling must sit inside `interpretation_swing_max`. A new config-integrity test proves it. The design must show no double count with `_directive_bonus` and the identity cause (design.md:320).
+5. **Route scores (Q5):** option A. The route scoring formula stays. The Directive cause adds the normal stop bias (`stop_short_weight x strength`), like fear and identity.
+- **Open:** Q6, the player-facing text lines for the Directive cause. They are Jeff's wording. They are proposed after the code exists.
+- **Rules kept:** the stage bound (`interpretation_width`, `party_stance`) never enters combat (D-09). `StageStopPolicy.CAUSES` and `StopShortService` stay separate.
