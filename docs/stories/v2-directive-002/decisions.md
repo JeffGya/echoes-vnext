@@ -388,3 +388,10 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **J4:** option A. Floor 0.55 to 0.6 (start 0.6). `interpretation_swing_max` stays 2.0. The probe checks if edge growth is visible. The budget changes only with Jeff's approval.
 - **J5:** option A. Accept. Seek rarely has a Directive stop.
 - **Open:** Q6, the player text for the Directive stop cause (after the code exists). The design note must be extended for J2 B and C before any code.
+
+### D-71. phase-d-open-questions-o1-o2
+**Q:** The two open questions of `phase-d-design.md` (section 7, after the J2 extension).
+**A:** (Jeff, 2026-10-16)
+- **O1:** fear lean bound 0.12, the same as the stage. Exposure stays a cost for a very afraid Echo. The value is PROPOSED DEFAULT in config and the probe may change it.
+- **O2:** option A. A seasoned Echo shows its own exposure habit through the existing movement style (style alignment). No new Calling habit term in phase D.
+- **Next:** `mid-game-designer` proposes the config numbers in `docs/stories/v2-directive-002/phase-d-numbers.md`. Jeff approves the design note and the numbers before any code starts.
