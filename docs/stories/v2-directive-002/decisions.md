@@ -375,3 +375,16 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 5. **Route scores (Q5):** option A. The route scoring formula stays. The Directive cause adds the normal stop bias (`stop_short_weight x strength`), like fear and identity.
 - **Open:** Q6, the player-facing text lines for the Directive cause. They are Jeff's wording. They are proposed after the code exists.
 - **Rules kept:** the stage bound (`interpretation_width`, `party_stance`) never enters combat (D-09). `StageStopPolicy.CAUSES` and `StopShortService` stay separate.
+
+### D-70. phase-d-design-answers-j1-to-j5
+**Q:** Five questions from `phase-d-design.md` section 7.
+**A:** (Jeff, 2026-10-16)
+- **J1:** option B. Raise the acceptance weight to a probe-measured value (range 8 to 14, below the attractor limit at 20). A probe sweep sets it.
+- **J2:** both B and C, inside phase D. Jeff: "I don't want to follow up, I want it added here. It should be both." Pillar reason: Echo growth must show in movement exposure as well as in stops. So:
+  - **Fear lean (B):** fear lowers combat exposure acceptance. A frightened Echo shies from exposure. This matches the stage rule (design.md:31).
+  - **Judgment scale (C):** Judgment scales the Directive part of acceptance. A seasoned Echo uses its own exposure habit. This needs a Judgment argument in `_spatial_utility` and its own row in the swing budget.
+  - **Attribution:** the orchestrator keeps one named cause per recorded-value move by landing the causes in separate slices, with a re-record between them: (1) base acceptance map, (2) fear lean, (3) Judgment scale on acceptance, (4) Directive stop cause with its Judgment scale.
+- **J3:** option A. Accept. Fear lowers Judgment, so a shaken veteran leans back on orders.
+- **J4:** option A. Floor 0.55 to 0.6 (start 0.6). `interpretation_swing_max` stays 2.0. The probe checks if edge growth is visible. The budget changes only with Jeff's approval.
+- **J5:** option A. Accept. Seek rarely has a Directive stop.
+- **Open:** Q6, the player text for the Directive stop cause (after the code exists). The design note must be extended for J2 B and C before any code.
