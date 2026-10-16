@@ -22,6 +22,7 @@
 #   scout   active Directive = directive.scout_carefully (the default; explicit for sweeps)
 #   seek    active Directive = directive.seek_signs
 #   nofear  exposure_acceptance.fear_lean_bound = 0 (fear lean off)
+#   boards  run only the fixture boards of tools/ExposureChoiceBoards.gd (no fights)
 #   fear=N  every Echo starts with fear N and fear_base min(N, 40); keep N below the lowest
 #           refusal threshold or the Echoes refuse (a warning line says so). Try 0, 20, 45, 60.
 # Tokens combine with commas, and `<spatial_utility key>=<float>` sweeps a weight to any value:
@@ -65,6 +66,12 @@ static func _say(line: String) -> void:
 static func run() -> Dictionary:
 	var argv: PackedStringArray = OS.get_cmdline_user_args()
 	var arm: String = str(argv[2]) if argv.size() > 2 else "base"
+	if arm.split(",", false).has("boards"):
+		_sink = FileAccess.open("user://spatial_term_probe_%s.txt" % arm, FileAccess.WRITE)
+		ExposureChoiceBoards.run(arm)
+		_sink.close()
+		_sink = null
+		return {"ok": true, "error": ""}
 	_sink = FileAccess.open("user://spatial_term_probe_%s.txt" % arm, FileAccess.WRITE)
 	_say("### ARM %s" % arm)
 	_turns_by_action = {}
