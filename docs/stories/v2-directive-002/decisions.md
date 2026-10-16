@@ -395,3 +395,12 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **O1:** fear lean bound 0.12, the same as the stage. Exposure stays a cost for a very afraid Echo. The value is PROPOSED DEFAULT in config and the probe may change it.
 - **O2:** option A. A seasoned Echo shows its own exposure habit through the existing movement style (style alignment). No new Calling habit term in phase D.
 - **Next:** `mid-game-designer` proposes the config numbers in `docs/stories/v2-directive-002/phase-d-numbers.md`. Jeff approves the design note and the numbers before any code starts.
+
+### D-72. phase-d-numbers-approved
+**Q:** Three number choices from `phase-d-numbers.md`, and approval of the phase D design note and numbers.
+**A:** (Jeff, 2026-10-16)
+- **Hold affinity:** 0.8 (guard 1.0, observe 0.3). PROPOSED DEFAULT. The probe may change it.
+- **Exposure weight:** start at 11. The probe sweep (2, 8, 11, 14) shows the real effect. Jeff decides after the probe if the weight goes up. No guess now.
+- **Row order:** the Directive row goes after fear and identity in `CAUSE_ROWS`. The Echo's own cause wins a tie.
+- **Approval:** `phase-d-design.md` and `phase-d-numbers.md` are approved as the build basis. Slice 1 starts (base exposure rule and weight). Slices 2, 3 and 4 follow, one at a time, with a re-record and an `opus` attribution after each.
+- **Still open:** Q6 (player text for the Directive stop cause), after the code exists. Final values of the weight, the fear bound, the floors and the affinities come from the probe runs.
