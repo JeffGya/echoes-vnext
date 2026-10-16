@@ -47,6 +47,7 @@ const GuidanceContributionScript = preload("res://core/actors/behaviors/Guidance
 const MovementStyleServiceScript = preload("res://core/actors/behaviors/MovementStyleService.gd")
 const BoardAssessmentServiceScript = preload("res://core/actors/behaviors/BoardAssessmentService.gd")
 const ActionCandidateGeneratorScript = preload("res://core/actors/behaviors/ActionCandidateGenerator.gd")
+const StagePartyStanceScript = preload("res://core/movement/StagePartyStance.gd")
 
 ## ROUTE-shape validation order (mirrors MovementOptionService.STYLE_ORDER / OptionContract.STYLES).
 ## Most of these words also appear in the separate `movement_style` vocabulary
@@ -694,6 +695,7 @@ func select_movement_intent(
 	# default derivation and why this drives interpretation_width.
 	var judgment: float = float(context.get("judgment", 0.3))
 	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
+	var fear_lean: float = _fear_lean(actor, context.get("fear_ramp", {}) as Dictionary)
 	var board_summary: Dictionary = BoardAssessmentServiceScript.build_board_summary(
 		actor,
 		all_actors,
@@ -809,7 +811,8 @@ func select_movement_intent(
 				candidate["_movement_option"] as Dictionary,
 				directive,
 				spatial_cfg,
-				spatial_parts
+				spatial_parts,
+				fear_lean
 			)
 			candidate["_spatial_components"] = spatial_parts
 			# V2-INFRA-003 pass 8: cover_positioning — a Whole leader in range teaches
@@ -1350,6 +1353,10 @@ func _validate_spatial_config() -> Dictionary:
 		var offset: Variant = (block as Dictionary).get("offset", null)
 		if not (offset is int or offset is float) or not is_finite(float(offset)):
 			return _movement_failure("invalid_exposure_acceptance_offset", "movement_cfg.exposure_acceptance.offset")
+		if (block as Dictionary).has("fear_lean_bound"):
+			var bound: Variant = (block as Dictionary)["fear_lean_bound"]
+			if not (bound is int or bound is float) or not is_finite(float(bound)) or float(bound) < 0.0 or float(bound) > 1.0:
+				return _movement_failure("invalid_exposure_acceptance_fear_lean_bound", "movement_cfg.exposure_acceptance.fear_lean_bound")
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
 
@@ -1375,14 +1382,30 @@ func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
 
-## Route acceptance of exposure: Directive `exposure_tolerance` minus the configured offset.
-## 0.0 (neutral) when the tolerance or the `exposure_acceptance` config block is absent.
+## Route acceptance of exposure: D - `fear_lean`, clamped, with D = Directive `exposure_tolerance`
+## - offset. D is 0.0 when the tolerance or the `exposure_acceptance` offset is absent.
+## An EMPTY Directive (enemies, keeper trial) gives 0.0 and takes no fear lean.
 ## `intent_weights.exposure_acceptance` is not read here; it serves action choice only.
-func _exposure_acceptance(directive: Dictionary) -> float:
-	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
-	if not directive.has("exposure_tolerance") or not block is Dictionary or not (block as Dictionary).has("offset"):
+func _exposure_acceptance(directive: Dictionary, fear_lean: float = 0.0) -> float:
+	if directive.is_empty():
 		return 0.0
-	return clampf(float(directive["exposure_tolerance"]) - float((block as Dictionary)["offset"]), -1.0, 1.0)
+	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
+	var d: float = 0.0
+	if directive.has("exposure_tolerance") and block is Dictionary and (block as Dictionary).has("offset"):
+		d = float(directive["exposure_tolerance"]) - float((block as Dictionary)["offset"])
+	return clampf(d - fear_lean, -1.0, 1.0)
+
+
+## Fall in exposure acceptance that this actor's fear causes: `fear_lean_bound` x the
+## stage fear ramp. 0.0 when the bound or either ramp key is absent. Reads `max(fear, fear_base)`
+## like the style inputs.
+func _fear_lean(actor: Dictionary, ramps: Dictionary) -> float:
+	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
+	if not block is Dictionary or not (block as Dictionary).has("fear_lean_bound") \
+			or not ramps.has("fear_start") or not ramps.has("fear_full"):
+		return 0.0
+	var fear: float = maxf(float(actor.get("fear", 0)), float(actor.get("fear_base", 0)))
+	return float((block as Dictionary)["fear_lean_bound"]) * StagePartyStanceScript.fear_ramp(fear, ramps)
 
 
 ## `out_parts`, when a non-null Dictionary is passed, receives this call's own
@@ -1396,7 +1419,8 @@ func _spatial_utility(
 	option: Dictionary,
 	directive: Dictionary,
 	config: Dictionary,
-	out_parts: Dictionary = {}
+	out_parts: Dictionary = {},
+	fear_lean: float = 0.0
 ) -> float:
 	var urgency: float = clampf(float(goal["urgency"]), 0.0, 1.0)
 	var progress: float = clampf(float(option["objective_progress"]), 0.0, 1.0)
@@ -1432,7 +1456,7 @@ func _spatial_utility(
 	var avoid_overcommit: float = clampf(
 		float(weights.get("avoid_overcommit", 0.0)), -1.0, 1.0
 	)
-	var exposure_acceptance: float = _exposure_acceptance(directive)
+	var exposure_acceptance: float = _exposure_acceptance(directive, fear_lean)
 	var ally_protection: float = clampf(
 		float(weights.get("ally_protection_bias", 0.0)), -1.0, 1.0
 	)

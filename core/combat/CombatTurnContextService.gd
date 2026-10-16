@@ -5,7 +5,8 @@
 #
 # WHAT THIS IS. Everything that turns the live encounter plus save data plus balance.json into
 # the single `ctx` Dictionary that ActorStateMachine.advance_turn() consumes, and the
-# terrain-aware board_cfg that the same activation needs afterwards. Five things, in the order
+# terrain-aware board_cfg that the same activation needs afterwards. Five things (plus
+# ctx.fear_ramp, the two stage fear-ramp keys combat shares, via _fear_ramp_cfg), in the order
 # they ran before the move and still run now:
 #
 #   1. PURIFY_SHRINE shrine scan          -> shrine_alive
@@ -179,6 +180,7 @@ func build_turn_context(
 		"bonds":                   _bonds_for_ctx,
 		"bond_thresholds":         ConfigService.get_bond_thresholds_cfg(config_service),
 		"bond_behavior_cfg":       ConfigService.get_bond_behavior_cfg(config_service),
+		"fear_ramp":               _fear_ramp_cfg(bdata),
 		# V2-VOICE-001: reactive bark queue — actors read this to fire rally_ally barks.
 		# Shallow copy so a consumer cannot append to (or clear) the live ectx array. The
 		# entries themselves are read but never written. Reset each round, one entry per
@@ -258,3 +260,15 @@ func build_turn_context(
 		"ctx":       ctx,
 		"board_cfg": movement_board_cfg,
 	}
+
+
+## Only the two ramp keys cross from the stage block into combat; no other stage key does.
+static func _fear_ramp_cfg(bdata: Dictionary) -> Dictionary:
+	var ramps: Variant = ((bdata.get("stages", {}) as Dictionary).get("party_stance", {}) as Dictionary).get("state_ramps", {})
+	if not ramps is Dictionary:
+		return {}
+	var out: Dictionary = {}
+	for key: String in ["fear_start", "fear_full"]:
+		if (ramps as Dictionary).has(key):
+			out[key] = (ramps as Dictionary)[key]
+	return out

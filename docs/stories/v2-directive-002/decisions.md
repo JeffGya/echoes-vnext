@@ -419,3 +419,18 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 **A:** (Jeff, 2026-10-16)
 - **Q-A:** yes. Add a Seek combat fingerprint suite BEFORE slices 2 to 4, so each slice shows its effect on Seek in a saved value. The probe showed Seek moving in two fixed fights: `endure` and `purify_shrine`. The suite is built next, as a new suite.
 - **QA fixes:** QA findings 4, 5, 6 and 8 are fixed together with slice 1.
+
+### D-75. fear-lean-scope
+**Q:** When does fear lower combat exposure acceptance? (Slice 2 builder assumption 1 against design 2a and test J6.)
+**A:** Option B (Jeff, 2026-10-16, the recommended option). Fear lowers acceptance for any actor whose Directive is non-empty. A Directive without `exposure_tolerance` gets D = 0 and still takes the fear lean: `acceptance = clamp(0 - F, -1, 1)`. An empty Directive (`{}`: enemies, the keeper trial) gets acceptance 0 and no fear lean. This matches design 2a and test J6 for a data-only Directive and keeps enemies and the trial unchanged.
+
+### D-76. weak-fear-lean-study-base-cost
+**Q:** The slice 2 fear lean changes no move in the 7 probe fights. What now?
+**CORRECTION (QA check, 2026-10-16):** only the two fear-45 pairs are valid (Scout 0 of 369, Seek 0 of 362 differ). In the two fear-70 pairs every Echo turn was `actor.refuse` (nascent refusal threshold 65, `data.actor` refusal bands), so no Echo movement was scored and those pairs cannot show the lean. The probe also set `fear_base` 70, outside the legal range 0 to 40. At fear 45 the ramp is 0.5, so the lean is 0.06 (about 1.0 score points). No pair tested the lean near the top of the ramp. A new probe arm at fear about 60 with `fear_base` at most 40 is needed. The orchestrator reported the fear-70 pairs as valid before the QA check; that was wrong.
+**A:** Option A (Jeff, 2026-10-16, the recommended option). Commit slice 2 as built (no recorded value moved: 43 of 43 suites incl. `fingerprint_seek`). Slices 3 and 4 go on. Before the final combined check, a designer studies the base exposure cost (`exposure_weight` -6.0 in `spatial_utility`), the lever that makes exposure matter. The study is `docs/stories/v2-directive-002/exposure-lever-study.md`. Any change to that cost is Jeff's decision and moves many recorded values.
+- **Limits that apply:** fear bound at most about 0.165 (a larger bound lets a frightened Seek Echo go below 0, rejected in D-71); weight at most 19 (slice 1 uses 17).
+
+### D-77. slice-2-qa-fixes
+**Q:** Fix the slice 2 QA findings before the commit? (QA check, 2026-10-16.)
+**A:** Yes, fix all (Jeff, 2026-10-16, the recommended option): (1) a probe at fear 60 with `fear_base` at most 40, lean on against lean off, because fear-70 Echoes refuse every turn; (2) a wiring test from the combat turn context to the arbiter; (3) design tests F3 (`fear_lean_not_scaled_by_judgment`), F6 (`directive_cfg/fear_lean_bound_exceeds_fear_judgment_path`) and the Judgment dimension of F5 move to slice 3, because they need the Judgment floor (`floor_a`); (5) the config comment for `fear_lean_bound` gives the upper limit; (6) the `_fear_lean` doc comment is reworded. Finding 4 (the C14 scan is narrower than the design row) is accepted as a note.
+- **Result of the fear 50 and 60 probe (2026-10-17, valid arms):** Echoes still move (fear 50: 61 Scout and 100 Seek Echo moves, no refusals; fear 60: 52 and 76 moves, 32 and 36 refusals). Lean on against lean off: Scout fear 50 differs in 0 of 374 moves, Scout fear 60 in 0 of 410, Seek fear 50 in 0 of 355, Seek fear 60 in 0 of 410. The lean (up to 0.12 x ramp x 17 = 1.2 to 1.6 score points) changes no move in the 7 fixed fights. `data/balance.json` unchanged by the runs.

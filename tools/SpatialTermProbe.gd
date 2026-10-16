@@ -21,6 +21,9 @@
 #   nocon   congestion_weight = 0
 #   scout   active Directive = directive.scout_carefully (the default; explicit for sweeps)
 #   seek    active Directive = directive.seek_signs
+#   nofear  exposure_acceptance.fear_lean_bound = 0 (fear lean off)
+#   fear=N  every Echo starts with fear N and fear_base min(N, 40); keep N below the lowest
+#           refusal threshold or the Echoes refuse (a warning line says so). Try 0, 20, 45, 60.
 # Tokens combine with commas, and `<spatial_utility key>=<float>` sweeps a weight to any value:
 #   seek,directive_exposure_acceptance_weight=20
 #
@@ -44,6 +47,8 @@ const MODES: Array = [
 ]
 
 static var _sink: FileAccess = null
+static var _turns_by_action: Dictionary = {}
+static var _fear_warned: bool = false
 
 
 static func register(runner) -> void:
@@ -62,9 +67,15 @@ static func run() -> Dictionary:
 	var arm: String = str(argv[2]) if argv.size() > 2 else "base"
 	_sink = FileAccess.open("user://spatial_term_probe_%s.txt" % arm, FileAccess.WRITE)
 	_say("### ARM %s" % arm)
+	_turns_by_action = {}
+	_fear_warned = false
 	for entry_v: Variant in MODES:
 		var entry: Array = entry_v
 		_run_mode(str(entry[0]), str(entry[1]), str(entry[2]), str(entry[3]), arm)
+	var keys: Array = _turns_by_action.keys()
+	keys.sort()
+	for key: Variant in keys:
+		_say("ECHO_TURNS %s = %d" % [str(key), int(_turns_by_action[key])])
 	if _sink != null:
 		_sink.close()
 		_sink = null
@@ -78,7 +89,7 @@ static func _run_mode(mode: String, tag: String, guide_mode: String, guide_joins
 		return
 	var runtime: FlowRuntime = env["runtime"]
 	var ectx: EncounterContext = env["ectx"]
-	_apply_arm(runtime, arm)
+	_apply_arm(runtime, arm, ectx)
 	# Fields pass. Round 0 is not enough on its own: exposure only rises once a route runs
 	# beside a controlling hostile, and the two sides start at opposite ends of the board.
 	runtime.dispatch({"type": "combat.init"})
@@ -102,10 +113,10 @@ static func _run_mode(mode: String, tag: String, guide_mode: String, guide_joins
 	if env2.is_empty():
 		_say("SETUP_FAILED %s" % mode)
 		return
-	_apply_arm(env2["runtime"] as FlowRuntime, arm)
+	_apply_arm(env2["runtime"] as FlowRuntime, arm, env2["ectx"] as EncounterContext)
 	var drive: Dictionary = FlowFingerprintTests._drive_and_capture(
 		env2["runtime"] as FlowRuntime, env2["ectx"] as EncounterContext, 30)
-	_dump_decisions(mode, drive)
+	_dump_decisions(mode, drive, env2["ectx"] as EncounterContext)
 
 
 ## Overrides one or more spatial_utility weights in the in-memory balance. data/balance.json is
@@ -115,7 +126,7 @@ static func _run_mode(mode: String, tag: String, guide_mode: String, guide_joins
 ## An arm is a comma-separated token list. A token is either a named arm above, or a
 ## `<spatial_utility key>=<float>` assignment, so a weight can be swept rather than only zeroed:
 ##   `seek,directive_exposure_acceptance_weight=10`
-static func _apply_arm(runtime: FlowRuntime, arm: String) -> void:
+static func _apply_arm(runtime: FlowRuntime, arm: String, ectx: EncounterContext = null) -> void:
 	if arm == "base":
 		return
 	var cfg: Dictionary = runtime.config_service._balance \
@@ -137,11 +148,27 @@ static func _apply_arm(runtime: FlowRuntime, arm: String) -> void:
 				_set_directive(runtime, "directive.scout_carefully")
 			"seek":
 				_set_directive(runtime, "directive.seek_signs")
+			"nofear":
+				var block: Dictionary = runtime.config_service._balance \
+					.get("data", {}).get("combat", {}).get("movement", {}).get("exposure_acceptance", {})
+				block["fear_lean_bound"] = 0.0
 			"seeknoacc":
 				_set_directive(runtime, "directive.seek_signs")
 				cfg["directive_exposure_acceptance_weight"] = 0.0
 			_:
 				var pair: PackedStringArray = token.split("=", false)
+				if pair.size() == 2 and pair[0] == "fear" and pair[1].is_valid_int() and ectx != null:
+					var fear_n: int = pair[1].to_int()
+					for actor_v: Variant in ectx.actors:
+						if actor_v is Dictionary and str((actor_v as Dictionary).get("faction", "")) == "echo":
+							(actor_v as Dictionary)["fear"] = fear_n
+							(actor_v as Dictionary)["fear_base"] = mini(fear_n, 40)
+					var lowest: int = _lowest_refusal_threshold(runtime)
+					if fear_n >= lowest and not _fear_warned:
+						_fear_warned = true
+						_say("### WARNING fear=%d is at or above the lowest refusal threshold %d: every Echo turn at or below that threshold will refuse" % [fear_n, lowest])
+					_say("### OVERRIDE echo fear = %s" % pair[1])
+					continue
 				# An unknown key must not pass silently: it would read as "this weight
 				# changes nothing" when in fact nothing was overridden.
 				if pair.size() != 2 or not cfg.has(pair[0]) or not pair[1].is_valid_float():
@@ -149,6 +176,20 @@ static func _apply_arm(runtime: FlowRuntime, arm: String) -> void:
 					continue
 				cfg[pair[0]] = pair[1].to_float()
 				_say("### OVERRIDE %s = %s" % [pair[0], pair[1]])
+
+
+## Lowest Absolute Fear Rule threshold: lowest band base plus lowest calling offset.
+static func _lowest_refusal_threshold(runtime: FlowRuntime) -> int:
+	var actor_cfg: Dictionary = runtime.config_service._balance.get("data", {}).get("actor", {})
+	var lowest_band: int = 100
+	for value: Variant in (actor_cfg.get("refusal_thresholds_by_band", {}) as Dictionary).values():
+		if value is int or value is float:
+			lowest_band = mini(lowest_band, int(value))
+	var lowest_offset: int = 0
+	for entry: Variant in (actor_cfg.get("calling_behavior", {}) as Dictionary).values():
+		if entry is Dictionary and (entry as Dictionary).has("absolute_fear_offset"):
+			lowest_offset = mini(lowest_offset, int((entry as Dictionary)["absolute_fear_offset"]))
+	return clampi(lowest_band + lowest_offset, 0, 100)
 
 
 ## One line per published option, for every living non-structure actor on the starting board.
@@ -190,11 +231,18 @@ static func _dump_fields(runtime: FlowRuntime, ectx: EncounterContext, mode: Str
 
 
 ## One line per resolved turn. Format is fixed and grep/diff friendly.
-static func _dump_decisions(mode: String, drive: Dictionary) -> void:
+static func _dump_decisions(mode: String, drive: Dictionary, ectx: EncounterContext) -> void:
+	var echo_ids: Dictionary = {}
+	for actor_v: Variant in ectx.actors:
+		if actor_v is Dictionary and str((actor_v as Dictionary).get("faction", "")) == "echo":
+			echo_ids[str((actor_v as Dictionary).get("id", ""))] = true
 	for round_v: Variant in drive.get("rounds", []) as Array:
 		var round_entry: Dictionary = round_v
 		for turn_v: Variant in round_entry.get("turns", []) as Array:
 			var turn: Dictionary = turn_v
+			if echo_ids.has(str(turn.get("actor_id", ""))):
+				var action_key: String = str(turn.get("action_type", ""))
+				_turns_by_action[action_key] = int(_turns_by_action.get(action_key, 0)) + 1
 			_say("TURN %s r%02d %s %s tgt=%s dmg=%d from=%s to=%s" % [
 				mode,
 				int(round_entry.get("round", 0)),
