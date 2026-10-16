@@ -22,6 +22,8 @@
 #   scout   active Directive = directive.scout_carefully (the default; explicit for sweeps)
 #   seek    active Directive = directive.seek_signs
 #   nofear  exposure_acceptance.fear_lean_bound = 0 (fear lean off)
+#   parts   log every Echo route decision (DECISION, TURNSUM, SUMMARY) from the arbiter pass of the
+#           chosen move; decision pass only. Example: `scout,fear=50,parts`
 #   boards  run only the fixture boards of tools/ExposureChoiceBoards.gd (no fights)
 #   fear=N  every Echo starts with fear N and fear_base min(N, 40); keep N below the lowest
 #           refusal threshold or the Echoes refuse (a warning line says so). Try 0, 20, 45, 60.
@@ -50,6 +52,8 @@ const MODES: Array = [
 static var _sink: FileAccess = null
 static var _turns_by_action: Dictionary = {}
 static var _fear_warned: bool = false
+static var _parts_mode: String = ""
+static var _parts_sum: Dictionary = {}
 
 
 static func register(runner) -> void:
@@ -76,9 +80,20 @@ static func run() -> Dictionary:
 	_say("### ARM %s" % arm)
 	_turns_by_action = {}
 	_fear_warned = false
+	var parts_on: bool = arm.split(",", false).has("parts")
+	_parts_sum = {"echo_passes": 0, "purifier_skipped": 0, "with_routes": 0, "two_plus": 0, "mixed": 0,
+		"mixed_xmargin_lt10": 0, "mixed_margin_lt10": 0, "mixed_flips": 0, "mixed_chosen_exposed": 0}
 	for entry_v: Variant in MODES:
 		var entry: Array = entry_v
-		_run_mode(str(entry[0]), str(entry[1]), str(entry[2]), str(entry[3]), arm)
+		if parts_on:
+			_run_parts_mode(str(entry[0]), str(entry[1]), str(entry[2]), str(entry[3]), arm)
+		else:
+			_run_mode(str(entry[0]), str(entry[1]), str(entry[2]), str(entry[3]), arm)
+	if parts_on:
+		var pieces: PackedStringArray = []
+		for key: Variant in _parts_sum:
+			pieces.append("%s=%d" % [str(key), int(_parts_sum[key])])
+		_say("SUMMARY arm=%s %s" % [arm, " ".join(pieces)])
 	var keys: Array = _turns_by_action.keys()
 	keys.sort()
 	for key: Variant in keys:
@@ -126,6 +141,62 @@ static func _run_mode(mode: String, tag: String, guide_mode: String, guide_joins
 	_dump_decisions(mode, drive, env2["ectx"] as EncounterContext)
 
 
+## Decision pass only. Every Echo route decision is captured by ExposureCaptureArbiter in the same
+## arbiter pass as the chosen move.
+static func _run_parts_mode(mode: String, tag: String, guide_mode: String, guide_joins: String, arm: String) -> void:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(mode, tag, guide_mode, guide_joins)
+	if env.is_empty():
+		_say("SETUP_FAILED %s" % mode)
+		return
+	var runtime: FlowRuntime = env["runtime"]
+	var ectx: EncounterContext = env["ectx"]
+	_apply_arm(runtime, arm, ectx)
+	_parts_mode = mode
+	runtime.behavior_module_factory = func(actor_cfg: Dictionary, movement_cfg: Dictionary) -> BehaviorModule:
+		var arbiter := ExposureCaptureArbiter.new(actor_cfg, movement_cfg)
+		arbiter.on_done = Callable(SpatialTermProbe, "_on_capture").bind(ectx)
+		return arbiter
+	var drive: Dictionary = FlowFingerprintTests._drive_and_capture(runtime, ectx, 30)
+	_dump_decisions(mode, drive, ectx)
+
+
+## A pass with a ready purifier is counted apart: the arbiter sets its winner to 9999 after the
+## capture point, so the capture is not the decision.
+static func _on_capture(last: Dictionary, context: Dictionary, ectx: EncounterContext) -> void:
+	var actor: Dictionary = context.get("actor", {}) as Dictionary
+	if str(actor.get("faction", "")) != "echo":
+		return
+	var records: Array = last["records"]
+	var chosen: Dictionary = last["chosen"]
+	var round_index: int = int(ectx.combat_state.get("round_counter", 0))
+	_parts_sum["echo_passes"] += 1
+	if bool(context.get("is_purifier", false)) and bool(context.get("shrine_alive", false)) \
+			and int(actor.get("purify_cooldown", 0)) == 0:
+		_parts_sum["purifier_skipped"] += 1
+		_say("PURIFIER_SKIPPED %s r%02d %s" % [_parts_mode, round_index, str(actor.get("id", ""))])
+		return
+	var tag: String = "%s r%02d %s" % [_parts_mode, round_index, str(actor.get("id", ""))]
+	var summary: Dictionary = ExposureCaptureArbiter.analyse(records, chosen)
+	for line: String in ExposureCaptureArbiter.decision_lines(tag, records, chosen):
+		_say(line)
+	_say(ExposureCaptureArbiter.turnsum_line(tag, summary))
+	if int(summary["options"]) >= 1:
+		_parts_sum["with_routes"] += 1
+	if int(summary["options"]) >= 2:
+		_parts_sum["two_plus"] += 1
+	if not bool(summary["mixed"]):
+		return
+	_parts_sum["mixed"] += 1
+	if float(summary["xmargin"]) >= 0.0 and float(summary["xmargin"]) < 10.0:
+		_parts_sum["mixed_xmargin_lt10"] += 1
+	if float(summary["margin"]) < 10.0:
+		_parts_sum["mixed_margin_lt10"] += 1
+	if bool(summary["flips"]):
+		_parts_sum["mixed_flips"] += 1
+	if bool(summary["chosen_exposed"]):
+		_parts_sum["mixed_chosen_exposed"] += 1
+
+
 ## Overrides one or more spatial_utility weights in the in-memory balance. data/balance.json is
 ## never touched. FlowRuntime re-reads data.combat.movement on every activation, so an override
 ## applied after setup is honoured for the whole fight.
@@ -151,6 +222,8 @@ static func _apply_arm(runtime: FlowRuntime, arm: String, ectx: EncounterContext
 				cfg["cohesion_weight"] = 0.0
 			"nocon":
 				cfg["congestion_weight"] = 0.0
+			"parts":
+				pass
 			"scout":
 				_set_directive(runtime, "directive.scout_carefully")
 			"seek":

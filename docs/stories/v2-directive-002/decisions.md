@@ -446,3 +446,13 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-80. measurement-hook-yes
 **Q:** The `parts` log of the D-78 measurement needs a 4-line hook in `core/runtime/FlowRuntime.gd` (`behavior_module_factory`, unset by default, so behaviour is identical). Add it?
 **A:** Yes (Jeff, 2026-10-17). The boards probe (D-78 step 2, commit `888f6e5`) showed the Directive exposure effect is visible when a choice exists: on the 5 boards Seek takes the exposed route at 0.4 to 1.6 cells of extra progress, Scout at 2.8 to over 6 cells or never, the cost alone at 1.8 to 4.4; the fear lean moves the Seek threshold by 0.3 to 0.8 cells. The count of real mixed decisions in the 7 fights is measured once, with 4 arms run in parallel (each with its own `ECHOES_TEST_SAVE_DIR`). Per D-79 this is the last probe of phase D.
+- **Result of the D-80 count (2026-10-17; 4 arms in parallel, 7 minutes; Echo route decisions in the 7 fixed fights, purifier passes excluded: 5 per arm):**
+
+| Arm | Echo passes | Passes with route options | Mixed (exposed and unexposed option) | Mixed with margin under 10 | Choice changes if exposure terms removed |
+|---|---|---|---|---|---|
+| Scout, calm | 276 | 243 | 3 | 0 | 0 |
+| Seek, calm | 255 | 233 | 5 | 2 | 1 |
+| Scout, fear 50 | 268 | 247 | 4 | 0 | 0 |
+| Seek, fear 50 | 258 | 234 | 6 | 3 | 1 |
+
+  Mixed decisions are 1 to 2 percent of Echo passes. The Directive exposure term and the fear lean decide 0 (Scout) or 1 (Seek) decision in about 260. The effect is real on the boards (D-80) and almost never asked for in these fights. The cause is the input (how often a fight offers an exposure choice), not the weights. Whether real stages offer more choices is not known. This is a follow-up question for Jeff, not a blocker for slices 3 and 4 (D-79).
