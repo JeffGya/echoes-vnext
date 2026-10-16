@@ -442,3 +442,7 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-79. pace-no-more-probes
 **Q:** The measuring takes too long. How do we finish phase D faster? (Jeff, 2026-10-17: "I feel like we are in a measuring loop that is taking a lot of time.")
 **A:** Run the D-78 measurement ONCE, then build slices 3 and 4 with no more probes (Jeff, 2026-10-17, the recommended option). Slices 3 and 4 are built one after the other. Each gets unit tests and one recorded-value run, with one named cause per slice. No weight sweeps and no fear probes. The final combined QA check and one full serial suite run once at the end. The measurement result informs Jeff's view of the exposure channel; it does not block slices 3 and 4.
+
+### D-80. measurement-hook-yes
+**Q:** The `parts` log of the D-78 measurement needs a 4-line hook in `core/runtime/FlowRuntime.gd` (`behavior_module_factory`, unset by default, so behaviour is identical). Add it?
+**A:** Yes (Jeff, 2026-10-17). The boards probe (D-78 step 2, commit `888f6e5`) showed the Directive exposure effect is visible when a choice exists: on the 5 boards Seek takes the exposed route at 0.4 to 1.6 cells of extra progress, Scout at 2.8 to over 6 cells or never, the cost alone at 1.8 to 4.4; the fear lean moves the Seek threshold by 0.3 to 0.8 cells. The count of real mixed decisions in the 7 fights is measured once, with 4 arms run in parallel (each with its own `ECHOES_TEST_SAVE_DIR`). Per D-79 this is the last probe of phase D.
