@@ -462,3 +462,16 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 **A:** (Jeff, 2026-10-17) Proceed with slice 3 as designed (D-70). And yes, exposure should matter more: "we want fear, judgement, moral and other systems to actually have an effect." So:
 - Slice 3 (Judgment scale on exposure acceptance) is built now, with unit tests and one recorded-value run. No more probes (D-79).
 - A designer studies how the Echo state systems (fear, Judgment/Standing, morale, and the other state inputs the arbiter already reads) can have a felt effect on movement, beyond the exposure channel alone. The study starts from `exposure-lever-study.md` and the D-80 count. It proposes options for Jeff. It changes nothing. The result decides a new slice or story. It is in the scope of the pillar (Echoes show growth and emotion in how they move).
+
+### D-82. state-systems-movement-answers
+**Q:** Eight questions from `state-systems-movement-study.md` (section 5). Jeff answered on 2026-10-17.
+**A:**
+- **Q1 (what fear shows as):** stay near allies and push less (A1) plus shorter steps (B1). Fall back to the group (B3) goes to V2-COMBAT-004.
+- **Q2 (morale):** fear and morale. A high-morale Echo advances more and drifts from the group, with bounds.
+- **Q3 (composure):** yes, for all leans. A seasoned Echo shows less fear in its movement (composure softens the lean by up to 40 percent). This amends D-70 J3 for the new leans: they are scaled by composure.
+- **Q4 (strength):** clear, about 6 to 10 percent of decisions change. `mid-game-designer` authors the bounds.
+- **Q5 (budget):** YES, `interpretation_swing_max` may rise up to 2.5, with a new config-integrity test. Jeff chose this against the advice (keep 2.0). Standing may then scale the Echo's own movement style (study option B4). The raise loosens the guard of the action layer too (now at 1.80); the design must show all layers inside the new value.
+- **Q6 (capacity):** yes, after a feasibility check by `mechanics-developer` (is capacity computed per activation and not saved or fixed by the COMBAT-002 contract). Standing 1 is already at the floor of 2, so only the bonus side acts there. If the check fails, stop and bring options.
+- **Q7 (arenas):** yes, in parallel. Authored set-piece arenas with real route choices (study option C1). Content, not code. Jeff approves the arenas.
+- **Q8 (fall-back goal):** goes to V2-COMBAT-004 as a requirement (D-07).
+- **Slice plan:** slice 3 (Judgment scale on exposure) in verification; slice 4 (Directive stop cause); slice 5 (A1: state-scaled progress and cohesion weights, bounded, softened by composure); slice 6 (B1: capacity from fear and morale); slice 7 (B4: Standing-scaled style, with the raised budget); arenas (C1) in parallel. Per D-79: no fight probes; unit tests plus the 30-second boards probe, and one recorded-value run per slice.
