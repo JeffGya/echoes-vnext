@@ -190,10 +190,12 @@ static func screen(
 	return vetoes
 
 
-## The stop-short block plus the shared Directive Judgment block (`directive_judgment` of the movement config).
+## The stop-short block plus the shared blocks of the movement config: `directive_judgment` and the
+## emotional status table `band_lean`.
 static func with_judgment_scale(stop_short_cfg: Dictionary, movement_cfg: Dictionary) -> Dictionary:
 	var out: Dictionary = stop_short_cfg.duplicate()
 	out["directive_judgment"] = movement_cfg.get("directive_judgment", {})
+	out["band_lean"] = EmotionStatusLean.table_of(movement_cfg)
 	return out
 
 

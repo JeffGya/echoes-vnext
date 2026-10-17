@@ -17,7 +17,7 @@ const _TESTS: Array = [
 	"gate_order_is_g1_to_g7",
 	"fear_strength_boundaries",
 	"fear_base_floor_blend",
-	"morale_strength_boundaries",
+	"fear_strength_follows_status_band",
 	"min_cause_strength_applies",
 	"identity_affinity_by_family",
 	"identity_affinity_by_vector",
@@ -78,11 +78,11 @@ static func _cfg(enabled: bool = true) -> Dictionary:
 	return cfg
 
 
-## A legal base case: fear 30 (strength 0.4), hostile 3 cells away, capacity 2.
+## A legal base case: fear 50 and morale 60 (burdened, a fear cause), hostile 3 cells away, capacity 2.
 static func _ctx(over: Dictionary = {}) -> Dictionary:
 	var ctx: Dictionary = {
 		"actor_type": "echo", "purpose": "engage", "urgency": 0.5,
-		"fear": 30, "fear_base": 0, "morale": 60,
+		"fear": 50, "fear_base": 0, "morale": 60,
 		"calling_family": "", "dominant_vector": "", "judgment": 0.0,
 		"capacity": 2, "def": 5, "guard_state": false,
 		"stop_in_hostile_reach": false, "previous_stop_short": false,
@@ -121,10 +121,8 @@ static func _t_block_loads_with_spec_values() -> Dictionary:
 	_eq(errs, "enabled", raw.get("enabled", false), true)
 	_near(errs, "stop_short_weight", float(cfg["stop_short_weight"]), 6.0)
 	_near(errs, "min_cause_strength", float(cfg["min_cause_strength"]), 0.15)
-	_eq(errs, "fear floor", int(cfg["fear"]["floor"]), 20)
-	_eq(errs, "fear full", int(cfg["fear"]["full"]), 45)
-	_near(errs, "morale shaken", float(cfg["morale_strength"]["shaken"]), 0.0)
-	_near(errs, "morale broken", float(cfg["morale_strength"]["broken"]), 0.8)
+	_eq(errs, "no second fear ramp", (cfg["fear"] as Dictionary).has("floor") or (cfg["fear"] as Dictionary).has("full"), false)
+	_eq(errs, "no morale table", cfg.has("morale_strength"), false)
 	var fam: Dictionary = cfg["identity"]["family_affinity"]
 	_near(errs, "anchor guard", float(fam["anchor"]["guard"]), 0.8)
 	_near(errs, "anchor hold", float(fam["anchor"]["hold"]), 0.8)
@@ -185,7 +183,7 @@ static func _t_gate_g5_streak() -> Dictionary:
 static func _t_gate_g6_no_cause() -> Dictionary:
 	var errs: Array = []
 	_eq(errs, "calm steady echo", _veto_of(_ctx({ "fear": 0, "morale": 60 }), _cfg()), "no_cause")
-	_eq(errs, "shaken morale alone", _veto_of(_ctx({ "fear": 0, "morale": 30 }), _cfg()), "no_cause")
+	_eq(errs, "morale in the uncertain band is below the floor", _veto_of(_ctx({ "fear": 0, "morale": 37 }), _cfg()), "no_cause")
 	var edge: Dictionary = _ctx({ "fear": 0, "calling_family": "edge", "dominant_vector": "vanguard" })
 	_eq(errs, "edge identity", _veto_of(edge, _cfg()), "no_cause")
 	# A cause exists only for observe, and observe is not legal: the cause has no legal benefit.
@@ -216,7 +214,7 @@ static func _t_gate_order_is_g1_to_g7() -> Dictionary:
 		["urgency", 0.5, "hostile_in_reach"],
 		["stop_in_hostile_reach", false, "streak"],
 		["previous_stop_short", false, "no_cause"],
-		["fear", 30, "no_benefit"],
+		["fear", 50, "no_benefit"],
 	]
 	_eq(errs, "first", _veto_of(all_bad, _cfg()), "purpose_excluded")
 	for step_v: Variant in order:
@@ -226,57 +224,65 @@ static func _t_gate_order_is_g1_to_g7() -> Dictionary:
 	return _res(errs)
 
 
+## Expected values come from the band_lean table and the shared status, not from the service.
+static func _status_strength(morale: int, fear: int, fear_base: int = 0) -> float:
+	var table: Dictionary = _cfg()["band_lean"] as Dictionary
+	return maxf(0.0, -float(table[EmotionService.get_emotional_status(morale, maxi(fear, fear_base))]))
+
+
 static func _t_fear_strength_boundaries() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_near(errs, "fear 19", StopShortService.fear_strength({ "fear": 19 }, cfg), 0.0)
-	_near(errs, "fear 20", StopShortService.fear_strength({ "fear": 20 }, cfg), 0.0)
-	_near(errs, "fear 32", StopShortService.fear_strength({ "fear": 32 }, cfg), 12.0 / 25.0)
-	_near(errs, "fear 45", StopShortService.fear_strength({ "fear": 45 }, cfg), 1.0)
-	_near(errs, "fear 90 clamps", StopShortService.fear_strength({ "fear": 90 }, cfg), 1.0)
-	var at_19: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 19 }), cfg)
-	_near(errs, "cause fear 19", float(at_19["strength"]), 0.0)
-	var at_45: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 45 }), cfg)
-	_near(errs, "cause fear 45", float(at_45["strength"]), 1.0)
+	for pair: Array in [[50, 0], [50, 40], [50, 41], [50, 44], [50, 45], [50, 54], [50, 55], [50, 65], [50, 75], [50, 85], [50, 100]]:
+		_near(errs, "morale %d fear %d" % [pair[0], pair[1]], StopShortService.fear_strength({ "morale": pair[0], "fear": pair[1] }, cfg), _status_strength(pair[0], pair[1]))
+	_near(errs, "grounded is 0", StopShortService.fear_strength({ "morale": 50, "fear": 40 }, cfg), 0.0)
+	var at_45: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 45, "morale": 50 }), cfg)
+	_near(errs, "cause fear 45", float(at_45["strength"]), _status_strength(50, 45))
 	_eq(errs, "fear code", at_45["code"], "fear")
 	_eq(errs, "fear source", at_45["source"], "emotion")
+	_near(errs, "no table gives 0", StopShortService.fear_strength({ "morale": 50, "fear": 100 }, {}), 0.0)
 	return _res(errs)
 
 
 static func _t_fear_base_floor_blend() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_near(errs, "fear_base above fear", StopShortService.fear_strength({ "fear": 0, "fear_base": 45 }, cfg), 1.0)
-	_near(errs, "fear above fear_base", StopShortService.fear_strength({ "fear": 45, "fear_base": 0 }, cfg), 1.0)
-	_near(errs, "both low", StopShortService.fear_strength({ "fear": 10, "fear_base": 15 }, cfg), 0.0)
+	_near(errs, "fear_base above fear", StopShortService.fear_strength({ "morale": 50, "fear": 0, "fear_base": 45 }, cfg), _status_strength(50, 0, 45))
+	_near(errs, "fear above fear_base", StopShortService.fear_strength({ "morale": 50, "fear": 45, "fear_base": 0 }, cfg), _status_strength(50, 45))
+	_near(errs, "both low", StopShortService.fear_strength({ "morale": 50, "fear": 10, "fear_base": 15 }, cfg), 0.0)
+	if _status_strength(50, 0, 45) <= 0.0:
+		errs.append("fixture broken: fear_base 45 must read as afraid")
 	return _res(errs)
 
 
-static func _t_morale_strength_boundaries() -> Dictionary:
+## Low morale reaches the fear cause through the same status; the cause code stays "fear".
+static func _t_fear_strength_follows_status_band() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_near(errs, "morale 0", StopShortService.morale_strength({ "morale": 0 }, cfg), 0.8)
-	_near(errs, "morale 24 broken", StopShortService.morale_strength({ "morale": 24 }, cfg), 0.8)
-	_near(errs, "morale 25 shaken is 0", StopShortService.morale_strength({ "morale": 25 }, cfg), 0.0)
-	_near(errs, "morale 49 shaken is 0", StopShortService.morale_strength({ "morale": 49 }, cfg), 0.0)
-	_near(errs, "morale 50 steady", StopShortService.morale_strength({ "morale": 50 }, cfg), 0.0)
-	_near(errs, "morale 100", StopShortService.morale_strength({ "morale": 100 }, cfg), 0.0)
+	for morale: int in [0, 5, 10, 15, 20, 24, 25, 34, 35, 39, 40, 100]:
+		_near(errs, "morale %d" % morale, StopShortService.fear_strength({ "morale": morale, "fear": 0 }, cfg), _status_strength(morale, 0))
 	var broken: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 0, "morale": 24 }), cfg)
-	_near(errs, "cause broken", float(broken["strength"]), 0.8)
-	_eq(errs, "morale code", broken["code"], "morale")
-	var shaken: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 0, "morale": 25 }), cfg)
-	_near(errs, "cause shaken", float(shaken["strength"]), 0.0)
-	var both: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 45, "morale": 10 }), cfg)
-	_near(errs, "larger of fear and morale", float(both["strength"]), 1.0)
-	_eq(errs, "fear wins code", both["code"], "fear")
+	_near(errs, "cause low morale", float(broken["strength"]), _status_strength(24, 0))
+	_eq(errs, "low morale code", broken["code"], "fear")
+	var steady: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 0, "morale": 60 }), cfg)
+	_near(errs, "steady morale", float(steady["strength"]), 0.0)
+	var both: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 50, "morale": 10 }), cfg)
+	_near(errs, "worse of fear and morale", float(both["strength"]), _status_strength(10, 50))
+	if _status_strength(10, 50) <= _status_strength(60, 50):
+		errs.append("fixture broken: low morale must be worse than high morale at the same fear")
 	return _res(errs)
 
 
 static func _t_min_cause_strength_applies() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_eq(errs, "fear 23", _veto_of(_ctx({ "fear": 23 }), cfg), "no_cause")
-	_eq(errs, "fear 24", _veto_of(_ctx({ "fear": 24 }), cfg), "")
+	var floor_strength: float = float(cfg["min_cause_strength"])
+	var below: float = _status_strength(37, 0)
+	var above: float = _status_strength(30, 0)
+	if not (below > 0.0 and below < floor_strength and above >= floor_strength):
+		errs.append("fixture broken: uncertain %s hesitant %s floor %s" % [below, above, floor_strength])
+	_eq(errs, "uncertain is below the floor", _veto_of(_ctx({ "fear": 0, "morale": 37 }), cfg), "no_cause")
+	_eq(errs, "hesitant clears the floor", _veto_of(_ctx({ "fear": 0, "morale": 30 }), cfg), "")
 	return _res(errs)
 
 
@@ -418,7 +424,7 @@ static func _t_benefit_hold_predicate() -> Dictionary:
 static func _t_benefit_choice_and_order() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	var s1: Dictionary = StopShortService.evaluate(_ctx({ "fear": 30 }), cfg)
+	var s1: Dictionary = StopShortService.evaluate(_ctx({ "fear": 50 }), cfg)
 	_eq(errs, "S1 stop", s1["stop"], true)
 	_eq(errs, "S1 guard", s1["benefit_id"], "guard")
 	_eq(errs, "S1 plan", s1["benefit_plan"]["action_type"], "actor.guard")
@@ -440,10 +446,10 @@ static func _t_benefit_choice_and_order() -> Dictionary:
 	_eq(errs, "S3c edge never stops for identity", StopShortService.evaluate(_ctx({
 		"fear": 0, "calling_family": "edge", "judgment": 1.0 }), cfg)["stop"], false)
 	var morale_only: Dictionary = StopShortService.evaluate(_ctx({ "fear": 0, "morale": 10 }), cfg)
-	_eq(errs, "broken morale stops", morale_only["stop"], true)
-	_eq(errs, "broken morale code", morale_only["cause_code"], "morale")
+	_eq(errs, "low morale stops", morale_only["stop"], true)
+	_eq(errs, "low morale reads through the fear cause", morale_only["cause_code"], "fear")
 	var strongest: Dictionary = StopShortService.evaluate(_ctx({
-		"fear": 45, "calling_family": "sight", "judgment": 1.0 }), cfg)
+		"fear": 85, "calling_family": "sight", "judgment": 1.0 }), cfg)
 	_eq(errs, "strongest cause wins", strongest["cause_id"], "fear")
 	_eq(errs, "S2 control: steady and calm moves on", StopShortService.evaluate(_ctx({ "fear": 0, "morale": 60 }), cfg)["stop"], false)
 	return _res(errs)
@@ -453,11 +459,11 @@ static func _t_bias_is_weight_times_strength() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
 	var out: Dictionary = StopShortService.evaluate(_ctx({ "fear": 45 }), cfg)
-	_near(errs, "weight 6 x 1.0", float(out["bias"]), 6.0)
+	_near(errs, "weight x strength", float(out["bias"]), float(cfg["stop_short_weight"]) * _status_strength(60, 45))
 	cfg["stop_short_weight"] = 7.5
-	var out2: Dictionary = StopShortService.evaluate(_ctx({ "fear": 30 }), cfg)
-	_near(errs, "weight 7.5 x 0.4", float(out2["bias"]), 3.0)
-	_near(errs, "strength", float(out2["strength"]), 0.4)
+	var out2: Dictionary = StopShortService.evaluate(_ctx({ "fear": 65 }), cfg)
+	_near(errs, "weight 7.5 x strength", float(out2["bias"]), 7.5 * _status_strength(60, 65))
+	_near(errs, "strength", float(out2["strength"]), _status_strength(60, 65))
 	return _res(errs)
 
 
@@ -583,7 +589,7 @@ static func _t_fear_affinity_guard_only() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
 	for cause_ctx: Dictionary in [_ctx({ "fear": 45 }), _ctx({ "fear": 0, "morale": 10 })]:
-		_near(errs, "guard", float(StopShortService.cause_strength("fear", "guard", cause_ctx, cfg)["strength"]), 1.0 if int(cause_ctx["fear"]) == 45 else 0.8)
+		_near(errs, "guard", float(StopShortService.cause_strength("fear", "guard", cause_ctx, cfg)["strength"]), _status_strength(int(cause_ctx["morale"]), int(cause_ctx["fear"])))
 		_near(errs, "observe", float(StopShortService.cause_strength("fear", "observe", cause_ctx, cfg)["strength"]), 0.0)
 		_near(errs, "hold", float(StopShortService.cause_strength("fear", "hold", cause_ctx, cfg)["strength"]), 0.0)
 	return _res(errs)
@@ -628,9 +634,9 @@ static func _t_tie_break_hold_first_with_ally_near() -> Dictionary:
 	_eq(errs, "S3b stop", s3b["stop"], true)
 	_eq(errs, "S3b benefit", s3b["benefit_id"], "hold")
 	_eq(errs, "S3b cause", s3b["cause_id"], "identity")
-	# Ally near does not beat a stronger guard cause (fear 45 gives guard 1.0 against hold 0.8).
+	# Ally near does not beat a stronger guard cause (fear 85 gives guard 1.0 against hold 0.8).
 	var fear_wins: Dictionary = StopShortService.evaluate(_ctx({
-		"fear": 45, "calling_family": "anchor", "judgment": 1.0, "cohesion_stop": 0.8, "cohesion_full": 0.2 }), cfg)
+		"fear": 85, "calling_family": "anchor", "judgment": 1.0, "cohesion_stop": 0.8, "cohesion_full": 0.2 }), cfg)
 	_eq(errs, "stronger guard cause still wins", fear_wins["benefit_id"], "guard")
 	return _res(errs)
 
@@ -778,7 +784,7 @@ static func _t_afraid_directive_scale_not_below_calm() -> Dictionary:
 static func _t_fear_cause_not_scaled_by_judgment() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	for fear: int in [30, 45]:
+	for fear: int in [50, 85]:
 		var at_zero: float = float(StopShortService.cause_strength("fear", "guard", _ctx({ "fear": fear, "judgment": 0.0 }), cfg)["strength"])
 		var at_one: float = float(StopShortService.cause_strength("fear", "guard", _ctx({ "fear": fear, "judgment": 1.0 }), cfg)["strength"])
 		_near(errs, "fear %d: same strength at J 0 and J 1" % fear, at_one, at_zero)
@@ -821,7 +827,7 @@ static func _t_directive_row_is_last_and_own_cause_wins_a_tie() -> Dictionary:
 	var a: Dictionary = StopShortService.evaluate(with_identity, cfg)
 	_eq(errs, "identity tie: identity wins", a["cause_id"], "identity")
 	cfg["directive"]["affinity"]["guard"] = 1.0
-	var with_fear: Dictionary = _ctx({ "fear": 45, "judgment": 1.0, "directive_tolerance": 0.0 })
+	var with_fear: Dictionary = _ctx({ "fear": 85, "judgment": 1.0, "directive_tolerance": 0.0 })
 	var b: Dictionary = StopShortService.evaluate(with_fear, cfg)
 	_eq(errs, "fear tie: fear wins", b["cause_id"], "fear")
 	var alone: Dictionary = StopShortService.evaluate(_ctx({ "fear": 0, "judgment": 1.0, "directive_tolerance": 0.0 }), cfg)
@@ -895,11 +901,11 @@ static func _t_directive_config_integrity() -> Dictionary:
 static func _t_directive_swing_within_declared_budget() -> Dictionary:
 	var errs: Array = []
 	var data: Dictionary = _balance().get("data", {}) as Dictionary
-	var budget: float = float(((data["maturity_expression"] as Dictionary)["interpretation_swing_max"] as Dictionary)["value"])
+	var budget: float = float((((data["maturity_expression"] as Dictionary)["interpretation_swing_max"] as Dictionary)["layer_max"] as Dictionary)["stop"])
 	var block: Dictionary = _cfg()["directive_judgment"] as Dictionary
 	var swing: float = DirectiveJudgmentScale.swing(block)
 	if not swing <= budget:
-		errs.append("stop swing %s is above the budget %s" % [swing, budget])
+		errs.append("stop swing %s is above the stop layer ceiling %s" % [swing, budget])
 	_near(errs, "swing is 1 / floor", swing, 1.0 / float(block["judgment_floor"]))
 	return _res(errs)
 
@@ -907,7 +913,7 @@ static func _t_directive_swing_within_declared_budget() -> Dictionary:
 static func _t_fear_wins_over_shipped_scout_directive() -> Dictionary:
 	var errs: Array = []
 	var scout_t: float = _shipped_tolerance("directive.scout_carefully")
-	var out: Dictionary = StopShortService.evaluate(_ctx({ "fear": 45, "directive_tolerance": scout_t, "judgment": 0.2 }), _cfg())
+	var out: Dictionary = StopShortService.evaluate(_ctx({ "fear": 85, "directive_tolerance": scout_t, "judgment": 0.2 }), _cfg())
 	_eq(errs, "fear owns the stop", out["cause_id"], "fear")
 	_eq(errs, "fear code", out["cause_code"], "fear")
 	return _res(errs)

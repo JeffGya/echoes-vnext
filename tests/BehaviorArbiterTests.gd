@@ -1423,14 +1423,14 @@ static func _t_interpretation_swing_within_declared_budget() -> Dictionary:
 	var expr_cfg: Dictionary = (bal.get("data", {}) as Dictionary).get("maturity_expression", {})
 	var identity_weight_scale: Dictionary = expr_cfg.get("identity_weight_scale", {})
 	var directive_interpretation_mul: Dictionary = expr_cfg.get("directive_interpretation_mul", {})
-	var swing_max: float = float(expr_cfg.get("interpretation_swing_max", {}).get("value", 0.0))
+	var swing_max: float = float((expr_cfg.get("interpretation_swing_max", {}).get("layer_max", {}) as Dictionary).get("action", 0.0))
 
 	if identity_weight_scale.is_empty() or directive_interpretation_mul.is_empty() or swing_max <= 0.0:
-		return { "ok": false, "error": "fixture broken: expected non-empty identity_weight_scale/directive_interpretation_mul and a positive interpretation_swing_max, got %s / %s / %s" % [str(identity_weight_scale), str(directive_interpretation_mul), str(swing_max)] }
+		return { "ok": false, "error": "fixture broken: expected non-empty identity_weight_scale/directive_interpretation_mul and a positive interpretation_swing_max.layer_max.action, got %s / %s / %s" % [str(identity_weight_scale), str(directive_interpretation_mul), str(swing_max)] }
 
 	var actual_swing: float = BehaviorArbiter.compute_interpretation_swing(identity_weight_scale, directive_interpretation_mul)
 	if actual_swing > swing_max:
-		return { "ok": false, "error": "authored identity:directive ratio (%.4f) exceeds the declared interpretation_swing_max budget (%.4f) — identity_weight_scale=%s, directive_interpretation_mul=%s" % [actual_swing, swing_max, str(identity_weight_scale), str(directive_interpretation_mul)] }
+		return { "ok": false, "error": "authored identity:directive ratio (%.4f) exceeds the action layer ceiling interpretation_swing_max.layer_max.action (%.4f) — identity_weight_scale=%s, directive_interpretation_mul=%s" % [actual_swing, swing_max, str(identity_weight_scale), str(directive_interpretation_mul)] }
 	return { "ok": true }
 
 

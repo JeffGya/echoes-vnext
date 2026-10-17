@@ -47,7 +47,6 @@ const GuidanceContributionScript = preload("res://core/actors/behaviors/Guidance
 const MovementStyleServiceScript = preload("res://core/actors/behaviors/MovementStyleService.gd")
 const BoardAssessmentServiceScript = preload("res://core/actors/behaviors/BoardAssessmentService.gd")
 const ActionCandidateGeneratorScript = preload("res://core/actors/behaviors/ActionCandidateGenerator.gd")
-const StagePartyStanceScript = preload("res://core/movement/StagePartyStance.gd")
 
 ## ROUTE-shape validation order (mirrors MovementOptionService.STYLE_ORDER / OptionContract.STYLES).
 ## Most of these words also appear in the separate `movement_style` vocabulary
@@ -163,14 +162,14 @@ const _DEFAULTS := {
 	# judgment) — see data.maturity_expression's matching _comment for the swing
 	# budget these two keys are jointly checked against (config-integrity test:
 	# tests/BehaviorArbiterTests.gd's arbiter/interpretation_swing_within_declared_budget).
-	# {trait: 0.35, vector: 0.35} against directive_interpretation_mul.low=0.75 gives
-	# (1.0+0.35)/0.75 = 1.80 <= interpretation_swing_max (2.0). directive_band_mul
+	# The identity scale against directive_interpretation_mul.low must stay inside
+	# interpretation_swing_max.layer_max.action. directive_band_mul
 	# (the old per-band table) is REMOVED, not kept dead — see _directive_bonus()'s
 	# doc comment.
 	"identity_weight_scale":  { "trait": 0.35, "vector": 0.35 },
 	"composure_dampen_scale": { "value": 0.4 },  # V2-PROG-012 Phase 2 (renamed from presence_dampen_scale)
 	"directive_interpretation_mul": { "low": 0.75, "high": 1.30 },
-	"interpretation_swing_max": { "value": 2.0 },
+	"interpretation_swing_max": { "value": 2.5 },
 
 	"wound_chase_mul":              15.0,  # Forming+ finish-wounded score bonus multiplier
 	"surrounded_move_penalty":     -18.0, # Forming+ penalty for move into surrounded position
@@ -695,7 +694,7 @@ func select_movement_intent(
 	# default derivation and why this drives interpretation_width.
 	var judgment: float = float(context.get("judgment", 0.3))
 	var interpretation_width: float = clampf(judgment, 0.0, 1.0)
-	var fear_lean: float = _fear_lean(actor, context.get("fear_ramp", {}) as Dictionary)
+	var fear_lean: float = _fear_lean(actor, composure)
 	var board_summary: Dictionary = BoardAssessmentServiceScript.build_board_summary(
 		actor,
 		all_actors,
@@ -1361,6 +1360,10 @@ func _validate_spatial_config() -> Dictionary:
 			var bound: Variant = (block as Dictionary)["fear_lean_bound"]
 			if not (bound is int or bound is float) or not is_finite(float(bound)) or float(bound) < 0.0 or float(bound) > 1.0:
 				return _movement_failure("invalid_exposure_acceptance_fear_lean_bound", "movement_cfg.exposure_acceptance.fear_lean_bound")
+	if _movement_cfg.has("felt_state"):
+		var felt: Variant = _movement_cfg["felt_state"]
+		if not felt is Dictionary or not EmotionStatusLean.is_valid((felt as Dictionary).get("band_lean", null)):
+			return _movement_failure("invalid_felt_state_band_lean", "movement_cfg.felt_state.band_lean")
 	var judgment_cfg: Variant = _movement_cfg.get("directive_judgment", {})
 	if not judgment_cfg is Dictionary:
 		return _movement_failure("invalid_directive_judgment_config", "movement_cfg.directive_judgment")
@@ -1411,16 +1414,15 @@ func _exposure_acceptance_parts(directive: Dictionary, fear_lean: float, judgmen
 	return {"D_scaled": d_scaled, "F": fear_lean, "acceptance": clampf(d_scaled - fear_lean, -1.0, 1.0)}
 
 
-## Fall in exposure acceptance that this actor's fear causes: `fear_lean_bound` x the
-## stage fear ramp. 0.0 when the bound or either ramp key is absent. Reads `max(fear, fear_base)`
-## like the style inputs.
-func _fear_lean(actor: Dictionary, ramps: Dictionary) -> float:
+## Fall in exposure acceptance from this actor's emotional state: `fear_lean_bound` x the afraid
+## part of the status lean, softened by composure. 0.0 when the bound or the table is absent.
+func _fear_lean(actor: Dictionary, composure: float) -> float:
 	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
-	if not block is Dictionary or not (block as Dictionary).has("fear_lean_bound") \
-			or not ramps.has("fear_start") or not ramps.has("fear_full"):
+	if not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
 		return 0.0
-	var fear: float = maxf(float(actor.get("fear", 0)), float(actor.get("fear_base", 0)))
-	return float((block as Dictionary)["fear_lean_bound"]) * StagePartyStanceScript.fear_ramp(fear, ramps)
+	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
+	var dampen: float = float((_cfg_get("composure_dampen_scale") as Dictionary).get("value", 0.4))
+	return float((block as Dictionary)["fear_lean_bound"]) * EmotionStatusLean.afraid_of(actor, table, composure, dampen)
 
 
 ## `out_parts`, when a non-null Dictionary is passed, receives this call's own

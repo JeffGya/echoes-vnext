@@ -323,18 +323,15 @@
 				"rival_protect_penalty": -10.0
 			},
 			"stop_short": {
-				"_comment": "Stop-short (movement-model 7.5; decisions.md #108). Starting values; the designer sets every number. The enabled flag switches the feature; cell_search.enabled switches the stop-cell search. Fear and low morale favour guard only. The directive block sets the Directive cause: strength = (1 - exposure_tolerance) x affinity x the shared Judgment scale (data.combat.movement.directive_judgment). It is the last cause, so fear or identity wins a tie.",
+				"_comment": "Stop-short (movement-model 7.5; decisions.md #108). Starting values; the designer sets every number. The enabled flag switches the feature; cell_search.enabled switches the stop-cell search. Fear and low morale together are the afraid part of the emotional status (data.combat.movement.felt_state.band_lean); they favour guard only. The directive block sets the Directive cause: strength = (1 - exposure_tolerance) x affinity x the shared Judgment scale (data.combat.movement.directive_judgment). It is the last cause, so fear or identity wins a tie.",
 				"enabled": true,
 				"stop_short_weight": 6.0,
 				"min_cause_strength": 0.15,
 				"urgency_ceiling": 1.0,
 				"excluded_purposes": ["withdraw", "read", "hold"],
 				"fear": {
-					"floor": 20,
-					"full": 45,
 					"affinity": { "guard": 1.0, "observe": 0.0, "hold": 0.0 }
 				},
-				"morale_strength": { "shaken": 0.0, "broken": 0.8 },
 				"identity": {
 					"judgment_base": 0.5,
 					"family_affinity": {
@@ -1230,8 +1227,13 @@
 				"vector": 0.35
 			},
 			"interpretation_swing_max": {
-				"_comment": "V2-PROG-012 Phase 6 Item 2: PROPOSED DEFAULT. The declared budget on the identity:directive ratio at interpretation_width=1.0 (BehaviorArbiter.compute_interpretation_swing(identity_weight_scale, directive_interpretation_mul) — see that function's doc comment for the exact formula). This is the mechanism that stops DEFECT 2 recurring: identity_weight_scale and directive_interpretation_mul are authored in two separate blocks with no knowledge of each other, so nothing previously stopped them being tuned independently into an unbudgeted combined swing (the pre-fix values, trait/vector 0.6 against directive_band_mul's whole=0.75, gave a ratio of 2.13 with no budget checking it at all). A config-integrity test (tests/BehaviorArbiterTests.gd) FAILS if the authored ratio exceeds this value — any future tuning pass that raises identity_weight_scale or lowers directive_interpretation_mul.low without also raising this budget to match will fail loudly instead of silently drifting. 2.0 is not derived from a specific playtest measurement (no combat-feel target has been ratified yet) — it is a round-number ceiling comfortably above the fitted default (1.80) that still meaningfully constrains future tuning. The swing of data.combat.movement.directive_judgment is checked against this value too.",
-				"value": 2.0
+				"_comment": "PROPOSED DEFAULT. The declared budget on the own-side to Directive-side ratio at interpretation_width=1.0 (BehaviorArbiter.compute_interpretation_swing). Config-integrity tests fail when a layer exceeds its ceiling: the action layer and the stop layer against layer_max, the acceptance layer and the shared pair against value. This stops identity_weight_scale and directive_interpretation_mul from being tuned apart into an unbudgeted swing.",
+				"value": 2.5,
+				"layer_max": {
+					"_comment": "PROPOSED DEFAULT. Tighter ceilings for the action layer and the stop layer; each must be positive and at most value. The acceptance layer and the state-lean layer use value.",
+					"action": 2.0,
+					"stop": 2.0
+				}
 			},
 			"autonomy_outputs": {
 				"_comment": "V2-PROG-012 Phase 1: hidden maturity-expression autonomy layer (GDD §11.5, §7.3). PROPOSED DEFAULTS awaiting playtest ratification. Four flat 0.0-1.0 scalars (judgment, presence, composure, legibility) derived per-Echo per-turn from eight named inputs (GDD:1371-1380): Standing/Storyweight maturity, archetype, trait balance, calling family/accent, bonds/rivalries, vow state, fear/morale, instability. Deliberately flat weighted sums, clamped 0.0-1.0 — GDD:1438-1442 forbids growing this into a broad hidden stat-bonus tree. Each output below is its own weight dictionary so it can be tuned independently without touching the others.",
@@ -1700,9 +1702,19 @@
 			"movement": {
 				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. (1) directive_exposure_acceptance_weight: the term is weight x acceptance x exposure. Acceptance comes from the Directive exposure_tolerance, exposure_acceptance (offset, fear lean) and directive_judgment, not from intent_weights.exposure_acceptance. An empty Directive gives acceptance 0. Keep weight x max acceptance below abs(exposure_weight). (2) Exposure is a fraction in a fight: _exposure divides controlled edges by the route length. Older measurements: docs/stories/v2-combat-003/handoff.md section 22. All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
 				"exposure_acceptance": {
-					"_comment": "PROPOSED DEFAULT. Sibling of spatial_utility so the closed spatial_utility schema stays unchanged. offset: acceptance of exposure = Directive exposure_tolerance - offset. A missing block gives acceptance 0. fear_lean_bound: acceptance falls by fear_lean_bound x ramp(max(fear, fear_base)), with the ramp from data.stages.party_stance.state_ramps; combat does not read the stage bounds. A missing key gives no fear lean. The fear lean is not scaled by Judgment. Limits on fear_lean_bound are enforced by the fear_lean_bound tests in tests/DirectiveConfigTests.gd.",
+					"_comment": "PROPOSED DEFAULT. Sibling of spatial_utility so the closed spatial_utility schema stays unchanged. offset: acceptance of exposure = Directive exposure_tolerance - offset. A missing block gives acceptance 0. fear_lean_bound: acceptance falls by fear_lean_bound x the afraid part of the emotional status (felt_state.band_lean), softened by composure. A missing key gives no fear lean. The fear lean is not scaled by Judgment. Limits on fear_lean_bound are enforced by tests/DirectiveConfigTests.gd.",
 					"offset": 0.5,
 					"fear_lean_bound": 0.12
+				},
+				"felt_state": {
+					"_comment": "PROPOSED DEFAULT. band_lean turns each emotional status (EmotionService.get_emotional_status) into one lean from -1 (afraid) to +1 (bold); composure softens it by data.maturity_expression.composure_dampen_scale. It must hold all ten statuses, never fall along EmotionService.STATUS_LADDER, and be 0 for grounded and whole. A switch set to false, or a missing block, leaves that feature off.",
+					"band_lean": {
+						"hollow": -1.0, "fraying": -0.95, "strained": -0.9, "pressed": -0.75, "burdened": -0.55,
+						"hesitant": -0.25, "uncertain": -0.1, "grounded": 0.0, "whole": 0.0, "radiant": 0.7
+					},
+					"lean": { "enabled": false, "progress_floor": 0.65, "progress_max": 1.25, "cohesion_max": 1.4, "cohesion_min": 0.85 },
+					"steps": { "enabled": false, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1, "composure_default": 0.4 },
+					"style_growth": { "enabled": false }
 				},
 				"directive_judgment": {
 					"_comment": "PROPOSED DEFAULT. One Judgment scale for Directive influence, read by exposure acceptance (BehaviorArbiter) and by the Directive stop cause (StopShortService): scale = judgment_floor + (1 - judgment_floor) x (1 - J). judgment_floor must be in [judgment_floor_min, 1]; a missing floor scales by 1. The swing 1 / judgment_floor must stay at or under data.maturity_expression.interpretation_swing_max.value.",

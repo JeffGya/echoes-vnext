@@ -25,6 +25,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/config_failures", _t_config_failures)
 	runner.register_test("movement_arbiter/metric_capacity_failures", _t_metric_capacity_failures)
 	runner.register_test("movement_arbiter/identity_one_factor", _t_identity_one_factor)
+	FeltStateTests.register(runner)
+	runner.register_test("movement_arbiter/fear_lean_reaches_acceptance_through_actor_state_machine", _t_fear_lean_reaches_acceptance_through_actor_state_machine)
 	runner.register_test("movement_arbiter/ten_virtues", _t_ten_virtues)
 	runner.register_test("movement_arbiter/maturity_skill_passive", _t_maturity_skill_passive)
 	runner.register_test("movement_arbiter/vow_bond_order", _t_vow_bond_order)
@@ -42,7 +44,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/acceptance_missing_tolerance_is_neutral", _t_acceptance_missing_tolerance_is_neutral)
 	runner.register_test("movement_arbiter/acceptance_rejects_non_finite_inputs", _t_acceptance_rejects_non_finite_inputs)
 	runner.register_test("movement_arbiter/fear_lean_lowers_acceptance", _t_fear_lean_lowers_acceptance)
-	runner.register_test("movement_arbiter/fear_lean_ramp_matches_stage_ramp", _t_fear_lean_ramp_matches_stage_ramp)
+	runner.register_test("movement_arbiter/fear_lean_follows_status_band", _t_fear_lean_follows_status_band)
 	runner.register_test("movement_arbiter/fear_lean_reads_max_of_fear_and_base", _t_fear_lean_reads_max_of_fear_and_base)
 	runner.register_test("movement_arbiter/more_fear_never_more_accepting", _t_more_fear_never_more_accepting)
 	runner.register_test("movement_arbiter/afraid_seek_still_treats_exposure_as_cost_not_ban", _t_afraid_seek_still_cost_not_ban)
@@ -60,6 +62,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/acceptance_order_of_operations", _t_acceptance_order_of_operations)
 	runner.register_test("movement_arbiter/acceptance_missing_tolerance_is_neutral_plus_fear", _t_acceptance_missing_tolerance_is_neutral_plus_fear)
 	runner.register_test("movement_arbiter/acceptance_swing_within_declared_budget", _t_acceptance_swing_within_declared_budget)
+	runner.register_test("movement_arbiter/swing_layer_ceilings_consistent", _t_swing_layer_ceilings_consistent)
 	runner.register_test("movement_arbiter/judgment_floor_validated_and_neutral_when_missing", _t_judgment_floor_validated_and_neutral_when_missing)
 	runner.register_test("movement_arbiter/acceptance_rejects_non_finite_judgment", _t_acceptance_rejects_non_finite_judgment)
 	runner.register_test("movement_arbiter/fear_lean_not_scaled_by_judgment", _t_fear_lean_not_scaled_by_judgment)
@@ -1019,64 +1022,76 @@ static func _t_acceptance_rejects_non_finite_inputs() -> Dictionary:
 
 
 ## Acceptance as the arbiter scores it: the exposure term divided by weight x exposure (1.0).
-static func _acceptance_at(arbiter: BehaviorArbiter, cfg: Dictionary, directive: Dictionary, actor: Dictionary, ramps: Dictionary) -> float:
+static func _acceptance_at(arbiter: BehaviorArbiter, cfg: Dictionary, directive: Dictionary, actor: Dictionary, composure: float = 0.0) -> float:
 	var parts: Dictionary = {}
-	arbiter._spatial_utility({"urgency": 0.0, "purpose": "advance"}, _exposed_option(0.0), directive, cfg, parts, arbiter._fear_lean(actor, ramps))
+	arbiter._spatial_utility({"urgency": 0.0, "purpose": "advance"}, _exposed_option(0.0), directive, cfg, parts, arbiter._fear_lean(actor, composure))
 	return float((parts["parts"] as Dictionary)["directive_exposure_acceptance"]) / float(cfg["directive_exposure_acceptance_weight"])
 
 
-static func _shipped_ramps() -> Dictionary:
-	var cs := ConfigService.new()
-	cs.load_balance()
-	return (((cs.get_balance()["data"] as Dictionary)["stages"] as Dictionary)["party_stance"] as Dictionary)["state_ramps"] as Dictionary
+static func _band_lean() -> Dictionary:
+	return EmotionStatusLean.table_of(_shipped_movement_and_directives()["movement"] as Dictionary)
+
+
+## Afraid part of the actor's status lean, from the shipped table and the shared status rule.
+static func _afraid_part(actor: Dictionary) -> float:
+	var fear: int = maxi(int(actor.get("fear", 0)), int(actor.get("fear_base", 0)))
+	var status: String = EmotionService.get_emotional_status(int(actor.get("morale", 50)), fear)
+	return maxf(0.0, -float(_band_lean()[status]))
+
+
+## Largest drop between two neighbours on the status ladder.
+static func _largest_step(table: Dictionary) -> float:
+	var step := 0.0
+	for i: int in range(1, EmotionService.STATUS_LADDER.size()):
+		step = maxf(step, float(table[EmotionService.STATUS_LADDER[i]]) - float(table[EmotionService.STATUS_LADDER[i - 1]]))
+	return step
 
 
 static func _t_fear_lean_lowers_acceptance() -> Dictionary:
 	var shipped: Dictionary = _shipped_movement_and_directives()
 	var movement: Dictionary = shipped["movement"] as Dictionary
 	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
-	var ramps: Dictionary = _shipped_ramps()
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var calm: Dictionary = _actor()
 	var afraid: Dictionary = _actor()
 	afraid["fear"] = 70
 	for id: String in ["directive.scout_carefully", "directive.seek_signs"]:
 		var directive: Dictionary = (shipped["directives"] as Dictionary)[id] as Dictionary
-		var calm_value: float = _acceptance_at(arbiter, cfg, directive, calm, ramps)
-		var afraid_value: float = _acceptance_at(arbiter, cfg, directive, afraid, ramps)
-		var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])
-		if not is_equal_approx(calm_value - afraid_value, bound):
-			return _fail("%s: fear 70 should lower acceptance by %s, got %s to %s" % [id, bound, calm_value, afraid_value])
+		var calm_value: float = _acceptance_at(arbiter, cfg, directive, calm)
+		var afraid_value: float = _acceptance_at(arbiter, cfg, directive, afraid)
+		var want: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"]) * _afraid_part(afraid)
+		if want <= 0.0 or not is_equal_approx(calm_value - afraid_value, want):
+			return _fail("%s: fear 70 should lower acceptance by %s, got %s to %s" % [id, want, calm_value, afraid_value])
 	return _pass()
 
 
-static func _t_fear_lean_ramp_matches_stage_ramp() -> Dictionary:
+## The lean is the bound times the afraid part of the table entry of the shared status, with
+## steps where the status changes.
+static func _t_fear_lean_follows_status_band() -> Dictionary:
 	var movement: Dictionary = _shipped_movement_and_directives()["movement"] as Dictionary
-	var ramps: Dictionary = _shipped_ramps()
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])
-	var start: float = float(ramps["fear_start"])
-	var full: float = float(ramps["fear_full"])
-	for fear: int in [0, int(start) - 1, int(start), 33, 45, int(full), 100]:
+	var table: Dictionary = _band_lean()
+	for fear: int in [0, 40, 41, 44, 45, 54, 55, 64, 65, 74, 75, 84, 85, 100]:
 		var actor: Dictionary = _actor()
 		actor["fear"] = fear
-		var want: float = bound * clampf((float(fear) - start) / (full - start), 0.0, 1.0)
-		if not is_equal_approx(arbiter._fear_lean(actor, ramps), want):
-			return _fail("fear %d: lean %s, expected %s" % [fear, arbiter._fear_lean(actor, ramps), want])
-	var at_start: Dictionary = _actor()
-	at_start["fear"] = int(start)
-	if arbiter._fear_lean(at_start, ramps) != 0.0:
-		return _fail("lean at fear_start must be exactly 0")
-	var at_full: Dictionary = _actor()
-	at_full["fear"] = int(full)
-	if not is_equal_approx(arbiter._fear_lean(at_full, ramps), bound):
-		return _fail("lean at fear_full must be the full bound")
+		var status: String = EmotionService.get_emotional_status(50, fear)
+		var want: float = bound * maxf(0.0, -float(table[status]))
+		if not is_equal_approx(arbiter._fear_lean(actor, 0.0), want):
+			return _fail("fear %d (%s): lean %s, expected %s" % [fear, status, arbiter._fear_lean(actor, 0.0), want])
+	var calm: Dictionary = _actor()
+	calm["fear"] = 40
+	if arbiter._fear_lean(calm, 0.0) != 0.0:
+		return _fail("a grounded Echo must have lean exactly 0")
+	var burdened: Dictionary = _actor()
+	burdened["fear"] = 45
+	if arbiter._fear_lean(burdened, 0.0) <= 0.0:
+		return _fail("a burdened Echo must lean")
 	return _pass()
 
 
 static func _t_fear_lean_reads_max_of_fear_and_base() -> Dictionary:
 	var movement: Dictionary = _shipped_movement_and_directives()["movement"] as Dictionary
-	var ramps: Dictionary = _shipped_ramps()
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var base_only: Dictionary = _actor()
 	base_only["fear"] = 0
@@ -1084,34 +1099,37 @@ static func _t_fear_lean_reads_max_of_fear_and_base() -> Dictionary:
 	var fear_only: Dictionary = _actor()
 	fear_only["fear"] = 70
 	fear_only["fear_base"] = 0
-	var lean: float = arbiter._fear_lean(base_only, ramps)
-	if lean <= 0.0 or not is_equal_approx(lean, arbiter._fear_lean(fear_only, ramps)):
+	var lean: float = arbiter._fear_lean(base_only, 0.0)
+	if lean <= 0.0 or not is_equal_approx(lean, arbiter._fear_lean(fear_only, 0.0)):
 		return _fail("a high fear_base with low fear must lean like the same fear: %s" % lean)
 	return _pass()
 
 
+## With Judgment held fixed, more fear never raises acceptance. Each fear point may lower it by at
+## most the largest step of the table times the bound.
 static func _t_more_fear_never_more_accepting() -> Dictionary:
 	var shipped: Dictionary = _shipped_movement_and_directives()
 	var movement: Dictionary = shipped["movement"] as Dictionary
 	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
-	var ramps: Dictionary = _shipped_ramps()
 	var arbiter := BehaviorArbiter.new({}, movement)
+	var step_limit: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"]) * _largest_step(_band_lean())
 	for id: String in ["directive.scout_carefully", "directive.seek_signs"]:
 		var directive: Dictionary = (shipped["directives"] as Dictionary)[id] as Dictionary
 		var calm_actor: Dictionary = _actor()
-		var previous: float = _acceptance_at(arbiter, cfg, directive, calm_actor, ramps)
+		var previous: float = _acceptance_at(arbiter, cfg, directive, calm_actor)
 		for fear: int in range(1, 101):
 			var actor: Dictionary = _actor()
 			actor["fear"] = fear
-			var value: float = _acceptance_at(arbiter, cfg, directive, actor, ramps)
+			var value: float = _acceptance_at(arbiter, cfg, directive, actor)
 			if value > previous + 0.0000001:
 				return _fail("%s: acceptance rose from %s to %s at fear %d" % [id, previous, value, fear])
+			if previous - value > step_limit + 0.0000001:
+				return _fail("%s: acceptance fell by more than the largest step times the bound at fear %d" % [id, fear])
 			previous = value
-		if float(ramps["fear_start"]) > 1.0:
-			var below: Dictionary = _actor()
-			below["fear"] = int(ramps["fear_start"]) - 1
-			if not is_equal_approx(_acceptance_at(arbiter, cfg, directive, below, ramps), _acceptance_at(arbiter, cfg, directive, calm_actor, ramps)):
-				return _fail("%s: fear below fear_start must not change acceptance" % id)
+		var grounded: Dictionary = _actor()
+		grounded["fear"] = 40
+		if not is_equal_approx(_acceptance_at(arbiter, cfg, directive, grounded), _acceptance_at(arbiter, cfg, directive, calm_actor)):
+			return _fail("%s: a grounded Echo must not change acceptance" % id)
 	return _pass()
 
 
@@ -1130,7 +1148,7 @@ static func _t_afraid_seek_still_cost_not_ban() -> Dictionary:
 		if value <= -0.05:
 			return _fail("a frightened Seek Echo must hesitate, not refuse; acceptance %s at J %s" % [value, j])
 		var scale: float = 1.0 if j == 0.0 else _floor_a(movement)
-		var want: float = d * scale - float(block["fear_lean_bound"])
+		var want: float = d * scale - float(block["fear_lean_bound"]) * _afraid_part(afraid)
 		if value < 0.0 or not is_equal_approx(value, want):
 			return _fail("frightened Seek acceptance %s at J %s, expected %s (at or above 0)" % [value, j, want])
 	return _pass()
@@ -1138,20 +1156,19 @@ static func _t_afraid_seek_still_cost_not_ban() -> Dictionary:
 
 static func _t_fear_lean_missing_key_is_zero() -> Dictionary:
 	var movement: Dictionary = (_shipped_movement_and_directives()["movement"] as Dictionary).duplicate(true)
-	var ramps: Dictionary = _shipped_ramps()
 	var afraid: Dictionary = _actor()
 	afraid["fear"] = 100
-	if BehaviorArbiter.new({}, movement)._fear_lean(afraid, {}) != 0.0:
-		return _fail("missing ramp keys must give lean 0")
-	if BehaviorArbiter.new({}, movement)._fear_lean(afraid, {"fear_start": 20}) != 0.0:
-		return _fail("one ramp key must give lean 0")
+	var no_table: Dictionary = movement.duplicate(true)
+	no_table.erase("felt_state")
+	if BehaviorArbiter.new({}, no_table)._fear_lean(afraid, 0.0) != 0.0:
+		return _fail("a missing band_lean table must give lean 0")
 	(movement["exposure_acceptance"] as Dictionary).erase("fear_lean_bound")
-	if BehaviorArbiter.new({}, movement)._fear_lean(afraid, ramps) != 0.0:
+	if BehaviorArbiter.new({}, movement)._fear_lean(afraid, 0.0) != 0.0:
 		return _fail("missing fear_lean_bound must give lean 0")
 	if not bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
 		return _fail("a block without fear_lean_bound must stay valid")
 	movement.erase("exposure_acceptance")
-	if BehaviorArbiter.new({}, movement)._fear_lean(afraid, ramps) != 0.0:
+	if BehaviorArbiter.new({}, movement)._fear_lean(afraid, 0.0) != 0.0:
 		return _fail("missing exposure_acceptance block must give lean 0")
 	return _pass()
 
@@ -1164,18 +1181,17 @@ static func _t_fear_lean_needs_a_directive() -> Dictionary:
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var afraid: Dictionary = _actor()
 	afraid["fear"] = 100
-	var ramps: Dictionary = _shipped_ramps()
 	if arbiter._exposure_acceptance({}, 0.12) != 0.0:
 		return _fail("an empty Directive must give acceptance 0 whatever the fear lean")
-	if _acceptance_at(arbiter, cfg, {}, afraid, ramps) != 0.0:
+	if _acceptance_at(arbiter, cfg, {}, afraid) != 0.0:
 		return _fail("frightened actor with an empty Directive scored a non-zero acceptance term")
 	var no_tolerance: Dictionary = {"intent_weights": {"exposure_acceptance": 1.0}}
 	if not is_equal_approx(arbiter._exposure_acceptance(no_tolerance, 0.12), -0.12):
 		return _fail("a Directive without tolerance must give D = 0 minus the lean")
 	if arbiter._exposure_acceptance(no_tolerance, 0.0) != 0.0:
 		return _fail("a Directive without tolerance and a calm actor must give 0")
-	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])
-	if not is_equal_approx(_acceptance_at(arbiter, cfg, no_tolerance, afraid, ramps), -bound):
+	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"]) * _afraid_part(afraid)
+	if not is_equal_approx(_acceptance_at(arbiter, cfg, no_tolerance, afraid), -bound):
 		return _fail("frightened actor without tolerance should score -fear_lean_bound")
 	var bare := BehaviorArbiter.new({}, {"spatial_utility": cfg})
 	if bare._exposure_acceptance({"exposure_tolerance": 0.8}, 0.0) != 0.0:
@@ -1200,23 +1216,24 @@ static func _t_fear_bound_is_combat_owned() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
 	var data: Dictionary = (cs.get_balance()["data"] as Dictionary).duplicate(true)
-	var before: Dictionary = CombatTurnContextService._fear_ramp_cfg(data)
-	if before.keys().size() != 2 or not before.has("fear_start") or not before.has("fear_full"):
-		return _fail("combat context must carry exactly fear_start and fear_full: %s" % str(before.keys()))
-	var bounds: Dictionary = (((data["stages"] as Dictionary)["party_stance"] as Dictionary)["bounds"] as Dictionary)
-	bounds["exposure_tolerance"] = 0.45
 	var movement: Dictionary = (data["combat"] as Dictionary)["movement"] as Dictionary
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var afraid: Dictionary = _actor()
 	afraid["fear"] = 70
-	var lean: float = arbiter._fear_lean(afraid, CombatTurnContextService._fear_ramp_cfg(data))
-	if not is_equal_approx(lean, float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])):
-		return _fail("changing the stage bound moved the combat fear lean: %s" % lean)
+	var before: float = arbiter._fear_lean(afraid, 0.0)
+	var party_stance: Dictionary = (data["stages"] as Dictionary)["party_stance"] as Dictionary
+	(party_stance["bounds"] as Dictionary)["exposure_tolerance"] = 0.45
+	(party_stance["state_ramps"] as Dictionary)["fear_start"] = 0
+	(party_stance["state_ramps"] as Dictionary)["fear_full"] = 10
+	var after: float = arbiter._fear_lean(afraid, 0.0)
+	var want: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"]) * _afraid_part(afraid)
+	if before <= 0.0 or after != before or not is_equal_approx(after, want):
+		return _fail("changing the stage block moved the combat fear lean: %s then %s, expected %s" % [before, after, want])
 	return _pass()
 
 
 ## Production path: CombatTurnContextService.build_turn_context -> select_movement_intent.
-## Fails if ctx["fear_ramp"] is not built or the arbiter stops reading it.
+## Fails if the arbiter stops reading the actor view and composure for the lean.
 static func _t_fear_lean_reaches_arbiter_through_turn_context() -> Dictionary:
 	var movement: Dictionary = (_shipped_movement_and_directives()["movement"] as Dictionary)
 	var terms: Array = []
@@ -1228,16 +1245,27 @@ static func _t_fear_lean_reaches_arbiter_through_turn_context() -> Dictionary:
 		var exposure: float = float(spatial["exposure"]) / float((movement["spatial_utility"] as Dictionary)["exposure_weight"])
 		terms.append({"term": float(spatial["directive_exposure_acceptance"]), "exposure": exposure})
 	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])
-	var ramp_value: float = _shared_fear_ramp(60.0)
 	var weight: float = float((movement["spatial_utility"] as Dictionary)["directive_exposure_acceptance_weight"])
 	var calm: Dictionary = terms[0] as Dictionary
 	var afraid: Dictionary = terms[1] as Dictionary
 	if not is_equal_approx(float(calm["exposure"]), float(afraid["exposure"])) or float(calm["exposure"]) <= 0.0:
 		return _fail("the two runs scored different or zero exposure: %s" % str(terms))
-	var expected_drop: float = weight * bound * ramp_value * float(calm["exposure"])
+	var afraid_actor: Dictionary = _actor()
+	afraid_actor["fear"] = 60
+	var dampen: float = float(_composure_dampen_scale() * _TURN_COMPOSURE)
+	var expected_drop: float = weight * bound * _afraid_part(afraid_actor) * (1.0 - dampen) * float(calm["exposure"])
 	if not is_equal_approx(float(calm["term"]) - float(afraid["term"]), expected_drop) or expected_drop <= 0.0:
 		return _fail("afraid Echo term should be lower by %s; calm %s afraid %s" % [expected_drop, calm["term"], afraid["term"]])
 	return _pass()
+
+
+const _TURN_COMPOSURE: float = 0.25
+
+
+static func _composure_dampen_scale() -> float:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	return float((((cs.get_balance()["data"] as Dictionary)["maturity_expression"] as Dictionary)["composure_dampen_scale"] as Dictionary)["value"])
 
 
 ## One Echo through build_turn_context and select_movement_intent on the open fixture.
@@ -1263,10 +1291,8 @@ static func _turn_context_run(directive_id: String, fear: int, judgment: float) 
 	directives.load_from_config(balance)
 	var svc := CombatTurnContextService.new(flow_ctx, config, directives, StructuredLogger.new())
 	var ctx: Dictionary = svc.build_turn_context(actor, ectx, balance, bdata, 1, 1)["ctx"]
-	var ramp: Dictionary = ctx.get("fear_ramp", {}) as Dictionary
-	if not ramp.has("fear_start") or not ramp.has("fear_full"):
-		return {"error": "build_turn_context did not carry both fear ramp keys: %s" % str(ramp)}
 	ctx["judgment"] = judgment
+	ctx["composure"] = _TURN_COMPOSURE
 	var exposed: Array = []
 	for option_value: Variant in fixture["options"] as Array:
 		if float((option_value as Dictionary)["exposure"]) > 0.0:
@@ -1313,7 +1339,7 @@ static func _judgment_actor(bdata: Dictionary, rank: int, calling: String, fear:
 
 static func _accept_parts(arbiter: BehaviorArbiter, cfg: Dictionary, directive: Dictionary, actor: Dictionary, judgment: float) -> Dictionary:
 	var parts: Dictionary = {}
-	arbiter._spatial_utility({"urgency": 0.0, "purpose": "advance"}, _exposed_option(0.0), directive, cfg, parts, arbiter._fear_lean(actor, _shipped_ramps()), judgment)
+	arbiter._spatial_utility({"urgency": 0.0, "purpose": "advance"}, _exposed_option(0.0), directive, cfg, parts, arbiter._fear_lean(actor, 0.0), judgment)
 	return parts["acceptance_parts"] as Dictionary
 
 
@@ -1431,7 +1457,6 @@ static func _t_acceptance_growth_anchor_and_edge() -> Dictionary:
 static func _t_acceptance_order_of_operations() -> Dictionary:
 	var movement: Dictionary = _shipped_movement_and_directives()["movement"] as Dictionary
 	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
-	var ramps: Dictionary = _shipped_ramps()
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var block: Dictionary = movement["exposure_acceptance"] as Dictionary
 	var floor_a: float = _floor_a(movement)
@@ -1442,12 +1467,11 @@ static func _t_acceptance_order_of_operations() -> Dictionary:
 		var j: float = float(case[0])
 		var actor: Dictionary = _actor()
 		actor["fear"] = int(case[1])
-		var ramp: float = clampf((float(case[1]) - float(ramps["fear_start"])) / (float(ramps["fear_full"]) - float(ramps["fear_start"])), 0.0, 1.0)
 		for directive_value: Variant in pair:
 			var directive: Dictionary = directive_value as Dictionary
 			var d: float = float(directive["exposure_tolerance"]) - float(block["offset"])
 			var want_scaled: float = d * (floor_a + (1.0 - floor_a) * (1.0 - j))
-			var want_f: float = bound * ramp
+			var want_f: float = bound * _afraid_part(actor)
 			var got: Dictionary = _accept_parts(arbiter, cfg, directive, actor, j)
 			if not is_equal_approx(float(got["D_scaled"]), want_scaled) or not is_equal_approx(float(got["F"]), want_f) \
 					or not is_equal_approx(float(got["acceptance"]), want_scaled - want_f):
@@ -1487,6 +1511,26 @@ static func _t_acceptance_swing_within_declared_budget() -> Dictionary:
 		return _fail("a missing judgment_floor scales by 1.0, so its swing must read 1.0")
 	if DirectiveJudgmentScale.swing({"judgment_floor": 0.0}) != INF:
 		return _fail("a floor of 0 must read as an unbounded swing")
+	return _pass()
+
+
+static func _t_swing_layer_ceilings_consistent() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var swing_cfg: Dictionary = (((cs.get_balance()["data"] as Dictionary)["maturity_expression"] as Dictionary)["interpretation_swing_max"]) as Dictionary
+	var budget: float = float(swing_cfg.get("value", 0.0))
+	var layers: Dictionary = swing_cfg.get("layer_max", {}) as Dictionary
+	if budget <= 0.0 or layers.is_empty():
+		return _fail("fixture broken: budget %s, layer_max %s" % [budget, str(layers)])
+	for layer: String in ["action", "stop"]:
+		if not layers.has(layer):
+			return _fail("layer_max.%s is missing" % layer)
+	for layer: String in layers:
+		var ceiling: Variant = layers[layer]
+		if layer.begins_with("_"):
+			continue
+		if not (ceiling is int or ceiling is float) or float(ceiling) <= 0.0 or float(ceiling) > budget:
+			return _fail("layer_max.%s = %s must be positive and at most %s" % [layer, str(ceiling), budget])
 	return _pass()
 
 
@@ -1554,9 +1598,10 @@ static func _t_fear_lean_not_scaled_by_judgment() -> Dictionary:
 	return _pass()
 
 
-## More fear never raises acceptance across Judgment, with the window derived from config. Fear lowers
-## Judgment, which raises the Directive scale a little. From fear_start to fear_full the lean outgrows
-## that rise; past fear_full the lean is flat and acceptance may rise by the Judgment path slope.
+## More fear never raises acceptance across Judgment, with the rule derived from config. Fear lowers
+## Judgment by `fear_pressure_weight` x the afraid part, which raises the Directive scale. One ladder step
+## of size s raises acceptance by at most (1 - floor) x weight x max|D| x s and lowers it by bound x s.
+## Rule: bound x largest step is at least that rise at the largest step.
 static func _t_more_fear_never_more_accepting_across_judgment() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
@@ -1565,37 +1610,25 @@ static func _t_more_fear_never_more_accepting_across_judgment() -> Dictionary:
 	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
 	var block: Dictionary = movement["exposure_acceptance"] as Dictionary
 	var pressure: float = float((((data["maturity_expression"] as Dictionary)["autonomy_outputs"] as Dictionary)["judgment"] as Dictionary)["fear_pressure_weight"])
-	var ramps: Dictionary = _shipped_ramps()
-	var start: float = float(ramps["fear_start"])
-	var full: float = float(ramps["fear_full"])
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var max_d := 0.0
 	for directive_value: Variant in _scout_seek():
 		max_d = maxf(max_d, absf(float((directive_value as Dictionary)["exposure_tolerance"]) - float(block["offset"])))
-	var judgment_slope: float = (1.0 - _floor_a(movement)) * pressure * max_d / 100.0
-	var lean_slope: float = float(block["fear_lean_bound"]) / (full - start)
-	if lean_slope < judgment_slope:
-		return _fail("the lean slope %s never overtakes the Judgment path slope %s" % [lean_slope, judgment_slope])
-	var overtake: float = start
-	var rise_bound: float = judgment_slope * start
-	if rise_bound > 0.01:
-		return _fail("the rise before fear_start, %s, is above 0.01" % rise_bound)
+	var step: float = _largest_step(_band_lean())
+	var judgment_rise: float = (1.0 - _floor_a(movement)) * pressure * max_d * step
+	if float(block["fear_lean_bound"]) * step < judgment_rise:
+		return _fail("bound x largest step %s is below the Judgment path rise %s" % [float(block["fear_lean_bound"]) * step, judgment_rise])
 	for directive_value: Variant in _scout_seek():
 		var directive: Dictionary = directive_value as Dictionary
 		for j0: float in [0.0, 0.25, 0.5, 0.75, 1.0]:
-			var calm: float = float(_accept_parts(arbiter, cfg, directive, _actor(), j0)["acceptance"])
-			var previous: float = calm
+			var previous: float = float(_accept_parts(arbiter, cfg, directive, _actor(), j0)["acceptance"])
 			for fear: int in range(1, 101):
 				var actor: Dictionary = _actor()
 				actor["fear"] = fear
-				var j: float = clampf(j0 - pressure * float(fear) / 100.0, 0.0, 1.0)
+				var j: float = clampf(j0 - pressure * _afraid_part(actor), 0.0, 1.0)
 				var value: float = float(_accept_parts(arbiter, cfg, directive, actor, j)["acceptance"])
-				if value > calm + rise_bound + 0.0000001:
-					return _fail("T %s J0 %s fear %d: acceptance %s rose above calm %s by more than %s" % [directive["exposure_tolerance"], j0, fear, value, calm, rise_bound])
-				if float(fear) > overtake and float(fear) <= full and value > previous + 0.0000001:
-					return _fail("T %s J0 %s fear %d: acceptance rose from %s to %s after fear point %s" % [directive["exposure_tolerance"], j0, fear, previous, value, overtake])
-				if float(fear) > full and value > previous + judgment_slope + 0.0000001:
-					return _fail("T %s J0 %s fear %d: acceptance rose from %s to %s past fear_full by more than the Judgment path slope %s" % [directive["exposure_tolerance"], j0, fear, previous, value, judgment_slope])
+				if value > previous + 0.0000001:
+					return _fail("T %s J0 %s fear %d: acceptance rose from %s to %s" % [directive["exposure_tolerance"], j0, fear, previous, value])
 				previous = value
 	return _pass()
 
@@ -1689,6 +1722,48 @@ static func _t_judgment_reaches_acceptance_through_actor_state_machine() -> Dict
 	return _pass()
 
 
+## Through ActorStateMachine: the fear lean is the bound times the afraid part of the status, softened by
+## the composure the machine derives for the Echo (not injected). A seasoned Echo leans less.
+static func _t_fear_lean_reaches_acceptance_through_actor_state_machine() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var shipped: Dictionary = _shipped_movement_and_directives()
+	var movement: Dictionary = shipped["movement"] as Dictionary
+	var bdata: Dictionary = cs.get_balance()["data"] as Dictionary
+	var scout: Dictionary = (shipped["directives"] as Dictionary)["directive.scout_carefully"] as Dictionary
+	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])
+	var dampen: float = _composure_dampen_scale()
+	var leans: Array = []
+	for rank: int in [1, 9]:
+		var fixture: Dictionary = _open_fixture(20, 4, {}, scout)
+		var actor: Dictionary = _judgment_actor(bdata, rank, "okofor", 60)
+		actor["id"] = "echo.a"
+		actor["grid_pos"] = {"col": 0, "row": 0}
+		var context: Dictionary = {
+			"actor": actor, "all_actors": [], "t": 1, "cfg": {"data": bdata}, "directive": scout,
+			"movement_context": fixture["movement_context"], "movement_profile": fixture["profile"],
+			"movement_goals": fixture["goals"], "movement_options": fixture["options"],
+		}
+		var module := _InputsArbiter.new({}, movement)
+		var machine := ActorStateMachine.new(actor, module)
+		machine.advance_turn(context, StructuredLogger.new(), 1)
+		var found: Dictionary = {}
+		for key: String in ["winner", "runner_up"]:
+			var spatial: Dictionary = (module.inputs.get(key, {}) as Dictionary).get("spatial", {}) as Dictionary
+			if spatial.has("acceptance_parts"):
+				found = spatial["acceptance_parts"] as Dictionary
+				break
+		if found.is_empty():
+			return _fail("rank %d: no route candidate with acceptance_parts" % rank)
+		var want: float = bound * _afraid_part(actor) * (1.0 - dampen * float(actor["_composure"]))
+		if want <= 0.0 or not is_equal_approx(float(found["F"]), want):
+			return _fail("rank %d: lean %s, wanted %s from composure %s" % [rank, found["F"], want, actor["_composure"]])
+		leans.append(float(found["F"]))
+	if float(leans[1]) >= float(leans[0]):
+		return _fail("the seasoned Echo's lean %s must be smaller than the young Echo's %s" % [leans[1], leans[0]])
+	return _pass()
+
+
 ## Judgment reaches the arbiter's spatial term from the turn context. Fails if the J argument
 ## of _spatial_utility is not passed.
 static func _t_judgment_reaches_arbiter_through_turn_context() -> Dictionary:
@@ -1717,10 +1792,6 @@ static func _t_judgment_reaches_arbiter_through_turn_context() -> Dictionary:
 		if float(terms[1]) >= float(terms[0]):
 			return _fail("%s: the seasoned Echo's Directive exposure term %s must be smaller than the young Echo's %s" % [id, terms[1], terms[0]])
 	return _pass()
-
-
-static func _shared_fear_ramp(fear: float) -> float:
-	return preload("res://core/movement/StagePartyStance.gd").fear_ramp(fear, _shipped_ramps())
 
 
 ## Combat code may read only the two shared ramp keys of the stage block.

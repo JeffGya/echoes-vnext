@@ -200,7 +200,7 @@ static func _style_of(option_id: String, goal_id: String) -> String:
 
 static func _actor(over: Dictionary = {}) -> Dictionary:
 	var actor: Dictionary = {
-		"id": "echo_0001", "actor_type": "echo", "faction": "echo", "fear": 45, "fear_base": 0, "morale": 60,
+		"id": "echo_0001", "actor_type": "echo", "faction": "echo", "fear": 85, "fear_base": 0, "morale": 60,
 		"dominant_vector": "", "stats": { "def": 5 }, "guard_state": false,
 	}
 	for k: String in over.keys():
@@ -263,9 +263,12 @@ static func _t_screen_keeps_legal_and_records_bias() -> Dictionary:
 	_eq(errs, "tagged", stop.get("benefit_id", ""), "guard")
 	_eq(errs, "direct untouched", (cands[1] as Dictionary).has("_stop_short"), false)
 	var bias: float = StopShortContextService.record_bias(cands[0] as Dictionary)
-	_eq(errs, "bias is weight x strength", is_equal_approx(bias, 6.0), true)
+	var cfg: Dictionary = _cfg()
+	var strength: float = maxf(0.0, -float((cfg["band_lean"] as Dictionary)[EmotionService.get_emotional_status(60, 85)]))
+	var want_bias: float = float(cfg["stop_short_weight"]) * strength
+	_eq(errs, "bias is weight x strength", strength > 0.0 and is_equal_approx(bias, want_bias), true)
 	_eq(errs, "bias recorded under the cause key",
-		is_equal_approx(float(((cands[0] as Dictionary)["_score_bias"] as Dictionary).get("stop_short.fear", 0.0)), 6.0), true)
+		is_equal_approx(float(((cands[0] as Dictionary)["_score_bias"] as Dictionary).get("stop_short.fear", 0.0)), want_bias), true)
 	_eq(errs, "no bias on a normal route", StopShortContextService.record_bias(cands[1] as Dictionary), 0.0)
 	var tag: Dictionary = StopShortContextService.trace_tag(cands[0] as Dictionary)
 	_eq(errs, "tag", [tag["cause_id"], tag["benefit_id"], tag["source"], tag["code"]], ["fear", "guard", "emotion", "fear"])

@@ -125,20 +125,13 @@ static func cause_strength(cause_id: String, benefit_id: String, ctx: Dictionary
 	return { "cause_id": cause_id, "strength": 0.0, "source": "", "code": "" }
 
 
+## Afraid part of the emotional status (fear and morale together) of the ctx values. 0.0 without
+## `cfg.band_lean`.
 static func fear_strength(ctx: Dictionary, cfg: Dictionary) -> float:
-	var fear_cfg: Dictionary = cfg.get("fear", {}) as Dictionary
-	var lo: float = float(fear_cfg.get("floor", 20))
-	var hi: float = float(fear_cfg.get("full", 45))
-	var level: float = maxf(float(ctx.get("fear", 0)), float(ctx.get("fear_base", 0)))
-	if hi <= lo:
-		return 1.0 if level >= hi else 0.0
-	return clampf((level - lo) / (hi - lo), 0.0, 1.0)
-
-
-static func morale_strength(ctx: Dictionary, cfg: Dictionary) -> float:
-	var tier: String = EmotionService.get_morale_tier(int(ctx.get("morale", 50)))
-	var row: Dictionary = cfg.get("morale_strength", {}) as Dictionary
-	return clampf(float(row.get(tier, 0.0)), 0.0, 1.0)
+	var table: Dictionary = cfg.get("band_lean", {}) as Dictionary
+	if table.is_empty():
+		return 0.0
+	return EmotionStatusLean.afraid(EmotionStatusLean.lean(EmotionStatusLean.status_of(ctx), table))
 
 
 static func benefit_plan(benefit_id: String, ctx: Dictionary, cfg: Dictionary) -> Dictionary:
@@ -168,15 +161,12 @@ static func _veto(reason: String) -> Dictionary:
 
 
 static func _fear_cause(benefit_id: String, ctx: Dictionary, cfg: Dictionary) -> Dictionary:
-	var fear_s: float = fear_strength(ctx, cfg)
-	var morale_s: float = morale_strength(ctx, cfg)
 	var affinity: Dictionary = (cfg.get("fear", {}) as Dictionary).get("affinity", {}) as Dictionary
-	var combined: float = maxf(fear_s, morale_s) * clampf(float(affinity.get(benefit_id, 0.0)), 0.0, 1.0)
 	return {
 		"cause_id": "fear",
-		"strength": combined,
+		"strength": fear_strength(ctx, cfg) * clampf(float(affinity.get(benefit_id, 0.0)), 0.0, 1.0),
 		"source": "emotion",
-		"code": "fear" if fear_s >= morale_s else "morale",
+		"code": "fear",
 	}
 
 
