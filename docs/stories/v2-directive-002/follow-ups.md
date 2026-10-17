@@ -97,3 +97,8 @@ Owner: phase B+C, which edits the same guard.
 
 ## Found in PR 107 review (2026-10-16)
 - `ConversationRepairTests._restore_save` (`tests/ConversationRepairTests.gd:64`) restores only the primary save file. Boot and dispatch can leave `.pending_*`, `.tmp` and `.bak*` files beside it (AGENTS.md lines 151-158). Seven callers in that suite use it. `StageExploreP5Tests` and `UnifiedResolveTests` have their own primary-only helpers. Risk is low: each process has its own save folder. Fix: call `TestSaveHarness.remove_save_artifacts` inside the helpers. This is a separate story. `ContactBidScalingTests` is already fixed at its own call site (commit 9776aac).
+
+## Found in phase D slice 1 and 2 (2026-10-16)
+- Stale numbers in `scripts/run-tests-sharded.sh` comments: line ~21 says shard4 has "~16 sibling suites" (it has 19); line ~24 and `AGENTS.md` ~242 say "~124" suites (the count is 132); line ~93 says shard1 and shard7 are "the two smallest shards" (shard7 has 3 suites, shard1 has 9, shard8 has 10).
+- Shard 8 now holds `fingerprint_seek` (about 3 minutes). Its alarm is 700 s. A timed sharded run must read shard 8's `elapsed_secs`. If it nears 700 s, add an alarm override or move the suite.
+- The "Names that look right and are WRONG" paragraph in `AGENTS.md` lists fingerprint modes and does not mention `fingerprint_seek`.

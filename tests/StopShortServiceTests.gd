@@ -17,7 +17,7 @@ const _TESTS: Array = [
 	"gate_order_is_g1_to_g7",
 	"fear_strength_boundaries",
 	"fear_base_floor_blend",
-	"morale_strength_boundaries",
+	"fear_strength_follows_status_band",
 	"min_cause_strength_applies",
 	"identity_affinity_by_family",
 	"identity_affinity_by_vector",
@@ -37,6 +37,23 @@ const _TESTS: Array = [
 	"fear_affinity_guard_only",
 	"fear_stop_vetoed_when_guard_illegal",
 	"tie_break_hold_first_with_ally_near",
+	"directive_cause_scout_stronger_than_seek",
+	"directive_cause_falls_with_judgment",
+	"directive_cause_yields_to_identity_at_higher_judgment",
+	"directive_cause_floor_holds_for_edge_calling",
+	"directive_contrast_by_calling_at_standing_1",
+	"afraid_directive_scale_not_below_calm",
+	"fear_cause_not_scaled_by_judgment",
+	"seek_directive_cause_gone_when_seasoned",
+	"directive_cause_does_not_stack_with_identity",
+	"directive_row_is_last_and_own_cause_wins_a_tie",
+	"directive_alone_without_benefit_is_no_benefit",
+	"calm_echo_without_directive_is_no_cause",
+	"synthetic_tolerance_reaches_cause",
+	"directive_config_integrity",
+	"directive_swing_within_declared_budget",
+	"fear_wins_over_shipped_scout_directive",
+	"text_bank_directive_clause",
 ]
 
 
@@ -52,17 +69,20 @@ static func _balance() -> Dictionary:
 
 
 static func _cfg(enabled: bool = true) -> Dictionary:
-	var cfg: Dictionary = ((_balance().get("data", {}) as Dictionary).get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary
+	var data: Dictionary = _balance().get("data", {}) as Dictionary
+	var cfg: Dictionary = StopShortContextService.with_judgment_scale(
+		((data.get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary),
+		((data.get("combat", {}) as Dictionary).get("movement", {}) as Dictionary))
 	cfg = cfg.duplicate(true)
 	cfg["enabled"] = enabled
 	return cfg
 
 
-## A legal base case: fear 30 (strength 0.4), hostile 3 cells away, capacity 2.
+## A legal base case: fear 50 and morale 60 (burdened, a fear cause), hostile 3 cells away, capacity 2.
 static func _ctx(over: Dictionary = {}) -> Dictionary:
 	var ctx: Dictionary = {
 		"actor_type": "echo", "purpose": "engage", "urgency": 0.5,
-		"fear": 30, "fear_base": 0, "morale": 60,
+		"fear": 50, "fear_base": 0, "morale": 60,
 		"calling_family": "", "dominant_vector": "", "judgment": 0.0,
 		"capacity": 2, "def": 5, "guard_state": false,
 		"stop_in_hostile_reach": false, "previous_stop_short": false,
@@ -101,10 +121,8 @@ static func _t_block_loads_with_spec_values() -> Dictionary:
 	_eq(errs, "enabled", raw.get("enabled", false), true)
 	_near(errs, "stop_short_weight", float(cfg["stop_short_weight"]), 6.0)
 	_near(errs, "min_cause_strength", float(cfg["min_cause_strength"]), 0.15)
-	_eq(errs, "fear floor", int(cfg["fear"]["floor"]), 20)
-	_eq(errs, "fear full", int(cfg["fear"]["full"]), 45)
-	_near(errs, "morale shaken", float(cfg["morale_strength"]["shaken"]), 0.0)
-	_near(errs, "morale broken", float(cfg["morale_strength"]["broken"]), 0.8)
+	_eq(errs, "no second fear ramp", (cfg["fear"] as Dictionary).has("floor") or (cfg["fear"] as Dictionary).has("full"), false)
+	_eq(errs, "no morale table", cfg.has("morale_strength"), false)
 	var fam: Dictionary = cfg["identity"]["family_affinity"]
 	_near(errs, "anchor guard", float(fam["anchor"]["guard"]), 0.8)
 	_near(errs, "anchor hold", float(fam["anchor"]["hold"]), 0.8)
@@ -165,7 +183,7 @@ static func _t_gate_g5_streak() -> Dictionary:
 static func _t_gate_g6_no_cause() -> Dictionary:
 	var errs: Array = []
 	_eq(errs, "calm steady echo", _veto_of(_ctx({ "fear": 0, "morale": 60 }), _cfg()), "no_cause")
-	_eq(errs, "shaken morale alone", _veto_of(_ctx({ "fear": 0, "morale": 30 }), _cfg()), "no_cause")
+	_eq(errs, "morale in the uncertain band is below the floor", _veto_of(_ctx({ "fear": 0, "morale": 37 }), _cfg()), "no_cause")
 	var edge: Dictionary = _ctx({ "fear": 0, "calling_family": "edge", "dominant_vector": "vanguard" })
 	_eq(errs, "edge identity", _veto_of(edge, _cfg()), "no_cause")
 	# A cause exists only for observe, and observe is not legal: the cause has no legal benefit.
@@ -196,7 +214,7 @@ static func _t_gate_order_is_g1_to_g7() -> Dictionary:
 		["urgency", 0.5, "hostile_in_reach"],
 		["stop_in_hostile_reach", false, "streak"],
 		["previous_stop_short", false, "no_cause"],
-		["fear", 30, "no_benefit"],
+		["fear", 50, "no_benefit"],
 	]
 	_eq(errs, "first", _veto_of(all_bad, _cfg()), "purpose_excluded")
 	for step_v: Variant in order:
@@ -206,57 +224,65 @@ static func _t_gate_order_is_g1_to_g7() -> Dictionary:
 	return _res(errs)
 
 
+## Expected values come from the band_lean table and the shared status, not from the service.
+static func _status_strength(morale: int, fear: int, fear_base: int = 0) -> float:
+	var table: Dictionary = _cfg()["band_lean"] as Dictionary
+	return maxf(0.0, -float(table[EmotionService.get_emotional_status(morale, maxi(fear, fear_base))]))
+
+
 static func _t_fear_strength_boundaries() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_near(errs, "fear 19", StopShortService.fear_strength({ "fear": 19 }, cfg), 0.0)
-	_near(errs, "fear 20", StopShortService.fear_strength({ "fear": 20 }, cfg), 0.0)
-	_near(errs, "fear 32", StopShortService.fear_strength({ "fear": 32 }, cfg), 12.0 / 25.0)
-	_near(errs, "fear 45", StopShortService.fear_strength({ "fear": 45 }, cfg), 1.0)
-	_near(errs, "fear 90 clamps", StopShortService.fear_strength({ "fear": 90 }, cfg), 1.0)
-	var at_19: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 19 }), cfg)
-	_near(errs, "cause fear 19", float(at_19["strength"]), 0.0)
-	var at_45: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 45 }), cfg)
-	_near(errs, "cause fear 45", float(at_45["strength"]), 1.0)
+	for pair: Array in [[50, 0], [50, 40], [50, 41], [50, 44], [50, 45], [50, 54], [50, 55], [50, 65], [50, 75], [50, 85], [50, 100]]:
+		_near(errs, "morale %d fear %d" % [pair[0], pair[1]], StopShortService.fear_strength({ "morale": pair[0], "fear": pair[1] }, cfg), _status_strength(pair[0], pair[1]))
+	_near(errs, "grounded is 0", StopShortService.fear_strength({ "morale": 50, "fear": 40 }, cfg), 0.0)
+	var at_45: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 45, "morale": 50 }), cfg)
+	_near(errs, "cause fear 45", float(at_45["strength"]), _status_strength(50, 45))
 	_eq(errs, "fear code", at_45["code"], "fear")
 	_eq(errs, "fear source", at_45["source"], "emotion")
+	_near(errs, "no table gives 0", StopShortService.fear_strength({ "morale": 50, "fear": 100 }, {}), 0.0)
 	return _res(errs)
 
 
 static func _t_fear_base_floor_blend() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_near(errs, "fear_base above fear", StopShortService.fear_strength({ "fear": 0, "fear_base": 45 }, cfg), 1.0)
-	_near(errs, "fear above fear_base", StopShortService.fear_strength({ "fear": 45, "fear_base": 0 }, cfg), 1.0)
-	_near(errs, "both low", StopShortService.fear_strength({ "fear": 10, "fear_base": 15 }, cfg), 0.0)
+	_near(errs, "fear_base above fear", StopShortService.fear_strength({ "morale": 50, "fear": 0, "fear_base": 45 }, cfg), _status_strength(50, 0, 45))
+	_near(errs, "fear above fear_base", StopShortService.fear_strength({ "morale": 50, "fear": 45, "fear_base": 0 }, cfg), _status_strength(50, 45))
+	_near(errs, "both low", StopShortService.fear_strength({ "morale": 50, "fear": 10, "fear_base": 15 }, cfg), 0.0)
+	if _status_strength(50, 0, 45) <= 0.0:
+		errs.append("fixture broken: fear_base 45 must read as afraid")
 	return _res(errs)
 
 
-static func _t_morale_strength_boundaries() -> Dictionary:
+## Low morale reaches the fear cause through the same status; the cause code stays "fear".
+static func _t_fear_strength_follows_status_band() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_near(errs, "morale 0", StopShortService.morale_strength({ "morale": 0 }, cfg), 0.8)
-	_near(errs, "morale 24 broken", StopShortService.morale_strength({ "morale": 24 }, cfg), 0.8)
-	_near(errs, "morale 25 shaken is 0", StopShortService.morale_strength({ "morale": 25 }, cfg), 0.0)
-	_near(errs, "morale 49 shaken is 0", StopShortService.morale_strength({ "morale": 49 }, cfg), 0.0)
-	_near(errs, "morale 50 steady", StopShortService.morale_strength({ "morale": 50 }, cfg), 0.0)
-	_near(errs, "morale 100", StopShortService.morale_strength({ "morale": 100 }, cfg), 0.0)
+	for morale: int in [0, 5, 10, 15, 20, 24, 25, 34, 35, 39, 40, 100]:
+		_near(errs, "morale %d" % morale, StopShortService.fear_strength({ "morale": morale, "fear": 0 }, cfg), _status_strength(morale, 0))
 	var broken: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 0, "morale": 24 }), cfg)
-	_near(errs, "cause broken", float(broken["strength"]), 0.8)
-	_eq(errs, "morale code", broken["code"], "morale")
-	var shaken: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 0, "morale": 25 }), cfg)
-	_near(errs, "cause shaken", float(shaken["strength"]), 0.0)
-	var both: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 45, "morale": 10 }), cfg)
-	_near(errs, "larger of fear and morale", float(both["strength"]), 1.0)
-	_eq(errs, "fear wins code", both["code"], "fear")
+	_near(errs, "cause low morale", float(broken["strength"]), _status_strength(24, 0))
+	_eq(errs, "low morale code", broken["code"], "fear")
+	var steady: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 0, "morale": 60 }), cfg)
+	_near(errs, "steady morale", float(steady["strength"]), 0.0)
+	var both: Dictionary = StopShortService.cause_strength("fear", "guard", _ctx({ "fear": 50, "morale": 10 }), cfg)
+	_near(errs, "worse of fear and morale", float(both["strength"]), _status_strength(10, 50))
+	if _status_strength(10, 50) <= _status_strength(60, 50):
+		errs.append("fixture broken: low morale must be worse than high morale at the same fear")
 	return _res(errs)
 
 
 static func _t_min_cause_strength_applies() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	_eq(errs, "fear 23", _veto_of(_ctx({ "fear": 23 }), cfg), "no_cause")
-	_eq(errs, "fear 24", _veto_of(_ctx({ "fear": 24 }), cfg), "")
+	var floor_strength: float = float(cfg["min_cause_strength"])
+	var below: float = _status_strength(37, 0)
+	var above: float = _status_strength(30, 0)
+	if not (below > 0.0 and below < floor_strength and above >= floor_strength):
+		errs.append("fixture broken: uncertain %s hesitant %s floor %s" % [below, above, floor_strength])
+	_eq(errs, "uncertain is below the floor", _veto_of(_ctx({ "fear": 0, "morale": 37 }), cfg), "no_cause")
+	_eq(errs, "hesitant clears the floor", _veto_of(_ctx({ "fear": 0, "morale": 30 }), cfg), "")
 	return _res(errs)
 
 
@@ -324,13 +350,13 @@ static func _t_cause_registry_rows() -> Dictionary:
 	for row_v: Variant in StopShortService.CAUSE_ROWS:
 		var row: Dictionary = row_v as Dictionary
 		ids.append(str(row["id"]))
-	_eq(errs, "registry rows", ids, ["fear", "identity"])
-	for reserved: String in ["directive", "guidance", "bond", "vow"]:
+	_eq(errs, "registry rows", ids, ["fear", "identity", "directive"])
+	for reserved: String in ["guidance", "bond", "vow"]:
 		_eq(errs, "reserved has no row: " + reserved, ids.has(reserved), false)
 		var got: Dictionary = StopShortService.cause_strength(reserved, "guard", _ctx({ "fear": 90 }), _cfg())
 		_near(errs, "reserved has no logic: " + reserved, float(got["strength"]), 0.0)
 	_eq(errs, "bias key", StopShortService.bias_key("fear"), "stop_short.fear")
-	for code_source: Array in [["emotion", "fear"], ["emotion", "morale"], ["calling", "calling_weight"], ["vector", "values"]]:
+	for code_source: Array in [["emotion", "fear"], ["emotion", "morale"], ["calling", "calling_weight"], ["vector", "values"], ["directive", "directive_order"]]:
 		_eq(errs, "trace source known: " + str(code_source[0]), DecisionTrace.SOURCES.has(str(code_source[0])), true)
 		_eq(errs, "text clause exists: " + str(code_source[1]), StopShortText.has_key(["cause_clause", str(code_source[1])]), true)
 	return _res(errs)
@@ -398,7 +424,7 @@ static func _t_benefit_hold_predicate() -> Dictionary:
 static func _t_benefit_choice_and_order() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
-	var s1: Dictionary = StopShortService.evaluate(_ctx({ "fear": 30 }), cfg)
+	var s1: Dictionary = StopShortService.evaluate(_ctx({ "fear": 50 }), cfg)
 	_eq(errs, "S1 stop", s1["stop"], true)
 	_eq(errs, "S1 guard", s1["benefit_id"], "guard")
 	_eq(errs, "S1 plan", s1["benefit_plan"]["action_type"], "actor.guard")
@@ -420,10 +446,10 @@ static func _t_benefit_choice_and_order() -> Dictionary:
 	_eq(errs, "S3c edge never stops for identity", StopShortService.evaluate(_ctx({
 		"fear": 0, "calling_family": "edge", "judgment": 1.0 }), cfg)["stop"], false)
 	var morale_only: Dictionary = StopShortService.evaluate(_ctx({ "fear": 0, "morale": 10 }), cfg)
-	_eq(errs, "broken morale stops", morale_only["stop"], true)
-	_eq(errs, "broken morale code", morale_only["cause_code"], "morale")
+	_eq(errs, "low morale stops", morale_only["stop"], true)
+	_eq(errs, "low morale reads through the fear cause", morale_only["cause_code"], "fear")
 	var strongest: Dictionary = StopShortService.evaluate(_ctx({
-		"fear": 45, "calling_family": "sight", "judgment": 1.0 }), cfg)
+		"fear": 85, "calling_family": "sight", "judgment": 1.0 }), cfg)
 	_eq(errs, "strongest cause wins", strongest["cause_id"], "fear")
 	_eq(errs, "S2 control: steady and calm moves on", StopShortService.evaluate(_ctx({ "fear": 0, "morale": 60 }), cfg)["stop"], false)
 	return _res(errs)
@@ -433,11 +459,11 @@ static func _t_bias_is_weight_times_strength() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
 	var out: Dictionary = StopShortService.evaluate(_ctx({ "fear": 45 }), cfg)
-	_near(errs, "weight 6 x 1.0", float(out["bias"]), 6.0)
+	_near(errs, "weight x strength", float(out["bias"]), float(cfg["stop_short_weight"]) * _status_strength(60, 45))
 	cfg["stop_short_weight"] = 7.5
-	var out2: Dictionary = StopShortService.evaluate(_ctx({ "fear": 30 }), cfg)
-	_near(errs, "weight 7.5 x 0.4", float(out2["bias"]), 3.0)
-	_near(errs, "strength", float(out2["strength"]), 0.4)
+	var out2: Dictionary = StopShortService.evaluate(_ctx({ "fear": 65 }), cfg)
+	_near(errs, "weight 7.5 x strength", float(out2["bias"]), 7.5 * _status_strength(60, 65))
+	_near(errs, "strength", float(out2["strength"]), _status_strength(60, 65))
 	return _res(errs)
 
 
@@ -499,7 +525,7 @@ static func _t_text_bank_every_key_resolves() -> Dictionary:
 		_eq(errs, "plain " + benefit, StopShortText.has_key(["reason_line", benefit, "plain"]), true)
 		_eq(errs, "row_word text " + benefit, StopShortText.row_word(benefit).is_empty(), false)
 		_eq(errs, "reason text " + benefit, StopShortText.reason_line(benefit).is_empty(), false)
-	for code: String in ["fear", "morale", "calling_weight", "values"]:
+	for code: String in ["fear", "morale", "calling_weight", "values", "directive_order"]:
 		_eq(errs, "clause " + code, StopShortText.has_key(["cause_clause", code]), true)
 		_eq(errs, "clause text " + code, StopShortText.cause_clause(code).is_empty(), false)
 	_eq(errs, "first person", StopShortText.reason_line("guard").begins_with("I "), true)
@@ -535,7 +561,7 @@ static func _t_text_bank_missing_key_fails() -> Dictionary:
 	var errs: Array = []
 	_eq(errs, "unknown benefit row word", StopShortText.has_key(["row_word", "range"]), false)
 	_eq(errs, "unknown section", StopShortText.has_key(["nope", "guard"]), false)
-	_eq(errs, "unknown clause", StopShortText.has_key(["cause_clause", "directive_order"]), false)
+	_eq(errs, "unknown clause", StopShortText.has_key(["cause_clause", "no_such_clause"]), false)
 	_eq(errs, "lookup ok flag", StopShortText.lookup(["row_word", "range"])["ok"], false)
 	_eq(errs, "a dictionary is not a line", StopShortText.has_key(["row_word"]), false)
 	_eq(errs, "note keys are not lines", StopShortText.all_lines().has(StopShortText.lookup(["_status"])["text"]), false)
@@ -563,7 +589,7 @@ static func _t_fear_affinity_guard_only() -> Dictionary:
 	var errs: Array = []
 	var cfg: Dictionary = _cfg()
 	for cause_ctx: Dictionary in [_ctx({ "fear": 45 }), _ctx({ "fear": 0, "morale": 10 })]:
-		_near(errs, "guard", float(StopShortService.cause_strength("fear", "guard", cause_ctx, cfg)["strength"]), 1.0 if int(cause_ctx["fear"]) == 45 else 0.8)
+		_near(errs, "guard", float(StopShortService.cause_strength("fear", "guard", cause_ctx, cfg)["strength"]), _status_strength(int(cause_ctx["morale"]), int(cause_ctx["fear"])))
 		_near(errs, "observe", float(StopShortService.cause_strength("fear", "observe", cause_ctx, cfg)["strength"]), 0.0)
 		_near(errs, "hold", float(StopShortService.cause_strength("fear", "hold", cause_ctx, cfg)["strength"]), 0.0)
 	return _res(errs)
@@ -608,8 +634,298 @@ static func _t_tie_break_hold_first_with_ally_near() -> Dictionary:
 	_eq(errs, "S3b stop", s3b["stop"], true)
 	_eq(errs, "S3b benefit", s3b["benefit_id"], "hold")
 	_eq(errs, "S3b cause", s3b["cause_id"], "identity")
-	# Ally near does not beat a stronger guard cause (fear 45 gives guard 1.0 against hold 0.8).
+	# Ally near does not beat a stronger guard cause (fear 85 gives guard 1.0 against hold 0.8).
 	var fear_wins: Dictionary = StopShortService.evaluate(_ctx({
-		"fear": 45, "calling_family": "anchor", "judgment": 1.0, "cohesion_stop": 0.8, "cohesion_full": 0.2 }), cfg)
+		"fear": 85, "calling_family": "anchor", "judgment": 1.0, "cohesion_stop": 0.8, "cohesion_full": 0.2 }), cfg)
 	_eq(errs, "stronger guard cause still wins", fear_wins["benefit_id"], "guard")
+	return _res(errs)
+
+
+# The Directive cause.
+
+const _SCOUT_T: float = 0.3
+const _SEEK_T: float = 0.8
+
+
+static func _shipped_tolerance(directive_id: String) -> float:
+	var directives: Dictionary = MovementArbitrationTests._shipped_movement_and_directives()["directives"] as Dictionary
+	return float((directives[directive_id] as Dictionary)["exposure_tolerance"])
+
+
+static func _directive_strength(benefit: String, tolerance: float, judgment: float, over: Dictionary = {}) -> float:
+	var ctx: Dictionary = _ctx({ "fear": 0, "directive_tolerance": tolerance, "judgment": judgment })
+	for k: String in over.keys():
+		ctx[k] = over[k]
+	return float(StopShortService.cause_strength("directive", benefit, ctx, _cfg())["strength"])
+
+
+static func _t_directive_cause_scout_stronger_than_seek() -> Dictionary:
+	var errs: Array = []
+	var scout_t: float = _shipped_tolerance("directive.scout_carefully")
+	var seek_t: float = _shipped_tolerance("directive.seek_signs")
+	_near(errs, "shipped Scout tolerance", scout_t, _SCOUT_T)
+	_near(errs, "shipped Seek tolerance", seek_t, _SEEK_T)
+	var cfg: Dictionary = _cfg()
+	var j: float = MovementArbitrationTests._production_judgment(1, "okofor")
+	for benefit: String in StopShortService.BENEFITS:
+		var scout: float = _directive_strength(benefit, scout_t, j)
+		var seek: float = _directive_strength(benefit, seek_t, j)
+		if not scout > seek:
+			errs.append("%s: Scout %s must be above Seek %s" % [benefit, scout, seek])
+	var ctx_scout: Dictionary = _ctx({ "fear": 0, "directive_tolerance": scout_t, "judgment": 0.2 })
+	var ctx_seek: Dictionary = _ctx({ "fear": 0, "directive_tolerance": seek_t, "judgment": 0.2 })
+	for benefit: String in StopShortService.BENEFITS:
+		_eq(errs, "Scout %s reaches the cut at J 0.2" % benefit, StopShortService.best_cause(benefit, ctx_scout, cfg).is_empty(), false)
+	_eq(errs, "Seek observe is below the cut", StopShortService.best_cause("observe", ctx_seek, cfg).is_empty(), true)
+	_eq(errs, "Seek hold is below the cut at J 0.2", StopShortService.best_cause("hold", ctx_seek, cfg).is_empty(), true)
+	_near(errs, "Scout guard at J 0.2", _directive_strength("guard", scout_t, 0.2), 0.644)
+	_near(errs, "Seek guard at J 0.2", _directive_strength("guard", seek_t, 0.2), 0.184)
+	return _res(errs)
+
+
+static func _t_directive_cause_falls_with_judgment() -> Dictionary:
+	var errs: Array = []
+	var floor_s: float = float(_cfg()["directive_judgment"]["judgment_floor"])
+	for benefit: String in StopShortService.BENEFITS:
+		var affinity: float = float(_cfg()["directive"]["affinity"][benefit])
+		var top: float = (1.0 - _SCOUT_T) * affinity
+		var previous: float = 2.0
+		for j: float in [0.0, 0.2, 0.5, 0.85, 1.0]:
+			var got: float = _directive_strength(benefit, _SCOUT_T, j)
+			if not got < previous:
+				errs.append("%s J %s: %s did not fall below %s" % [benefit, j, got, previous])
+			if got > top + 0.0000001 or got < top * floor_s - 0.0000001:
+				errs.append("%s J %s: %s outside [%s, %s]" % [benefit, j, got, top * floor_s, top])
+			previous = got
+		_near(errs, benefit + " at J 0 is the top", _directive_strength(benefit, _SCOUT_T, 0.0), top)
+		_near(errs, benefit + " at J 1 is the floor", _directive_strength(benefit, _SCOUT_T, 1.0), top * floor_s)
+		_near(errs, benefit + " J above 1 clamps", _directive_strength(benefit, _SCOUT_T, 5.0), top * floor_s)
+	var young: float = MovementArbitrationTests._production_judgment(1, "okofor")
+	var seasoned: float = MovementArbitrationTests._production_judgment(9, "okofor")
+	if not _directive_strength("guard", _SCOUT_T, seasoned) < _directive_strength("guard", _SCOUT_T, young):
+		errs.append("production Judgment %s (Standing 9) must give a weaker cause than %s (Standing 1)" % [seasoned, young])
+	return _res(errs)
+
+
+static func _t_directive_cause_yields_to_identity_at_higher_judgment() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	var base: Dictionary = { "fear": 0, "calling_family": "anchor", "directive_tolerance": _SCOUT_T }
+	var young: float = MovementArbitrationTests._production_judgment(1, "okofor")
+	var seasoned: float = MovementArbitrationTests._production_judgment(9, "okofor")
+	var young_out: Dictionary = StopShortService.evaluate(_ctx(_with(base, { "judgment": young })), cfg)
+	var seasoned_out: Dictionary = StopShortService.evaluate(_ctx(_with(base, { "judgment": seasoned })), cfg)
+	_eq(errs, "Standing 1 anchor: Directive owns the stop", young_out["cause_id"], "directive")
+	_eq(errs, "Standing 9 anchor: identity owns the stop", seasoned_out["cause_id"], "identity")
+	var flips: int = 0
+	var owner: String = ""
+	for i in range(0, 101):
+		var out: Dictionary = StopShortService.evaluate(_ctx(_with(base, { "judgment": float(i) / 100.0 })), cfg)
+		if str(out["cause_id"]) != owner:
+			flips += 1
+			owner = str(out["cause_id"])
+	_eq(errs, "one crossover across J 0..1", flips, 2)
+	return _res(errs)
+
+
+static func _with(a: Dictionary, b: Dictionary) -> Dictionary:
+	var out: Dictionary = a.duplicate()
+	for k: String in b.keys():
+		out[k] = b[k]
+	return out
+
+
+static func _t_directive_cause_floor_holds_for_edge_calling() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	var floor_s: float = float(cfg["directive_judgment"]["judgment_floor"])
+	for rank: int in [1, 6, 9]:
+		var j: float = MovementArbitrationTests._production_judgment(rank, "okofor")
+		var out: Dictionary = StopShortService.evaluate(_ctx({
+			"fear": 0, "calling_family": "edge", "directive_tolerance": _SCOUT_T, "judgment": j }), cfg)
+		_eq(errs, "Standing %d edge Echo still stops" % rank, out["stop"], true)
+		_eq(errs, "Standing %d owner" % rank, out["cause_id"], "directive")
+		if float(out["strength"]) < (1.0 - _SCOUT_T) * floor_s - 0.0000001 or float(out["strength"]) <= 0.0:
+			errs.append("Standing %d strength %s is below the floor" % [rank, out["strength"]])
+	return _res(errs)
+
+
+static func _t_directive_contrast_by_calling_at_standing_1() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	var j: float = MovementArbitrationTests._production_judgment(1, "okofor")
+	var no_guard: Dictionary = { "fear": 0, "def": 0, "directive_tolerance": _SCOUT_T, "judgment": j }
+	var anchor: Dictionary = StopShortService.evaluate(_ctx(_with(no_guard, { "calling_family": "anchor" })), cfg)
+	var sight: Dictionary = StopShortService.evaluate(_ctx(_with(no_guard, { "calling_family": "sight" })), cfg)
+	_eq(errs, "both stop on observe", [anchor["benefit_id"], sight["benefit_id"]], ["observe", "observe"])
+	_eq(errs, "anchor observe owner", anchor["cause_id"], "directive")
+	_eq(errs, "sight observe owner", sight["cause_id"], "identity")
+	if not float(sight["strength"]) > float(anchor["strength"]):
+		errs.append("sight observe %s must be stronger than anchor observe %s" % [sight["strength"], anchor["strength"]])
+	return _res(errs)
+
+
+static func _t_afraid_directive_scale_not_below_calm() -> Dictionary:
+	var errs: Array = []
+	var floor_s: float = float(_cfg()["directive_judgment"]["judgment_floor"])
+	var calm_j: float = MovementArbitrationTests._production_judgment(3, "okofor", 0)
+	var afraid_j: float = MovementArbitrationTests._production_judgment(3, "okofor", 60)
+	if not afraid_j < calm_j:
+		errs.append("fear must lower Judgment in the production path: afraid %s calm %s" % [afraid_j, calm_j])
+	var calm: float = DirectiveJudgmentScale.scale(calm_j, _cfg()["directive_judgment"])
+	var afraid: float = DirectiveJudgmentScale.scale(afraid_j, _cfg()["directive_judgment"])
+	if afraid < calm:
+		errs.append("afraid scale %s is below calm scale %s" % [afraid, calm])
+	if calm < floor_s or afraid > 1.0:
+		errs.append("scale left [floor, 1]: calm %s afraid %s" % [calm, afraid])
+	return _res(errs)
+
+
+static func _t_fear_cause_not_scaled_by_judgment() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	for fear: int in [50, 85]:
+		var at_zero: float = float(StopShortService.cause_strength("fear", "guard", _ctx({ "fear": fear, "judgment": 0.0 }), cfg)["strength"])
+		var at_one: float = float(StopShortService.cause_strength("fear", "guard", _ctx({ "fear": fear, "judgment": 1.0 }), cfg)["strength"])
+		_near(errs, "fear %d: same strength at J 0 and J 1" % fear, at_one, at_zero)
+	return _res(errs)
+
+
+static func _t_seek_directive_cause_gone_when_seasoned() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	var young: Dictionary = _ctx({ "fear": 0, "directive_tolerance": _SEEK_T, "judgment": 0.2 })
+	var seasoned: Dictionary = _ctx({ "fear": 0, "directive_tolerance": _SEEK_T, "judgment": 0.85 })
+	_eq(errs, "young Seek guard cause exists", StopShortService.best_cause("guard", young, cfg).is_empty(), false)
+	_eq(errs, "seasoned Seek guard cause is gone", StopShortService.best_cause("guard", seasoned, cfg).is_empty(), true)
+	_eq(errs, "young Seek can stop", StopShortService.evaluate(young, cfg)["stop"], true)
+	_eq(errs, "seasoned Seek has no cause", _veto_of(seasoned, cfg), "no_cause")
+	return _res(errs)
+
+
+static func _t_directive_cause_does_not_stack_with_identity() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	var ctx: Dictionary = _ctx({ "fear": 0, "calling_family": "anchor", "directive_tolerance": _SCOUT_T, "judgment": 0.5 })
+	var identity: float = float(StopShortService.cause_strength("identity", "guard", ctx, cfg)["strength"])
+	var directive: float = float(StopShortService.cause_strength("directive", "guard", ctx, cfg)["strength"])
+	var best: float = float(StopShortService.best_cause("guard", ctx, cfg)["strength"])
+	_near(errs, "best is the maximum", best, maxf(identity, directive))
+	if best >= identity + directive - 0.0000001:
+		errs.append("best %s looks like a sum of %s and %s" % [best, identity, directive])
+	_near(errs, "bias uses the maximum", float(StopShortService.evaluate(ctx, cfg)["bias"]), 6.0 * best)
+	return _res(errs)
+
+
+static func _t_directive_row_is_last_and_own_cause_wins_a_tie() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	_eq(errs, "directive is the last row", str((StopShortService.CAUSE_ROWS.back() as Dictionary)["id"]), "directive")
+	cfg["directive_judgment"]["judgment_floor"] = 1.0
+	cfg["directive"] = { "affinity": { "guard": 0.8, "hold": 0.0, "observe": 0.0 } }
+	var with_identity: Dictionary = _ctx({ "fear": 0, "calling_family": "anchor", "judgment": 1.0, "directive_tolerance": 0.0 })
+	var a: Dictionary = StopShortService.evaluate(with_identity, cfg)
+	_eq(errs, "identity tie: identity wins", a["cause_id"], "identity")
+	cfg["directive"]["affinity"]["guard"] = 1.0
+	var with_fear: Dictionary = _ctx({ "fear": 85, "judgment": 1.0, "directive_tolerance": 0.0 })
+	var b: Dictionary = StopShortService.evaluate(with_fear, cfg)
+	_eq(errs, "fear tie: fear wins", b["cause_id"], "fear")
+	var alone: Dictionary = StopShortService.evaluate(_ctx({ "fear": 0, "judgment": 1.0, "directive_tolerance": 0.0 }), cfg)
+	_eq(errs, "alone, directive owns the stop", alone["cause_id"], "directive")
+	_eq(errs, "directive source", alone["cause_source"], "directive")
+	_eq(errs, "directive code", alone["cause_code"], "directive_order")
+	_eq(errs, "directive source is a known trace source", DecisionTrace.SOURCES.has("directive"), true)
+	return _res(errs)
+
+
+static func _t_directive_alone_without_benefit_is_no_benefit() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	_eq(errs, "control: legal stop", StopShortService.evaluate(_ctx({ "fear": 0, "directive_tolerance": _SCOUT_T }), cfg)["stop"], true)
+	_eq(errs, "hostile too far", _veto_of(_ctx({ "fear": 0, "directive_tolerance": _SCOUT_T,
+		"hostiles": [{ "id": "e", "dist": 8, "marked": false }] }), cfg), "no_benefit")
+	_eq(errs, "no hostiles", _veto_of(_ctx({ "fear": 0, "directive_tolerance": _SCOUT_T, "hostiles": [] }), cfg), "no_benefit")
+	return _res(errs)
+
+
+static func _t_calm_echo_without_directive_is_no_cause() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	_eq(errs, "no Directive in ctx", _veto_of(_ctx({ "fear": 0 }), cfg), "no_cause")
+	_eq(errs, "tolerance 1.0 gives base 0", _veto_of(_ctx({ "fear": 0, "directive_tolerance": 1.0 }), cfg), "no_cause")
+	var no_block: Dictionary = cfg.duplicate(true)
+	no_block.erase("directive")
+	_eq(errs, "no config block", _veto_of(_ctx({ "fear": 0, "directive_tolerance": _SCOUT_T }), no_block), "no_cause")
+	return _res(errs)
+
+
+static func _t_synthetic_tolerance_reaches_cause() -> Dictionary:
+	var errs: Array = []
+	var cfg: Dictionary = _cfg()
+	var floor_s: float = float(cfg["directive_judgment"]["judgment_floor"])
+	var out: Dictionary = StopShortService.cause_strength(
+		"directive", "guard", _ctx({ "fear": 0, "directive_tolerance": 0.5, "judgment": 0.0 }), cfg)
+	_near(errs, "(1 - 0.5) x 1.0 x 1.0", float(out["strength"]), 0.5)
+	var seasoned: Dictionary = StopShortService.cause_strength(
+		"directive", "guard", _ctx({ "fear": 0, "directive_tolerance": 0.5, "judgment": 1.0 }), cfg)
+	_near(errs, "at J 1", float(seasoned["strength"]), 0.5 * floor_s)
+	return _res(errs)
+
+
+static func _t_directive_config_integrity() -> Dictionary:
+	var errs: Array = []
+	var cfg0: Dictionary = _cfg()
+	var shared: Dictionary = cfg0["directive_judgment"] as Dictionary
+	var floor_s: float = float(shared["judgment_floor"])
+	var floor_min: float = float(shared["judgment_floor_min"])
+	if not (is_finite(floor_s) and floor_s >= floor_min and floor_s <= 1.0):
+		errs.append("judgment_floor %s is outside %s..1" % [floor_s, floor_min])
+	_eq(errs, "stop block has no floor of its own", (cfg0["directive"] as Dictionary).has("judgment_floor"), false)
+	for benefit: String in StopShortService.BENEFITS:
+		var a: float = float(((cfg0["directive"] as Dictionary)["affinity"] as Dictionary).get(benefit, -1.0))
+		if not (is_finite(a) and a >= 0.0 and a <= 1.0):
+			errs.append("affinity %s = %s is outside 0..1" % [benefit, a])
+	var ctx: Dictionary = _ctx({ "fear": 0, "directive_tolerance": _SCOUT_T, "judgment": 0.2 })
+	for bad: float in [floor_min - 0.01, 1.01, -1.0]:
+		var cfg: Dictionary = _cfg()
+		cfg["directive_judgment"]["judgment_floor"] = bad
+		_near(errs, "floor %s gives no cause" % bad, float(StopShortService.cause_strength("directive", "guard", ctx, cfg)["strength"]), 0.0)
+	for ok: float in [floor_min, 1.0]:
+		var cfg: Dictionary = _cfg()
+		cfg["directive_judgment"]["judgment_floor"] = ok
+		if not float(StopShortService.cause_strength("directive", "guard", ctx, cfg)["strength"]) > 0.0:
+			errs.append("floor %s must be accepted" % ok)
+	return _res(errs)
+
+
+static func _t_directive_swing_within_declared_budget() -> Dictionary:
+	var errs: Array = []
+	var data: Dictionary = _balance().get("data", {}) as Dictionary
+	var budget: float = float((((data["maturity_expression"] as Dictionary)["interpretation_swing_max"] as Dictionary)["layer_max"] as Dictionary)["stop"])
+	var block: Dictionary = _cfg()["directive_judgment"] as Dictionary
+	var swing: float = DirectiveJudgmentScale.swing(block)
+	if not swing <= budget:
+		errs.append("stop swing %s is above the stop layer ceiling %s" % [swing, budget])
+	_near(errs, "swing is 1 / floor", swing, 1.0 / float(block["judgment_floor"]))
+	return _res(errs)
+
+
+static func _t_fear_wins_over_shipped_scout_directive() -> Dictionary:
+	var errs: Array = []
+	var scout_t: float = _shipped_tolerance("directive.scout_carefully")
+	var out: Dictionary = StopShortService.evaluate(_ctx({ "fear": 85, "directive_tolerance": scout_t, "judgment": 0.2 }), _cfg())
+	_eq(errs, "fear owns the stop", out["cause_id"], "fear")
+	_eq(errs, "fear code", out["cause_code"], "fear")
+	return _res(errs)
+
+
+static func _t_text_bank_directive_clause() -> Dictionary:
+	var errs: Array = []
+	var line: String = StopShortText.cause_clause("directive_order")
+	_eq(errs, "resolves", StopShortText.has_key(["cause_clause", "directive_order"]), true)
+	_eq(errs, "not empty", line.is_empty(), false)
+	_eq(errs, "first person", line.begins_with("I "), true)
+	for word: String in ["directive", "stance", "keeper_", "order_"]:
+		_eq(errs, "no game word " + word, line.to_lower().contains(word), false)
+	_eq(errs, "a Directive stop shows the plain reason line", StopShortText.reason_line("guard", "directive_order"), StopShortText.reason_line("guard"))
 	return _res(errs)

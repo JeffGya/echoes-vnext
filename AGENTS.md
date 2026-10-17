@@ -84,7 +84,7 @@ it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are 
 ```bash
 <godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 131 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring`, `stop_short_search`, `directive_char`, `contact_cfg` and `stage_stop_ui` added since; post-`fingerprint`-suite split — see below.
+The 132 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `skill_reach`, `stop_short`, `stop_short_wiring`, `stop_short_search`, `directive_char`, `contact_cfg`, `stage_stop_ui` and `fingerprint_seek` added since; post-`fingerprint`-suite split — see below.
 A `seam`-suite split was also tried, measured to give no speedup, and reverted — `seam` remains
 one suite):
 ```
@@ -97,7 +97,7 @@ fingerprint_combat fingerprint_determinism_combat fingerprint_determinism_endure
 fingerprint_determinism_guide_spirit fingerprint_determinism_protect
 fingerprint_determinism_purify_shrine fingerprint_determinism_pursue
 fingerprint_determinism_recover fingerprint_endure fingerprint_guide_spirit
-fingerprint_protect fingerprint_purify_shrine fingerprint_pursue fingerprint_recover
+fingerprint_protect fingerprint_purify_shrine fingerprint_pursue fingerprint_recover fingerprint_seek
 flow_transaction foundation_ui grid guidance guidance_bark identity institution intel
 ko_death leadership live_movement_style maturity_baseline melee morale movement
 movement_arbiter movement_fallback movement_option movement_path movement_style
@@ -110,7 +110,7 @@ statinit structure support terrain thread trace traversal unified_resolve vector
 venture_char voice vow weave
 ```
 Added since that capture: `board_camera.bounds board_camera.echo_detail board_camera.input
-board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera` (all in shard9), `directive_char` (shard5), `contact_cfg` (shard4) and `stage_stop_ui` (shard1).
+board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera` (all in shard9), `directive_char` (shard5), `contact_cfg` (shard4), `stage_stop_ui` (shard1) and `fingerprint_seek` (shard8).
 Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
 (it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`),
 `fingerprint` (now `fingerprint_combat`, `fingerprint_purify_shrine`, `fingerprint_recover`,
@@ -237,7 +237,7 @@ though the wall-clock is shorter — do not run it alongside anything else that 
 `/tmp/echoes-vnext-*`.
 
 **Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
-`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 131
+`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 132
 live registered suites (regenerated 2026-09-20, updated same day after
 `fingerprint_determinism_self_check` was split into 7 per-mode `fingerprint_determinism_<mode>`
 suites, one shared suite name becoming 7) are split into 9 disjoint sets — every suite appears in

@@ -46,6 +46,12 @@ static func read_party(save_data: Dictionary, cfg_data: Dictionary, exclude_id: 
 	return echoes
 
 
+## Fear ramp 0..1 from `state_ramps`. Stage leans and combat exposure acceptance share it.
+static func fear_ramp(fear: float, ramps: Dictionary) -> float:
+	var fear_start := _num(ramps, "fear_start")
+	return clampf((fear - fear_start) / maxf(_num(ramps, "fear_full") - fear_start, 0.001), 0.0, 1.0)
+
+
 ## One Echo's signed lean on one dial, in dial units (coefficient x bound x strength).
 ## `category` selects one coefficient set inside a category dial (`category_weight`).
 static func echo_lean(echo: Dictionary, dial: String, stance_cfg: Dictionary, category: String = "") -> float:
@@ -57,10 +63,9 @@ static func echo_lean(echo: Dictionary, dial: String, stance_cfg: Dictionary, ca
 	var strength := floor_ + (1.0 - floor_) * float(echo.get("width", 0.0))
 	var fear := float(echo.get("fear", 0.0))
 	var morale := float(echo.get("morale", 50.0))
-	var fear_start := _num(ramps, "fear_start")
 	var neutral := _num(ramps, "morale_neutral")
 	var low_below := _num(ramps, "escape_morale_below")
-	var fear_lean := clampf((fear - fear_start) / maxf(_num(ramps, "fear_full") - fear_start, 0.001), 0.0, 1.0)
+	var fear_lean := fear_ramp(fear, ramps)
 	var morale_lean := clampf((morale - neutral) / maxf(neutral, 0.001), -1.0, 1.0)
 	var low_lean := clampf((low_below - morale) / maxf(low_below, 0.001), 0.0, 1.0)
 	var sum := _num(coeffs, "calling_" + str(echo.get("family", ""))) * strength \

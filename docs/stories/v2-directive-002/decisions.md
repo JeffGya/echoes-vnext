@@ -77,6 +77,7 @@ Not yet applied to data. Scout line corrected by Jeff on 2026-10-11 ("your step"
 ### D-05. revive-exposure-tolerance
 **Q:** `exposure_tolerance` is authored on both Directives (0.3 and 0.8) and read by nothing. What now?
 **A:** Revive it as the one exposure input for stage. Combat phase D can feed the same key into `directive_exposure_acceptance`.
+- **Amended by D-69 Q2:** `exposure_tolerance` drives movement; `intent_weights.exposure_acceptance` stays for action choice, so two exposure inputs remain.
 
 ### D-06. pair-only
 **Q:** Do Press the Path and Hold the Circle belong here?
@@ -362,3 +363,163 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **"Purpose" in `cause.objective`:** allowed. It means the Echoes' purpose.
 - **`steadied` line:** has no `{name}:` prefix, on purpose.
 - **`purpose.hold`:** no line (D-67).
+
+## Phase D (combat expression and stop-short Directive cause)
+
+### D-69. phase-d-design-answers
+**Q:** Five design questions from the phase D recon (read-only report, 2026-10-16).
+**A:** (Jeff, 2026-10-16)
+1. **Exposure map (Q1):** option A. Combat acceptance = `exposure_tolerance` minus 0.5 (Scout -0.2, Seek +0.3). The offset is a config key (ANSWERS #83). Scout moves the recorded hashes, so an `opus` agent attributes each move.
+2. **Old number (Q2):** option A. `intent_weights.exposure_acceptance` stays for action choice (melee, guard, idle rows). Tolerance drives movement only. Two exposure inputs remain, and the docs say so (D-05 is amended).
+3. **Stop favour (Q3):** option A. The Directive stop cause is `(1 - exposure_tolerance) x affinity[benefit]`. Guard and hold get a larger affinity. Observe gets a small affinity. No new Directive key (ANSWERS #81). The numbers are PROPOSED DEFAULT in config.
+4. **Standing (Q4):** option B (Jeff chose against the advice). Judgment scales the Directive stop cause down: higher Standing obeys less. The scaling must sit inside `interpretation_swing_max`. A new config-integrity test proves it. The design must show no double count with `_directive_bonus` and the identity cause (design.md:320).
+5. **Route scores (Q5):** option A. The route scoring formula stays. The Directive cause adds the normal stop bias (`stop_short_weight x strength`), like fear and identity.
+- **Open:** Q6, the player-facing text lines for the Directive cause. They are Jeff's wording. They are proposed after the code exists.
+- **Rules kept:** the stage bound (`interpretation_width`, `party_stance`) never enters combat (D-09). `StageStopPolicy.CAUSES` and `StopShortService` stay separate.
+
+### D-70. phase-d-design-answers-j1-to-j5
+**Q:** Five questions from `phase-d-design.md` section 7.
+**A:** (Jeff, 2026-10-16)
+- **J1:** option B. Raise the acceptance weight to a probe-measured value (range 8 to 14, below the attractor limit at 20). A probe sweep sets it.
+- **J2:** both B and C, inside phase D. Jeff: "I don't want to follow up, I want it added here. It should be both." Pillar reason: Echo growth must show in movement exposure as well as in stops. So:
+  - **Fear lean (B):** fear lowers combat exposure acceptance. A frightened Echo shies from exposure. This matches the stage rule (design.md:31).
+  - **Judgment scale (C):** Judgment scales the Directive part of acceptance. A seasoned Echo uses its own exposure habit. This needs a Judgment argument in `_spatial_utility` and its own row in the swing budget.
+  - **Attribution:** the orchestrator keeps one named cause per recorded-value move by landing the causes in separate slices, with a re-record between them: (1) base acceptance map, (2) fear lean, (3) Judgment scale on acceptance, (4) Directive stop cause with its Judgment scale.
+- **J3:** option A. Accept. Fear lowers Judgment, so a shaken veteran leans back on orders.
+- **J4:** option A. Floor 0.55 to 0.6 (start 0.6). `interpretation_swing_max` stays 2.0. The probe checks if edge growth is visible. The budget changes only with Jeff's approval.
+- **J5:** option A. Accept. Seek rarely has a Directive stop.
+- **Open:** Q6, the player text for the Directive stop cause (after the code exists). The design note must be extended for J2 B and C before any code.
+
+### D-71. phase-d-open-questions-o1-o2
+**Q:** The two open questions of `phase-d-design.md` (section 7, after the J2 extension).
+**A:** (Jeff, 2026-10-16)
+- **O1:** fear lean bound 0.12, the same as the stage. Exposure stays a cost for a very afraid Echo. The value is PROPOSED DEFAULT in config and the probe may change it.
+- **O2:** option A. A seasoned Echo shows its own exposure habit through the existing movement style (style alignment). No new Calling habit term in phase D.
+- **Next:** `mid-game-designer` proposes the config numbers in `docs/stories/v2-directive-002/phase-d-numbers.md`. Jeff approves the design note and the numbers before any code starts.
+
+### D-72. phase-d-numbers-approved
+**Q:** Three number choices from `phase-d-numbers.md`, and approval of the phase D design note and numbers.
+**A:** (Jeff, 2026-10-16)
+- **Hold affinity:** 0.8 (guard 1.0, observe 0.3). PROPOSED DEFAULT. The probe may change it.
+- **Exposure weight:** start at 11. The probe sweep (2, 8, 11, 14) shows the real effect. Jeff decides after the probe if the weight goes up. No guess now.
+- **Row order:** the Directive row goes after fear and identity in `CAUSE_ROWS`. The Echo's own cause wins a tie.
+- **Approval:** `phase-d-design.md` and `phase-d-numbers.md` are approved as the build basis. Slice 1 starts (base exposure rule and weight). Slices 2, 3 and 4 follow, one at a time, with a re-record and an `opus` attribution after each.
+- **Still open:** Q6 (player text for the Directive stop cause), after the code exists. Final values of the weight, the fear bound, the floors and the affinities come from the probe runs.
+
+### D-73. exposure-weight-17
+**Q:** Which exposure weight ships in slice 1? The probe sweep (14 runs of 7 fixed combat fixtures, 2026-10-16) showed the term is silent below weight 14.
+**A:** 17 (Jeff, 2026-10-16, the recommended option). PROPOSED DEFAULT. It is inside the legal limit (weight x acceptance < 6: Seek 17 x 0.3 = 5.1, Scout 17 x 0.2 = 3.4).
+- **Evidence (differing moves vs weight 0, the term off):** Scout 0 of 384 at weights 2, 8 and 11; 2 at 14, 17 and 19 (`purify_shrine`). Seek 0 of 355 at 2 to 14; 16 at 17 and 19 (14 in `endure`, 2 in `purify_shrine`). Weight 19 adds nothing over 17.
+- **Limits:** the probe plays 7 fixed fights. The effect is still small at 17 because the base exposure cost (`exposure_weight` -6.0) is large. A stronger felt difference may need a change to that base cost. That is a larger design change and is not in phase D.
+- D-73 replaces the D-70 J1 probe range (8 to 14) and the D-72 start value 11.
+- Limit: at weight 17 the exposure term becomes an attractor for any Directive with exposure_tolerance of 0.853 or more (0.5 + 6/17). The config-integrity test (`directive_cfg/exposure_acceptance_never_attractor`) catches a new Directive that breaks this.
+
+### D-74. seek-fingerprint-suite-and-qa-fixes
+**Q:** (Q-A) Should a Seek combat fingerprint suite come before slices 2 to 4? And what happens to the QA findings after slice 1?
+**A:** (Jeff, 2026-10-16)
+- **Q-A:** yes. Add a Seek combat fingerprint suite BEFORE slices 2 to 4, so each slice shows its effect on Seek in a saved value. The probe showed Seek moving in two fixed fights: `endure` and `purify_shrine`. The suite is built next, as a new suite.
+- **QA fixes:** QA findings 4, 5, 6 and 8 are fixed together with slice 1.
+
+### D-75. fear-lean-scope
+**Q:** When does fear lower combat exposure acceptance? (Slice 2 builder assumption 1 against design 2a and test J6.)
+**A:** Option B (Jeff, 2026-10-16, the recommended option). Fear lowers acceptance for any actor whose Directive is non-empty. A Directive without `exposure_tolerance` gets D = 0 and still takes the fear lean: `acceptance = clamp(0 - F, -1, 1)`. An empty Directive (`{}`: enemies, the keeper trial) gets acceptance 0 and no fear lean. This matches design 2a and test J6 for a data-only Directive and keeps enemies and the trial unchanged.
+
+### D-76. weak-fear-lean-study-base-cost
+**Q:** The slice 2 fear lean changes no move in the 7 probe fights. What now?
+**CORRECTION (QA check, 2026-10-16):** only the two fear-45 pairs are valid (Scout 0 of 369, Seek 0 of 362 differ). In the two fear-70 pairs every Echo turn was `actor.refuse` (nascent refusal threshold 65, `data.actor` refusal bands), so no Echo movement was scored and those pairs cannot show the lean. The probe also set `fear_base` 70, outside the legal range 0 to 40. At fear 45 the ramp is 0.5, so the lean is 0.06 (about 1.0 score points). No pair tested the lean near the top of the ramp. A new probe arm at fear about 60 with `fear_base` at most 40 is needed. The orchestrator reported the fear-70 pairs as valid before the QA check; that was wrong.
+**A:** Option A (Jeff, 2026-10-16, the recommended option). Commit slice 2 as built (no recorded value moved: 43 of 43 suites incl. `fingerprint_seek`). Slices 3 and 4 go on. Before the final combined check, a designer studies the base exposure cost (`exposure_weight` -6.0 in `spatial_utility`), the lever that makes exposure matter. The study is `docs/stories/v2-directive-002/exposure-lever-study.md`. Any change to that cost is Jeff's decision and moves many recorded values.
+- **Limits that apply:** fear bound at most about 0.165 (a larger bound lets a frightened Seek Echo go below 0, rejected in D-71); weight at most 19 (slice 1 uses 17).
+
+### D-77. slice-2-qa-fixes
+**Q:** Fix the slice 2 QA findings before the commit? (QA check, 2026-10-16.)
+**A:** Yes, fix all (Jeff, 2026-10-16, the recommended option): (1) a probe at fear 60 with `fear_base` at most 40, lean on against lean off, because fear-70 Echoes refuse every turn; (2) a wiring test from the combat turn context to the arbiter; (3) design tests F3 (`fear_lean_not_scaled_by_judgment`), F6 (`directive_cfg/fear_lean_bound_exceeds_fear_judgment_path`) and the Judgment dimension of F5 move to slice 3, because they need the Judgment floor (`floor_a`); (5) the config comment for `fear_lean_bound` gives the upper limit; (6) the `_fear_lean` doc comment is reworded. Finding 4 (the C14 scan is narrower than the design row) is accepted as a note.
+- **Result of the fear 50 and 60 probe (2026-10-17, valid arms):** Echoes still move (fear 50: 61 Scout and 100 Seek Echo moves, no refusals; fear 60: 52 and 76 moves, 32 and 36 refusals). Lean on against lean off: Scout fear 50 differs in 0 of 374 moves, Scout fear 60 in 0 of 410, Seek fear 50 in 0 of 355, Seek fear 60 in 0 of 410. The lean (up to 0.12 x ramp x 17 = 1.2 to 1.6 score points) changes no move in the 7 fixed fights. `data/balance.json` unchanged by the runs.
+
+### D-78. measure-exposure-choices-before-slice-3
+**Q:** Before slice 3, measure first whether real exposure choices exist, or build slice 3 now? (Study `exposure-lever-study.md`: only 4.8 to 7.3 percent of Echo decisions in the probe fights offer an exposed and an unexposed route; the probe logs no score parts.)
+**A:** Measure first, then slice 3 (Jeff, 2026-10-17, the recommended option). Step 1: a print-only change to `tools/SpatialTermProbe.gd` logs the spatial parts, total score, chosen flag and margin for every route option, for the 7 fights, Scout and Seek, calm and fear 50 (study section 2.3). Step 2: 3 to 5 production-path fixture boards with real route choices (an exposed and an unexposed route of similar progress), to learn whether the effects of slices 1 to 3 can be seen at all. No recorded value moves. Slice 3 starts after the result, with Jeff's decision on what the result means.
+
+### D-79. pace-no-more-probes
+**Q:** The measuring takes too long. How do we finish phase D faster? (Jeff, 2026-10-17: "I feel like we are in a measuring loop that is taking a lot of time.")
+**A:** Run the D-78 measurement ONCE, then build slices 3 and 4 with no more probes (Jeff, 2026-10-17, the recommended option). Slices 3 and 4 are built one after the other. Each gets unit tests and one recorded-value run, with one named cause per slice. No weight sweeps and no fear probes. The final combined QA check and one full serial suite run once at the end. The measurement result informs Jeff's view of the exposure channel; it does not block slices 3 and 4.
+
+### D-80. measurement-hook-yes
+**Q:** The `parts` log of the D-78 measurement needs a 4-line hook in `core/runtime/FlowRuntime.gd` (`behavior_module_factory`, unset by default, so behaviour is identical). Add it?
+**A:** Yes (Jeff, 2026-10-17). The boards probe (D-78 step 2, commit `888f6e5`) showed the Directive exposure effect is visible when a choice exists: on the 5 boards Seek takes the exposed route at 0.4 to 1.6 cells of extra progress, Scout at 2.8 to over 6 cells or never, the cost alone at 1.8 to 4.4; the fear lean moves the Seek threshold by 0.3 to 0.8 cells. The count of real mixed decisions in the 7 fights is measured once, with 4 arms run in parallel (each with its own `ECHOES_TEST_SAVE_DIR`). Per D-79 this is the last probe of phase D.
+- **Result of the D-80 count (2026-10-17; 4 arms in parallel, 7 minutes; Echo route decisions in the 7 fixed fights, purifier passes excluded: 5 per arm):**
+
+| Arm | Echo passes | Passes with route options | Mixed (exposed and unexposed option) | Mixed with margin under 10 | Choice changes if exposure terms removed |
+|---|---|---|---|---|---|
+| Scout, calm | 276 | 243 | 3 | 0 | 0 |
+| Seek, calm | 255 | 233 | 5 | 2 | 1 |
+| Scout, fear 50 | 268 | 247 | 4 | 0 | 0 |
+| Seek, fear 50 | 258 | 234 | 6 | 3 | 1 |
+
+  Mixed decisions are 1 to 2 percent of Echo passes. The Directive exposure term and the fear lean decide 0 (Scout) or 1 (Seek) decision in about 260. The effect is real on the boards (D-80) and almost never asked for in these fights. The cause is the input (how often a fight offers an exposure choice), not the weights. Whether real stages offer more choices is not known. This is a follow-up question for Jeff, not a blocker for slices 3 and 4 (D-79).
+
+### D-81. proceed-slice-3-and-make-state-systems-matter
+**Q:** The count (D-80) shows exposure choices are 1 to 2 percent of Echo decisions in the 7 fixed fights. Proceed with slice 3? Should exposure matter more?
+**A:** (Jeff, 2026-10-17) Proceed with slice 3 as designed (D-70). And yes, exposure should matter more: "we want fear, judgement, moral and other systems to actually have an effect." So:
+- Slice 3 (Judgment scale on exposure acceptance) is built now, with unit tests and one recorded-value run. No more probes (D-79).
+- A designer studies how the Echo state systems (fear, Judgment/Standing, morale, and the other state inputs the arbiter already reads) can have a felt effect on movement, beyond the exposure channel alone. The study starts from `exposure-lever-study.md` and the D-80 count. It proposes options for Jeff. It changes nothing. The result decides a new slice or story. It is in the scope of the pillar (Echoes show growth and emotion in how they move).
+
+### D-82. state-systems-movement-answers
+**Q:** Eight questions from `state-systems-movement-study.md` (section 5). Jeff answered on 2026-10-17.
+**A:**
+- **Q1 (what fear shows as):** stay near allies and push less (A1) plus shorter steps (B1). Fall back to the group (B3) goes to V2-COMBAT-004.
+- **Q2 (morale):** fear and morale. A high-morale Echo advances more and drifts from the group, with bounds.
+- **Q3 (composure):** yes, for all leans. A seasoned Echo shows less fear in its movement (composure softens the lean by up to 40 percent). This amends D-70 J3 for the new leans: they are scaled by composure.
+- **Q4 (strength):** clear, about 6 to 10 percent of decisions change. `mid-game-designer` authors the bounds.
+- **Q5 (budget):** YES, `interpretation_swing_max` may rise up to 2.5, with a new config-integrity test. Jeff chose this against the advice (keep 2.0). Standing may then scale the Echo's own movement style (study option B4). The raise loosens the guard of the action layer too (now at 1.80); the design must show all layers inside the new value.
+- **Q6 (capacity):** yes, after a feasibility check by `mechanics-developer` (is capacity computed per activation and not saved or fixed by the COMBAT-002 contract). Standing 1 is already at the floor of 2, so only the bonus side acts there. If the check fails, stop and bring options.
+- **Q7 (arenas):** yes, in parallel. Authored set-piece arenas with real route choices (study option C1). Content, not code. Jeff approves the arenas.
+- **Q8 (fall-back goal):** goes to V2-COMBAT-004 as a requirement (D-07).
+- **Slice plan:** slice 3 (Judgment scale on exposure) in verification; slice 4 (Directive stop cause); slice 5 (A1: state-scaled progress and cohesion weights, bounded, softened by composure); slice 6 (B1: capacity from fear and morale); slice 7 (B4: Standing-scaled style, with the raised budget); arenas (C1) in parallel. Per D-79: no fight probes; unit tests plus the 30-second boards probe, and one recorded-value run per slice.
+
+### D-83. slice-3-qa-answers
+**Q:** Slice 3 QA check (2026-10-17): three questions.
+**A:** (Jeff, 2026-10-17)
+- **A (fear rule, finding 3):** bounded rise, derive the window. Keep the rule 'more fear never makes exposure more acceptable, except a tiny rise just above `fear_start`' (real peak 0.006 for Seek; design F5 text is corrected to say this). The fixed window of 5 fear points in the F5 test is replaced by a window derived from the config (the fear point where the lean overtakes the Judgment path). Test F6 is replaced by a slope rule: `fear_lean_bound / (fear_full - fear_start) >= (1 - floor) x fear_pressure_weight x max abs(D) / 100`, plus a bound on the rise before `fear_start`.
+- **B (floor 0.5, finding 5):** the lowest allowed `judgment_floor` is 0.55 (matches J4: 0.55 to 0.6). The validator rejects below 0.55. Test J9 and the config comment match. At 0.5 the swing would have no headroom.
+- **C (Judgment default, finding 8):** make `judgment` REQUIRED on the movement path (Jeff chose this against the advice to defer). A missing `judgment` in the context of `select_movement_intent` fails validation (loud). Production always supplies it (`ActorStateMachine.gd:355`). Fixtures that call the arbiter without `judgment` get an explicit value. This is design J8, kept. The action layer (`_directive_bonus`) keeps its own default unless the same check is needed there; the builder reports.
+- **Verified later (2026-10-17):** the rise above `fear_full` is also bounded by `judgment_slope` per point (0.0003, about 0.009 in total for Seek); the F5 test derives its window from config. F6 is the slope rule, plus the pre-start bound (0.01), plus the old total bound `fear_lean_bound >= (1 - floor) x fear_pressure_weight x max abs(D)` (0.03 at shipped values). The slope rule alone fails only below a bound of 0.015.
+- **QA fixes:** findings 1, 2, 4, 5, 6, 7, 9, 13 are fixed with slice 3. Finding 12 (bonds in `_production_judgment`) is optional.
+
+### D-84. no-authored-arenas-procedural-only
+**Q:** Build authored (hand-made) set-piece arenas with route choices (study option C1, Q7 of D-82)?
+**A:** No (Jeff, 2026-10-17). D-82 Q7 is WITHDRAWN. Authored arenas go against the game: stages and combat boards are procedural and deterministic by seed (GDD, 'Current generation model', "stages should be procedurally generated before first entry", "deterministic generation using the Realm/stage seed"). The GDD also states the goal in the right place: "the Foundation tactical field uses readable irregular terrain, obstacles, hazards, and meaningful route tradeoffs" (GDD line ~4302). So the exposure systems must show up through the procedural generator, not through authored maps. The draft `arenas-draft.md` stays only as history of the withdrawn idea; its test boards (the `boards` probe) stay as TEST FIXTURES only, which they always were. Next: a designer studies how the procedural terrain generation (`StageTerrain.generate`, placement rules) can produce meaningful route tradeoffs (an exposed and an unexposed route of similar progress) often enough, with fixed seeds, inside the GDD. V2-STAGE-010 (hazards) may be the owner story. The study proposes; Jeff decides.
+
+### D-85. scope-answers-after-arenas
+**Q:** After D-84, where do slices 5 to 7 belong, and which Notion notes are allowed?
+**A:** (Jeff, 2026-10-17) Slices 5 to 7 STAY in V2-DIRECTIVE-002 (against the orchestrator's advice to move them to a new story). The GDD is not changed (Jeff: "You are not allowed to change GDD"). Notion: only a watch note on V2-STAGE-010 is allowed; no new-story draft. The note was written on 2026-10-17 (section 'Watch note: exposure choices are rare on generated boards'). It names the overlap with V2-COMBAT-004 slices 004B and 004D (combat-board generation is out of V2-STAGE-010 scope on that page) for Jeff to settle.
+
+### D-86. fewer-runs-and-one-run-for-slices-5-to-7
+**Q:** The recorded-value runs took too long (Jeff, 2026-10-17: "reduce the amount of runs"). Can slices 5 to 7 share one recorded-value run? This changes D-79 (one run per slice).
+**A:** Yes (Jeff, 2026-10-17). Slices 5, 6 and 7 are built one after another with unit tests only, then ONE recorded-value run covers all three. Each slice has its own config switch so one OFF arm switches all three off. If the old values return, the moves come from slices 5 to 7 together. A moved value is narrowed to one slice with one more arm only if needed. Other cuts (orchestrator): no separate re-run after the slice 4 re-record (the values come from the ON logs, a script checks each against the log, the final full suite checks them once); no more probes; after a small fix only the one or two suites it touches are re-run; QA agents run no tests; one full serial suite at the end of phase D.
+
+### D-87. one-reading-per-system
+**Q:** (Jeff, 2026-10-17, after the slices 5 to 7 note took the larger of fear and low morale instead of the Sanctum emotional state.) Rule: 'I don't want multiple reinterpretations of the same systems. This is 1 game. Things need to work well together and build off each other. Otherwise it gets confusing for a player.'
+**A:** Binding design rule for this story and later ones. Each game system has ONE definition, and every part of the game reads that definition: fear and morale together are the Sanctum emotional state (`EmotionService.get_emotional_status(morale, fear)`, ten ordered bands); Judgment is one value; composure is one value; exposure tolerance is one value. New work builds on these. It adds no second reading. The slices 5 to 7 note is reworked around the emotional state and carries an audit table of every place these systems reach a combat movement, step or stop decision (keep / merge / conflict). Reworks of committed slices 2, 3 and 4 are options for Jeff, not done by agents on their own.
+
+### D-88. slice-4-qa-answers
+**Q:** Slice 4 QA check (2026-10-17): stop rate, floor keys, stop line wording, small fixes. Jeff answered:
+**A:** (Jeff, 2026-10-17)
+- **Stop rate (F5):** add a stop-rate check to the one combined run for slices 5 to 7 (D-86): print stop counts per Echo; if a calm Echo's stop rate is above the 25 percent measured ceiling of stop-short decision #108, lower the guard affinity. No extra run now and no new code limit.
+- **Floor keys (N2, F4):** ONE shared Directive Judgment floor key in config for the acceptance scale and the stop scale (rule D-87), plus the minimum bound as a config key (`judgment_floor_min`, 0.55, D-83 B). No bound literal in code or tests. One shared helper for the scale and the swing (N3).
+- **Stop line:** proposal C, `cause_clause.directive_order` = "I follow what I was told." (No screen shows it yet.)
+- **Small fixes:** fix all (F1, F2, F3, F6, N7), and clean the comments: 'Reduce comments to what is needed and update. Shorter is better. Avoid referring to stories or hard coded numbers. Rather refer to config.' Applies to the code, test and config comments phase D added or rewrote.
+- **Not decided here:** N4 (does the Directive stop bias count as the Echo's own judgment in the divergence probe) stays open; it is checked in the final combined QA.
+
+### D-89. slices-5-to-7-design-answers
+**Q:** The reworked note `phase-d-design-5-7.md` (shared emotional state, one reading per system, D-87): Q1 to Q5.
+**A:** (Jeff, 2026-10-17)
+- **Q5 (rework of committed code):** take C1 to C5 now, inside the one run (D-86). C1 chip input uses `max(fear, fear_base)`; C2 slice 2 fear lean reads the emotional status band; C3 composure softens that lean; C4 fear lowers Judgment through the band; C5 stop-short fear and morale read the band (the second fear ramp and `morale_strength` go). C6 and C7 (style, action layer) wait for a later story. C8: `_DEFAULTS` swing value follows config.
+- **Q1:** keep the +1 step for a radiant Echo (high morale, low fear).
+- **Q2:** radiant lean +0.7.
+- **Q3:** per-layer swing ceilings of 2.0 for the action layer and the stop layer; shared budget 2.5; the Directive Judgment floor minimum may need to follow the budget test (the note says 0.56 at 2.5; the config key `judgment_floor_min` is the one place to change).
+- **Q4:** accept that slice 7 is quiet and has no neutral point; it reuses `identity_weight_scale`.
+- **Build basis:** the note is the build basis; its numbers are PROPOSED DEFAULT in config. Build order (one builder at a time, they share files): (a) shared status-lean module + C1 to C5 + C8; (b) slice 5; (c) slice 6; (d) slice 7. Unit tests only. Then ONE recorded-value run. Attribution: one OFF arm sets the three `enabled` switches of slices 5 to 7 to false; values that still move come from C1 to C5, the rest from slices 5 to 7. The stop-rate check of D-88 is part of that run.
+
+### D-90. stop-rate-check-result
+**Q:** Stop-rate check (D-88): how often do Echoes stop short with the shipped Directive stop cause and slices 5 to 7?
+**A:** Measured 2026-10-17 with the `parts` arm (7 fixed fights, Echo route-deciding turns, purifier turns excluded; two arms in parallel). Scout: 23 stops in 263 turns (8.7 percent). Seek: 20 stops in 265 turns (7.5 percent). By fight (Scout, stops/turns): combat 2/31, purify_shrine 2/32, recover 2/10, protect 3/25, endure 1/25, pursue 0/20, guide_spirit 13/120. No Echo with 5 or more turns is above 25 percent except in samples of 5 to 7 turns (protect 2 of 5 for one Echo; Seek combat 2 of 7). The feared 'a stop every other turn' did not appear. The 25 percent reference of stop-short decision #108 is not a config key; the probe prints rates only. No change to the guard affinity. The probe's STOPRATE_SUMMARY and STOPCAUSE lines did not appear in the output (only the per-Echo lines); who stops (Directive, fear or identity) is not measured. Not a blocker.

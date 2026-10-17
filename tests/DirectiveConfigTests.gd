@@ -130,6 +130,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_cfg/integrity_accepts_partial_translation", Callable(DirectiveConfigTests, "_t_integrity_accepts_partial_translation"))
 	runner.register_test("directive_cfg/resonance_key_renamed", Callable(DirectiveConfigTests, "_t_resonance_key_renamed"))
 	runner.register_test("directive_cfg/subtree_getters_match_full_copy", Callable(DirectiveConfigTests, "_t_subtree_getters_match_full_copy"))
+	runner.register_test("directive_cfg/exposure_acceptance_never_attractor", Callable(DirectiveConfigTests, "_t_exposure_acceptance_never_attractor"))
+	runner.register_test("directive_cfg/fear_lean_bound_exceeds_fear_judgment_path", Callable(DirectiveConfigTests, "_t_fear_lean_bound_exceeds_fear_judgment_path"))
+	runner.register_test("directive_cfg/judgment_floors_at_least_half", Callable(DirectiveConfigTests, "_t_judgment_floors_at_least_half"))
 
 
 # ─── Test 1 — scout step_budget == 3 after load_from_config ─────────────────
@@ -465,3 +468,95 @@ static func _t_subtree_getters_match_full_copy() -> Dictionary:
 		return { "ok": false, "error": "an overridden get_balance() was not read" }
 	return { "ok": true }
 
+
+# Weight x largest acceptance must stay below the exposure cost, or exposure becomes an attractor.
+static func _t_exposure_acceptance_never_attractor() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var movement: Dictionary = cs.get_balance()["data"]["combat"]["movement"]
+	var block: Variant = movement.get("exposure_acceptance", null)
+	if not block is Dictionary or not ((block as Dictionary).get("offset", null) is float or (block as Dictionary).get("offset", null) is int):
+		return { "ok": false, "error": "movement.exposure_acceptance.offset is missing or not a number" }
+	var offset: float = float((block as Dictionary)["offset"])
+	if not is_finite(offset):
+		return { "ok": false, "error": "offset is not finite" }
+	var spatial: Dictionary = movement["spatial_utility"]
+	var limit: float = absf(float(spatial["exposure_weight"]))
+	var weight: float = float(spatial["directive_exposure_acceptance_weight"])
+	var directives: Dictionary = ConfigService.get_directives_cfg(cs)
+	var checked := 0
+	for id: Variant in directives.keys():
+		var entry: Dictionary = directives[id] as Dictionary
+		if not entry.has("exposure_tolerance"):
+			continue
+		checked += 1
+		var acceptance: float = float(entry["exposure_tolerance"]) - offset
+		if acceptance < -1.0 or acceptance > 1.0:
+			return { "ok": false, "error": "%s acceptance %s is outside -1..1" % [id, acceptance] }
+		if weight * acceptance >= limit:
+			return { "ok": false, "error": "%s: weight %s x acceptance %s reaches the exposure cost %s" % [id, weight, acceptance, limit] }
+	if checked < 2:
+		return { "ok": false, "error": "expected exposure_tolerance on the shipped Directives, found %d" % checked }
+	return { "ok": true }
+
+
+## Step rule: at the largest step of the status table, the fall in the fear lean (bound x step) must
+## cover the rise that the same fear opens through Judgment ((1 - floor) x fear_pressure_weight x max|D| x step),
+## and the bound must cover the whole Judgment path.
+static func _fear_rule_error(bound: float, floor_a: float, pressure: float, step: float, max_d: float) -> String:
+	var judgment_rise: float = (1.0 - floor_a) * pressure * max_d * step
+	if bound * step < judgment_rise:
+		return "bound x largest step %s is below the Judgment path rise %s" % [bound * step, judgment_rise]
+	var total: float = (1.0 - floor_a) * pressure * max_d
+	if bound < total:
+		return "bound %s is below the total Judgment path (1 - floor) x fpw x max|D| = %s" % [bound, total]
+	return ""
+
+
+static func _t_fear_lean_bound_exceeds_fear_judgment_path() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var data: Dictionary = cs.get_balance()["data"]
+	var block: Dictionary = data["combat"]["movement"]["exposure_acceptance"]
+	var floor_a: float = float(data["combat"]["movement"]["directive_judgment"]["judgment_floor"])
+	var pressure: float = float(data["maturity_expression"]["autonomy_outputs"]["judgment"]["fear_pressure_weight"])
+	var table: Dictionary = data["combat"]["movement"]["felt_state"]["band_lean"]
+	var step := 0.0
+	for i: int in range(1, EmotionService.STATUS_LADDER.size()):
+		step = maxf(step, float(table[EmotionService.STATUS_LADDER[i]]) - float(table[EmotionService.STATUS_LADDER[i - 1]]))
+	var max_d := 0.0
+	for entry_value: Variant in ConfigService.get_directives_cfg(cs).values():
+		if (entry_value as Dictionary).has("exposure_tolerance"):
+			max_d = maxf(max_d, absf(float((entry_value as Dictionary)["exposure_tolerance"]) - float(block["offset"])))
+	if max_d <= 0.0 or step <= 0.0:
+		return { "ok": false, "error": "no Directive tolerance (%s) or no table step (%s)" % [max_d, step] }
+	var error: String = _fear_rule_error(float(block["fear_lean_bound"]), floor_a, pressure, step, max_d)
+	if not error.is_empty():
+		return { "ok": false, "error": error }
+	var path: float = (1.0 - floor_a) * pressure * max_d
+	if _fear_rule_error(0.9 * path, floor_a, pressure, step, max_d).is_empty():
+		return { "ok": false, "error": "the rule accepted a bound %s below its limit" % (0.9 * path) }
+	return { "ok": true }
+
+
+static func _t_judgment_floors_at_least_half() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var data: Dictionary = cs.get_balance()["data"]
+	var block: Dictionary = data["combat"]["movement"]["directive_judgment"]
+	var floor_min: Variant = block.get("judgment_floor_min", null)
+	var value: Variant = block.get("judgment_floor", null)
+	if not (floor_min is float or floor_min is int) or float(floor_min) <= 0.0 or float(floor_min) > 1.0:
+		return { "ok": false, "error": "judgment_floor_min = %s is missing or outside (0, 1]" % str(floor_min) }
+	if not (value is float or value is int) or float(value) < float(floor_min) or float(value) > 1.0:
+		return { "ok": false, "error": "judgment_floor = %s is missing or outside [%s, 1]" % [str(value), str(floor_min)] }
+	for stale: Array in [["combat", "movement", "exposure_acceptance"], ["actor", "stop_short", "directive"]]:
+		var node: Dictionary = data
+		for key: String in stale:
+			node = node.get(key, {}) as Dictionary
+		if node.has("judgment_floor"):
+			return { "ok": false, "error": "a second judgment_floor key exists under %s" % "/".join(stale) }
+	return { "ok": true }
