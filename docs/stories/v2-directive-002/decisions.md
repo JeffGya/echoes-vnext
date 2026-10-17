@@ -509,3 +509,13 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **Stop line:** proposal C, `cause_clause.directive_order` = "I follow what I was told." (No screen shows it yet.)
 - **Small fixes:** fix all (F1, F2, F3, F6, N7), and clean the comments: 'Reduce comments to what is needed and update. Shorter is better. Avoid referring to stories or hard coded numbers. Rather refer to config.' Applies to the code, test and config comments phase D added or rewrote.
 - **Not decided here:** N4 (does the Directive stop bias count as the Echo's own judgment in the divergence probe) stays open; it is checked in the final combined QA.
+
+### D-89. slices-5-to-7-design-answers
+**Q:** The reworked note `phase-d-design-5-7.md` (shared emotional state, one reading per system, D-87): Q1 to Q5.
+**A:** (Jeff, 2026-10-17)
+- **Q5 (rework of committed code):** take C1 to C5 now, inside the one run (D-86). C1 chip input uses `max(fear, fear_base)`; C2 slice 2 fear lean reads the emotional status band; C3 composure softens that lean; C4 fear lowers Judgment through the band; C5 stop-short fear and morale read the band (the second fear ramp and `morale_strength` go). C6 and C7 (style, action layer) wait for a later story. C8: `_DEFAULTS` swing value follows config.
+- **Q1:** keep the +1 step for a radiant Echo (high morale, low fear).
+- **Q2:** radiant lean +0.7.
+- **Q3:** per-layer swing ceilings of 2.0 for the action layer and the stop layer; shared budget 2.5; the Directive Judgment floor minimum may need to follow the budget test (the note says 0.56 at 2.5; the config key `judgment_floor_min` is the one place to change).
+- **Q4:** accept that slice 7 is quiet and has no neutral point; it reuses `identity_weight_scale`.
+- **Build basis:** the note is the build basis; its numbers are PROPOSED DEFAULT in config. Build order (one builder at a time, they share files): (a) shared status-lean module + C1 to C5 + C8; (b) slice 5; (c) slice 6; (d) slice 7. Unit tests only. Then ONE recorded-value run. Attribution: one OFF arm sets the three `enabled` switches of slices 5 to 7 to false; values that still move come from C1 to C5, the rest from slices 5 to 7. The stop-rate check of D-88 is part of that run.
