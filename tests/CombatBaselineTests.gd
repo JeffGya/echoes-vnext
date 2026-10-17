@@ -353,10 +353,10 @@ const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 ]
 # Phase 2d: 2 -> 3 rounds, both existing hashes byte-identical and one appended. The recover
 # cell is further from the party on the larger map, so the hold takes one more round to finish.
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). RECOVER_EMOTION_HASHES 3 -> 2 rounds; indices 0-1 byte-identical; 1 round(s) removed.
 const RECOVER_EMOTION_HASHES: Array = [
 	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",
 	"42b2541c3e3490c69dd8b76eac35d95a26de37c310a16ccb713930c1effbc3fd",
-	"895021d10aef2be5027d8223d3d0283551594162f243418a1ee895b84babe102",
 ]
 # V2-COMBAT-003 Phase 7a: rounds 1-3 unchanged; diverges at round index 3, the same round the
 # decision log names (r04 enemy.dust_wanderer_1 stops walking off 6,4 to swing at echo_0001 for
@@ -367,12 +367,13 @@ const RECOVER_EMOTION_HASHES: Array = [
 # fixed (decisions #32-38). Round count holds at 5; indices 0-2 stay byte-identical, diverging
 # from index 3.
 # Re-recorded: stop_short.enabled true. Only the last index (4) moved; 5 rounds held.
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). PROTECT_EMOTION_HASHES 5 -> 5 rounds; indices 0-3 byte-identical; diverges from index 4.
 const PROTECT_EMOTION_HASHES: Array = [
 	"814a9f2f861b64efcdf5f9391b44a370fef37fef54cac82b5d0278a3034fea10",
 	"207c3c93af6281a71ce9a544e588891fde6bffaafda26bcb86016212ea059f42",
 	"9305dc7dc32b271bc317d9c5b9c81d067c05aeace6df5aa71e00f3bdf2bfaab1",
 	"6f3569b3a53b03631cbb75ae3453b9ab5ba6e996e311698ea7b0da1bb6a310aa",
-	"cff1ac7e940b202329b97a7dc243ff730265782693f31458a982e932f2792ec9",
+	"cebd884229feb42d3cc213f3f18b1814e004b4f1b11b26f5c328ef993308c528",
 ]
 # V2-COMBAT-003 Phase 7a: rounds 1-2 unchanged; diverges at round index 2, the same round the
 # decision log names (r03, echo_0001 at 6,2). Still 5 rounds.
@@ -383,12 +384,13 @@ const PROTECT_EMOTION_HASHES: Array = [
 # byte-identical, diverging from index 2 — the accepted rank/reward regression (decision #39)
 # shows up here as a later, not earlier, split.
 # Re-recorded: Directive stop cause. 5 rounds; indices 0-1 byte-identical, diverging from index 2.
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). ENDURE_EMOTION_HASHES 5 -> 5 rounds; indices 0-1 byte-identical; diverges from index 2.
 const ENDURE_EMOTION_HASHES: Array = [
 	"93b71ed7260bf0483a28fada3159b989edce9c56edd047317e891c8341089a2a",
 	"18c88d4e3436998a3f4c7c0607b098ba0703d36af315095a00834e2481b290c6",
-	"d5b8e3286de7ea133f17fad46b5588c7f260350e73b3234e1e44754ef88a9f47",
-	"a280cc978b05503b2a0ddb8688774a148a9b6563dcce97ae628e54ff7efd3690",
-	"a433c15b811b2ff002e2549e4544b77fc32cc57214e9f1631a70ff607abc387d",
+	"867f5bc09c57cf1c2387801e24723fdf552a2537dd4c1ac571672fb011fd8b81",
+	"3104d63b16a36f4cec63e1aa7c116adeff2e16ee6f58e6b54ef002eaa43a0c58",
+	"58661105c1ae035eb339b2dc5491949a4ede1784855b0646f2d7124cf04c9645",
 ]
 # Phase 2d: 5 -> 4 rounds, index 0 byte-identical, diverging from index 1. The long_multiplier
 # is applied AFTER the max clamp (EncounterSetupService.gd:332-347), so this board went 48x12 ->
@@ -423,6 +425,7 @@ const PURSUE_EMOTION_HASHES: Array = [
 # Re-recorded: stop_short.enabled true. 25 -> 24 rounds: indices 0-23 are byte-identical and the
 # last round is gone, because the fight now ends one round earlier.
 # Re-recorded: Directive stop cause. 24 -> 22 rounds; indices 0-21 byte-identical; the fight ends two rounds earlier.
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). GUIDE_SPIRIT_EMOTION_HASHES 22 -> 24 rounds; indices 0-21 byte-identical; 2 round(s) appended.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
 	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
@@ -446,6 +449,8 @@ const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"46814c8e0ea76de593210b370fc96a4e3d4350df560df40940a46ba7ee9cf5e0",
 	"7f035cf29f8e12e4be48763addf19740b169078f5126f593b87b8ef87fbdfd3f",
 	"41add5672f9740f0d91f657b0c4a9df9981c5350d70b133a339b66fc0dfd5b36",
+	"d4ff8247e9ea553c2b4509630d541d7b445f6a60b55c9df7bd9a457427c53543",
+	"bd08e9846d06f6622627ff4f56fbb0cd8318b1d2f37ad979ce13b1c9ee621e6a",
 ]
 
 

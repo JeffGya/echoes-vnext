@@ -21,7 +21,8 @@ static func register(runner) -> void:
 
 
 # Recorded: Seek, with Directive exposure acceptance.
-const COMBAT_ROUNDS_HASH := "0e0ccca9805d76d36368153bbc6f063f95f2d499b0cfa6de64effb6a38152daa"
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). COMBAT_ROUNDS_HASH moved; COMBAT_FINAL_HASH and COMBAT_SAVE_HASH held.
+const COMBAT_ROUNDS_HASH := "f44b41fbb4c397144d197223f97721c5d123f05856732af598d1c7374094bbe9"
 const COMBAT_FINAL_HASH  := "e0043b496aa493283d87769c19660e63bcb8d39422aae1000833a0402dd8c746"
 const COMBAT_SAVE_HASH   := "caca2686f263f70df3fb30a6a0638cadf1f10d749586cd8bc9cb4e36f9bd50ba"
 
@@ -44,8 +45,9 @@ static func test_purify_shrine() -> Dictionary:
 
 
 # Recorded: Seek, with Directive exposure acceptance.
-const RECOVER_ROUNDS_HASH := "6fedd6a4694c95d91524ee4fd67150e43c25467e027a17be73d34a7259d0b657"
-const RECOVER_FINAL_HASH  := "998e712bbb60a8bde0210851985ffe76eed911e219e0359479ac4fef03794246"
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). RECOVER_ROUNDS_HASH and RECOVER_FINAL_HASH moved; RECOVER_SAVE_HASH held.
+const RECOVER_ROUNDS_HASH := "92454eb5cd96d688a96b5c4686b413d80ac10df6c803e6c0fce86b883332dbaa"
+const RECOVER_FINAL_HASH  := "33e43352f7aa027a6d034a3d24c07308825adb4b62ae3227310c03856d1626e7"
 const RECOVER_SAVE_HASH   := "0b9bb5db21150c1e886ab7b3401b83287d6c82c168317d3d15e239dfa88b12b6"
 
 static func test_recover() -> Dictionary:
@@ -55,7 +57,8 @@ static func test_recover() -> Dictionary:
 
 
 # Recorded: Seek, with Directive exposure acceptance.
-const PROTECT_ROUNDS_HASH := "8468efd7371b3ffe22518b9e9adcf30f38ecbaed212802403e3a2f807139e1ff"
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). PROTECT_ROUNDS_HASH moved; PROTECT_FINAL_HASH and PROTECT_SAVE_HASH held.
+const PROTECT_ROUNDS_HASH := "0da463fed98219e2ed3165c4941a8e2c369fd77fa29b1331a630386250f61e53"
 const PROTECT_FINAL_HASH  := "298e2a9335ad20092d836eef06602c82bd297fe6013642836080af8bbc4648a7"
 const PROTECT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
@@ -67,9 +70,10 @@ static func test_protect() -> Dictionary:
 
 # Recorded: Seek, with Directive exposure acceptance.
 # Re-recorded: Directive stop cause. ENDURE_ROUNDS_HASH and ENDURE_FINAL_HASH moved; ENDURE_SAVE_HASH held.
-const ENDURE_ROUNDS_HASH := "14bcf5b0e87cf970ea77f3277a7030e306eb37b23840d8867c761ed338d8fdfd"
-const ENDURE_FINAL_HASH  := "bf50059fbe3d259559747a454583ab918e7eda58ffa57344a9e1b49a1d9265b1"
-const ENDURE_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH and ENDURE_SAVE_HASH moved; none held.
+const ENDURE_ROUNDS_HASH := "488d5c89a3ca387e4b9d015f3fbb527ee0184fb8b2c3b3c18a46293983bc3a53"
+const ENDURE_FINAL_HASH  := "b71e750707ca784e8a002b6b122a80ca37a952234f7355372d31b3e698ac6b39"
+const ENDURE_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
 
 static func test_endure() -> Dictionary:
 	var r: Dictionary = FlowFingerprintTests._run_mode_fingerprint(
@@ -90,8 +94,9 @@ static func test_pursue() -> Dictionary:
 
 # Recorded: Seek, with Directive exposure acceptance.
 # Re-recorded: Directive stop cause. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
-const GUIDE_SPIRIT_ROUNDS_HASH := "7ae36ae0f11e16e3558df5601bcc752a178ba33d96e2303c4da43bd3fb70a1e4"
-const GUIDE_SPIRIT_FINAL_HASH  := "cf0012793e3ae7385e32b55d95ae345b9789dff7b53a07a9a27b376a7c9b571e"
+# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
+const GUIDE_SPIRIT_ROUNDS_HASH := "2710f14913b3ec32c799dfed1a8b33b440a73b6d1f42e669597519b5de28767b"
+const GUIDE_SPIRIT_FINAL_HASH  := "af7bd3c7577970a1e7d9540a9c3f5a023de1c1ac8c7f9a6c7749c2e65aa03f78"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:
