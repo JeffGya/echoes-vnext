@@ -14,7 +14,7 @@ const PART_KEYS: Array = [
 ]
 const PART_SHORT: Array = ["urg", "prog", "coh", "exp", "con", "com", "dadv", "davoid", "dexp", "dally", "dicpt"]
 
-## {records: Array, chosen: Dictionary} of the latest pass; empty when the pass failed.
+## {records: Array, chosen: Dictionary, stop: Dictionary} of the latest pass; empty when the pass failed.
 var last: Dictionary = {}
 ## Optional Callable(last, context), called after each valid pass.
 var on_done: Callable = Callable()
@@ -43,6 +43,7 @@ func select_movement_intent(context: Dictionary, movement_context: Dictionary, p
 				"type": str(planned.get("type", "")),
 				"target_id": str(planned.get("target_id", "")),
 			},
+			"stop": (result.get("_stop_short", {}) as Dictionary).duplicate(),
 		}
 		if on_done.is_valid():
 			on_done.call(last, context)

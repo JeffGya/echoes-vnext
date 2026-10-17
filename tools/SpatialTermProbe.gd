@@ -54,6 +54,10 @@ static var _turns_by_action: Dictionary = {}
 static var _fear_warned: bool = false
 static var _parts_mode: String = ""
 static var _parts_sum: Dictionary = {}
+## {echo_id: {turns, stops, causes: {cause_id: count}}} of the fight in progress.
+static var _stop_rows: Dictionary = {}
+## Stop-rate totals of the whole arm.
+static var _stop_tot: Dictionary = {}
 
 
 static func register(runner) -> void:
@@ -83,6 +87,7 @@ static func run() -> Dictionary:
 	var parts_on: bool = arm.split(",", false).has("parts")
 	_parts_sum = {"echo_passes": 0, "purifier_skipped": 0, "with_routes": 0, "two_plus": 0, "mixed": 0,
 		"mixed_xmargin_lt10": 0, "mixed_margin_lt10": 0, "mixed_flips": 0, "mixed_chosen_exposed": 0}
+	_stop_tot = {"echoes": 0, "turns": 0, "stops": 0, "causes": {}}
 	for entry_v: Variant in MODES:
 		var entry: Array = entry_v
 		if parts_on:
@@ -156,8 +161,38 @@ static func _run_parts_mode(mode: String, tag: String, guide_mode: String, guide
 		var arbiter := ExposureCaptureArbiter.new(actor_cfg, movement_cfg)
 		arbiter.on_done = Callable(SpatialTermProbe, "_on_capture").bind(ectx)
 		return arbiter
+	_stop_rows = {}
 	var drive: Dictionary = FlowFingerprintTests._drive_and_capture(runtime, ectx, 30)
 	_dump_decisions(mode, drive, ectx)
+	_say_stop_rows(mode, arm)
+
+
+## One line per Echo. The stop-rate ceiling is not in config, so only the rate is printed.
+static func _say_stop_rows(mode: String, arm: String) -> void:
+	var ids: Array = _stop_rows.keys()
+	ids.sort()
+	for id_v: Variant in ids:
+		var row: Dictionary = _stop_rows[id_v]
+		var turns: int = int(row["turns"])
+		var stops: int = int(row["stops"])
+		_say("STOPRATE %s %s %s turns=%d stops=%d rate=%.3f" % [arm, mode, str(id_v), turns, stops,
+			float(stops) / float(maxi(turns, 1))])
+		_stop_tot["echoes"] += 1
+		_stop_tot["turns"] += turns
+		_stop_tot["stops"] += stops
+		var causes: Dictionary = _stop_tot["causes"]
+		for cause: Variant in row["causes"]:
+			causes[cause] = int(causes.get(cause, 0)) + int(row["causes"][cause])
+
+
+static func _say_stop_summary(arm: String) -> void:
+	var turns: int = int(_stop_tot["turns"])
+	var stops: int = int(_stop_tot["stops"])
+	var causes: Dictionary = _stop_tot["causes"]
+	_say("STOPRATE_SUMMARY %s echoes=%d turns=%d stops=%d rate=%.3f echoes_above_ceiling=n/a (no ceiling key in config)" % [
+		arm, int(_stop_tot["echoes"]), turns, stops, float(stops) / float(maxi(turns, 1))])
+	_say("STOPCAUSE %s directive=%d fear=%d identity=%d" % [arm,
+		int(causes.get("directive", 0)), int(causes.get("fear", 0)), int(causes.get("identity", 0))])
 
 
 ## A pass with a ready purifier is counted apart: the arbiter sets its winner to 9999 after the
@@ -176,6 +211,7 @@ static func _on_capture(last: Dictionary, context: Dictionary, ectx: EncounterCo
 		_say("PURIFIER_SKIPPED %s r%02d %s" % [_parts_mode, round_index, str(actor.get("id", ""))])
 		return
 	var tag: String = "%s r%02d %s" % [_parts_mode, round_index, str(actor.get("id", ""))]
+	_count_stop(str(actor.get("id", "")), last.get("stop", {}) as Dictionary)
 	var summary: Dictionary = ExposureCaptureArbiter.analyse(records, chosen)
 	for line: String in ExposureCaptureArbiter.decision_lines(tag, records, chosen):
 		_say(line)
@@ -195,6 +231,16 @@ static func _on_capture(last: Dictionary, context: Dictionary, ectx: EncounterCo
 		_parts_sum["mixed_flips"] += 1
 	if bool(summary["chosen_exposed"]):
 		_parts_sum["mixed_chosen_exposed"] += 1
+
+
+static func _count_stop(echo_id: String, stop: Dictionary) -> void:
+	var row: Dictionary = _stop_rows.get(echo_id, {"turns": 0, "stops": 0, "causes": {}})
+	row["turns"] += 1
+	if not stop.is_empty():
+		row["stops"] += 1
+		var cause: String = str(stop.get("cause_id", ""))
+		row["causes"][cause] = int(row["causes"].get(cause, 0)) + 1
+	_stop_rows[echo_id] = row
 
 
 ## Overrides one or more spatial_utility weights in the in-memory balance. data/balance.json is
