@@ -1712,9 +1712,9 @@
 						"hollow": -1.0, "fraying": -0.95, "strained": -0.9, "pressed": -0.75, "burdened": -0.55,
 						"hesitant": -0.25, "uncertain": -0.1, "grounded": 0.0, "whole": 0.0, "radiant": 0.7
 					},
-					"lean": { "enabled": false, "progress_floor": 0.65, "progress_max": 1.25, "cohesion_max": 1.4, "cohesion_min": 0.85 },
-					"steps": { "enabled": false, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1, "composure_default": 0.4 },
-					"style_growth": { "enabled": false }
+					"lean": { "enabled": true, "progress_floor": 0.65, "progress_max": 1.25, "cohesion_max": 1.4, "cohesion_min": 0.85 },
+					"steps": { "enabled": true, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1, "composure_default": 0.4 },
+					"style_growth": { "enabled": true }
 				},
 				"directive_judgment": {
 					"_comment": "PROPOSED DEFAULT. One Judgment scale for Directive influence, read by exposure acceptance (BehaviorArbiter) and by the Directive stop cause (StopShortService): scale = judgment_floor + (1 - judgment_floor) x (1 - J). judgment_floor must be in [judgment_floor_min, 1]; a missing floor scales by 1. The swing 1 / judgment_floor must stay at or under data.maturity_expression.interpretation_swing_max.value.",

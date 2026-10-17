@@ -765,6 +765,8 @@ func select_movement_intent(
 	# ASSUMED: only one vow (tikoro_nko_agyina) exists and it is protective/cohesion-
 	# themed, so "a vow is active" reads as fully Ward-leaning until a vow carries its
 	# own Ward/Break strain signal. See the story report's OPEN block.
+	var style_growth: Dictionary = _style_growth(interpretation_width) if is_echo_faction \
+		else {"vector_mul": 1.0, "trait_mul": 1.0}
 	var style_inputs: Dictionary = {
 		"actor":            actor,
 		"bonds":            bonds_ctx if is_echo_faction else [],
@@ -774,6 +776,8 @@ func select_movement_intent(
 		"traits":           actor.get("traits", {}) as Dictionary,
 		"fear":             maxf(float(actor.get("fear", 0)), float(actor.get("fear_base", 0))),
 		"morale_tier":      EmotionService.get_morale_tier(int(actor.get("morale", 50))),
+		"vector_mul":       style_growth["vector_mul"],
+		"trait_mul":        style_growth["trait_mul"],
 		"vow_lean":         0.0 if active_vow.is_empty() else -1.0,
 		"cfg":              _cfg_get("movement_style_weights") as Dictionary,
 	}
@@ -783,6 +787,10 @@ func select_movement_intent(
 		int(profile["capacity"]), Callable(self, "_route_style_of"),
 		StopShortContextService.with_judgment_scale(_cfg.get("stop_short", {}) as Dictionary, _movement_cfg))
 	var spatial_cfg: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
+	var pull: Array = [1.0, 1.0]
+	var lean_cfg: Dictionary = _felt_section("lean") if is_echo_faction else {}
+	if not lean_cfg.is_empty():
+		pull = felt_pull(_state_lean(actor, composure), lean_cfg)
 	for candidate: Dictionary in candidates:
 		var plan: Dictionary = candidate["_movement_plan"] as Dictionary
 		# See select_intent()'s scoring loop for why the breakdown is kept.
@@ -813,7 +821,9 @@ func select_movement_intent(
 				spatial_cfg,
 				spatial_parts,
 				fear_lean,
-				interpretation_width
+				interpretation_width,
+				float(pull[0]),
+				float(pull[1])
 			)
 			candidate["_spatial_components"] = spatial_parts
 			# V2-INFRA-003 pass 8: cover_positioning — a Whole leader in range teaches
@@ -1364,12 +1374,46 @@ func _validate_spatial_config() -> Dictionary:
 		var felt: Variant = _movement_cfg["felt_state"]
 		if not felt is Dictionary or not EmotionStatusLean.is_valid((felt as Dictionary).get("band_lean", null)):
 			return _movement_failure("invalid_felt_state_band_lean", "movement_cfg.felt_state.band_lean")
+		var felt_failure: Dictionary = _validate_felt_sections(felt as Dictionary)
+		if not bool(felt_failure.get("valid", true)):
+			return felt_failure
 	var judgment_cfg: Variant = _movement_cfg.get("directive_judgment", {})
 	if not judgment_cfg is Dictionary:
 		return _movement_failure("invalid_directive_judgment_config", "movement_cfg.directive_judgment")
 	if not DirectiveJudgmentScale.is_valid(judgment_cfg as Dictionary):
 		return _movement_failure("invalid_directive_judgment_floor", "movement_cfg.directive_judgment.judgment_floor")
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
+
+
+const _FELT_RANGES := {
+	"lean": { "progress_floor": [0.5, 0.9], "progress_max": [1.0, 1.4], "cohesion_max": [1.0, 1.45], "cohesion_min": [0.7, 1.0] },
+	"steps": { "penalty_at": [0.3, 0.9], "bonus_at": [0.4, 1.0], "composure_default": [0.0, 1.0] },
+}
+
+
+## Checks the switches and the numbers of the lean, steps and style_growth sections. A section that
+## is absent is off. Returns {} when valid.
+func _validate_felt_sections(felt: Dictionary) -> Dictionary:
+	for section: String in ["lean", "steps", "style_growth"]:
+		if not felt.has(section):
+			continue
+		var block: Variant = felt[section]
+		var field_path: String = "movement_cfg.felt_state.%s" % section
+		if not block is Dictionary or not (block as Dictionary).get("enabled", null) is bool:
+			return _movement_failure("invalid_felt_state_section", field_path)
+		var ranges: Dictionary = _FELT_RANGES.get(section, {}) as Dictionary
+		for key: String in ranges:
+			var value: Variant = (block as Dictionary).get(key, null)
+			var bounds: Array = ranges[key] as Array
+			if not (value is int or value is float) or not is_finite(float(value)) \
+					or float(value) < float(bounds[0]) or float(value) > float(bounds[1]):
+				return _movement_failure("invalid_felt_state_value", "%s.%s" % [field_path, key])
+		if section == "steps":
+			for key: String in ["penalty_steps", "bonus_steps"]:
+				var count: Variant = (block as Dictionary).get(key, null)
+				if not (count is int or count is float) or not (float(count) == 0.0 or float(count) == 1.0):
+					return _movement_failure("invalid_felt_state_value", "%s.%s" % [field_path, key])
+	return {}
 
 
 func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
@@ -1425,6 +1469,47 @@ func _fear_lean(actor: Dictionary, composure: float) -> float:
 	return float((block as Dictionary)["fear_lean_bound"]) * EmotionStatusLean.afraid_of(actor, table, composure, dampen)
 
 
+## One `felt_state` section when its switch is on; {} when the block, the section or the switch is absent.
+func _felt_section(section: String) -> Dictionary:
+	var felt: Variant = _movement_cfg.get("felt_state", {})
+	var block: Variant = (felt as Dictionary).get(section, {}) if felt is Dictionary else {}
+	if block is Dictionary and bool((block as Dictionary).get("enabled", false)):
+		return block as Dictionary
+	return {}
+
+
+## Signed status lean of the actor, softened by composure. 0.0 when the table is absent.
+func _state_lean(actor: Dictionary, composure: float) -> float:
+	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
+	if table.is_empty():
+		return 0.0
+	var dampen: float = float((_cfg_get("composure_dampen_scale") as Dictionary).get("value", 0.4))
+	return EmotionStatusLean.soften(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table), composure, dampen)
+
+
+## [progress_mul, cohesion_mul] for a signed lean: afraid pulls toward allies, bold toward the goal.
+static func felt_pull(lean_value: float, lean_cfg: Dictionary) -> Array:
+	var t: float = absf(lean_value)
+	if lean_value < 0.0:
+		return [1.0 - t * (1.0 - float(lean_cfg["progress_floor"])), 1.0 + t * (float(lean_cfg["cohesion_max"]) - 1.0)]
+	if lean_value > 0.0:
+		return [1.0 + t * (float(lean_cfg["progress_max"]) - 1.0), 1.0 - t * (1.0 - float(lean_cfg["cohesion_min"]))]
+	return [1.0, 1.0]
+
+
+## Growth of the Echo's own style by Judgment, on the action layer's identity scale.
+func _style_growth(judgment: float) -> Dictionary:
+	if _felt_section("style_growth").is_empty():
+		return {"vector_mul": 1.0, "trait_mul": 1.0}
+	var id_scale: Dictionary = _cfg_get("identity_weight_scale")
+	return {
+		"vector_mul": 1.0 + judgment * float(id_scale.get("vector", 0.6)),
+		"trait_mul": 1.0 + judgment * float(id_scale.get("trait", 0.6)),
+	}
+
+
+## `progress_mul` / `cohesion_mul` scale the two pull weights (felt-state lean); the rest of the
+## terms stay unscaled.
 ## `out_parts`, when a non-null Dictionary is passed, receives this call's own
 ## decomposition: {parts: {term → weighted value}, acceptance_parts: {D_scaled, F,
 ## acceptance}, raw, cap, value}. Purely additive
@@ -1439,7 +1524,9 @@ func _spatial_utility(
 	config: Dictionary,
 	out_parts: Dictionary = {},
 	fear_lean: float = 0.0,
-	judgment: float = 0.0
+	judgment: float = 0.0,
+	progress_mul: float = 1.0,
+	cohesion_mul: float = 1.0
 ) -> float:
 	var urgency: float = clampf(float(goal["urgency"]), 0.0, 1.0)
 	var progress: float = clampf(float(option["objective_progress"]), 0.0, 1.0)
@@ -1488,8 +1575,8 @@ func _spatial_utility(
 	var intercepts: float = 1.0 if purpose in ["intercept", "cut_off"] else 0.0
 	var parts: Dictionary = {
 		"urgency":                       float(config["urgency_weight"]) * urgency,
-		"objective_progress":            float(config["objective_progress_weight"]) * progress * (1.0 + maxf(float(config["urgency_progress_gain"]), 0.0) * urgency),
-		"cohesion":                      float(config["cohesion_weight"]) * cohesion,
+		"objective_progress":            float(config["objective_progress_weight"]) * progress_mul * progress * (1.0 + maxf(float(config["urgency_progress_gain"]), 0.0) * urgency),
+		"cohesion":                      float(config["cohesion_weight"]) * cohesion_mul * cohesion,
 		"exposure":                      float(config["exposure_weight"]) * exposure,
 		"congestion":                    float(config["congestion_weight"]) * congestion,
 		"commitment":                    float(config["commitment_weight"]) * commitment_progress_ratio,

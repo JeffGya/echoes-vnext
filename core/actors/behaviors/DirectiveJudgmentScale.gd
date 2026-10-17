@@ -24,11 +24,12 @@ static func is_valid(cfg: Dictionary) -> bool:
 	return float(floor_v) >= float(cfg.get("judgment_floor_min", 0.0)) and float(floor_v) <= 1.0
 
 
-## Own side at J = 1 (1.0: nothing else scales with J) over the scale at J = 1. 1.0 without a floor.
-static func swing(cfg: Dictionary) -> float:
+## Own side at J = 1 (`own_side`, 1.0 when nothing else scales with J) over the scale at J = 1.
+## `own_side` without a floor.
+static func swing(cfg: Dictionary, own_side: float = 1.0) -> float:
 	if not cfg.has("judgment_floor"):
-		return 1.0
+		return own_side
 	var floor_v: float = float(cfg["judgment_floor"])
 	if floor_v <= 0.0:
 		return INF
-	return 1.0 / floor_v
+	return own_side / floor_v

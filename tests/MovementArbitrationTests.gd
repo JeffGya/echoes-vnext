@@ -63,12 +63,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/acceptance_missing_tolerance_is_neutral_plus_fear", _t_acceptance_missing_tolerance_is_neutral_plus_fear)
 	runner.register_test("movement_arbiter/acceptance_swing_within_declared_budget", _t_acceptance_swing_within_declared_budget)
 	runner.register_test("movement_arbiter/swing_layer_ceilings_consistent", _t_swing_layer_ceilings_consistent)
+	runner.register_test("movement_arbiter/felt_state_swing_within_declared_budget", _t_felt_state_swing_within_declared_budget)
+	runner.register_test("movement_arbiter/cross_layer_pair_within_declared_budget", _t_cross_layer_pair_within_declared_budget)
 	runner.register_test("movement_arbiter/judgment_floor_validated_and_neutral_when_missing", _t_judgment_floor_validated_and_neutral_when_missing)
 	runner.register_test("movement_arbiter/acceptance_rejects_non_finite_judgment", _t_acceptance_rejects_non_finite_judgment)
 	runner.register_test("movement_arbiter/fear_lean_not_scaled_by_judgment", _t_fear_lean_not_scaled_by_judgment)
 	runner.register_test("movement_arbiter/more_fear_never_more_accepting_across_judgment", _t_more_fear_never_more_accepting_across_judgment)
 	runner.register_test("movement_arbiter/judgment_reaches_arbiter_through_turn_context", _t_judgment_reaches_arbiter_through_turn_context)
-	runner.register_test("movement_arbiter/acceptance_own_side_has_no_judgment_input", _t_acceptance_own_side_has_no_judgment_input)
+	runner.register_test("movement_arbiter/acceptance_own_side_equals_identity_scale", _t_acceptance_own_side_equals_identity_scale)
 	runner.register_test("movement_arbiter/judgment_reaches_acceptance_through_actor_state_machine", _t_judgment_reaches_acceptance_through_actor_state_machine)
 
 
@@ -1494,23 +1496,61 @@ static func _t_acceptance_missing_tolerance_is_neutral_plus_fear() -> Dictionary
 	return _pass()
 
 
-static func _t_acceptance_swing_within_declared_budget() -> Dictionary:
+## Own side of the acceptance layer is the action layer's identity scale when the style grows
+## with Judgment, else 1.0.
+static func _swing_numbers() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
 	var data: Dictionary = cs.get_balance()["data"] as Dictionary
-	var block: Dictionary = ((data["combat"] as Dictionary)["movement"] as Dictionary)["directive_judgment"] as Dictionary
-	var swing_max: float = float(((data["maturity_expression"] as Dictionary)["interpretation_swing_max"] as Dictionary).get("value", 0.0))
-	if swing_max <= 0.0 or not block.has("judgment_floor"):
-		return _fail("fixture broken: swing_max %s, judgment_floor present %s" % [swing_max, block.has("judgment_floor")])
-	var swing: float = DirectiveJudgmentScale.swing(block)
-	if swing > swing_max:
-		return _fail("Directive Judgment swing %s exceeds interpretation_swing_max %s" % [swing, swing_max])
-	if not is_equal_approx(swing, 1.0 / float(block["judgment_floor"])):
-		return _fail("the swing must be 1 / judgment_floor, got %s" % swing)
-	if DirectiveJudgmentScale.swing({}) != 1.0:
-		return _fail("a missing judgment_floor scales by 1.0, so its swing must read 1.0")
+	var movement: Dictionary = (data["combat"] as Dictionary)["movement"] as Dictionary
+	var felt: Dictionary = movement["felt_state"] as Dictionary
+	var expr: Dictionary = data["maturity_expression"] as Dictionary
+	var scale: Dictionary = expr["identity_weight_scale"] as Dictionary
+	var identity: float = 1.0 + maxf(float(scale["trait"]), float(scale["vector"]))
+	var lean: Dictionary = felt["lean"] as Dictionary
+	var mul: Dictionary = expr["directive_interpretation_mul"] as Dictionary
+	return {
+		"budget": float((expr["interpretation_swing_max"] as Dictionary).get("value", 0.0)),
+		"block": movement["directive_judgment"] as Dictionary,
+		"own_style": identity if bool((felt["style_growth"] as Dictionary)["enabled"]) else 1.0,
+		"lean_side": maxf(float(lean["cohesion_max"]), float(lean["progress_max"]) if bool(lean["enabled"]) else 1.0),
+		"low_over_high": float(mul["low"]) / float(mul["high"]),
+		"action_own": identity,
+	}
+
+
+static func _t_acceptance_swing_within_declared_budget() -> Dictionary:
+	var n: Dictionary = _swing_numbers()
+	var block: Dictionary = n["block"] as Dictionary
+	if float(n["budget"]) <= 0.0 or not block.has("judgment_floor"):
+		return _fail("fixture broken: budget %s, judgment_floor present %s" % [n["budget"], block.has("judgment_floor")])
+	var swing: float = DirectiveJudgmentScale.swing(block, float(n["own_style"]))
+	if swing > float(n["budget"]):
+		return _fail("acceptance swing %s exceeds interpretation_swing_max %s (judgment_floor_min is the key that would move)" % [swing, n["budget"]])
+	if not is_equal_approx(swing, float(n["own_style"]) / float(block["judgment_floor"])):
+		return _fail("the swing must be own side / judgment_floor, got %s" % swing)
+	if DirectiveJudgmentScale.swing({}) != 1.0 or DirectiveJudgmentScale.swing({}, 1.35) != 1.35:
+		return _fail("a missing judgment_floor scales by 1.0, so its swing is the own side")
 	if DirectiveJudgmentScale.swing({"judgment_floor": 0.0}) != INF:
 		return _fail("a floor of 0 must read as an unbounded swing")
+	return _pass()
+
+
+static func _t_felt_state_swing_within_declared_budget() -> Dictionary:
+	var n: Dictionary = _swing_numbers()
+	var swing: float = DirectiveJudgmentScale.swing(n["block"] as Dictionary, float(n["lean_side"]))
+	if swing > float(n["budget"]):
+		return _fail("state-lean swing %s exceeds interpretation_swing_max %s" % [swing, n["budget"]])
+	return _pass()
+
+
+## Largest own side over the smallest Directive-side factor, across layers.
+static func _t_cross_layer_pair_within_declared_budget() -> Dictionary:
+	var n: Dictionary = _swing_numbers()
+	var own: float = maxf(maxf(float(n["own_style"]), float(n["lean_side"])), float(n["action_own"]))
+	var pair: float = own / minf(float(n["low_over_high"]), float((n["block"] as Dictionary)["judgment_floor"]))
+	if pair > float(n["budget"]):
+		return _fail("cross-layer swing %s exceeds interpretation_swing_max %s" % [pair, n["budget"]])
 	return _pass()
 
 
@@ -1636,34 +1676,22 @@ static func _t_more_fear_never_more_accepting_across_judgment() -> Dictionary:
 ## Own side of the acceptance swing is 1.0 only while no Judgment input reaches the style
 ## alignment: the style_inputs literal, _style_alignment, _style_urgency_factor and
 ## MovementStyleService must not mention Judgment or interpretation width in code.
-static func _t_acceptance_own_side_has_no_judgment_input() -> Dictionary:
-	var arbiter_text: String = FileAccess.get_file_as_string("res://core/actors/behaviors/BehaviorArbiter.gd")
-	var regions: Dictionary = {
-		"style_inputs literal": _between(arbiter_text, "var style_inputs: Dictionary = {", "\n\t}"),
-		"_style_alignment": _between(arbiter_text, "func _style_alignment(", "\n\n\n"),
-		"_style_urgency_factor": _between(arbiter_text, "static func _style_urgency_factor(", "\n\n\n"),
-		"MovementStyleService": FileAccess.get_file_as_string("res://core/actors/behaviors/MovementStyleService.gd"),
-	}
-	for name: String in regions:
-		var text: String = regions[name]
-		if text.length() < 80:
-			return _fail("%s was not found by the scan" % name)
-		for line: String in text.split("\n"):
-			var code: String = line.strip_edges()
-			if code.begins_with("#"):
-				continue
-			var lower: String = code.to_lower()
-			if lower.contains("judgment") or lower.contains("interpretation"):
-				return _fail("%s reads Judgment, so the own-side multiplier of DirectiveJudgmentScale.swing is no longer 1.0: %s" % [name, code])
+## Judgment enters style only as the two identity multipliers of the action layer's scale. The
+## state parts staying at 1.0 is pinned by felt_state/style_growth_scales_only_identity_parts.
+static func _t_acceptance_own_side_equals_identity_scale() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var data: Dictionary = cs.get_balance()["data"] as Dictionary
+	var movement: Dictionary = ((data["combat"] as Dictionary)["movement"] as Dictionary).duplicate(true)
+	var scale: Dictionary = (data["maturity_expression"] as Dictionary)["identity_weight_scale"] as Dictionary
+	((movement["felt_state"] as Dictionary)["style_growth"] as Dictionary)["enabled"] = true
+	var arbiter := BehaviorArbiter.new({}, movement)
+	for j: float in [0.0, 0.4, 1.0]:
+		var growth: Dictionary = arbiter._style_growth(j)
+		if not is_equal_approx(float(growth["vector_mul"]), 1.0 + j * float(scale["vector"])) \
+				or not is_equal_approx(float(growth["trait_mul"]), 1.0 + j * float(scale["trait"])):
+			return _fail("J %s: growth %s is not 1 + J x identity_weight_scale %s" % [j, str(growth), str(scale)])
 	return _pass()
-
-
-static func _between(text: String, from: String, to: String) -> String:
-	var start: int = text.find(from)
-	if start < 0:
-		return ""
-	var stop: int = text.find(to, start + from.length())
-	return text.substr(start, (stop if stop >= 0 else text.length()) - start)
 
 
 ## Through ActorStateMachine, not a hand-written ctx: Judgment is derived from the actor's own

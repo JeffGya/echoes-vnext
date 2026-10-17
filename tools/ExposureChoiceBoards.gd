@@ -35,6 +35,9 @@ const SWEEP_FROM: float = -0.5
 const SWEEP_TO: float = 1.0
 const SWEEP_STEP: float = 0.005
 const CELL: float = 0.125
+## [name, fear, morale] of the states the felt-state rows print.
+const FELT_STATES: Array = [["grounded", 0, 50], ["burdened", 45, 50], ["pressed", 55, 50], ["hollow", 90, 50], ["radiant", 0, 80]]
+const FELT_STANDINGS: Array = [1, 3, 6, 9]
 
 
 static func run(_arm: String) -> void:
@@ -85,6 +88,7 @@ static func run(_arm: String) -> void:
 	SpatialTermProbe._say("### FLIP_TABLE smallest progress advantage of E over U, in cells (1 cell = 0.125), at which E is chosen; base = same with the Directive exposure part and fear lean removed; none = never inside the sweep")
 	for line: String in table:
 		SpatialTermProbe._say("FLIP_TABLE " + line)
+	_felt_rows(config, balance, bdata, movement)
 
 
 static func build(def: Dictionary) -> Dictionary:
@@ -150,6 +154,7 @@ static func _select(config: ConfigService, balance: Dictionary, bdata: Dictionar
 		board: Dictionary, options: Array, directive_id: String, fear: int) -> Dictionary:
 	var actor: Dictionary = (board["actor"] as Dictionary).duplicate(true)
 	actor["fear"] = fear
+	actor["morale"] = int(board.get("morale", actor.get("morale", 50)))
 	var flow_ctx := FlowContext.new()
 	flow_ctx.save_data = {"stage_context": {"active_directive_id": directive_id}}
 	var ectx := EncounterContext.new()
@@ -162,6 +167,8 @@ static func _select(config: ConfigService, balance: Dictionary, bdata: Dictionar
 	var svc := CombatTurnContextService.new(flow_ctx, config, directives, StructuredLogger.new())
 	var ctx: Dictionary = svc.build_turn_context(actor, ectx, balance, bdata, 1, 1)["ctx"]
 	ctx["judgment"] = float(board["judgment"])
+	if board.has("composure"):
+		ctx["composure"] = float(board["composure"])
 	var arbiter := ExposureCaptureArbiter.new({}, movement)
 	var result: Dictionary = arbiter.select_movement_intent(
 		ctx, board["movement_context"] as Dictionary, board["profile"] as Dictionary, board["goals"] as Array, options)
@@ -284,3 +291,97 @@ static func _flip(config: ConfigService, balance: Dictionary, bdata: Dictionary,
 		"removed_points": "none" if first_removed.is_empty() else "%.2f" % float(first_removed["adv_points"]),
 		"monotonic": monotonic,
 	}
+
+
+## Judgment and composure as the combat pipeline derives them for an Echo of this Standing and state.
+static func _expression(config: ConfigService, bdata: Dictionary, standing: int, fear: int, morale: int) -> Dictionary:
+	var actor: Dictionary = MovementArbitrationTests._judgment_actor(bdata, standing, "okofor", fear)
+	actor["morale"] = morale
+	var inputs: Dictionary = MaturityExpressionService.build_ctx_inputs(
+		actor, [], {}, bdata, ConfigService.get_bond_thresholds_cfg(config), {}, 0.0)
+	var expression: Dictionary = MaturityExpressionService.derive_expression(actor, inputs, bdata["maturity_expression"] as Dictionary)
+	expression["actor"] = actor
+	return expression
+
+
+static func _chosen_cells(config: ConfigService, balance: Dictionary, bdata: Dictionary, movement: Dictionary,
+		board: Dictionary, fear: int) -> String:
+	var result: Dictionary = _select(config, balance, bdata, movement, board, board["options"] as Array, "directive.scout_carefully", fear)
+	if not bool(result["valid"]):
+		return "failed"
+	var chosen_id: String = str((result["chosen"] as Dictionary).get("option_id", ""))
+	for option_v: Variant in board["options"] as Array:
+		if str((option_v as Dictionary)["option_id"]) == chosen_id:
+			return str(((option_v as Dictionary)["path"] as Array).size())
+	return "stay"
+
+
+## Print rows for the felt-state lean, steps and style growth. Print only.
+static func _felt_rows(config: ConfigService, balance: Dictionary, bdata: Dictionary, movement: Dictionary) -> void:
+	var def: Dictionary = DEFS[0]
+	var live := LiveMovementContextService.new(FlowContext.new(), StructuredLogger.new())
+	var capacity_cfg: Dictionary = movement["capacity"] as Dictionary
+	SpatialTermProbe._say("### FELT F-1 chosen route and the smallest progress advantage (cells) at which the exposed route wins, board B1, scout")
+	for standing: int in [1, 9]:
+		for state: Array in FELT_STATES:
+			var expression: Dictionary = _expression(config, bdata, standing, int(state[1]), int(state[2]))
+			var board: Dictionary = build(def)
+			board["judgment"] = float(expression["judgment"])
+			board["composure"] = float(expression["composure"])
+			board["morale"] = int(state[2])
+			var picked: Dictionary = _pick(board["options"] as Array, def["pick"] as Dictionary)
+			var cell: Dictionary = _cell(config, balance, bdata, movement, board, picked, "directive.scout_carefully", int(state[1]), "FELT")
+			var flip: Dictionary = _flip(config, balance, bdata, movement, board, picked, "directive.scout_carefully", int(state[1]))
+			SpatialTermProbe._say("FELT_F1 standing=%d state=%s composure=%.2f chosen=%s flip_cells=%s" % [
+				standing, str(state[0]), float(expression["composure"]), cell["chosen"], flip["cells"]])
+	SpatialTermProbe._say("### FELT F-2 capacity and option count (board B1) by Standing and state")
+	var f2_board: Dictionary = build(def)
+	for standing: int in FELT_STANDINGS:
+		for state: Array in FELT_STATES:
+			var expression: Dictionary = _expression(config, bdata, standing, int(state[1]), int(state[2]))
+			var mover: Dictionary = (expression["actor"] as Dictionary).duplicate(true)
+			mover["standing"] = standing
+			mover["fear"] = int(state[1])
+			mover["morale"] = int(state[2])
+			mover["_composure"] = float(expression["composure"])
+			var base: Dictionary = MovementProfileService.derive_profile(mover, capacity_cfg)
+			var profile: Dictionary = live._with_state_steps(base, mover, movement, bdata)
+			var generated: Dictionary = MovementOptionService.generate_options(
+				f2_board["movement_context"] as Dictionary, profile, (f2_board["goals"] as Array)[0] as Dictionary)
+			SpatialTermProbe._say("FELT_F2 standing=%d state=%s base_capacity=%d capacity=%d options=%d" % [
+				standing, str(state[0]), int(base["capacity"]), int(profile["capacity"]), (generated.get("options", []) as Array).size()])
+	SpatialTermProbe._say("### FELT F-3 style score of the forceful route shape at production Judgment, without and with growth")
+	var style_cfg: Dictionary = (bdata["actor"] as Dictionary)["movement_style_weights"] as Dictionary
+	for standing: int in [1, 6, 9]:
+		var expression: Dictionary = _expression(config, bdata, standing, 0, 50)
+		var actor: Dictionary = expression["actor"] as Dictionary
+		var judgment: float = float(expression["judgment"])
+		var growth: Dictionary = BehaviorArbiter.new({}, movement)._style_growth(judgment)
+		var plain: float = MovementStyleService.style_alignment_score("forceful", "advance", actor["vector_scores"] as Dictionary,
+			"", actor.get("traits", {}) as Dictionary, 0.0, "steady", 0.0, 0.0, style_cfg)
+		var grown: float = MovementStyleService.style_alignment_score("forceful", "advance", actor["vector_scores"] as Dictionary,
+			"", actor.get("traits", {}) as Dictionary, 0.0, "steady", 0.0, 0.0, style_cfg, float(growth["vector_mul"]), float(growth["trait_mul"]))
+		SpatialTermProbe._say("FELT_F3 standing=%d judgment=%.3f vector_mul=%.3f trait_mul=%.3f score=%.3f grown=%.3f" % [
+			standing, judgment, float(growth["vector_mul"]), float(growth["trait_mul"]), plain, grown])
+	SpatialTermProbe._say("### FELT F-4 afraid Echo, standing 3, pressed: cells of the chosen route with the switches off and on (stop-short is not modelled here)")
+	var off_movement: Dictionary = movement.duplicate(true)
+	for key: String in ["lean", "steps", "style_growth"]:
+		((off_movement["felt_state"] as Dictionary)[key] as Dictionary)["enabled"] = false
+	var pressed: Array = FELT_STATES[2]
+	var expression: Dictionary = _expression(config, bdata, 3, int(pressed[1]), int(pressed[2]))
+	for arm: Array in [["off", off_movement], ["on", movement]]:
+		var mover: Dictionary = (expression["actor"] as Dictionary).duplicate(true)
+		mover["standing"] = 3
+		mover["fear"] = int(pressed[1])
+		mover["morale"] = int(pressed[2])
+		mover["_composure"] = float(expression["composure"])
+		var base: Dictionary = MovementProfileService.derive_profile(mover, capacity_cfg)
+		var profile: Dictionary = live._with_state_steps(base, mover, arm[1] as Dictionary, bdata)
+		var arm_def: Dictionary = def.duplicate(true)
+		arm_def["capacity"] = int(profile["capacity"])
+		var board: Dictionary = build(arm_def)
+		board["judgment"] = float(expression["judgment"])
+		board["composure"] = float(expression["composure"])
+		board["morale"] = int(pressed[2])
+		SpatialTermProbe._say("FELT_F4 arm=%s capacity=%d cells=%s" % [
+			str(arm[0]), int(profile["capacity"]), _chosen_cells(config, balance, bdata, arm[1] as Dictionary, board, int(pressed[1]))])
