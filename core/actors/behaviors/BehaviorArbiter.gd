@@ -781,7 +781,8 @@ func select_movement_intent(
 
 	var stop_short_vetoes: Array = StopShortContextService.screen(
 		candidates, actor, all_actors, context, movement_context, options,
-		int(profile["capacity"]), Callable(self, "_route_style_of"), _cfg.get("stop_short", {}) as Dictionary)
+		int(profile["capacity"]), Callable(self, "_route_style_of"),
+		StopShortContextService.with_judgment_scale(_cfg.get("stop_short", {}) as Dictionary, _movement_cfg))
 	var spatial_cfg: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
 	for candidate: Dictionary in candidates:
 		var plan: Dictionary = candidate["_movement_plan"] as Dictionary
@@ -1360,10 +1361,11 @@ func _validate_spatial_config() -> Dictionary:
 			var bound: Variant = (block as Dictionary)["fear_lean_bound"]
 			if not (bound is int or bound is float) or not is_finite(float(bound)) or float(bound) < 0.0 or float(bound) > 1.0:
 				return _movement_failure("invalid_exposure_acceptance_fear_lean_bound", "movement_cfg.exposure_acceptance.fear_lean_bound")
-		if (block as Dictionary).has("judgment_floor"):
-			var floor_a: Variant = (block as Dictionary)["judgment_floor"]
-			if not (floor_a is int or floor_a is float) or not is_finite(float(floor_a)) or float(floor_a) < 0.55 or float(floor_a) > 1.0:
-				return _movement_failure("invalid_exposure_acceptance_judgment_floor", "movement_cfg.exposure_acceptance.judgment_floor")
+	var judgment_cfg: Variant = _movement_cfg.get("directive_judgment", {})
+	if not judgment_cfg is Dictionary:
+		return _movement_failure("invalid_directive_judgment_config", "movement_cfg.directive_judgment")
+	if not DirectiveJudgmentScale.is_valid(judgment_cfg as Dictionary):
+		return _movement_failure("invalid_directive_judgment_floor", "movement_cfg.directive_judgment.judgment_floor")
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
 
@@ -1390,11 +1392,9 @@ func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
 
 
 ## Route acceptance of exposure: clamp(D_scaled - fear_lean), with D = Directive
-## `exposure_tolerance` - offset (0.0 when either is absent) and
-## D_scaled = D x (floor + (1 - floor) x (1 - judgment)). The fear lean is NOT scaled.
-## A missing `judgment_floor` scales by 1.0. An EMPTY Directive (enemies, keeper trial)
-## gives 0.0 everywhere and takes no lean. `intent_weights.exposure_acceptance` is not
-## read here; it serves action choice only.
+## `exposure_tolerance` - offset (0.0 when either is absent) and D_scaled = D x the
+## DirectiveJudgmentScale. The fear lean is not scaled. An EMPTY Directive (enemies, keeper
+## trial) gives 0.0 and takes no lean. `intent_weights.exposure_acceptance` is not read here.
 func _exposure_acceptance(directive: Dictionary, fear_lean: float = 0.0, judgment: float = 0.0) -> float:
 	return float(_exposure_acceptance_parts(directive, fear_lean, judgment)["acceptance"])
 
@@ -1404,13 +1404,9 @@ func _exposure_acceptance_parts(directive: Dictionary, fear_lean: float, judgmen
 		return {"D_scaled": 0.0, "F": 0.0, "acceptance": 0.0}
 	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
 	var d: float = 0.0
-	var scale: float = 1.0
-	if block is Dictionary:
-		if directive.has("exposure_tolerance") and (block as Dictionary).has("offset"):
-			d = float(directive["exposure_tolerance"]) - float((block as Dictionary)["offset"])
-		if (block as Dictionary).has("judgment_floor"):
-			var floor_a: float = float((block as Dictionary)["judgment_floor"])
-			scale = floor_a + (1.0 - floor_a) * (1.0 - clampf(judgment, 0.0, 1.0))
+	if block is Dictionary and directive.has("exposure_tolerance") and (block as Dictionary).has("offset"):
+		d = float(directive["exposure_tolerance"]) - float((block as Dictionary)["offset"])
+	var scale: float = DirectiveJudgmentScale.scale(judgment, _movement_cfg.get("directive_judgment", {}) as Dictionary)
 	var d_scaled: float = clampf(d, -1.0, 1.0) * scale
 	return {"D_scaled": d_scaled, "F": fear_lean, "acceptance": clampf(d_scaled - fear_lean, -1.0, 1.0)}
 
@@ -2011,20 +2007,6 @@ static func compute_interpretation_swing(
 	if directive_mul_at_1 <= 0.0:
 		return INF
 	return identity_mul_at_1 / directive_mul_at_1
-
-
-## Swing of the acceptance layer, same convention as `compute_interpretation_swing`: the own
-## side at J = 1 (style alignment is not scaled by J, so 1.0) over the Directive side at
-## J = 1 (`judgment_floor`). A missing floor scales by 1.0, so its swing is 1.0; a floor
-## not above 0 is INF. The own side stays 1.0 only while no Judgment input reaches the
-## style alignment (guard test `acceptance_own_side_has_no_judgment_input`).
-static func compute_acceptance_swing(exposure_acceptance: Dictionary) -> float:
-	if not exposure_acceptance.has("judgment_floor"):
-		return 1.0
-	var floor_a: float = float(exposure_acceptance["judgment_floor"])
-	if floor_a <= 0.0:
-		return INF
-	return 1.0 / floor_a
 
 
 # VOW-001: Apply vow-specific intent bias additively to all candidates.

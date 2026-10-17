@@ -501,9 +501,8 @@ static func _t_exposure_acceptance_never_attractor() -> Dictionary:
 	return { "ok": true }
 
 
-## Slope rule (D-83): the lean must outgrow the Judgment path that fear itself opens.
-## fear_lean_bound / (fear_full - fear_start) >= (1 - floor) x fear_pressure_weight x max|D| / 100,
-## and the total bound fear_lean_bound >= (1 - floor) x fpw x max|D|, and the rise before fear_start, (1 - floor) x fpw x fear_start / 100 x max|D|, stays within 0.01.
+## Slope rule: the fear lean must outgrow the Judgment path that fear itself opens: per fear point, and in total.
+## The rise before fear_start must stay small.
 static func _fear_rule_error(bound: float, floor_a: float, pressure: float, start: float, full: float, max_d: float) -> String:
 	var judgment_slope: float = (1.0 - floor_a) * pressure * max_d / 100.0
 	if bound / (full - start) < judgment_slope:
@@ -522,6 +521,7 @@ static func _t_fear_lean_bound_exceeds_fear_judgment_path() -> Dictionary:
 		return { "ok": false, "error": "could not load production balance.json" }
 	var data: Dictionary = cs.get_balance()["data"]
 	var block: Dictionary = data["combat"]["movement"]["exposure_acceptance"]
+	var floor_a: float = float(data["combat"]["movement"]["directive_judgment"]["judgment_floor"])
 	var pressure: float = float(data["maturity_expression"]["autonomy_outputs"]["judgment"]["fear_pressure_weight"])
 	var ramps: Dictionary = data["stages"]["party_stance"]["state_ramps"]
 	var max_d := 0.0
@@ -532,13 +532,13 @@ static func _t_fear_lean_bound_exceeds_fear_judgment_path() -> Dictionary:
 		return { "ok": false, "error": "no Directive carries exposure_tolerance" }
 	var start: float = float(ramps["fear_start"])
 	var full: float = float(ramps["fear_full"])
-	var error: String = _fear_rule_error(float(block["fear_lean_bound"]), float(block["judgment_floor"]), pressure, start, full, max_d)
+	var error: String = _fear_rule_error(float(block["fear_lean_bound"]), floor_a, pressure, start, full, max_d)
 	if not error.is_empty():
 		return { "ok": false, "error": error }
-	var path: float = (1.0 - float(block["judgment_floor"])) * pressure * max_d
+	var path: float = (1.0 - floor_a) * pressure * max_d
 	var too_small_values: Array = [0.9 * path / 100.0 * (full - start), 0.9 * path]
 	for too_small: float in too_small_values:
-		if _fear_rule_error(too_small, float(block["judgment_floor"]), pressure, start, full, max_d).is_empty():
+		if _fear_rule_error(too_small, floor_a, pressure, start, full, max_d).is_empty():
 			return { "ok": false, "error": "the rule accepted a bound %s below its limit" % too_small }
 	return { "ok": true }
 
@@ -548,12 +548,17 @@ static func _t_judgment_floors_at_least_half() -> Dictionary:
 	if not cs.load_balance():
 		return { "ok": false, "error": "could not load production balance.json" }
 	var data: Dictionary = cs.get_balance()["data"]
-	var floors: Dictionary = { "combat.movement.exposure_acceptance.judgment_floor": (data["combat"]["movement"]["exposure_acceptance"] as Dictionary).get("judgment_floor", null) }
-	var stop_directive: Variant = ((data["actor"] as Dictionary).get("stop_short", {}) as Dictionary).get("directive", {})
-	if stop_directive is Dictionary and (stop_directive as Dictionary).has("judgment_floor"):
-		floors["actor.stop_short.directive.judgment_floor"] = (stop_directive as Dictionary)["judgment_floor"]
-	for path: String in floors:
-		var value: Variant = floors[path]
-		if not (value is float or value is int) or float(value) < 0.55 or float(value) > 1.0:
-			return { "ok": false, "error": "%s = %s is missing or outside [0.55, 1]" % [path, str(value)] }
+	var block: Dictionary = data["combat"]["movement"]["directive_judgment"]
+	var floor_min: Variant = block.get("judgment_floor_min", null)
+	var value: Variant = block.get("judgment_floor", null)
+	if not (floor_min is float or floor_min is int) or float(floor_min) <= 0.0 or float(floor_min) > 1.0:
+		return { "ok": false, "error": "judgment_floor_min = %s is missing or outside (0, 1]" % str(floor_min) }
+	if not (value is float or value is int) or float(value) < float(floor_min) or float(value) > 1.0:
+		return { "ok": false, "error": "judgment_floor = %s is missing or outside [%s, 1]" % [str(value), str(floor_min)] }
+	for stale: Array in [["combat", "movement", "exposure_acceptance"], ["actor", "stop_short", "directive"]]:
+		var node: Dictionary = data
+		for key: String in stale:
+			node = node.get(key, {}) as Dictionary
+		if node.has("judgment_floor"):
+			return { "ok": false, "error": "a second judgment_floor key exists under %s" % "/".join(stale) }
 	return { "ok": true }

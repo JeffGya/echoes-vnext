@@ -27,6 +27,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_char/degenerate_weights_warn_only", Callable(DirectiveCharacterizationTests, "_t_degenerate_weights_warn_only"))
 	runner.register_test("directive_char/picker_description_matches_config", Callable(DirectiveCharacterizationTests, "_t_picker_description"))
 	runner.register_test("directive_char/synthetic_directive_reaches_acceptance", Callable(DirectiveCharacterizationTests, "_t_synthetic_directive_reaches_acceptance"))
+	runner.register_test("directive_char/synthetic_directive_reaches_stop_cause", Callable(DirectiveCharacterizationTests, "_t_synthetic_directive_reaches_stop_cause"))
 	runner.register_test("directive_char/no_directive_id_literal_in_core", Callable(DirectiveCharacterizationTests, "_t_no_id_literal_in_core"))
 
 
@@ -223,7 +224,7 @@ static func _t_third_drives_bids_and_approach() -> Dictionary:
 	return { "ok": true }
 
 
-# A data-only Directive (D-14): a new tolerance reaches route acceptance with no logic change.
+# A data-only Directive: a new tolerance reaches route acceptance with no logic change.
 static func _t_synthetic_directive_reaches_acceptance() -> Dictionary:
 	var cs := ConfigService.new()
 	if not cs.load_balance():
@@ -241,6 +242,30 @@ static func _t_synthetic_directive_reaches_acceptance() -> Dictionary:
 	var got: float = float((parts["parts"] as Dictionary)["directive_exposure_acceptance"])
 	if not is_equal_approx(got, expected):
 		return { "ok": false, "error": "synthetic tolerance 0.65 gave term %s, expected %s" % [got, expected] }
+	return { "ok": true }
+
+
+# Same for the stop cause, through the real screen.
+static func _t_synthetic_directive_reaches_stop_cause() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load balance.json" }
+	var third := _third_entry(ConfigService.get_directives_cfg(cs))
+	third["exposure_tolerance"] = 0.5
+	var cfg: Dictionary = StopShortContextService.with_judgment_scale(
+		cs.get_balance()["data"]["actor"]["stop_short"] as Dictionary,
+		cs.get_balance()["data"]["combat"]["movement"] as Dictionary).duplicate(true)
+	cfg["enabled"] = true
+	var cands: Array = [StopShortWiringTests._candidate("option.a.conservative")]
+	var vetoes: Array = StopShortContextService.screen(
+		cands, StopShortWiringTests._actor({ "fear": 0 }), StopShortWiringTests._hostiles(5),
+		{ "calling_family": "", "judgment": 0.0, "directive": third },
+		{ "relationships": { "enemy_1": "hostile" } }, [], 2, Callable(StopShortWiringTests, "_style_of"), cfg)
+	if not vetoes.is_empty() or cands.size() != 1:
+		return { "ok": false, "error": "the synthetic Directive did not give a legal stop: %s" % str(vetoes) }
+	var tag: Dictionary = StopShortContextService.trace_tag(cands[0] as Dictionary)
+	if str(tag.get("cause_id", "")) != "directive" or not is_equal_approx(float((cands[0]["_stop_short"] as Dictionary)["strength"]), 0.5):
+		return { "ok": false, "error": "wrong tag or strength: %s" % str(cands[0]) }
 	return { "ok": true }
 
 

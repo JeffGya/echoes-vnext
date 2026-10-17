@@ -1,16 +1,10 @@
 # res://tools/ExposureChoiceBoards.gd
 #
-# INVESTIGATION TOOL — not a test. Run with `-- tests spatialprobe boards`; prints, never asserts.
-#
-# Each board is an Echo with an exposed route and an unexposed route of near-equal progress.
-# Options come from MovementOptionService.generate_options; the context comes from
-# CombatTurnContextService.build_turn_context; the choice comes from select_movement_intent
-# (the path of movement_arbiter/fear_lean_reaches_arbiter_through_turn_context).
-#
-# The generator gives two routes to ONE destination the same objective_progress, so every board
-# compares two destinations of equal or near-equal progress. The flip sweep then moves the
-# progress of the exposed (E) options only; that edit is the one hand-made value in this tool.
-# Config is read, never written. Refusal is not modelled (the arbiter is called directly).
+# INVESTIGATION TOOL, not a test. Run with `-- tests spatialprobe boards`; prints, never asserts.
+# Each board is an Echo with an exposed route (E) and an unexposed route (U) of near-equal
+# progress, built through the production path (generate_options, build_turn_context,
+# select_movement_intent). The flip sweep moves the progress of the E options only: the one
+# hand-made value. Config is read, never written. Refusal is not modelled.
 
 class_name ExposureChoiceBoards
 extends RefCounted

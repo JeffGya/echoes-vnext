@@ -1,12 +1,8 @@
 # res://tools/ExposureCaptureArbiter.gd
 #
-# INVESTIGATION TOOL — not a test. A BehaviorArbiter that records every scored candidate of
-# one select_movement_intent pass, so the log and the chosen move come from the same pass.
-#
-# `_apply_guidance` runs after every score term (spatial, style, vow, bond) and before the
-# sort, so the snapshot taken there is the score the sort compares. Purifier overrides and the
-# legacy purifier candidate come later and are not recorded (no purifier in a probe board).
-# Behaviour is unchanged: the override calls `super` and only reads.
+# INVESTIGATION TOOL, not a test. Records every scored candidate of one select_movement_intent
+# pass. The snapshot is taken in `_apply_guidance`, after all score terms and before the sort.
+# Purifier overrides come later and are not recorded. The override only reads.
 
 class_name ExposureCaptureArbiter
 extends BehaviorArbiter

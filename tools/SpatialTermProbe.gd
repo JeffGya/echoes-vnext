@@ -26,7 +26,7 @@
 #           chosen move; decision pass only. Example: `scout,fear=50,parts`
 #   boards  run only the fixture boards of tools/ExposureChoiceBoards.gd (no fights)
 #   fear=N  every Echo starts with fear N and fear_base min(N, 40); keep N below the lowest
-#           refusal threshold or the Echoes refuse (a warning line says so). Try 0, 20, 45, 60.
+#           refusal threshold or the Echoes refuse (a warning line says so).
 # Tokens combine with commas, and `<spatial_utility key>=<float>` sweeps a weight to any value:
 #   seek,directive_exposure_acceptance_weight=20
 #

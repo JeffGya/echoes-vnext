@@ -1129,7 +1129,7 @@ static func _t_afraid_seek_still_cost_not_ban() -> Dictionary:
 		var value: float = float(_accept_parts(arbiter, cfg, seek, afraid, j)["acceptance"])
 		if value <= -0.05:
 			return _fail("a frightened Seek Echo must hesitate, not refuse; acceptance %s at J %s" % [value, j])
-		var scale: float = 1.0 if j == 0.0 else float(block["judgment_floor"])
+		var scale: float = 1.0 if j == 0.0 else _floor_a(movement)
 		var want: float = d * scale - float(block["fear_lean_bound"])
 		if value < 0.0 or not is_equal_approx(value, want):
 			return _fail("frightened Seek acceptance %s at J %s, expected %s (at or above 0)" % [value, j, want])
@@ -1156,8 +1156,8 @@ static func _t_fear_lean_missing_key_is_zero() -> Dictionary:
 	return _pass()
 
 
-## D-75: an empty Directive (enemies, keeper trial) takes no lean. A non-empty one without a
-## tolerance has D = 0 and still takes the lean (design test J6).
+## An empty Directive (enemies, keeper trial) takes no lean. A non-empty one without a
+## tolerance has D = 0 and still takes the lean.
 static func _t_fear_lean_needs_a_directive() -> Dictionary:
 	var movement: Dictionary = _shipped_movement_and_directives()["movement"] as Dictionary
 	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
@@ -1323,7 +1323,7 @@ static func _scout_seek() -> Array:
 
 
 static func _floor_a(movement: Dictionary) -> float:
-	return float((movement["exposure_acceptance"] as Dictionary)["judgment_floor"])
+	return float((movement["directive_judgment"] as Dictionary)["judgment_floor"])
 
 
 static func _t_acceptance_falls_with_judgment() -> Dictionary:
@@ -1426,15 +1426,15 @@ static func _t_acceptance_growth_anchor_and_edge() -> Dictionary:
 	return _pass()
 
 
-## The four Echoes of design 2a, step by step. Expected values come from the config keys and
-## the formula written out here, not from the arbiter.
+## Step by step. Expected values come from the config keys and the formula written out here,
+## not from the arbiter.
 static func _t_acceptance_order_of_operations() -> Dictionary:
 	var movement: Dictionary = _shipped_movement_and_directives()["movement"] as Dictionary
 	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
 	var ramps: Dictionary = _shipped_ramps()
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var block: Dictionary = movement["exposure_acceptance"] as Dictionary
-	var floor_a: float = float(block["judgment_floor"])
+	var floor_a: float = _floor_a(movement)
 	var bound: float = float(block["fear_lean_bound"])
 	var pair: Array = _scout_seek()
 	var cases: Array = [[0.2, 0], [0.85, 0], [0.025, 70], [0.675, 70]]
@@ -1474,30 +1474,31 @@ static func _t_acceptance_swing_within_declared_budget() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
 	var data: Dictionary = cs.get_balance()["data"] as Dictionary
-	var block: Dictionary = ((data["combat"] as Dictionary)["movement"] as Dictionary)["exposure_acceptance"] as Dictionary
+	var block: Dictionary = ((data["combat"] as Dictionary)["movement"] as Dictionary)["directive_judgment"] as Dictionary
 	var swing_max: float = float(((data["maturity_expression"] as Dictionary)["interpretation_swing_max"] as Dictionary).get("value", 0.0))
 	if swing_max <= 0.0 or not block.has("judgment_floor"):
 		return _fail("fixture broken: swing_max %s, judgment_floor present %s" % [swing_max, block.has("judgment_floor")])
-	var swing: float = BehaviorArbiter.compute_acceptance_swing(block)
+	var swing: float = DirectiveJudgmentScale.swing(block)
 	if swing > swing_max:
-		return _fail("acceptance swing %s exceeds interpretation_swing_max %s" % [swing, swing_max])
+		return _fail("Directive Judgment swing %s exceeds interpretation_swing_max %s" % [swing, swing_max])
 	if not is_equal_approx(swing, 1.0 / float(block["judgment_floor"])):
-		return _fail("compute_acceptance_swing must be 1 / judgment_floor, got %s" % swing)
-	if BehaviorArbiter.compute_acceptance_swing({}) != 1.0:
+		return _fail("the swing must be 1 / judgment_floor, got %s" % swing)
+	if DirectiveJudgmentScale.swing({}) != 1.0:
 		return _fail("a missing judgment_floor scales by 1.0, so its swing must read 1.0")
-	if BehaviorArbiter.compute_acceptance_swing({"judgment_floor": 0.0}) != INF:
+	if DirectiveJudgmentScale.swing({"judgment_floor": 0.0}) != INF:
 		return _fail("a floor of 0 must read as an unbounded swing")
 	return _pass()
 
 
 static func _t_judgment_floor_validated_and_neutral_when_missing() -> Dictionary:
 	var movement: Dictionary = (_shipped_movement_and_directives()["movement"] as Dictionary).duplicate(true)
-	var block: Dictionary = movement["exposure_acceptance"] as Dictionary
-	for bad: Variant in [NAN, INF, -INF, "0.6", null, 0.5, 0.54, 1.01, 0.0, -0.6]:
+	var block: Dictionary = movement["directive_judgment"] as Dictionary
+	var floor_min: float = float(block["judgment_floor_min"])
+	for bad: Variant in [NAN, INF, -INF, "0.6", null, floor_min - 0.01, 1.01, 0.0, -0.6]:
 		block["judgment_floor"] = bad
 		if bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
 			return _fail("judgment_floor %s was accepted" % str(bad))
-	for good: Variant in [0.55, 0.6, 1, 1.0]:
+	for good: Variant in [floor_min, 0.6, 1, 1.0]:
 		block["judgment_floor"] = good
 		if not bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
 			return _fail("judgment_floor %s was rejected" % str(good))
@@ -1506,8 +1507,9 @@ static func _t_judgment_floor_validated_and_neutral_when_missing() -> Dictionary
 	var seek: Dictionary = _scout_seek()[1] as Dictionary
 	if not bool(arbiter._validate_spatial_config()["valid"]):
 		return _fail("a block without judgment_floor must stay valid")
+	var offset: float = float((movement["exposure_acceptance"] as Dictionary)["offset"])
 	for j: float in [0.0, 0.5, 1.0]:
-		if not is_equal_approx(arbiter._exposure_acceptance(seek, 0.0, j), float(seek["exposure_tolerance"]) - float(block["offset"])):
+		if not is_equal_approx(arbiter._exposure_acceptance(seek, 0.0, j), float(seek["exposure_tolerance"]) - offset):
 			return _fail("a missing judgment_floor must scale by 1.0 (J %s)" % j)
 	return _pass()
 
@@ -1552,11 +1554,9 @@ static func _t_fear_lean_not_scaled_by_judgment() -> Dictionary:
 	return _pass()
 
 
-## F5 across Judgment, with the window derived from config. Fear lowers Judgment (fear_pressure_weight
-## x fear / 100), which raises the Directive scale a little. The lean grows by bound / (full - start)
-## per fear point from fear_start; the Judgment path grows by at most (1 - floor) x fpw x max|D| / 100
-## per point. From the first fear point where the lean outgrows the Judgment path to fear_full, acceptance
-## never rises; past fear_full the lean is flat, so it may rise by the Judgment path slope per point. Before it, the total rise over calm stays within (1 - floor) x fpw x fear_start / 100 x max|D|.
+## More fear never raises acceptance across Judgment, with the window derived from config. Fear lowers
+## Judgment, which raises the Directive scale a little. From fear_start to fear_full the lean outgrows
+## that rise; past fear_full the lean is flat and acceptance may rise by the Judgment path slope.
 static func _t_more_fear_never_more_accepting_across_judgment() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
@@ -1572,7 +1572,7 @@ static func _t_more_fear_never_more_accepting_across_judgment() -> Dictionary:
 	var max_d := 0.0
 	for directive_value: Variant in _scout_seek():
 		max_d = maxf(max_d, absf(float((directive_value as Dictionary)["exposure_tolerance"]) - float(block["offset"])))
-	var judgment_slope: float = (1.0 - float(block["judgment_floor"])) * pressure * max_d / 100.0
+	var judgment_slope: float = (1.0 - _floor_a(movement)) * pressure * max_d / 100.0
 	var lean_slope: float = float(block["fear_lean_bound"]) / (full - start)
 	if lean_slope < judgment_slope:
 		return _fail("the lean slope %s never overtakes the Judgment path slope %s" % [lean_slope, judgment_slope])
@@ -1621,7 +1621,7 @@ static func _t_acceptance_own_side_has_no_judgment_input() -> Dictionary:
 				continue
 			var lower: String = code.to_lower()
 			if lower.contains("judgment") or lower.contains("interpretation"):
-				return _fail("%s reads Judgment, so the own-side multiplier of compute_acceptance_swing is no longer 1.0: %s" % [name, code])
+				return _fail("%s reads Judgment, so the own-side multiplier of DirectiveJudgmentScale.swing is no longer 1.0: %s" % [name, code])
 	return _pass()
 
 
@@ -1679,7 +1679,8 @@ static func _t_judgment_reaches_acceptance_through_actor_state_machine() -> Dict
 		if found.is_empty():
 			return _fail("rank %d: ActorStateMachine produced no route candidate with acceptance_parts" % rank)
 		var j: float = float(actor["_judgment"])
-		var want: float = d * (float(block["judgment_floor"]) + (1.0 - float(block["judgment_floor"])) * (1.0 - j))
+		var floor_a: float = _floor_a(movement)
+		var want: float = d * (floor_a + (1.0 - floor_a) * (1.0 - j))
 		if not is_equal_approx(float(found["D_scaled"]), want):
 			return _fail("rank %d: D_scaled %s, wanted %s from the Echo's own Judgment %s" % [rank, found["D_scaled"], want, j])
 		scaled.append(absf(float(found["D_scaled"])))
@@ -1722,7 +1723,7 @@ static func _shared_fear_ramp(fear: float) -> float:
 	return preload("res://core/movement/StagePartyStance.gd").fear_ramp(fear, _shipped_ramps())
 
 
-## Combat code may read only the two shared ramp keys of the stage block (C14, narrowed).
+## Combat code may read only the two shared ramp keys of the stage block.
 static func _t_stage_bound_not_read_in_combat() -> Dictionary:
 	var hits: Array = []
 	var scanned := {"files": 0}

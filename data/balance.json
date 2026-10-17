@@ -28,7 +28,7 @@
 				"target_preference": { "intel": 1.4, "objective": 1.2, "combat": 0.4, "reward": 1.2 },
 				"precise_intel_bias": 25,
 				"exposure_tolerance": 0.3,
-				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Stage: read by StagePartyStance and bent by data.stages.party_stance (D-05). Combat: BehaviorArbiter reads this raw value, unbent, as route acceptance = exposure_tolerance - data.combat.movement.exposure_acceptance.offset (D-69 Q1).",
+				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Stage: read by StagePartyStance and bent by data.stages.party_stance. Combat: read raw (not bent) by BehaviorArbiter (acceptance, with data.combat.movement.exposure_acceptance.offset) and by StopShortService (Directive cause base, 1 - tolerance).",
 				"escape_bonus": 20,
 				"intel_retention": true,
 				"intel_retention_bonus": 1.5,
@@ -41,7 +41,7 @@
 				"id": "directive.seek_signs",
 				"label": "Seek Signs",
 				"description": "There is much to discover. Push ahead, stay alert but beware the danger. Wanting too much can cost.",
-				"_comment_intent_exposure_acceptance": "intent_weights.exposure_acceptance serves action choice only (melee, guard, idle rows). Route scoring reads exposure_tolerance, offset by data.combat.movement.exposure_acceptance.offset, since D-69.",
+				"_comment_intent_exposure_acceptance": "intent_weights.exposure_acceptance serves action choice only. Route scoring reads exposure_tolerance.",
 				"intent_weights": {
 					"clue_seeking_priority": 0.40,
 					"reporting_priority":    0.30,
@@ -64,7 +64,7 @@
 				"target_preference": { "intel": 0.9, "objective": 1.6, "combat": 1.4, "reward": 0.9 },
 				"precise_intel_bias": 75,
 				"exposure_tolerance": 0.8,
-				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Stage: read by StagePartyStance and bent by data.stages.party_stance (D-05). Combat: BehaviorArbiter reads this raw value, unbent, as route acceptance = exposure_tolerance - data.combat.movement.exposure_acceptance.offset (D-69 Q1).",
+				"_comment_exposure_tolerance": "PROPOSED DEFAULT. Stage: read by StagePartyStance and bent by data.stages.party_stance. Combat: read raw (not bent) by BehaviorArbiter (acceptance, with data.combat.movement.exposure_acceptance.offset) and by StopShortService (Directive cause base, 1 - tolerance).",
 				"escape_bonus": 0,
 				"intel_retention": false,
 				"intel_retention_bonus": 1.0,
@@ -323,7 +323,7 @@
 				"rival_protect_penalty": -10.0
 			},
 			"stop_short": {
-				"_comment": "Stop-short (movement-model 7.5; decisions.md #108). Starting values; the designer sets every number. The enabled flag switches the feature; cell_search.enabled switches the stop-cell search. Fear and low morale favour guard only.",
+				"_comment": "Stop-short (movement-model 7.5; decisions.md #108). Starting values; the designer sets every number. The enabled flag switches the feature; cell_search.enabled switches the stop-cell search. Fear and low morale favour guard only. The directive block sets the Directive cause: strength = (1 - exposure_tolerance) x affinity x the shared Judgment scale (data.combat.movement.directive_judgment). It is the last cause, so fear or identity wins a tie.",
 				"enabled": true,
 				"stop_short_weight": 6.0,
 				"min_cause_strength": 0.15,
@@ -349,6 +349,10 @@
 						"devoted": { "hold": 0.5 },
 						"protector": { "guard": 0.5 }
 					}
+				},
+				"directive": {
+					"_comment": "PROPOSED DEFAULT. affinity[benefit] weights the Directive cause for each stop benefit.",
+					"affinity": { "guard": 1.0, "hold": 0.8, "observe": 0.3 }
 				},
 				"guard": { "hostile_reach_extra": 1, "min_def": 1 },
 				"observe": { "marked_strength": 5, "mark_rounds": 1 },
@@ -1221,12 +1225,12 @@
 				"whole": 95
 			},
 			"identity_weight_scale": {
-				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus, scaled by interpretation_width (V2-PROG-012 Phase 6, derived from autonomy_outputs.judgment below — NOT rank_strength; see BehaviorArbiter._score()'s doc comment on the identity-weight-scaling block). At interpretation_width=0.0 multiplier=1.0x; at interpretation_width=1.0 multiplier=1.0+scale. Paired with directive_interpretation_mul below as the two halves of the action-layer budgeted axis (the acceptance layer has its own floor, combat.movement.exposure_acceptance.judgment_floor, under the same budget) — see interpretation_swing_max's _comment for the identity:directive ratio these two blocks are jointly checked against (config-integrity test: tests/BehaviorArbiterTests.gd). V2-PROG-012 Phase 6 Item 2: lowered from 0.6/0.6 (the pre-fix DEFECT 2 value) to 0.35/0.35 — PROPOSED DEFAULT, chosen to fit inside interpretation_swing_max: (1.0+0.35)/directive_interpretation_mul.low(0.75) = 1.80 <= 2.0. 0.6 would give (1.0+0.6)/0.75 = 2.13 > 2.0, failing the budget.",
+				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus, scaled by interpretation_width (V2-PROG-012 Phase 6, derived from autonomy_outputs.judgment below — NOT rank_strength; see BehaviorArbiter._score()'s doc comment on the identity-weight-scaling block). At interpretation_width=0.0 multiplier=1.0x; at interpretation_width=1.0 multiplier=1.0+scale. Paired with directive_interpretation_mul below as the two halves of ONE budgeted axis — see interpretation_swing_max's _comment for the identity:directive ratio these two blocks are jointly checked against (config-integrity test: tests/BehaviorArbiterTests.gd). V2-PROG-012 Phase 6 Item 2: lowered from 0.6/0.6 (the pre-fix DEFECT 2 value) to 0.35/0.35 — PROPOSED DEFAULT, chosen to fit inside interpretation_swing_max: (1.0+0.35)/directive_interpretation_mul.low(0.75) = 1.80 <= 2.0. 0.6 would give (1.0+0.6)/0.75 = 2.13 > 2.0, failing the budget. The acceptance layer and the Directive stop cause share one floor under the same budget (data.combat.movement.directive_judgment).",
 				"trait": 0.35,
 				"vector": 0.35
 			},
 			"interpretation_swing_max": {
-				"_comment": "V2-PROG-012 Phase 6 Item 2: PROPOSED DEFAULT. The declared budget on the identity:directive ratio at interpretation_width=1.0 (BehaviorArbiter.compute_interpretation_swing(identity_weight_scale, directive_interpretation_mul) — see that function's doc comment for the exact formula). This is the mechanism that stops DEFECT 2 recurring: identity_weight_scale and directive_interpretation_mul are authored in two separate blocks with no knowledge of each other, so nothing previously stopped them being tuned independently into an unbudgeted combined swing (the pre-fix values, trait/vector 0.6 against directive_band_mul's whole=0.75, gave a ratio of 2.13 with no budget checking it at all). A config-integrity test (tests/BehaviorArbiterTests.gd) FAILS if the authored ratio exceeds this value — any future tuning pass that raises identity_weight_scale or lowers directive_interpretation_mul.low without also raising this budget to match will fail loudly instead of silently drifting. 2.0 is not derived from a specific playtest measurement (no combat-feel target has been ratified yet) — it is a round-number ceiling comfortably above the fitted default (1.80) that still meaningfully constrains future tuning. Two tests read this value: arbiter/interpretation_swing_within_declared_budget (action layer, tests/BehaviorArbiterTests.gd) and movement_arbiter/acceptance_swing_within_declared_budget (acceptance layer, 1 / combat.movement.exposure_acceptance.judgment_floor, tests/MovementArbitrationTests.gd).",
+				"_comment": "V2-PROG-012 Phase 6 Item 2: PROPOSED DEFAULT. The declared budget on the identity:directive ratio at interpretation_width=1.0 (BehaviorArbiter.compute_interpretation_swing(identity_weight_scale, directive_interpretation_mul) — see that function's doc comment for the exact formula). This is the mechanism that stops DEFECT 2 recurring: identity_weight_scale and directive_interpretation_mul are authored in two separate blocks with no knowledge of each other, so nothing previously stopped them being tuned independently into an unbudgeted combined swing (the pre-fix values, trait/vector 0.6 against directive_band_mul's whole=0.75, gave a ratio of 2.13 with no budget checking it at all). A config-integrity test (tests/BehaviorArbiterTests.gd) FAILS if the authored ratio exceeds this value — any future tuning pass that raises identity_weight_scale or lowers directive_interpretation_mul.low without also raising this budget to match will fail loudly instead of silently drifting. 2.0 is not derived from a specific playtest measurement (no combat-feel target has been ratified yet) — it is a round-number ceiling comfortably above the fitted default (1.80) that still meaningfully constrains future tuning. The swing of data.combat.movement.directive_judgment is checked against this value too.",
 				"value": 2.0
 			},
 			"autonomy_outputs": {
@@ -1323,7 +1327,7 @@
 				"identity_vector_bonus": 1
 			},
 			"directive_interpretation_mul": {
-				"_comment": "V2-PROG-012 Phase 6 (DEFECT 2 fix): REPLACES the old per-band directive_band_mul table (nascent 1.30 / forming 1.10 / grounded 0.90 / whole 0.75) with a continuous lerp over interpretation_width (derived from autonomy_outputs.judgment below, NOT expression_band/rank — see BehaviorArbiter._directive_bonus()'s doc comment). dir_mul = lerp(high, low, interpretation_width): low judgment (width near 0.0) follows the directive most literally (mul near `high`); high judgment (width near 1.0) weighs it least (mul near `low`). `low`/`high` are the SAME endpoints the old table used at its extremes (nascent==high, whole==low) so the shape at the boundaries is unchanged — only the middle is now continuous instead of stepped, which also fixes band_by_standing's rank 6-9 saturation (ranks above 5 all read \"whole\" and would otherwise plateau at `low` regardless of how much higher judgment climbs). directive_band_mul is REMOVED outright (not kept as a dead documented-equivalence table) — a per-band table gated on expression_band is exactly the mechanism this fix retires. Old per-band table is documented HERE only as the historical reference for `low`/`high`, not read anywhere. A second Directive-Judgment curve exists: the acceptance scale (combat.movement.exposure_acceptance.judgment_floor), a linear floor + (1 - floor) x (1 - J) kept separate from this lerp on purpose.",
+				"_comment": "V2-PROG-012 Phase 6 (DEFECT 2 fix): REPLACES the old per-band directive_band_mul table (nascent 1.30 / forming 1.10 / grounded 0.90 / whole 0.75) with a continuous lerp over interpretation_width (derived from autonomy_outputs.judgment below, NOT expression_band/rank — see BehaviorArbiter._directive_bonus()'s doc comment). dir_mul = lerp(high, low, interpretation_width): low judgment (width near 0.0) follows the directive most literally (mul near `high`); high judgment (width near 1.0) weighs it least (mul near `low`). `low`/`high` are the SAME endpoints the old table used at its extremes (nascent==high, whole==low) so the shape at the boundaries is unchanged — only the middle is now continuous instead of stepped, which also fixes band_by_standing's rank 6-9 saturation (ranks above 5 all read \"whole\" and would otherwise plateau at `low` regardless of how much higher judgment climbs). directive_band_mul is REMOVED outright (not kept as a dead documented-equivalence table) — a per-band table gated on expression_band is exactly the mechanism this fix retires. Old per-band table is documented HERE only as the historical reference for `low`/`high`, not read anywhere. The shared scale in data.combat.movement.directive_judgment is a separate linear curve on purpose.",
 				"low": 0.75,
 				"high": 1.30
 			},
@@ -1694,12 +1698,16 @@
 				}
 			},
 			"movement": {
-				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. (1) directive_exposure_acceptance_weight (V2-DIRECTIVE-002 phase D slice 1): the term is weight x acceptance x exposure, and acceptance = (directive.exposure_tolerance - exposure_acceptance.offset) x the Judgment scale (judgment_floor + (1 - judgment_floor) x (1 - J)), minus the fear lean (Scout -0.2 and Seek +0.3 before the scale and the lean), read from the active Directive entry. directive.intent_weights.exposure_acceptance no longer feeds this term; it still feeds action choice. Then fear lowers acceptance by fear_lean_bound x ramp(fear) (slice 2, D-75): a Directive with no exposure_tolerance has D = 0 and still takes the lean; an empty Directive gives acceptance 0. The value 17.0 is PROPOSED DEFAULT (D-73); the phase D probe sweep checks it. Keep weight x max acceptance below abs(exposure_weight). (2) exposure is a fraction in a fight: _exposure divides controlled edges by the route length, so a one-cell route gives 0 or 1 and a longer route can give 0.5. Older measurements and sweeps: docs/stories/v2-combat-003/handoff.md section 22 (weight then inert). All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
+				"_comment_spatial_utility": "This note is OUTSIDE spatial_utility because BehaviorArbiter._validate_spatial_config rejects any key that is not a weight, and a rejected key discards the whole board. V2-COMBAT-003 phase 10 measured every weight in that block. (1) directive_exposure_acceptance_weight: the term is weight x acceptance x exposure. Acceptance comes from the Directive exposure_tolerance, exposure_acceptance (offset, fear lean) and directive_judgment, not from intent_weights.exposure_acceptance. An empty Directive gives acceptance 0. Keep weight x max acceptance below abs(exposure_weight). (2) Exposure is a fraction in a fight: _exposure divides controlled edges by the route length. Older measurements: docs/stories/v2-combat-003/handoff.md section 22. All values PROPOSED DEFAULT. (3) V2-COMBAT-003.5 Phase 3c fix, decisions #33/#35, both PROPOSED DEFAULT: urgency_progress_gain multiplies the objective_progress term by (1 + gain x urgency), so closing distance outranks manners when the goal is time-pressured; cap was raised 20.0 -> 28.0 so that amplified progress term is not clipped away by the cap it now reaches.",
 				"exposure_acceptance": {
-					"_comment": "PROPOSED DEFAULT. Sibling of spatial_utility so the closed spatial_utility schema stays unchanged. offset: combat acceptance of exposure = Directive exposure_tolerance - offset (D-69 Q1). 0.5 sits between the shipped tolerances 0.3 and 0.8. A missing block gives acceptance 0. fear_lean_bound (slice 2, D-70 J2 B, D-71 O1): acceptance falls by fear_lean_bound x ramp(max(fear, fear_base)); the ramp is data.stages.party_stance.state_ramps fear_start to fear_full, the only stage keys combat reads. Combat owns this bound; it does not read stages.party_stance.bounds. A missing key gives no fear lean. Upper limit: (Seek tolerance - offset) x judgment_floor, about 0.18 at floor 0.6 and 0.165 at floor 0.55 (a larger bound lets a frightened seasoned Seek Echo go below 0; D-71, D-76). Lower limit (D-83 slope rule): bound / (fear_full - fear_start) must stay at or above (1 - judgment_floor) x fear_pressure_weight x max abs(tolerance - offset) / 100, and the rise before fear_start stays within 0.01 (test directive_cfg/fear_lean_bound_exceeds_fear_judgment_path). judgment_floor (slice 3, D-70 J2 C, D-72): the Directive part of acceptance D is scaled by judgment_floor + (1 - judgment_floor) x (1 - J), where J is the Judgment the arbiter already reads (interpretation_width). The fear lean is SUBTRACTED after the scale and is not scaled. A missing key scales by 1.0. Allowed 0.55 to 1.0 (D-83); proposed range 0.55 to 0.6. The swing 1 / judgment_floor must stay at or under data.maturity_expression.interpretation_swing_max.value (test movement_arbiter/acceptance_swing_within_declared_budget).",
+					"_comment": "PROPOSED DEFAULT. Sibling of spatial_utility so the closed spatial_utility schema stays unchanged. offset: acceptance of exposure = Directive exposure_tolerance - offset. A missing block gives acceptance 0. fear_lean_bound: acceptance falls by fear_lean_bound x ramp(max(fear, fear_base)), with the ramp from data.stages.party_stance.state_ramps; combat does not read the stage bounds. A missing key gives no fear lean. The fear lean is not scaled by Judgment. Limits on fear_lean_bound are enforced by the fear_lean_bound tests in tests/DirectiveConfigTests.gd.",
 					"offset": 0.5,
-					"fear_lean_bound": 0.12,
-					"judgment_floor": 0.6
+					"fear_lean_bound": 0.12
+				},
+				"directive_judgment": {
+					"_comment": "PROPOSED DEFAULT. One Judgment scale for Directive influence, read by exposure acceptance (BehaviorArbiter) and by the Directive stop cause (StopShortService): scale = judgment_floor + (1 - judgment_floor) x (1 - J). judgment_floor must be in [judgment_floor_min, 1]; a missing floor scales by 1. The swing 1 / judgment_floor must stay at or under data.maturity_expression.interpretation_swing_max.value.",
+					"judgment_floor": 0.6,
+					"judgment_floor_min": 0.55
 				},
 				"spatial_utility": {
 					"cap": 28.0,
@@ -3111,7 +3119,7 @@
 			"escape_base_threshold": 40,
 			"_comment_escape_base_threshold": "PROPOSED DEFAULT. Return-home roll (0 to 100) succeeds when roll > escape_base_threshold - bent escape bonus. Value 40 is the literal it replaced; Scout bonus 20 gives 20, Seek bonus 0 gives 40.",
 				"party_stance": {
-					"_comment": "PROPOSED DEFAULT. Party stance numbers for the stage Directive profile. Combat has its own fear bound (movement.exposure_acceptance.fear_lean_bound); stage bounds never enter combat. Every bound is under half the gap between the two Directive baselines, so a party softens a Directive but never inverts it.",
+					"_comment": "PROPOSED DEFAULT. Party stance numbers for the stage Directive profile. Stage bounds never enter combat (combat has data.combat.movement.exposure_acceptance.fear_lean_bound). Every bound is under half the gap between the two Directive baselines, so a party softens a Directive but never inverts it.",
 					"bounds": {
 						"_comment": "PROPOSED DEFAULT. Largest total bend a party can apply to one dial, either direction. Gaps between Scout and Seek baselines: step_budget 3 (readiness_steps), exposure_tolerance 0.5, escape_bonus 20, commitment_fraction 0.35, stop_willingness 0.4. category_weight is under half the smallest non-zero gap between two categories in one Directive (0.2), so a bend never inverts a ranking the Directive authored.",
 						"category_weight": 0.09,
@@ -3161,7 +3169,7 @@
 						}
 					},
 					"state_ramps": {
-						"_comment": "PROPOSED DEFAULT. fear lean = clamp((fear - fear_start) / (fear_full - fear_start), 0, 1). morale lean = clamp((morale - morale_neutral) / morale_neutral, -1, 1). morale_low lean (return safety only) = clamp((escape_morale_below - morale) / escape_morale_below, 0, 1). fear is the Echo's current fear on the actor view for the stage; combat reads max(fear, fear_base) and shares only fear_start and fear_full (BehaviorArbiter._fear_lean).",
+						"_comment": "PROPOSED DEFAULT. fear lean = clamp((fear - fear_start) / (fear_full - fear_start), 0, 1). morale lean = clamp((morale - morale_neutral) / morale_neutral, -1, 1). morale_low lean (return safety only) = clamp((escape_morale_below - morale) / escape_morale_below, 0, 1). fear is the Echo's current fear on the actor view for the stage. Combat shares only fear_start and fear_full.",
 						"fear_start": 20,
 						"fear_full": 70,
 						"morale_neutral": 50,

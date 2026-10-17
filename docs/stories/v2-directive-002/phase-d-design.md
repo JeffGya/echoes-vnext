@@ -73,7 +73,7 @@ All Directive terms move in one direction with Judgment (J, 0 to 1). Own terms m
 | Acceptance, fear lean (new) | none | 0 | 0 | flat in J. Rises with fear only. |
 | Acceptance, own habit (shipped as style alignment) | none | flat | flat | flat. It is not scaled by J today (section 3, assumption A7). |
 | Stop cause, Directive (new) | `floor_s + (1 - floor_s) x (1 - J)` | 1.0 | `floor_s` | falls |
-| Stop cause, identity (shipped) | `judgment_base + (1 - judgment_base) x J`, base 0.5 (`StopShortService.gd:192-193`) | 0.5 | 1.0 | rises |
+| Stop cause, identity (shipped) | `judgment_base + (1 - judgment_base) x J`, base 0.5 (`StopShortService.gd:191-192`) | 0.5 | 1.0 | rises |
 | Stop cause, fear (shipped) | none | 1.0 | 1.0 | flat. Fear lowers J through `fear_pressure_weight` (0.25). |
 
 `best_cause` takes the strongest stop cause per benefit. It does not add them (`StopShortService.gd`, `best_cause`).
@@ -210,7 +210,7 @@ Bias = `stop_short_weight` (6.0) x strength. The route scoring formula does not 
 | One-way | `scale(J)` is 1.0 at J = 0 and falls to `floor_s` at J = 1. It never exceeds 1.0. |
 | Floor | `floor_s` 0.6 (D-70 J4; range 0.55 to 0.6). Own key, separate from `floor_a`. |
 | Cause id | A new registry row in `CAUSE_ROWS` (D-10). Internal id "directive". The `cause_strength` arm is a `match` on the id of the CAUSE, not on a Directive id. No Directive id literal in `core/` (ANSWERS #81). |
-| Context | One new ctx field: the active Directive's `exposure_tolerance`. `judgment` already exists in ctx (`StopShortContextService.gd:344`; default 0.3 if the context lacks it, a fixture trap). |
+| Context | One new ctx field: the active Directive's `exposure_tolerance`. `judgment` already exists in ctx (`StopShortContextService.gd:374`; default 0.3 if the context lacks it, a fixture trap). |
 | Source / code | `cause_source` and `cause_code` get new internal values. They feed the trace only. Text is Jeff's (Q6). |
 | Missing tolerance | No Directive cause (strength 0). |
 | New Directive key | None (ANSWERS #81, D-69 Q3). Affinity lives in `data.actor.stop_short`, not in the Directive entry. |
