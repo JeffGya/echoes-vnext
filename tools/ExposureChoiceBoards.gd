@@ -34,7 +34,9 @@ const DEFS: Array = [
 		"capacity": 4, "walls": [], "pick": {"E": ["forceful"], "U": ["direct"]}},
 ]
 const DIRECTIVES: Array = [["scout", "directive.scout_carefully"], ["seek", "directive.seek_signs"]]
-const FEARS: Array = [0, 30, 50]
+const FEARS: Array = [0, 50]
+## Standing (rank) of the test Echo; Judgment comes from the production derivation, not a literal.
+const STANDINGS: Array = [1, 9]
 const SWEEP_FROM: float = -0.5
 const SWEEP_TO: float = 1.0
 const SWEEP_STEP: float = 0.005
@@ -68,20 +70,24 @@ static func run(_arm: String) -> void:
 					str(def["name"]), side, _short(str(option["option_id"])), float(option["exposure"]),
 					float(option["objective_progress"]), (option["path"] as Array).size()])
 		for directive_v: Variant in DIRECTIVES:
-			var row: PackedStringArray = []
-			for fear: int in FEARS:
-				var tag: String = "%s dir=%s fear=%d" % [str(def["name"]), str(directive_v[0]), fear]
-				var cell: Dictionary = _cell(config, balance, bdata, movement, board, picked, str(directive_v[1]), fear, tag)
-				SpatialTermProbe._say("CASE %s choice=%s chosen=%s margin_E_minus_U=%.3f margin_without_dexp=%.3f choice_without_dexp=%s" % [
-					tag, cell["choice"], cell["chosen"], cell["margin"], cell["margin_removed"], cell["removed_choice"]])
-				for line: String in cell["lines"] as PackedStringArray:
-					SpatialTermProbe._say(line)
-				var flip: Dictionary = _flip(config, balance, bdata, movement, board, picked, str(directive_v[1]), fear)
-				SpatialTermProbe._say("FLIP %s adv_cells=%s adv_progress=%s adv_points=%s monotonic=%d without_dexp_adv_cells=%s without_dexp_adv_points=%s" % [
-					tag, flip["cells"], flip["progress"], flip["points"], 1 if bool(flip["monotonic"]) else 0,
-					flip["removed_cells"], flip["removed_points"]])
-				row.append("fear%d=%s(base %s)" % [fear, flip["cells"], flip["removed_cells"]])
-			table.append("%s %s %s" % [str(def["name"]), str(directive_v[0]), " ".join(row)])
+			for standing: int in STANDINGS:
+				var row: PackedStringArray = []
+				for fear: int in FEARS:
+					var judgment: float = MovementArbitrationTests._production_judgment(standing, "okofor", fear)
+					var cell_board: Dictionary = board.duplicate()
+					cell_board["judgment"] = judgment
+					var tag: String = "%s dir=%s standing=%d fear=%d" % [str(def["name"]), str(directive_v[0]), standing, fear]
+					var cell: Dictionary = _cell(config, balance, bdata, movement, cell_board, picked, str(directive_v[1]), fear, tag)
+					SpatialTermProbe._say("CASE %s judgment=%.3f choice=%s chosen=%s margin_E_minus_U=%.3f margin_without_dexp=%.3f choice_without_dexp=%s" % [
+						tag, judgment, cell["choice"], cell["chosen"], cell["margin"], cell["margin_removed"], cell["removed_choice"]])
+					for line: String in cell["lines"] as PackedStringArray:
+						SpatialTermProbe._say(line)
+					var flip: Dictionary = _flip(config, balance, bdata, movement, cell_board, picked, str(directive_v[1]), fear)
+					SpatialTermProbe._say("FLIP %s judgment=%.3f adv_cells=%s adv_progress=%s adv_points=%s monotonic=%d without_dexp_adv_cells=%s without_dexp_adv_points=%s" % [
+						tag, judgment, flip["cells"], flip["progress"], flip["points"], 1 if bool(flip["monotonic"]) else 0,
+						flip["removed_cells"], flip["removed_points"]])
+					row.append("fear%d(J%.2f)=%s(base %s)" % [fear, judgment, flip["cells"], flip["removed_cells"]])
+				table.append("%s %s standing%d %s" % [str(def["name"]), str(directive_v[0]), standing, " ".join(row)])
 	SpatialTermProbe._say("### FLIP_TABLE smallest progress advantage of E over U, in cells (1 cell = 0.125), at which E is chosen; base = same with the Directive exposure part and fear lean removed; none = never inside the sweep")
 	for line: String in table:
 		SpatialTermProbe._say("FLIP_TABLE " + line)
@@ -161,6 +167,7 @@ static func _select(config: ConfigService, balance: Dictionary, bdata: Dictionar
 	directives.load_from_config(balance)
 	var svc := CombatTurnContextService.new(flow_ctx, config, directives, StructuredLogger.new())
 	var ctx: Dictionary = svc.build_turn_context(actor, ectx, balance, bdata, 1, 1)["ctx"]
+	ctx["judgment"] = float(board["judgment"])
 	var arbiter := ExposureCaptureArbiter.new({}, movement)
 	var result: Dictionary = arbiter.select_movement_intent(
 		ctx, board["movement_context"] as Dictionary, board["profile"] as Dictionary, board["goals"] as Array, options)

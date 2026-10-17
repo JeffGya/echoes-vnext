@@ -131,6 +131,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_cfg/resonance_key_renamed", Callable(DirectiveConfigTests, "_t_resonance_key_renamed"))
 	runner.register_test("directive_cfg/subtree_getters_match_full_copy", Callable(DirectiveConfigTests, "_t_subtree_getters_match_full_copy"))
 	runner.register_test("directive_cfg/exposure_acceptance_never_attractor", Callable(DirectiveConfigTests, "_t_exposure_acceptance_never_attractor"))
+	runner.register_test("directive_cfg/fear_lean_bound_exceeds_fear_judgment_path", Callable(DirectiveConfigTests, "_t_fear_lean_bound_exceeds_fear_judgment_path"))
+	runner.register_test("directive_cfg/judgment_floors_at_least_half", Callable(DirectiveConfigTests, "_t_judgment_floors_at_least_half"))
 
 
 # ─── Test 1 — scout step_budget == 3 after load_from_config ─────────────────
@@ -496,4 +498,62 @@ static func _t_exposure_acceptance_never_attractor() -> Dictionary:
 			return { "ok": false, "error": "%s: weight %s x acceptance %s reaches the exposure cost %s" % [id, weight, acceptance, limit] }
 	if checked < 2:
 		return { "ok": false, "error": "expected exposure_tolerance on the shipped Directives, found %d" % checked }
+	return { "ok": true }
+
+
+## Slope rule (D-83): the lean must outgrow the Judgment path that fear itself opens.
+## fear_lean_bound / (fear_full - fear_start) >= (1 - floor) x fear_pressure_weight x max|D| / 100,
+## and the total bound fear_lean_bound >= (1 - floor) x fpw x max|D|, and the rise before fear_start, (1 - floor) x fpw x fear_start / 100 x max|D|, stays within 0.01.
+static func _fear_rule_error(bound: float, floor_a: float, pressure: float, start: float, full: float, max_d: float) -> String:
+	var judgment_slope: float = (1.0 - floor_a) * pressure * max_d / 100.0
+	if bound / (full - start) < judgment_slope:
+		return "lean slope %s is below the Judgment path slope %s" % [bound / (full - start), judgment_slope]
+	if judgment_slope * start > 0.01:
+		return "rise before fear_start %s is above 0.01" % (judgment_slope * start)
+	var total: float = (1.0 - floor_a) * pressure * max_d
+	if bound < total:
+		return "bound %s is below the total Judgment path (1 - floor) x fpw x max|D| = %s" % [bound, total]
+	return ""
+
+
+static func _t_fear_lean_bound_exceeds_fear_judgment_path() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var data: Dictionary = cs.get_balance()["data"]
+	var block: Dictionary = data["combat"]["movement"]["exposure_acceptance"]
+	var pressure: float = float(data["maturity_expression"]["autonomy_outputs"]["judgment"]["fear_pressure_weight"])
+	var ramps: Dictionary = data["stages"]["party_stance"]["state_ramps"]
+	var max_d := 0.0
+	for entry_value: Variant in ConfigService.get_directives_cfg(cs).values():
+		if (entry_value as Dictionary).has("exposure_tolerance"):
+			max_d = maxf(max_d, absf(float((entry_value as Dictionary)["exposure_tolerance"]) - float(block["offset"])))
+	if max_d <= 0.0:
+		return { "ok": false, "error": "no Directive carries exposure_tolerance" }
+	var start: float = float(ramps["fear_start"])
+	var full: float = float(ramps["fear_full"])
+	var error: String = _fear_rule_error(float(block["fear_lean_bound"]), float(block["judgment_floor"]), pressure, start, full, max_d)
+	if not error.is_empty():
+		return { "ok": false, "error": error }
+	var path: float = (1.0 - float(block["judgment_floor"])) * pressure * max_d
+	var too_small_values: Array = [0.9 * path / 100.0 * (full - start), 0.9 * path]
+	for too_small: float in too_small_values:
+		if _fear_rule_error(too_small, float(block["judgment_floor"]), pressure, start, full, max_d).is_empty():
+			return { "ok": false, "error": "the rule accepted a bound %s below its limit" % too_small }
+	return { "ok": true }
+
+
+static func _t_judgment_floors_at_least_half() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load production balance.json" }
+	var data: Dictionary = cs.get_balance()["data"]
+	var floors: Dictionary = { "combat.movement.exposure_acceptance.judgment_floor": (data["combat"]["movement"]["exposure_acceptance"] as Dictionary).get("judgment_floor", null) }
+	var stop_directive: Variant = ((data["actor"] as Dictionary).get("stop_short", {}) as Dictionary).get("directive", {})
+	if stop_directive is Dictionary and (stop_directive as Dictionary).has("judgment_floor"):
+		floors["actor.stop_short.directive.judgment_floor"] = (stop_directive as Dictionary)["judgment_floor"]
+	for path: String in floors:
+		var value: Variant = floors[path]
+		if not (value is float or value is int) or float(value) < 0.55 or float(value) > 1.0:
+			return { "ok": false, "error": "%s = %s is missing or outside [0.55, 1]" % [path, str(value)] }
 	return { "ok": true }

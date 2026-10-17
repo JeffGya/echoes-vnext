@@ -812,7 +812,8 @@ func select_movement_intent(
 				directive,
 				spatial_cfg,
 				spatial_parts,
-				fear_lean
+				fear_lean,
+				interpretation_width
 			)
 			candidate["_spatial_components"] = spatial_parts
 			# V2-INFRA-003 pass 8: cover_positioning — a Whole leader in range teaches
@@ -1056,6 +1057,8 @@ func _validate_movement_inputs(
 		return _movement_failure("invalid_directive", "context.directive")
 	if not context.get("calling_behavior", {}) is Dictionary:
 		return _movement_failure("invalid_calling_behavior", "context.calling_behavior")
+	if not context.has("judgment"):
+		return _movement_failure("missing_judgment", "context.judgment")
 	for numeric_field: String in ["presence_strength", "rank_strength", "composure", "judgment"]:
 		if context.has(numeric_field):
 			var numeric_value: Variant = context[numeric_field]
@@ -1357,6 +1360,10 @@ func _validate_spatial_config() -> Dictionary:
 			var bound: Variant = (block as Dictionary)["fear_lean_bound"]
 			if not (bound is int or bound is float) or not is_finite(float(bound)) or float(bound) < 0.0 or float(bound) > 1.0:
 				return _movement_failure("invalid_exposure_acceptance_fear_lean_bound", "movement_cfg.exposure_acceptance.fear_lean_bound")
+		if (block as Dictionary).has("judgment_floor"):
+			var floor_a: Variant = (block as Dictionary)["judgment_floor"]
+			if not (floor_a is int or floor_a is float) or not is_finite(float(floor_a)) or float(floor_a) < 0.55 or float(floor_a) > 1.0:
+				return _movement_failure("invalid_exposure_acceptance_judgment_floor", "movement_cfg.exposure_acceptance.judgment_floor")
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
 
@@ -1382,18 +1389,30 @@ func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
 
-## Route acceptance of exposure: D - `fear_lean`, clamped, with D = Directive `exposure_tolerance`
-## - offset. D is 0.0 when the tolerance or the `exposure_acceptance` offset is absent.
-## An EMPTY Directive (enemies, keeper trial) gives 0.0 and takes no fear lean.
-## `intent_weights.exposure_acceptance` is not read here; it serves action choice only.
-func _exposure_acceptance(directive: Dictionary, fear_lean: float = 0.0) -> float:
+## Route acceptance of exposure: clamp(D_scaled - fear_lean), with D = Directive
+## `exposure_tolerance` - offset (0.0 when either is absent) and
+## D_scaled = D x (floor + (1 - floor) x (1 - judgment)). The fear lean is NOT scaled.
+## A missing `judgment_floor` scales by 1.0. An EMPTY Directive (enemies, keeper trial)
+## gives 0.0 everywhere and takes no lean. `intent_weights.exposure_acceptance` is not
+## read here; it serves action choice only.
+func _exposure_acceptance(directive: Dictionary, fear_lean: float = 0.0, judgment: float = 0.0) -> float:
+	return float(_exposure_acceptance_parts(directive, fear_lean, judgment)["acceptance"])
+
+
+func _exposure_acceptance_parts(directive: Dictionary, fear_lean: float, judgment: float) -> Dictionary:
 	if directive.is_empty():
-		return 0.0
+		return {"D_scaled": 0.0, "F": 0.0, "acceptance": 0.0}
 	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
 	var d: float = 0.0
-	if directive.has("exposure_tolerance") and block is Dictionary and (block as Dictionary).has("offset"):
-		d = float(directive["exposure_tolerance"]) - float((block as Dictionary)["offset"])
-	return clampf(d - fear_lean, -1.0, 1.0)
+	var scale: float = 1.0
+	if block is Dictionary:
+		if directive.has("exposure_tolerance") and (block as Dictionary).has("offset"):
+			d = float(directive["exposure_tolerance"]) - float((block as Dictionary)["offset"])
+		if (block as Dictionary).has("judgment_floor"):
+			var floor_a: float = float((block as Dictionary)["judgment_floor"])
+			scale = floor_a + (1.0 - floor_a) * (1.0 - clampf(judgment, 0.0, 1.0))
+	var d_scaled: float = clampf(d, -1.0, 1.0) * scale
+	return {"D_scaled": d_scaled, "F": fear_lean, "acceptance": clampf(d_scaled - fear_lean, -1.0, 1.0)}
 
 
 ## Fall in exposure acceptance that this actor's fear causes: `fear_lean_bound` x the
@@ -1409,7 +1428,8 @@ func _fear_lean(actor: Dictionary, ramps: Dictionary) -> float:
 
 
 ## `out_parts`, when a non-null Dictionary is passed, receives this call's own
-## decomposition: {parts: {term → weighted value}, raw, cap, value}. Purely additive
+## decomposition: {parts: {term → weighted value}, acceptance_parts: {D_scaled, F,
+## acceptance}, raw, cap, value}. Purely additive
 ## reporting — the returned float is unchanged. `raw` and `cap` travel with the parts
 ## because the return is CLAMPED: a consumer asking "what would this score be without
 ## term X" must re-apply the same clamp to `raw - X`, which it cannot do from the
@@ -1420,7 +1440,8 @@ func _spatial_utility(
 	directive: Dictionary,
 	config: Dictionary,
 	out_parts: Dictionary = {},
-	fear_lean: float = 0.0
+	fear_lean: float = 0.0,
+	judgment: float = 0.0
 ) -> float:
 	var urgency: float = clampf(float(goal["urgency"]), 0.0, 1.0)
 	var progress: float = clampf(float(option["objective_progress"]), 0.0, 1.0)
@@ -1456,7 +1477,8 @@ func _spatial_utility(
 	var avoid_overcommit: float = clampf(
 		float(weights.get("avoid_overcommit", 0.0)), -1.0, 1.0
 	)
-	var exposure_acceptance: float = _exposure_acceptance(directive, fear_lean)
+	var acceptance_parts: Dictionary = _exposure_acceptance_parts(directive, fear_lean, judgment)
+	var exposure_acceptance: float = float(acceptance_parts["acceptance"])
 	var ally_protection: float = clampf(
 		float(weights.get("ally_protection_bias", 0.0)), -1.0, 1.0
 	)
@@ -1495,6 +1517,7 @@ func _spatial_utility(
 	var cap: float = float(config["cap"])
 	var value: float = clampf(raw, -cap, cap)
 	out_parts["parts"] = parts
+	out_parts["acceptance_parts"] = acceptance_parts
 	out_parts["raw"]   = raw
 	out_parts["cap"]   = cap
 	out_parts["value"] = value
@@ -1988,6 +2011,20 @@ static func compute_interpretation_swing(
 	if directive_mul_at_1 <= 0.0:
 		return INF
 	return identity_mul_at_1 / directive_mul_at_1
+
+
+## Swing of the acceptance layer, same convention as `compute_interpretation_swing`: the own
+## side at J = 1 (style alignment is not scaled by J, so 1.0) over the Directive side at
+## J = 1 (`judgment_floor`). A missing floor scales by 1.0, so its swing is 1.0; a floor
+## not above 0 is INF. The own side stays 1.0 only while no Judgment input reaches the
+## style alignment (guard test `acceptance_own_side_has_no_judgment_input`).
+static func compute_acceptance_swing(exposure_acceptance: Dictionary) -> float:
+	if not exposure_acceptance.has("judgment_floor"):
+		return 1.0
+	var floor_a: float = float(exposure_acceptance["judgment_floor"])
+	if floor_a <= 0.0:
+		return INF
+	return 1.0 / floor_a
 
 
 # VOW-001: Apply vow-specific intent bias additively to all candidates.

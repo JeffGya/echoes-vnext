@@ -123,7 +123,7 @@ Inputs, resolved once per Echo per turn (they do not change between candidates):
 Order of operations:
 
 ```
-1. D        = T - offset                                   (Scout -0.2, Seek +0.3)
+1. D        = clamp(T - offset, -1, 1)                      (Scout -0.2, Seek +0.3). The code clamps D before the scale.
 2. D_scaled = D x (floor_a + (1 - floor_a) x (1 - J))       Judgment scale. Sign kept. Magnitude falls.
 3. F        = fear_bound x ramp(fear)                       Fear lean. NOT scaled by J.
 4. acceptance = clamp(D_scaled - F, -1, 1)
@@ -133,7 +133,7 @@ Order of operations:
 | Rule | Detail |
 |---|---|
 | Order matters | Judgment scales only the Directive part (step 2). Fear lean is added after the scale (step 3). So fear is never multiplied by J. This copies `design.md:31`. |
-| Clamps | `J` is clamped 0..1. `ramp` is clamped 0..1. Final `acceptance` is clamped -1..1. With the defaults the largest magnitude is 0.3 + 0.12 = 0.42, so the final clamp is a guard only. |
+| Clamps | `D` is clamped to -1..1 before the Judgment scale (the code does this). `J` is clamped 0..1. `ramp` is clamped 0..1. Final `acceptance` is clamped -1..1. With the defaults the largest magnitude is 0.3 + 0.12 = 0.42, so the final clamp is a guard only. |
 | Missing `T` | `D = 0`. The Judgment scale then has nothing to scale. Fear lean still applies (it is the Echo's own state). No Directive id literal anywhere (ANSWERS #81). |
 | Two exposure inputs remain | `_directive_bonus` still reads `intent_weights.exposure_acceptance` for action choice (melee 0.4, guard -0.3, idle -0.2 rows). This is D-69 Q2. D-05 is amended. |
 | Where it is used | `_spatial_utility`, term `directive_exposure_acceptance`. It replaces `weights.get("exposure_acceptance")` in this term only. `_spatial_utility` gets two new arguments: `judgment` and `fear`. Or the arbiter resolves acceptance once per turn in a pure static helper and passes the value. Both are the same design. `mechanics-developer` picks one. The trace must show the three parts (`D_scaled`, `F`, `acceptance`) so a designer can read them. |
@@ -262,7 +262,9 @@ Values from `data/balance.json`:
 | B. Spatial acceptance (new, J2 C) | Which route option wins (how much exposure) | 1.0 (style alignment is not scaled by J; A7) | `floor_a` = 0.60 | 1.0 / 0.60 = **1.67** | Yes | 0.33 |
 | C. Stop cause (new, Q4) | Whether a route stops short | identity scale at J = 1 = 1.0 | `floor_s` = 0.60 | 1.0 / 0.60 = **1.67** | Yes | 0.33 |
 
-At floor 0.55 (low end of D-70): B and C are 1.82. Still inside 2.0. Floor 0.50 gives 2.00 (no headroom, not allowed). The two floors must stay at or above 0.5 by test.
+At floor 0.55 (low end of D-70): B and C are 1.82. Still inside 2.0. Floor 0.50 gives 2.00 (no headroom, not allowed). The valid range of `judgment_floor` is 0.55 to 1 (D-83 B). The validator rejects a value below 0.55. The two floors must stay at or above 0.55 by test.
+
+Layer B assumes the own side is 1.0. The guard test `movement_arbiter/acceptance_own_side_has_no_judgment_input` fails if the Echo's own style gains a Judgment input. Slice 7 must then pass the style multiplier at J = 1.
 
 The fear lean (J2 B) is not a Judgment layer. It is not scaled by J, so it has no swing. It has its own size bound in section 4 (the monotone rule).
 
@@ -271,7 +273,7 @@ New test rule (for `mechanics-developer`):
 | Change | Detail |
 |---|---|
 | Keep | `arbiter/interpretation_swing_within_declared_budget` unchanged (layer A). |
-| Add | A static function beside `compute_interpretation_swing` for layer B: `own_side_mul / floor_a`, with `own_side_mul` = 1.0 unless the spatial path gains a J-scaled own term. |
+| Add | A static function beside `compute_interpretation_swing` for layer B: `own_side_mul / floor_a`, with `own_side_mul` = 1.0 unless the spatial path gains a J-scaled own term. A missing floor returns 1.0. A floor not above 0 returns INF. |
 | Add | A static function for layer C: `identity_scale(J = 1) / floor_s`, from the `data.actor.stop_short` identity base and the new floor. |
 | Add | Tests `movement_arbiter/acceptance_swing_within_declared_budget` (B) and `stop_short/directive_swing_within_declared_budget` (C). Both read the SAME `interpretation_swing_max.value`. |
 | Why one budget key | A second key would let budgets drift. Q4 says scaling "must sit inside `interpretation_swing_max`". |
@@ -346,10 +348,17 @@ The fear lean reaches 0.12 at fear 70. So the fear lean is at least 4 times the 
 
 One readable rule (so the two never fight in play):
 
-> "More fear never makes exposure more acceptable."
+> "More fear never makes exposure more acceptable, except a small bounded rise in two places."
 
-Config-integrity rule that guarantees it: `fear_bound >= (1 - floor_a) x fear_pressure_weight x max|D|`. Defaults: 0.12 >= 0.03.
-Exact limit of the rule: below `fear_start` (fear 0 to 20) the lean is zero, so F-a alone can raise Seek acceptance by at most `0.4 x 0.25 x 0.2 x 0.3 = 0.006`. That is 0.08 score points at weight 14. It is a rounding effect, not a visible one. The test tolerance for this region is stated in section 5 (test F5).
+Fear lowers Judgment (F-a). A lower Judgment raises the Directive part `D_scaled`. So acceptance may rise slightly with fear in two places:
+
+1. Just above `fear_start`, before the lean overtakes the Judgment path. The peak is 0.006 for Seek. The bound is 0.01.
+2. Above `fear_full` (fear 70 to 100). The lean is flat there. The rise is at most `judgment_slope` per fear point (0.0003) and about 0.009 in total for Seek.
+
+In both places acceptance stays below the calm value. The test tolerance is in section 5 (tests F5 and F6). The F5 test derives its window from config (D-83 A).
+
+Config-integrity rules (test F6, section 5): the slope rule, the pre-start bound and the total bound. Defaults: slope 0.12 / 50 = 0.0024 >= 0.0003; pre-start 0.006 <= 0.01; total 0.12 >= 0.03.
+Pre-start size: below `fear_start` (fear 0 to 20) the lean is zero, so F-a alone can raise Seek acceptance by at most `0.4 x 0.25 x 0.2 x 0.3 = 0.006`. That is 0.10 score points at weight 17.
 
 Does this count fear twice by the stage rule (`design.md:31`: do not scale fear by Judgment again)? No. Fear lean is not scaled by J (step 3 follows step 2). Fear still enters J through the shipped F-a. That is the shipped, accepted path (D-70 J3). The stage has the same two paths and the same size relation.
 
@@ -389,8 +398,8 @@ Each test lands in the slice named in section 10.
 | F2 | Fear below `fear_start` | Lean is exactly 0. Fear 20 gives 0; fear 70 gives the full `fear_bound`. | `movement_arbiter/fear_lean_ramp_matches_stage_ramp` |
 | F3 | Same fear, Judgment 0.2 vs 0.85 (build J through production, hold fear fixed by setting the bonds and Standing, not by fear) | The lean `F` is equal. Only `D_scaled` differs. | `movement_arbiter/fear_lean_not_scaled_by_judgment` |
 | F4 | Fear read | Lean uses `max(fear, fear_base)`. A high `fear_base` with low `fear` still leans. | `movement_arbiter/fear_lean_reads_max_of_fear_and_base` |
-| F5 | The one readable rule | For fear from `fear_start` up: acceptance(fear) <= acceptance(calm), for both Directives and J from 0 to 1, with F-a included. Below `fear_start` the rise is at most 0.01. | `movement_arbiter/more_fear_never_more_accepting` |
-| F6 | Config integrity | `fear_bound >= (1 - floor_a) x fear_pressure_weight x max|D|`. | `directive_cfg/fear_lean_bound_exceeds_fear_judgment_path` |
+| F5 | The one readable rule | Acceptance(fear) <= acceptance(calm), for both Directives and J from 0 to 1, with F-a included, except two bounded rises. (a) Just above `fear_start`, before the lean overtakes: peak 0.006 for Seek, bound 0.01. (b) Above `fear_full` (fear 70 to 100): at most `judgment_slope` (0.0003) per fear point, about 0.009 in total for Seek. Acceptance stays below the calm value. The test derives its window from config (D-83 A). | `movement_arbiter/more_fear_never_more_accepting` |
+| F6 | Config integrity | Three rules. Slope: `fear_lean_bound / (fear_full - fear_start) >= (1 - floor) x fear_pressure_weight x max abs(D) / 100`. Pre-start bound: `(1 - floor) x fear_pressure_weight x fear_start / 100 x max abs(D) <= 0.01`. Total bound (kept): `fear_lean_bound >= (1 - floor) x fear_pressure_weight x max abs(D)` (0.03 at shipped values). The slope rule alone fails only below a bound of 0.015, so the total bound is kept to fail below 0.03. | `directive_cfg/fear_lean_bound_exceeds_fear_judgment_path` |
 | F7 | Seek stays a cost, not a ban | With default config, a frightened seasoned Seek Echo has acceptance above -0.05 (it hesitates, it does not refuse). This pins the answer to question O1 so a later change is deliberate. | `movement_arbiter/afraid_seek_still_treats_exposure_as_cost_not_ban` |
 | F8 | No stage leak | A fixture changes `data.stages.party_stance.bounds.exposure_tolerance`. Combat acceptance does not move. | `movement_arbiter/fear_bound_is_combat_owned` |
 
@@ -405,8 +414,8 @@ Each test lands in the slice named in section 10.
 | J5 | Order of operations | The formula in section 2a, step by step, on the four illustrative Echoes. Pins the numbers. | `movement_arbiter/acceptance_order_of_operations` |
 | J6 | Missing tolerance | `D = 0`; fear lean still applies. | `movement_arbiter/acceptance_missing_tolerance_is_neutral_plus_fear` |
 | J7 | Budget, layer B | `own_side_mul / floor_a <= interpretation_swing_max`. | `movement_arbiter/acceptance_swing_within_declared_budget` |
-| J8 | Fixture trap | A fixture with no `judgment` key fails loudly, not silently at 0.3. | `movement_arbiter/acceptance_requires_production_judgment` |
-| J9 | Both floors at or above 0.5 | Config integrity for `floor_a` and `floor_s`. | `directive_cfg/judgment_floors_at_least_half` |
+| J8 | Fixture trap | A fixture with no `judgment` key fails loudly, not silently at 0.3. DONE on the movement path: `_validate_movement_inputs` returns `missing_judgment` (D-83 C). The legacy selector `select_intent` keeps the silent default 0.3. A separate story could add the same check. | `movement_arbiter/acceptance_requires_production_judgment` |
+| J9 | Both floors at or above 0.55 | Config integrity for `floor_a` and `floor_s` (valid range 0.55 to 1, D-83 B). | `directive_cfg/judgment_floors_at_least_half` |
 
 Standing 1 failure check: C6 and J1 together must show contrast at Standing 1 without any Judgment effect. At Standing 1 both scales are near 1.0, so the Echo follows the Directive (young Echo follows). Calling still gives contrast through identity and style.
 
@@ -417,14 +426,14 @@ Standing 1 failure check: C6 and J1 together must show contrast at Standing 1 wi
 | Key (proposed path) | Purpose | Notes |
 |---|---|---|
 | `data.combat.movement.exposure_acceptance.offset` | Offset in `D = T - offset` | New sibling block of `spatial_utility`. Not in the closed block. |
-| `data.combat.movement.exposure_acceptance.judgment_floor` | `floor_a` | Range 0.55 to 0.6. Must be >= 0.5. |
+| `data.combat.movement.exposure_acceptance.judgment_floor` | `floor_a` | Range 0.55 to 0.6. Must be >= 0.55 (D-83 B). |
 | `data.combat.movement.exposure_acceptance.fear_lean_bound` | `fear_bound` | Combat-owned. Start equals the stage bound 0.12. Must satisfy F6. |
 | `data.combat.movement.spatial_utility.directive_exposure_acceptance_weight` | Weight of the acceptance term | EXISTS (2.0). Raised to 17 (D-73, which replaces the D-70 J1 range 8 to 14). Not a new key. |
 | `data.stages.party_stance.state_ramps.fear_start` / `fear_full` | Fear ramp | EXIST (20, 70). Read-only shared. Not copied. |
 | `data.actor.stop_short.directive.affinity.guard` | Affinity per benefit | Large. |
 | `data.actor.stop_short.directive.affinity.hold` | Affinity per benefit | Large. |
 | `data.actor.stop_short.directive.affinity.observe` | Affinity per benefit | Small. |
-| `data.actor.stop_short.directive.judgment_floor` | `floor_s` | Range 0.55 to 0.6. Must be >= 0.5. |
+| `data.actor.stop_short.directive.judgment_floor` | `floor_s` | Range 0.55 to 0.6. Must be >= 0.55 (D-83 B). |
 | `data.maturity_expression.interpretation_swing_max.value` | Budget | EXISTS (2.0). Unchanged (D-70 J4). |
 | `data.maturity_expression.autonomy_outputs.judgment.fear_pressure_weight` | Fear to Judgment | EXISTS (0.25). Read by test F6. Not retuned in phase D. |
 | `data.actor.stop_short.min_cause_strength` | Cutoff | EXISTS (0.15). Do not retune in phase D (it moves fear and identity too). |

@@ -1349,7 +1349,7 @@ static func _mv_fixture(bystanders: Array) -> Dictionary:
 	for value: Variant in others:
 		all_actors.append(value)
 	return {
-		"context": { "actor": mover, "all_actors": all_actors, "t": 1 },
+		"context": { "actor": mover, "all_actors": all_actors, "t": 1, "judgment": 0.3 },
 		"movement_context": MvContext.build(
 			"echo.a", "activation.a", mover["grid_pos"] as Dictionary, { "w": 6, "h": 3 },
 			walkable, walkable, occupancy, facts, relationships, terrain, [], {}, []

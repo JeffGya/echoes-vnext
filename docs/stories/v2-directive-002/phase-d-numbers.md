@@ -38,14 +38,14 @@ Rule: a key is authored in its own slice only. A key authored early is a dead ke
 
 | Key path | Proposed value | Range the probe may try | Slice | File | What it does | Why this value |
 |---|---|---|---|---|---|---|
-| `combat.movement.exposure_acceptance.fear_lean_bound` | 0.12 | Sweep list: 0.06, 0.12, 0.16. Floor: 0.05 (rule F6 for any tolerance). Ceiling: 0.16 (2b). | 2 | `data/balance.json`. Reader pending: `BehaviorArbiter.gd` (shared fear-ramp helper). | Sets the largest drop in acceptance that fear can cause. | Jeff chose 0.12 (D-71 O1), equal to the stage bound `stages.party_stance.bounds.exposure_tolerance`. 0.12 keeps a frightened Seek Echo above zero (2b). |
+| `combat.movement.exposure_acceptance.fear_lean_bound` | 0.12 | Sweep list: 0.06, 0.12, 0.16. Floor: 0.03 at shipped values (total bound of rule F6); 0.05 for any tolerance (`max abs(D)` 0.5). Ceiling: 0.16 (2b). | 2 | `data/balance.json`. Reader pending: `BehaviorArbiter.gd` (shared fear-ramp helper). | Sets the largest drop in acceptance that fear can cause. | Jeff chose 0.12 (D-71 O1), equal to the stage bound `stages.party_stance.bounds.exposure_tolerance`. 0.12 keeps a frightened Seek Echo above zero (2b). |
 | `stages.party_stance.state_ramps.fear_start` and `fear_full` | 20 and 70 (unchanged) | Not tuned in phase D | 2 | `data/balance.json:3156` (block), `:3158` (`fear_start`). Existing keys. Combat reads them through one shared helper. | Sets where the fear ramp starts and ends. | Same ramp as the stage. No second fear threshold (design 2b). Not a new key. |
 
 ### 1c. Slice 3: Judgment scale on acceptance
 
 | Key path | Proposed value | Range the probe may try | Slice | File | What it does | Why this value |
 |---|---|---|---|---|---|---|
-| `combat.movement.exposure_acceptance.judgment_floor` | 0.6 | Sweep list: 0.55, 0.6. Hard floor: 0.5 (test J9). | 3 | `data/balance.json`. Reader pending: `BehaviorArbiter.gd` (`_spatial_utility`). | Sets how much of the Directive acceptance a fully seasoned Echo keeps. | Jeff chose 0.55 to 0.6, start 0.6 (D-70 J4). 1.0 / 0.6 = 1.67, under the 2.0 budget (2a). |
+| `combat.movement.exposure_acceptance.judgment_floor` | 0.6 | Sweep list: 0.55, 0.6. Valid range 0.55 to 1 (D-83 B, test J9). | 3 | `data/balance.json`. Reader pending: `BehaviorArbiter.gd` (`_spatial_utility`). | Sets how much of the Directive acceptance a fully seasoned Echo keeps. | Jeff chose 0.55 to 0.6, start 0.6 (D-70 J4). 1.0 / 0.6 = 1.67, under the 2.0 budget (2a). |
 
 ### 1d. Slice 4: Directive stop cause
 
@@ -54,7 +54,7 @@ Rule: a key is authored in its own slice only. A key authored early is a dead ke
 | `actor.stop_short.directive.affinity.guard` | 1.0 | 0.8 to 1.0 | 4 | `data/balance.json`. Reader pending: `StopShortService.gd`, new arm in `cause_strength` (line `:116`). Same read pattern as `identity` at `:182`. | Sets how strongly the Directive favours a guard stop. | Guard is the main careful stop. Same value as the fear guard affinity (1.0, `:334`). Code clamps to 0..1. |
 | `actor.stop_short.directive.affinity.hold` | 0.8 | 0.7 to 1.0 | 4 | same | Sets how strongly the Directive favours a hold stop. | Large, and below guard. 0.8 equals the anchor identity hold (0.8). So the Directive wins for a young Echo and identity wins later (2c, choice 1). |
 | `actor.stop_short.directive.affinity.observe` | 0.3 | 0.2 to 0.4 | 4 | same | Sets how strongly the Directive favours an observe stop. | Small, as D-69 Q3 says. Scout observe is live up to Judgment 0.71 and gone above (2c, choice 3). |
-| `actor.stop_short.directive.judgment_floor` | 0.6 | Sweep list: 0.55, 0.6. Hard floor: 0.5. | 4 | same | Sets how much of the Directive stop strength a fully seasoned Echo keeps. | Same range as the acceptance floor (D-70 J4). A separate key, as the design says (A10). 1.0 / 0.6 = 1.67 (2a). |
+| `actor.stop_short.directive.judgment_floor` | 0.6 | Sweep list: 0.55, 0.6. Valid range 0.55 to 1 (D-83 B). | 4 | same | Sets how much of the Directive stop strength a fully seasoned Echo keeps. | Same range as the acceptance floor (D-70 J4). A separate key, as the design says (A10). 1.0 / 0.6 = 1.67 (2a). |
 
 Notes for the builder:
 1. A missing `directive` block must give strength 0, not an error. Fixtures that override the `stop_short` block (`stop_short_override`) then stay unchanged.
@@ -90,13 +90,15 @@ Checks:
 | Check | Arithmetic | Result |
 |---|---|---|
 | Layer B own side is 1.0 | `MovementStyleService.gd` has no Judgment read (grep found none). `style_inputs` (`BehaviorArbiter.gd:765-779`) has no Judgment key. | Design assumption A7 holds. |
-| Lowest floor that passes | 1.0 / floor <= 2.0 gives floor >= 0.5 | Test J9 uses 0.5 as the hard floor. At 0.5 the swing is exactly 2.00. No headroom. |
+| Lowest floor that passes | 1.0 / floor <= 2.0 gives floor >= 0.5 | At 0.5 the swing is exactly 2.00. No headroom. So the validator rejects a floor below 0.55 (D-83 B, test J9). |
 | Cross pair (not a real pairing) | 1.35 / 0.6 = 2.25. Floor needed for 2.0: 1.35 / 2.0 = 0.675. | Above the D-70 range. The identity 1.35 only multiplies the action layer. Per-layer tests apply (design 3b). Named for Jeff. |
 | Combined Directive pull of a seasoned Echo | Layer factors at J = 1: A 0.75 / 1.30 = 0.577; B 0.6; C 0.6. Terms add, they do not multiply. Smallest factor 0.577. | The seasoned Echo keeps at least 0.577 of the young pull in one decision. Ratio at most 1.73. |
 
 ### 2b. Fear lean integrity (design section 4, rule F6)
 
-Rule: `fear_bound >= (1 - floor_a) x fear_pressure_weight x max|D|`.
+Rule F6 has three parts (D-83 A). Slope: `fear_lean_bound / (fear_full - fear_start) >= (1 - floor) x fear_pressure_weight x max abs(D) / 100`. Pre-start bound: `(1 - floor) x fear_pressure_weight x fear_start / 100 x max abs(D) <= 0.01`. Total bound (kept): `fear_lean_bound >= (1 - floor) x fear_pressure_weight x max abs(D)`.
+
+Shipped values: slope 0.12 / 50 = 0.0024 >= 0.4 x 0.25 x 0.3 / 100 = 0.0003. Pre-start 0.4 x 0.25 x 0.2 x 0.3 = 0.006 <= 0.01. Total 0.03 (table below). The slope rule alone fails only below a bound of 0.015, not at 0.05. The total bound is kept so the test fails below 0.03.
 `fear_pressure_weight` = 0.25 (`data/balance.json:1240`). `max|D|` = max(|-0.2|, |+0.3|) = 0.3.
 
 | Case | Arithmetic | Needed | Bound 0.12 passes? |
@@ -104,9 +106,9 @@ Rule: `fear_bound >= (1 - floor_a) x fear_pressure_weight x max|D|`.
 | Floor 0.6, shipped Directives | (1 - 0.6) x 0.25 x 0.3 = 0.4 x 0.25 x 0.3 | 0.0300 | Yes. 0.12 / 0.03 = 4.0 times |
 | Floor 0.55, shipped Directives | 0.45 x 0.25 x 0.3 | 0.0338 | Yes. 3.6 times |
 | Floor 0.6, any tolerance 0 to 1 (`max|D|` = 0.5) | 0.4 x 0.25 x 0.5 | 0.0500 | Yes. 2.4 times |
-| Floor 0.5, any tolerance (worst case) | 0.5 x 0.25 x 0.5 | 0.0625 | Yes. 1.9 times |
+| Floor 0.5, any tolerance (worst case; NOT allowed since D-83 B, shown as history) | 0.5 x 0.25 x 0.5 | 0.0625 | Yes. 1.9 times |
 
-So the hard floor for `fear_lean_bound` is 0.05 (the `max|D|` = 0.5 case at floor 0.6). Below 0.0625 a floor of 0.5 would fail. The probe sweep starts at 0.06.
+So the total bound is 0.03 at shipped values. For any tolerance it is 0.05 (the `max abs(D)` = 0.5 case at floor 0.6). The test limit is 0.03 at shipped values, not 0.05. The valid floor starts at 0.55, so the 0.0625 case cannot occur. The probe sweep starts at 0.06.
 
 Seek stays hesitant, not banned (test F7, decision D-71). Lowest Seek acceptance for any J at full fear:
 
@@ -196,15 +198,15 @@ I do not edit these. The builder or I edit them in the slice named. Row 6 alread
 | # | Where | Text now | Why it is false after phase D | When |
 |---|---|---|---|---|
 | 1 | `data/balance.json:1696`, trap (1) in `_comment_spatial_utility` | "directive_exposure_acceptance_weight is DELIBERATELY INERT ... on the default directive.scout_carefully the term is 0.0 at ANY weight. Raising this number alone can change nothing." | Scout acceptance is -0.2. The weight is live. | Slice 1 **Status: FIXED in slice 1.** |
-| 2 | same line, same trap | "the term is weight x directive.intent_weights.exposure_acceptance x exposure" | The term is `weight x acceptance x exposure`. Acceptance comes from `exposure_tolerance` minus the offset (then fear lean, then Judgment scale). The old key now serves action choice only (D-69 Q2). | Slice 1, again at 2 and 3 **Status: FIXED in slice 1. Left: re-check at slices 2 and 3.** |
+| 2 | same line, same trap | "the term is weight x directive.intent_weights.exposure_acceptance x exposure" | The term is `weight x acceptance x exposure`. Acceptance comes from `exposure_tolerance` minus the offset (then fear lean, then Judgment scale). The old key now serves action choice only (D-69 Q2). | Slice 1, again at 2 and 3 **Status: FIXED in slice 1. FIXED in slice 3 (the builder fixed the config comment).** |
 | 3 | same line, trap (2) | "exposure is binary in a fight ... a flat penalty on a boolean, not a slope" | Probably still true. The design says "slope". Exposure may be 0, 0.5 or 1. I did not verify. Mark it "check", not "false". | Slice 1 (check) **Status: FIXED in slice 1 (the new comment says exposure is a fraction).** |
 | 4 | `data/balance.json:1696` end | "All values PROPOSED DEFAULT" and the sweep pointer to combat-003 section 22 | Not false. The weight is a new, probe-measured value. Add a pointer to the phase D probe. | Slice 1 **Status: FIXED in slice 1 (the comment cites D-73).** |
 | 5 | `data/balance.json:30-31` and `:65-66`, `_comment_exposure_tolerance` | "Read by StagePartyStance; bent by data.stages.party_stance (D-05)." | Combat now reads it too (acceptance, stop cause). Combat does not use the stage bend. D-05 is amended (D-69 Q2). | Slice 1 and 4 **Status: HALF FIXED: the slice 1 wording is in. Left: the stop cause wording in slice 4.** |
 | 6 | `data/balance.json:47`, Seek `intent_weights.exposure_acceptance` 0.20 (no comment now) | No comment. | Not false. Add a note: this key serves action choice only. `_directive_bonus` still reads it. | Slice 1 **Status: NOT FIXED. The builder fixes it later, because a running test reads `data/balance.json`. It is the Seek `intent_weights.exposure_acceptance` 0.20 note: the key now serves action choice only.** |
 | 7 | `data/balance.json:325`, `stop_short._comment` | "Starting values; the designer sets every number ... Fear and low morale favour guard only." | The block has a third cause (Directive) with its own sub-block. The sentence about guard only is true for fear and morale. Add the third cause. | Slice 4 |
-| 8 | `data/balance.json:1223`, `identity_weight_scale._comment` | "the two halves of ONE budgeted axis" and "Paired with directive_interpretation_mul" | Three layers use the same budget. Layers B and C have their own floors. | Slice 3 and 4 |
-| 9 | `data/balance.json:1228`, `interpretation_swing_max._comment` | "The declared budget on the identity:directive ratio" and one config-integrity test in `BehaviorArbiterTests.gd` | Three tests now read this value (layers A, B, C). The two new tests live in other files. | Slice 3 and 4 |
-| 10 | `data/balance.json:1325`, `directive_interpretation_mul._comment` | Describes the action layer as the only Directive-Judgment curve. | Two more curves exist (acceptance, stop cause). They use a separate linear form, by design (F1 over F2). | Slice 3 and 4 |
+| 8 | `data/balance.json:1223`, `identity_weight_scale._comment` | "the two halves of ONE budgeted axis" and "Paired with directive_interpretation_mul" | Three layers use the same budget. Layers B and C have their own floors. | Slice 3 and 4 **Status: FIXED in slice 3 (the builder fixed the config comment).** |
+| 9 | `data/balance.json:1228`, `interpretation_swing_max._comment` | "The declared budget on the identity:directive ratio" and one config-integrity test in `BehaviorArbiterTests.gd` | Three tests now read this value (layers A, B, C). The two new tests live in other files. | Slice 3 and 4 **Status: FIXED in slice 3 (the builder fixed the config comment).** |
+| 10 | `data/balance.json:1325`, `directive_interpretation_mul._comment` | Describes the action layer as the only Directive-Judgment curve. | Two more curves exist (acceptance, stop cause). They use a separate linear form, by design (F1 over F2). | Slice 3 and 4 **Status: FIXED in slice 3 (the builder fixed the config comment).** |
 | 11 | `data/balance.json:3157`, `state_ramps._comment` | "fear is the Echo's current fear on the actor view." | Combat reads `max(fear, fear_base)` (assumption A8). Combat also shares the two ramp keys. | Slice 2 |
 | 12 | `data/balance.json:3109`, `bounds._comment` and `:3122`, `leans._comment` | Stage-only wording about the fear lean on `exposure_tolerance`. | Not false. Add a pointer: combat has its own bound (`fear_lean_bound`). | Slice 2 |
 | 13 | `design.md:31`, `design.md:320`, D-09 and test C14 | "stage config never enters combat" | Narrowed: only `state_ramps.fear_start` and `fear_full` are shared (assumption A9). Docs, not config. | Slice 2 |
