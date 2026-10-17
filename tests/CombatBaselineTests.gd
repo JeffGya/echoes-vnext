@@ -304,14 +304,15 @@ static func _has_log(logger: StructuredLogger, type: String) -> bool:
 # from index 3 as the urgency fix reshapes routes.
 # V2-COMBAT-003.5 lateral/low_exposure fix re-record (decision #54) — still 7 rounds; indices
 # 0-2 stay byte-identical, diverging again from index 3 as `lateral` now routes correctly.
+# Re-recorded: Directive stop cause. 7 rounds; indices 0-3 byte-identical, diverging from index 4.
 const COMBAT_EMOTION_HASHES: Array = [
 	"c0e348c181a7d83ce625ae6ed12c93e7c88eb0a247d1061f7aa3ecdab5f383ac",
 	"ce777cfdc61ea886ead439c5c5f16b4c0a9eb79e32294cf74e293d0ab64926e8",
 	"b9efb78f125d0fafb3c483fd666061fbed385b3507331d2267039e76795503a2",
 	"4b486ee8205308d752c1be1d536e33e6bd49efc662cdc0290968706ddedb7e60",
-	"ef457a30015d25c93aa16b0f7095622445c8e5ac5989bb39901f3efbd52443e8",
-	"32a2e2930cb32ae608af977f2d499bba8d55e5d6078366b9e0dc85264256152f",
-	"63118a1dc9794e6da3dc61b4a7ea94cebdcbafd780e4b84e6be50cc9500728a3",
+	"e51fb3553a726279f235c05181206c5ee6aae88476fe30f17cd47c0a5782e547",
+	"f86a88aaa711b6b9aa391fae448764323469f05a231c905643568738a19a0caf",
+	"62c735f9ca9a362d03e32c29e3bd2932cfe7ddfb5e184d2dc3f5f4bcb5690fb2",
 ]
 # V2-COMBAT-003 Phase 6: same cause as COMBAT above. Rounds 1-2 unchanged; round 3 diverges
 # because echo_0003 no longer steps 5,2 -> 6,3 into the enemy's control to attack. Still 4 rounds.
@@ -381,12 +382,13 @@ const PROTECT_EMOTION_HASHES: Array = [
 # fixed (decisions #32-38). Still 5 rounds (duration_turns unmoved); indices 0-1 stay
 # byte-identical, diverging from index 2 — the accepted rank/reward regression (decision #39)
 # shows up here as a later, not earlier, split.
+# Re-recorded: Directive stop cause. 5 rounds; indices 0-1 byte-identical, diverging from index 2.
 const ENDURE_EMOTION_HASHES: Array = [
 	"93b71ed7260bf0483a28fada3159b989edce9c56edd047317e891c8341089a2a",
 	"18c88d4e3436998a3f4c7c0607b098ba0703d36af315095a00834e2481b290c6",
-	"9f1d9aaf9c3fe7a39c73dc16309c518deb15a4be0cece1ef908e263a598ffe69",
-	"8e5b57c161633cf5377ec2ce293f9ae82cb0a80f6db5a5ed79bf47de5eed3b46",
-	"bac1bbe4c2b62d326b50468442b366bd2f791e874ca1af566fc66472a515ed73",
+	"d5b8e3286de7ea133f17fad46b5588c7f260350e73b3234e1e44754ef88a9f47",
+	"a280cc978b05503b2a0ddb8688774a148a9b6563dcce97ae628e54ff7efd3690",
+	"a433c15b811b2ff002e2549e4544b77fc32cc57214e9f1631a70ff607abc387d",
 ]
 # Phase 2d: 5 -> 4 rounds, index 0 byte-identical, diverging from index 1. The long_multiplier
 # is applied AFTER the max clamp (EncounterSetupService.gd:332-347), so this board went 48x12 ->
@@ -420,6 +422,7 @@ const PURSUE_EMOTION_HASHES: Array = [
 # PURSUE_EMOTION_HASHES above. Matches the FlowFingerprintTests GUIDE_SPIRIT round_ended move.
 # Re-recorded: stop_short.enabled true. 25 -> 24 rounds: indices 0-23 are byte-identical and the
 # last round is gone, because the fight now ends one round earlier.
+# Re-recorded: Directive stop cause. 24 -> 22 rounds; indices 0-21 byte-identical; the fight ends two rounds earlier.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
 	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
@@ -443,8 +446,6 @@ const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"46814c8e0ea76de593210b370fc96a4e3d4350df560df40940a46ba7ee9cf5e0",
 	"7f035cf29f8e12e4be48763addf19740b169078f5126f593b87b8ef87fbdfd3f",
 	"41add5672f9740f0d91f657b0c4a9df9981c5350d70b133a339b66fc0dfd5b36",
-	"d4ff8247e9ea553c2b4509630d541d7b445f6a60b55c9df7bd9a457427c53543",
-	"bd08e9846d06f6622627ff4f56fbb0cd8318b1d2f37ad979ce13b1c9ee621e6a",
 ]
 
 

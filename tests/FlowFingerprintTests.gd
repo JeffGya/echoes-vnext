@@ -661,9 +661,10 @@ static func _run_mode_fingerprint(
 # Pace bonus re-record (docs/stories/pace-reward): par 7.3, round 7, ratio 0.96 -> full, +3 Ase.
 # ase 55 -> 58, ekwan 7, rank S. FINAL gains the pace keys; SAVE moves with ase. ROUNDS held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
-const COMBAT_ROUNDS_HASH := "bdd9adf80d5fd71d025eae56a5135b20fc45c63ba6990ed7cd9b18c5e01fe511"
+# Re-recorded: Directive stop cause. COMBAT_ROUNDS_HASH and COMBAT_SAVE_HASH moved; COMBAT_FINAL_HASH held.
+const COMBAT_ROUNDS_HASH := "15ad0156de8f96320453929010a15002fbf568b50e5006d5ea84c4d4073a66c3"
 const COMBAT_FINAL_HASH  := "e0043b496aa493283d87769c19660e63bcb8d39422aae1000833a0402dd8c746"
-const COMBAT_SAVE_HASH   := "5056f0e0672b7f61d14191172ccb1ff82da22fc6731ba9fad023b6eedb528e98"
+const COMBAT_SAVE_HASH   := "0458140c7144696073328049cafc901551ffda572649e45b0bd6f8ab5e82e352"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -740,7 +741,8 @@ static func test_combat() -> Dictionary:
 # ase 55 -> 57, ekwan 7, rank S. FINAL gains the pace keys; SAVE moves with ase. ROUNDS held.
 # Re-recorded: stop_short.enabled true, then cell_search.enabled true (ROUNDS and FINAL moved).
 # Re-recorded: Scout route exposure acceptance (tolerance 0.3 - offset 0.5) x weight 17 changes 2 Scout moves. ROUNDS moved; FINAL, SAVE held.
-const PURIFY_SHRINE_ROUNDS_HASH := "9fb438c5ee7cba26bb6ec93f4b28898723e37f42328fb6044a6be0d4f7fc3cc6"
+# Re-recorded: Directive stop cause. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
+const PURIFY_SHRINE_ROUNDS_HASH := "5beb5c1c7bc5934dd1c98c6107888b3928ce6a138ec1f8aac3924887acf71596"
 const PURIFY_SHRINE_FINAL_HASH  := "24c3b92582022ad8558bb323c5e9f7513126b8f1bb04308648d003a1eebcf7e8"
 const PURIFY_SHRINE_SAVE_HASH   := "930439633fdb06e3230da43ce270f90c35b86e4f6cb60f46f953bfb19aa282d4"
 
@@ -760,7 +762,8 @@ static func test_purify_shrine() -> Dictionary:
 # Pace bonus re-record: par 3.27, round 3 -> full, +3 Ase replaces the old +9 speed bonus.
 # ase 59 -> 53, ekwan 7 -> 6, rank S (0 of 2 enemies reached). FINAL and SAVE move. ROUNDS held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
-const RECOVER_ROUNDS_HASH := "939072d169d4e56100f964fe2e784da2488758f497683db9e26ff2b3876bdc42"
+# Re-recorded: Directive stop cause. RECOVER_ROUNDS_HASH moved; RECOVER_FINAL_HASH and RECOVER_SAVE_HASH held.
+const RECOVER_ROUNDS_HASH := "90b58fde7faeba3eb036e9dfb46567a17fd3bfd9b1c8d0a9b26c73c741417b00"
 const RECOVER_FINAL_HASH  := "998e712bbb60a8bde0210851985ffe76eed911e219e0359479ac4fef03794246"
 const RECOVER_SAVE_HASH   := "0b9bb5db21150c1e886ab7b3401b83287d6c82c168317d3d15e239dfa88b12b6"
 
@@ -806,8 +809,9 @@ static func test_protect() -> Dictionary:
 # 5 rounds (duration_turns unmoved), same outcome, so FINAL and SAVE held.
 # Pace bonus re-record: no-pace mode. Rank B -> S: 2 of 6 enemies reached and no speed term,
 # 110/120. FINAL moves on rank only; ase 50 and SAVE held. ROUNDS held.
-const ENDURE_ROUNDS_HASH := "fd9aafaa05e1c9860742af92414f864b08e1fe4cdc524af6e7042ce344ebc150"
-const ENDURE_FINAL_HASH  := "0b7b73a8adcebc0707dd7694ab1c956b4e9dcac8bb5cfc4ec9e886548ac29775"
+# Re-recorded: Directive stop cause. ENDURE_ROUNDS_HASH and ENDURE_FINAL_HASH moved; ENDURE_SAVE_HASH held.
+const ENDURE_ROUNDS_HASH := "b018dcf6eb1b3f5e5e0fe1ed723bfb4342d5219b648994cecee0fa2d582f8191"
+const ENDURE_FINAL_HASH  := "bf50059fbe3d259559747a454583ab918e7eda58ffa57344a9e1b49a1d9265b1"
 const ENDURE_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_endure() -> Dictionary:
@@ -924,8 +928,9 @@ static func test_pursue() -> Dictionary:
 # walkable board (the party starts farther from the spirit), still spirit_protected, spirit HP
 # 49 -> 60, ase 50, ekwan 6, rank S. SAVE held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved (FINAL too). The fight now ends in 24 rounds.
-const GUIDE_SPIRIT_ROUNDS_HASH := "d5030013ec7fd3116af9e2fe82112271ac852446dafb19093a79cc2f3b878556"
-const GUIDE_SPIRIT_FINAL_HASH  := "cf0012793e3ae7385e32b55d95ae345b9789dff7b53a07a9a27b376a7c9b571e"
+# Re-recorded: Directive stop cause. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
+const GUIDE_SPIRIT_ROUNDS_HASH := "95df18e452633f1bfa909f690fc56d6a28b796a20f28cbf8af166905843280d3"
+const GUIDE_SPIRIT_FINAL_HASH  := "5d6290aee45ec9959fd3fb80e8ee0cc0a6e9c2c26ce0f173d749723bb4535015"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:
