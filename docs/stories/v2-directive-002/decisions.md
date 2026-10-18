@@ -540,3 +540,12 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **Links to patch:** `docs/integration-map.md`, `docs/MEMORY.md`, `docs/LESSONS.md`, `docs/project_systems_audit.md`, `docs/stories/v2-combat-005/story-draft.md`, and any file that cites a removed path (grep `v2-directive-002/` first).
 - **Also in that commit:** the stale suite-count comments (`AGENTS.md` ~203 and ~291, `scripts/run-tests-sharded.sh` ~22, ~93, ~267) need Jeff's yes for the AGENTS.md lines.
 - **Order of work after the merge:** (1) refresh main; (2) new branch; (3) remove; (4) patch links; (5) `grep` that no link is dead; (6) commit and open the PR. Git history keeps every removed file.
+
+### D-93. finished-glyphs
+**Q:** Jeff supplied six finished stop glyphs (2026-10-18; images 3.1 to 3.6 in the order arrived_at, capacity_spent, interrupted, spotted_ahead, paused_to_read, no_route; each with a proverb source and a meaning). How do they go into the game?
+**A:** (Jeff, 2026-10-18)
+- **Small sizes:** options A and B together. 28 px is the practical minimum size (why card title 28 px; Echo card and party card 24 px). The 24 px glyph gets a thin cream rim so the brown outline reads on the dark portrait square.
+- **Closed outline:** `interrupted` and `no_route` must have a CLOSED outline. The supplied images cut the path off flat at the bottom with no outline. The closing is made in the processing step; if image processing cannot do it cleanly, Jeff regenerates those two images.
+- **When:** a separate small PR after PR 108 is merged (one subject per PR). The cleanup PR (D-92) is another small PR.
+- **Work files:** the scratchpad folder with the glyph work (processed PNGs, preview sheets, a Python venv with Pillow) is cleaned when the glyph PR is done.
+- **Integration needs (for that PR):** `StopGlyphs.gd` load path from `.svg` to `.png`; six PNGs with mipmaps on; delete the six draft SVGs and their `.import` files; update the docs that name the `.svg` path; a visual check at 960x540 on a real card; no tint (modulate stays white).
