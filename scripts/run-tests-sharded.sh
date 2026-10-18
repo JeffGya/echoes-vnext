@@ -69,78 +69,17 @@ SAVE_ROOT="$SCRATCH_ROOT/saves"
 rm -rf "$LOG_DIR"
 mkdir -p "$LOG_DIR" "$SAVE_ROOT"
 
-# Shard map: "<shard_name>|<comma-separated EXACT suite names>|<alarm_secs_override_or_empty>"
-# The third field overrides ALARM_SECS for that shard only; leave it empty to use the default.
-# Each shard's filter is passed to the runner as a single `tests =<name1>,<name2>,...`
-# invocation (exact-match mode — see ui/AppRoot.gd). shard1-5 and shard10 are the original
-# line-count bin-pack (see git history for that method); shard6-9 replace the old shard6 (see
-# note below). Disjoint by construction: every suite name appears in exactly one shard.
-#
-# Updated 2026-09-20 after PR #69 (V2-COMBAT-003.5 part 1/2) merged to main: that PR added
-# two new suites, `movement_style` (tests/MovementStyleServiceTests.gd) and
-# `live_movement_style` (tests/LiveMovementStyleTests.gd), registered in ui/AppRoot.gd.
-#
-# Updated again 2026-09-20 after a real measured run showed the old shard6 taking 763s wall
-# clock — 2.7x the next-slowest shard — while line-count balance put it at only 18 suites,
-# no different in kind from its siblings. Line count does not predict runtime. The old shard6
-# is now 4 shards:
-#   shard6 — was `fingerprint` alone (see below — now split further).
-#   shard7 — `seam` (tests/Stage004SeamTests.gd) alone. 3612 lines, by a wide margin the
-#     largest test source file in the repo (next largest is 1542).
-#   shard8/shard9 — the remaining 16 old-shard6 suites, bin-packed by source-file line count
-#     into two ~3900-line halves (see git history for the exact bin-pack).
-# This is a best-effort split with no per-suite timing data — only shard-level wall clock was
-# measured. Re-verify with a real timed run and adjust further if shard6-9 are still uneven.
-#
-# Updated again 2026-09-20 — the `fingerprint` suite fingerprint-suite refactor landed
-# (tests/FlowFingerprintTests.gd). It registered 8 tests under ONE shared suite name, which is
-# why the old shard6 above could never be split by suite-name sharding: all 8 had to run
-# serially in whatever one shard held "fingerprint". Each of the 7 modes (combat, purify_shrine,
-# recover, protect, endure, pursue, guide_spirit) is now its OWN suite name,
-# `fingerprint_<mode>`, so each can land in a different shard and run in parallel with unrelated
-# suites. They are added one per shard to shard1, shard2, shard3, shard4, shard5, shard7 and
-# shard8 — chosen to spread the real simulation cost rather than concentrate it, with no
-# per-mode timing data available, so shard1 and shard7 (the two smallest shards by suite count:
-# `movement,old_echo` and `seam` alone) absorb one mode each same as every other shard picked.
-# Updated again 2026-09-20 — `test_determinism_self_check` (formerly the dedicated shard6, 2400s
-# override) has been split the same way the main `fingerprint` suite was: one
-# `fingerprint_determinism_<mode>` suite per mode instead of one function looping all seven
-# in-process. Each new determinism suite does 2 full drives of its mode (record + diff) against
-# the main suite's 1, so it costs roughly 2x its corresponding `fingerprint_<mode>` suite
-# (~14-29s each, unmeasured per-suite but bounded by that ratio) — call it ~28-58s. Old shard6
-# is removed entirely; each determinism suite joins the SAME shard as its own mode's main
-# suite (never two ~2x-cost suites in one shard), so no single shard absorbs more than one
-# extra ~2x cost, avoiding a repeat of the old shard6 bottleneck. Re-measure and rebalance if a
-# shard turns out to need it — no per-suite timing data exists yet for these seven.
-#
-# Updated again 2026-09-20 — real timed sharded runs (post-fingerprint-split) showed shard7 at
-# 539-666s across repeat measurements, the new critical path. Splitting the `seam` suite
-# (tests/Stage004SeamTests.gd, 25 tests, then attempted as 5 cost-tiered suite names) was tried
-# and MEASURED to give no improvement (a follow-up run at 592s vs. a 546s pre-attempt baseline —
-# flat/noise, not a regression): `seam` was never the real cost. Reverted back to the single
-# `seam` suite name. The actual driver of shard7 is `fingerprint_pursue` +
-# `fingerprint_determinism_pursue` — two tests, each one full combat encounter run to completion
-# (round 7). That cost is not reducible by suite-name sharding (it's already two separate
-# suites, as small as this approach can make them); making it cheaper means changing the test's
-# own encounter length/assertions, a different and riskier kind of change, not attempted here.
-# shard7's alarm is overridden to 900s (was the 700s default) for real margin over its measured
-# range (539-666s across repeat runs) — the 700s default left as little as 34s of margin against
-# the highest observed figure, thin enough to risk a false alarm-kill under heavier contention.
-# Total sharded wall-clock has measured 546-666s across repeat runs (vs. a 788s pre-fingerprint-
-# split baseline and a ~1090s serial baseline) — real variance under contention on this machine,
-# not a regression from any single change; both figures are still a substantial improvement over
-# serial. Re-measure with repeat runs, not a single sample, before tightening any alarm further.
-SHARDS=(
-  "shard1|movement,old_echo,skill_reach,stage_stop_ui,stop_short,stop_short_search,stop_short_wiring,fingerprint_combat,fingerprint_determinism_combat|"
-  "shard2|combat_roundtrip,echofactory,emotion,exclusive_action,ko_death,melee,morale,onboarding,passive,pending_result,sanctum_pulse,sit_res,situational,skill,snapshot,stage,fingerprint_purify_shrine,fingerprint_determinism_purify_shrine|"
-  "shard3|actor,bark_popup,bond_trigger,combat_terrain,conversation_repair,divergence,divergence_bark,movement_arbiter,objective,retreat,sanctum.summon,skill_loadout,snapshot_purity,structure,support,terrain,fingerprint_recover,fingerprint_determinism_recover|"
-  "shard4|archetype,behavior_char,calling,calling_behavior,combat_ui,contact,contact_cfg,foundation_ui,institution,movement_fallback,movement_option,prog,realm_prog,sanctum.party,snapshot_fingerprint,traversal,vector,weave,fingerprint_protect,fingerprint_determinism_protect|"
-  "shard5|consequence,contact_actor,cooldown,directive,directive_char,explore,leadership,maturity_baseline,movement_path,realm_ui,recruit,reward,sanctum.layout,shrine,skill_unlock,voice,vow,fingerprint_endure,fingerprint_determinism_endure|"
-  "shard7|seam,fingerprint_pursue,fingerprint_determinism_pursue|900"
-  "shard8|behavior,behavior_arbiter,combat_initiative,explore_p5,identity,live_movement_style,statinit,trace,fingerprint_guide_spirit,fingerprint_determinism_guide_spirit|"
-  "shard9|economy,flow_transaction,grid,guidance,guidance_bark,movement_style,social_graph,venture_char,board_camera.bounds,board_camera.echo_detail,board_camera.input,board_camera.view,board_camera.zoom,board_camera.pointer,combat_camera,board_pointer,stage_camera|"
-  "shard10|arbiter,bridge,combat,combat_baseline,continuity,derived,directive_cfg,echo_party,expr,intel,objective_combat,realm,realm_reward,save_integrity,snapshot_contract,thread,unified_resolve|"
-)
+# The shard map (SHARDS, with the history of how it was balanced) lives in scripts/test-shard-map.sh.
+# scripts/check-shard-map.sh reads the same file.
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/test-shard-map.sh"
+
+# Fail before any shard starts if the map and the registered suites disagree. A suite missing
+# from the map would never run in a sharded run; a suite listed twice would run twice.
+if ! "$SCRIPT_DIR/check-shard-map.sh" "$CHECKOUT"; then
+  echo "FATAL: shard map check failed. No shard was started." >&2
+  exit 1
+fi
 
 echo "Sharding across ${#SHARDS[@]} shards. Logs: $LOG_DIR"
 

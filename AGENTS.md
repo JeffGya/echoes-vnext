@@ -256,8 +256,12 @@ suites, one shared suite name becoming 7) are split into 9 disjoint sets — eve
 exactly one shard, none selected twice, none dropped. `qa-verifier`: a sharded run's combined
 total should equal a serial full run's total exactly, no adjustment needed. **When a suite list
 changes** (a new `*Tests.gd` file registered in `ui/AppRoot.gd`, or a suite-registration rename
-like this one), the shard map in `scripts/run-tests-sharded.sh` and this count must be updated
-together — nothing checks this automatically yet.
+like this one), the shard map in `scripts/test-shard-map.sh` and the counts in this file must be
+updated together. `scripts/check-shard-map.sh` now checks the map (2026-10-18): it reads the registered
+suite names from the runner (`tests __nomatch__`), compares them with `SHARDS`, and exits 1 when a
+registered suite is missing from the map, a suite appears twice, the map names an unregistered suite,
+or the map has an empty entry. `scripts/run-tests-sharded.sh` runs it before it starts any shard. You can
+also run it alone (about 10 s): `GODOT_BIN=... scripts/check-shard-map.sh`.
 
 **Per-shard timeout is a HANG CEILING, not an expected duration — `wait` returns as soon as each
 shard's process exits on its own, so a shard that finishes early does not wait out the rest of
@@ -282,7 +286,7 @@ modes internally. That suite has now been split the same way, into 7 per-mode
 corresponding `fingerprint_<mode>` main suite. **shard6 no longer exists.** shard7 carries a 900s
 override (see below); every other shard uses the 700s default.
 
-**The shard map (`SHARDS` in the script) has a per-shard alarm override as its third
+**The shard map (`SHARDS` in `scripts/test-shard-map.sh`) has a per-shard alarm override as its third
 `|`-delimited field**, empty meaning "use the default": 700s covers eight of the nine shards with
 real margin (all measured well under 400s in the final timed run). shard7 (`seam` +
 `fingerprint_pursue` + `fingerprint_determinism_pursue`) is the one exception, overridden to 900s
