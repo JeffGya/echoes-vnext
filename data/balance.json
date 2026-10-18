@@ -1716,9 +1716,9 @@
 					"steps": { "enabled": true, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1, "composure_default": 0.4 },
 					"style_growth": { "enabled": true },
 					"ranges": {
-						"_comment": "PROPOSED DEFAULT. Limits [min, max] the validator accepts for each enabled lean and steps number, and the values allowed for penalty_steps and bonus_steps.",
+						"_comment": "Limits [min, max] the validator accepts for each enabled lean and steps number, and the values allowed for penalty_steps and bonus_steps. Jeff reviewed the limits on 2026-10-18. The steps limits reject a value that makes the effect do nothing.",
 						"lean": { "progress_floor": [0.5, 0.9], "progress_max": [1.0, 1.4], "cohesion_max": [1.0, 1.45], "cohesion_min": [0.7, 1.0] },
-						"steps": { "penalty_at": [0.3, 0.9], "bonus_at": [0.4, 1.0], "composure_default": [0.0, 1.0] },
+						"steps": { "penalty_at": [0.3, 0.8], "bonus_at": [0.4, 0.7], "composure_default": [0.0, 1.0] },
 						"step_counts": [0, 1]
 					}
 				},

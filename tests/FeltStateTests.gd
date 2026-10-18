@@ -468,6 +468,14 @@ static func _t_config_sections_validated() -> Dictionary:
 	(no_ranges["felt_state"] as Dictionary).erase("ranges")
 	if bool(BehaviorArbiter.new({}, no_ranges)._validate_spatial_config()["valid"]):
 		return _fail("an enabled section without felt_state.ranges must fail loudly")
+	var steps_ranges: Dictionary = ranges["steps"] as Dictionary
+	if float((steps_ranges["bonus_at"] as Array)[1]) > 0.7 or float((steps_ranges["penalty_at"] as Array)[1]) > 0.8:
+		return _fail("steps limits must reject a value that makes the effect do nothing")
+	var shipped: Dictionary = (_movement()["felt_state"] as Dictionary)["steps"] as Dictionary
+	for key: String in ["bonus_at", "penalty_at"]:
+		var bounds: Array = steps_ranges[key] as Array
+		if float(shipped[key]) < float(bounds[0]) or float(shipped[key]) > float(bounds[1]):
+			return _fail("shipped steps.%s sits outside its limits" % key)
 	return _pass()
 
 
