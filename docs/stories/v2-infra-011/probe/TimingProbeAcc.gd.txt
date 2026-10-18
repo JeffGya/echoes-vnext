@@ -1,0 +1,26 @@
+# TEMPORARY profiling accumulator. Never committed.
+extends RefCounted
+static var us: Dictionary = {}
+static var n: Dictionary = {}
+static var cnt: Dictionary = {}
+static var caller: String = "other"
+static func t() -> int:
+	return Time.get_ticks_usec()
+static func add(label: String, t0: int) -> void:
+	us[label] = int(us.get(label, 0)) + (Time.get_ticks_usec() - t0)
+	n[label] = int(n.get(label, 0)) + 1
+static func count(label: String, v: int) -> void:
+	cnt[label] = int(cnt.get(label, 0)) + v
+static func dump(title: String) -> void:
+	var keys: Array = us.keys()
+	keys.sort()
+	for k in keys:
+		print("TPROF %s label=%s ms=%.1f calls=%d" % [title, k, float(us[k]) / 1000.0, int(n[k])])
+	var ck: Array = cnt.keys()
+	ck.sort()
+	for k in ck:
+		print("TCOUNT %s label=%s sum=%d" % [title, k, int(cnt[k])])
+static func reset() -> void:
+	us = {}
+	n = {}
+	cnt = {}
