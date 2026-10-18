@@ -75,6 +75,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/directive_stop_is_not_own_judgment", _t_directive_stop_is_not_own_judgment)
 	runner.register_test("movement_arbiter/fear_lean_stays_in_own_score", _t_fear_lean_stays_in_own_score)
 	runner.register_test("movement_arbiter/all_directive_terms_leave_own_score", _t_all_directive_terms_leave_own_score)
+	runner.register_test("movement_arbiter/cap_leaves_own_score_clamped", _t_cap_leaves_own_score_clamped)
 	runner.register_test("movement_arbiter/style_growth_reaches_movement_style_through_actor_state_machine", _t_style_growth_reaches_movement_style_through_actor_state_machine)
 
 
@@ -1886,6 +1887,33 @@ static func _t_all_directive_terms_leave_own_score() -> Dictionary:
 	var route: float = BehaviorArbiter._route_directive_part({"_spatial_components": spatial})
 	if not is_equal_approx(route, want):
 		return _fail("route Directive part %s, wanted all five Directive terms = %s" % [route, want])
+	return _pass()
+
+
+## When the cap bites, the Echo's own score is the capped non-Directive part, not the capped total minus the Directive part.
+static func _t_cap_leaves_own_score_clamped() -> Dictionary:
+	var shipped: Dictionary = _shipped_movement_and_directives()
+	var movement: Dictionary = shipped["movement"] as Dictionary
+	var cfg: Dictionary = (movement["spatial_utility"] as Dictionary).duplicate(true)
+	var directive: Dictionary = ((shipped["directives"] as Dictionary)["directive.seek_signs"] as Dictionary).duplicate(true)
+	directive["intent_weights"] = {"objective_advance_priority": 0.8, "avoid_overcommit": 0.5}
+	var goal: Dictionary = {"urgency": 1.0, "purpose": "advance"}
+	var option: Dictionary = _exposed_option(1.0)
+	var arbiter := BehaviorArbiter.new({}, movement)
+	var probe: Dictionary = {}
+	arbiter._spatial_utility(goal, option, directive, cfg, probe, 0.0, 0.0)
+	var route_part: float = float(probe["directive_route_part"])
+	var own_raw: float = float(probe["raw"]) - route_part
+	if is_zero_approx(route_part) or own_raw <= 0.0:
+		return _fail("fixture: need a nonzero Directive part and a positive own part, got %s and %s" % [route_part, own_raw])
+	cfg["cap"] = own_raw * 0.5
+	var spatial: Dictionary = {}
+	arbiter._spatial_utility(goal, option, directive, cfg, spatial, 0.0, 0.0)
+	if not is_equal_approx(float(spatial["value"]), float(cfg["cap"])):
+		return _fail("fixture: the cap must bite, value %s cap %s" % [spatial["value"], cfg["cap"]])
+	var own: float = float(spatial["value"]) - BehaviorArbiter._route_directive_part({"_spatial_components": spatial})
+	if not is_equal_approx(own, float(cfg["cap"])):
+		return _fail("own score %s, wanted the capped non-Directive part %s" % [own, cfg["cap"]])
 	return _pass()
 
 

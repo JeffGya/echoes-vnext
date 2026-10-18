@@ -1608,9 +1608,11 @@ func _spatial_utility(
 	out_parts["parts"] = parts
 	var exposure_part: float = float(config["directive_exposure_acceptance_weight"]) * float(acceptance_parts["D_scaled"]) * exposure
 	out_parts["directive_exposure_part"] = exposure_part
-	out_parts["directive_route_part"] = exposure_part + float(parts["directive_objective_advance"]) \
+	var route_part: float = exposure_part + float(parts["directive_objective_advance"]) \
 		+ float(parts["directive_avoid_overcommit"]) + float(parts["directive_ally_protection"]) \
 		+ float(parts["directive_threat_interception"])
+	out_parts["directive_route_part"] = route_part
+	out_parts["own_spatial"] = clampf(raw - route_part, -cap, cap)
 	out_parts["acceptance_parts"] = acceptance_parts
 	out_parts["raw"]   = raw
 	out_parts["cap"]   = cap
@@ -2056,11 +2058,15 @@ func _rank_directive_candidates(
 ## The Directive's voice inside a route candidate's score beyond the per-type bonus: the five Directive
 ## spatial terms (the exposure term keeps the Echo's own fear lean out) and the Directive stop-short bias.
 ## Subtracted with the type bonus to get the Echo's own score. 0.0 for a candidate that is not a route.
-## The spatial value is clamped, so a removal past the cap takes out more than the clamped score held.
+## The spatial part is `value - own_spatial`, where `own_spatial` is the capped non-Directive part, so the
+## cap never changes the Echo's own score.
 static func _route_directive_part(candidate: Dictionary) -> float:
 	var spatial: Dictionary = candidate.get("_spatial_components", {}) as Dictionary
 	var bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
-	return float(spatial.get("directive_route_part", 0.0)) \
+	var spatial_part: float = 0.0
+	if spatial.has("own_spatial"):
+		spatial_part = float(spatial["value"]) - float(spatial["own_spatial"])
+	return spatial_part \
 		+ float(bias.get(StopShortService.bias_key("directive"), 0.0))
 
 
