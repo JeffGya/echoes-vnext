@@ -4,6 +4,9 @@ extends RefCounted
 
 var _tests: Array = [] # [{ "name": String, "fn": Callable }]
 
+## Optional. Called with the test name just before each test runs. Used by tests/LegacyLedgerFile.gd.
+var before_test_hook: Callable = Callable()
+
 func register_test(name: String, fn: Callable) -> void:
 	_tests.append({ "name": name, "fn": fn })
 
@@ -18,6 +21,8 @@ func run_all() -> Dictionary:
 
 		var ok := true
 		var err := ""
+		if before_test_hook.is_valid():
+			before_test_hook.call(name)
 		var started_ms := Time.get_ticks_msec()
 
 		# Catch runtime errors

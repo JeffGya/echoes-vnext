@@ -210,9 +210,29 @@ Two environment variables configure the script. `GODOT_BIN` is the Godot binary 
 Use `ALARM_SCALE` on a machine with fewer cores than shards: the shards then run slower than the
 alarms assume. Never set it below 1.
 
-**Coverage gap — `movement_fallback` is NOT validated by a sharded run.** See "Always run the FULL
-suite before committing" below: that rule exists in part because this guard only sees its own
-shard's ~16 suites here, not all ~124, so a clean sharded run cannot substitute for it.
+**`movement_fallback` in a sharded run (changed 2026-10-18).** `MovementFallbackGuardTests` reads a
+process-wide ledger of legacy-selector fallbacks (`ActorStateMachine.legacy_selector_uses`). In its
+own shard it saw only that shard's suites. It now runs in a separate **merge step** after all shards,
+and it judges the ledgers of every shard:
+1. Each shard process that has `ECHOES_TEST_SAVE_DIR` set writes its ledger to
+   `<save dir>/legacy_selector_ledger.json` after its last test (`tests/LegacyLedgerFile.gd`).
+2. The script runs one more Godot process: `tests =movement_fallback` with `ECHOES_LEGACY_LEDGER_IN` set to
+   the shard ledger files. The process loads the entries before its first test. The guard test is unchanged.
+3. `movement_fallback` is in `MERGE_SUITES` (`scripts/test-shard-map.sh`) and in no shard. The combined total
+   still equals the serial total. A shard that writes no ledger makes the run INVALID (exit 1), like a
+   missing `Tests:` line. A ledger file that cannot be read fails the guard and names the file.
+4. The serial run keeps its in-process guard. Without `ECHOES_TEST_SAVE_DIR` nothing is written.
+
+**What the serial guard really judges (Jeff, 2026-10-18: "match the serial verdict").**
+`behavior_char/legacy_selector_fallback_is_loud` calls `take_legacy_selector_uses()` at its start. That
+clears every entry that suites registered BEFORE it recorded. The serial guard therefore judges only the
+entries recorded at or after that test (today only `pending_result`). On 2026-10-18 `combat_roundtrip`
+recorded 57 real fallbacks (`perceived_actor_kind_mismatch`, `guide_spirit_01`) that the serial guard
+never sees. The sharded run copies the serial rule: each shard sets aside the entries recorded before
+that test as "ignored". The merge step prints them as a WARNING and does not judge them. The sharded verdict
+equals the serial verdict. If `behavior_char/legacy_selector_fallback_is_loud` is renamed, change
+`LegacyLedgerFile.SERIAL_WIPE_TEST` in the same commit; otherwise the merge step fails and says so.
+Whether to remove the clearing is a decision for Jeff (open follow-up).
 
 Launches several headless Godot processes at once — each with its own `ECHOES_TEST_SAVE_DIR`
 under `/tmp/echoes-vnext-sharded/` and a single `tests =<exact suite names>` invocation — and sums
@@ -301,12 +321,8 @@ described above, just per-shard.
 **Always run the FULL suite before committing.** This codebase has cross-cutting guards — a
 one-file change has broken tests in unrelated suites more than once (the dispatch-action count
 guard, and a UI test that wired nodes from another screen). Filter while iterating; never ship on a
-filtered run alone. **This specifically includes the sharded run**: `movement_fallback`
-(`MovementFallbackGuardTests`) is registered LAST in `ui/AppRoot.gd` because it reads a
-legacy-selector ledger that every other suite in the SAME PROCESS may write to. A sharded run only
-puts it alongside its own shard's ~16 sibling suites, not all ~124, so a clean sharded PASS on
-`movement_fallback` does NOT have full-suite validity — a fallback triggered by a suite in a
-different shard is invisible to it. Only the full serial suite validates this guard correctly.
+filtered run alone. The sharded run is a full run: since 2026-10-18 it also judges `movement_fallback`
+on the ledgers of all shards (see above), with the same verdict as the serial run.
 
 **Only ONE suite run at a time.** Tests share `/tmp/echoes-vnext-tests/`; two concurrent runs
 corrupt each other's save fixtures.

@@ -637,6 +637,10 @@ func _run_tests(parts: Array) -> void:
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)
 
+	# Isolated runs only: copy the serial run's ledger-clearing rule (tests/LegacyLedgerFile.gd).
+	# This needs the full registration order, so it runs before the filter trims the runner.
+	LegacyLedgerFile.install_serial_wipe(runner)
+
 	# Suite filter: "tests" with no argument runs everything, unchanged. "tests <filter>"
 	# matches the suite's reported name (text before "/" in each test's registered name,
 	# the same grouping used for the "✅ suite — N passed" lines below) case-insensitively,
@@ -710,7 +714,16 @@ func _run_tests(parts: Array) -> void:
 			suite_filter, matched_suites.size(), ", ".join(matched_suites)
 		])
 
+	# Sharded runs: load the other shards' legacy-selector ledgers before the guard suite runs
+	# (ECHOES_LEGACY_LEDGER_IN, see tests/LegacyLedgerFile.gd). Unset in every other run.
+	for ledger_line in LegacyLedgerFile.merge_from_env():
+		_debug_print(str(ledger_line))
+
 	var result: Dictionary = runner.run_all()
+	# Isolated runs (ECHOES_TEST_SAVE_DIR set): write this process's ledger for the merge step.
+	var ledger_dump_report := LegacyLedgerFile.dump_if_isolated()
+	if not ledger_dump_report.is_empty():
+		_debug_print(ledger_dump_report)
 	_debug_print("Tests: %d total, %d passed, %d failed" % [
 		int(result.get("total", 0)),
 		int(result.get("passed", 0)),

@@ -68,10 +68,20 @@ SHARDS=(
   "shard1|movement,old_echo,skill_reach,stage_stop_ui,stop_short,stop_short_search,stop_short_wiring,felt_state,fingerprint_combat,fingerprint_determinism_combat|"
   "shard2|combat_roundtrip,echofactory,emotion,exclusive_action,ko_death,melee,morale,onboarding,passive,pending_result,sanctum_pulse,sit_res,situational,skill,snapshot,stage,fingerprint_purify_shrine,fingerprint_determinism_purify_shrine|"
   "shard3|actor,bark_popup,bond_trigger,combat_terrain,conversation_repair,divergence,divergence_bark,movement_arbiter,objective,retreat,sanctum.summon,skill_loadout,snapshot_purity,structure,support,terrain,fingerprint_recover,fingerprint_determinism_recover|"
-  "shard4|archetype,behavior_char,calling,calling_behavior,combat_ui,contact,contact_cfg,foundation_ui,institution,movement_fallback,movement_option,prog,realm_prog,sanctum.party,snapshot_fingerprint,traversal,vector,weave,fingerprint_protect,fingerprint_determinism_protect|"
+  "shard4|archetype,behavior_char,calling,calling_behavior,combat_ui,contact,contact_cfg,foundation_ui,institution,movement_option,prog,realm_prog,sanctum.party,snapshot_fingerprint,traversal,vector,weave,fingerprint_protect,fingerprint_determinism_protect|"
   "shard5|consequence,contact_actor,cooldown,directive,directive_char,explore,leadership,maturity_baseline,movement_path,realm_ui,recruit,reward,sanctum.layout,shrine,skill_unlock,voice,vow,fingerprint_endure,fingerprint_determinism_endure|"
   "shard7|seam,fingerprint_pursue,fingerprint_determinism_pursue|900"
   "shard8|behavior,behavior_arbiter,combat_initiative,explore_p5,identity,live_movement_style,statinit,trace,fingerprint_guide_spirit,fingerprint_determinism_guide_spirit,fingerprint_seek|"
   "shard9|economy,flow_transaction,grid,guidance,guidance_bark,movement_style,social_graph,venture_char,board_camera.bounds,board_camera.echo_detail,board_camera.input,board_camera.view,board_camera.zoom,board_camera.pointer,combat_camera,board_pointer,stage_camera|"
   "shard10|arbiter,bridge,combat,combat_baseline,continuity,derived,directive_cfg,echo_party,expr,intel,objective_combat,realm,realm_reward,save_integrity,snapshot_contract,thread,unified_resolve|"
+)
+
+# Suites that run in the merge step and in NO shard (scripts/run-tests-sharded.sh).
+# movement_fallback (MovementFallbackGuardTests) fails when the process-wide legacy-selector ledger
+# is not empty. In a shard it saw only that shard's suites. In the merge step it sees the ledger of
+# every shard (tests/LegacyLedgerFile.gd), so a clean sharded run judges it like the serial run.
+# scripts/check-shard-map.sh counts these names with the shard suites: each registered suite must
+# appear exactly once in SHARDS and MERGE_SUITES together.
+MERGE_SUITES=(
+  movement_fallback
 )
