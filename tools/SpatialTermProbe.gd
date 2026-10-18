@@ -335,7 +335,8 @@ static func _dump_fields(runtime: FlowRuntime, ectx: EncounterContext, mode: Str
 		t += 1
 		var built: Dictionary = turn_ctx.build_turn_context(actor, ectx, balance, bdata, 0, t)
 		var prepared: Dictionary = live.prepare_live_movement_context(
-			actor, ectx, ectx.combat_state, built["board_cfg"] as Dictionary, bdata, t)
+			actor, ectx, ectx.combat_state, built["board_cfg"] as Dictionary, bdata, t,
+			MaturityExpressionService.composure_of(actor, {"all_actors": ectx.actors}, bdata))
 		if not bool(prepared.get("valid", false)):
 			continue
 		var options: Array = prepared.get("options", []) as Array

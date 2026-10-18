@@ -330,7 +330,8 @@ static func _measure_prepare_seam(
 	# cross-check total every granular step in (B) below must sum close to.
 	var t_prep0: int = Time.get_ticks_usec()
 	var movement_prepared: Dictionary = lm.prepare_live_movement_context(
-		actor, ectx, combat_state, movement_board_cfg, bdata, t)
+		actor, ectx, combat_state, movement_board_cfg, bdata, t,
+		MaturityExpressionService.composure_of(actor, {"all_actors": ectx.actors}, bdata))
 	var t_prep1: int = Time.get_ticks_usec()
 	breakdown["prep_calls"] = int(breakdown["prep_calls"]) + 1
 	breakdown["prep_usec"] = int(breakdown["prep_usec"]) + (t_prep1 - t_prep0)

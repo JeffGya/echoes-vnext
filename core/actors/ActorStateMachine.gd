@@ -625,7 +625,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_status, end_status,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
 		divergence_bark_cooldown, guidance_consent, guidance_reason_text, guidance_reading,
-		resilient_bark_cooldown)
+		resilient_bark_cooldown, expr_cfg.get("combat_banter", {}).get("calm_statuses", []) as Array)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -777,7 +777,8 @@ func _select_bark(
 	guidance_consent: String = "",
 	guidance_reason_text: String = "",
 	guidance_reading: String = "",
-	resilient_cooldown_ticks: int = 10
+	resilient_cooldown_ticks: int = 10,
+	banter_statuses: Array = []
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -845,9 +846,8 @@ func _select_bark(
 	elif end_status == "radiant" and action_type == "melee_attack":
 		context_key = "combat_inspired"
 		_bark_target_id = target
-	# Priority 8: combat_banter — low fear + steady/inspired morale
-	elif int(_actor.get("fear", 0)) < 30 \
-			and EmotionService.get_morale_tier(int(_actor.get("morale", 50))) in ["steady", "inspired"]:
+	# Priority 8: combat_banter — a calm status after the turn
+	elif end_status in banter_statuses:
 		context_key = "combat_banter"
 	# Priority 8.5: combat_calling_skill — actor used a calling-specific skill action
 	elif action_type in ["actor.interpose", "actor.hold_ground", "actor.steady_call",
