@@ -32,6 +32,14 @@ if ! [[ "$COUNT" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 [[ -s "$TIMING_FILE" ]] || { echo "FATAL: '$TIMING_FILE' is missing or empty." >&2; exit 1; }
+# More shards than suites would print empty entries such as "shard5||600", and
+# scripts/check-shard-map.sh rejects those. The timing file has one row per suite and does not
+# contain the MERGE_SUITES (movement_fallback), so its row count is below the registered count.
+ROWS="$(grep -c . "$TIMING_FILE")"
+if [[ "$COUNT" -gt "$ROWS" ]]; then
+  echo "FATAL: shard_count $COUNT is more than the $ROWS suites in '$TIMING_FILE'." >&2
+  exit 1
+fi
 
 sort -k1,1nr -k4,4 "$TIMING_FILE" | awk -v n="$COUNT" '
   { ms[NR] = $1; name[NR] = $4; total += $1 }
@@ -48,11 +56,19 @@ sort -k1,1nr -k4,4 "$TIMING_FILE" | awk -v n="$COUNT" '
     for (b = 1; b <= n; b++) order[b] = b
     for (i = 1; i <= n; i++) for (j = i + 1; j <= n; j++)
       if (load[order[j]] > load[order[i]]) { t = order[i]; order[i] = order[j]; order[j] = t }
-    printf "# Packed by scripts/rebalance-shards.sh: %d suites, %.0f s of test time, %d shards.\n", NR, total / 1000, n
+    # A bin can stay empty: suites that measured 0 ms never raise the load of a bin, so they all land in
+    # the same bin. An empty entry would fail scripts/check-shard-map.sh, so empty bins are left out.
+    used = 0
+    for (i = 1; i <= n; i++) if (count[order[i]] > 0) used++
+    if (used < n) printf "NOTE: %d of %d shards would be empty and are left out.\n", n - used, n > "/dev/stderr"
+    printf "# Packed by scripts/rebalance-shards.sh: %d suites, %.0f s of test time, %d shards.\n", NR, total / 1000, used
     printf "# Longest single suite: %.0f s (the floor under the wall-clock time).\n", ms[1] / 1000
     print "SHARDS=("
+    shard_no = 0
     for (i = 1; i <= n; i++) {
       b = order[i]
+      if (count[b] == 0) continue
+      shard_no++
       # Sort the suite names inside a shard so the diff between two rebalances stays small.
       m = split(list[b], parts, ",")
       for (x = 1; x <= m; x++) for (y = x + 1; y <= m; y++)
@@ -61,7 +77,7 @@ sort -k1,1nr -k4,4 "$TIMING_FILE" | awk -v n="$COUNT" '
       for (x = 2; x <= m; x++) joined = joined "," parts[x]
       est = load[b] / 1000
       alarm = est * 4; if (alarm < 600) alarm = 600
-      printf "  \"shard%d|%s|%d\"  # est %.0f s, %d suites\n", i, joined, alarm + 0.999, est, count[b]
+      printf "  \"shard%d|%s|%d\"  # est %.0f s, %d suites\n", shard_no, joined, alarm + 0.999, est, count[b]
     }
     print ")"
   }'
