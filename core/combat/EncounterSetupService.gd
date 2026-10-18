@@ -74,7 +74,7 @@
 #
 #   READS  (balance.json)
 #     data.grid                                   board dims + placement_modifiers
-#     data.combat.initiative_modifiers            -> ectx.initiative_cfg
+#     data.combat.initiative_modifiers + band_lean -> ectx.initiative_cfg
 #     data.combat.enemy_spawn_config              counts, thresholds, group selection
 #     data.combat.board                           base/max cols+rows, growth, pursue_override,
 #                                                 guide_spirit_override
@@ -197,7 +197,7 @@ func setup(t: int) -> void:
 		grid_cfg = bdata.get("grid", {})
 		# COMBAT-002: store initiative modifiers so EncounterRoundsState.enter() can use them.
 		var combat_cfg: Dictionary = bdata.get("combat", {})
-		flow_ctx.encounter_ctx.initiative_cfg = combat_cfg.get("initiative_modifiers", {})
+		flow_ctx.encounter_ctx.initiative_cfg = CombatState.initiative_cfg(combat_cfg)
 		# V2-COMBAT-003: store the stalemate config the same way, for the same reader.
 		flow_ctx.encounter_ctx.stalemate_cfg = combat_cfg.get("stalemate", {})
 

@@ -197,8 +197,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 	# PROG-010: capture emotional state at turn start (for event detection)
 	var start_fear: int = int(_actor.get("fear", 0))
-	var start_morale: int = int(_actor.get("morale", 50))
-	var start_morale_tier: String = EmotionService.get_morale_tier(start_morale)
+	var start_status: String = EmotionStatusLean.status_of(_actor)
 
 	# PROG-010: check last_echo_standing
 	var last_echo_standing := _is_last_echo_standing(context)
@@ -604,8 +603,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 	# PROG-010 / V2-VOICE-001: emotional event detection + bark selection
 	var end_fear: int = int(_actor.get("fear", 0))
-	var end_morale: int = int(_actor.get("morale", 50))
-	var end_morale_tier: String = EmotionService.get_morale_tier(end_morale)
+	var end_status: String = EmotionStatusLean.status_of(_actor)
 	var resilience_fired: bool = resist_fear_since_last_turn \
 		or bool((_actor.get("emotion", {}) as Dictionary).get("_resilience_fired", false))
 	var action_type: String = str(intent.get("action_type", ""))
@@ -624,7 +622,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var guidance_consent: String = str(guidance_response.get("consent", ""))
 	var guidance_reading: String = str(guidance_response.get("reading", ""))
 	var guidance_reason_text: String = str(guidance_response.get("reason_text", ""))
-	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
+	_select_bark(arch, calling, action_type, start_fear, end_fear, start_status, end_status,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
 		divergence_bark_cooldown, guidance_consent, guidance_reason_text, guidance_reading,
 		resilient_bark_cooldown)
@@ -767,8 +765,8 @@ func _select_bark(
 	action_type: String,
 	start_fear: int,
 	end_fear: int,
-	start_morale_tier: String,
-	end_morale_tier: String,
+	start_status: String,
+	end_status: String,
 	last_echo_standing: bool,
 	resilience_fired: bool,
 	target_id: Variant,
@@ -801,8 +799,8 @@ func _select_bark(
 	# Priority 4: combat_fear_rising (fear crossed 60 or 40)
 	elif (end_fear >= 60 and start_fear < 60) or (end_fear >= 40 and start_fear < 40):
 		context_key = "combat_fear_rising"
-	# Priority 5: combat_morale_falling (morale dropped a tier)
-	elif start_morale_tier != end_morale_tier and _morale_tier_rank(end_morale_tier) < _morale_tier_rank(start_morale_tier):
+	# Priority 5: combat_morale_falling (the emotional status got worse this turn)
+	elif EmotionService.STATUS_LADDER.find(end_status) < EmotionService.STATUS_LADDER.find(start_status):
 		context_key = "combat_morale_falling"
 	# Priority 5.4: combat_guidance_object / _refuse / _interpret — V2-COMBAT-003
 	# phase 9-10 TEMPORARY visual (V2-COMBAT-004 removes this bark surface and
@@ -843,13 +841,13 @@ func _select_bark(
 	elif action_type == "actor.taunt":
 		context_key = "combat_taunt"
 		_bark_target_id = target
-	# Priority 7: combat_inspired — morale inspired + aggressive action
-	elif end_morale_tier == "inspired" and action_type == "melee_attack":
+	# Priority 7: combat_inspired — radiant status + aggressive action
+	elif end_status == "radiant" and action_type == "melee_attack":
 		context_key = "combat_inspired"
 		_bark_target_id = target
 	# Priority 8: combat_banter — low fear + steady/inspired morale
 	elif int(_actor.get("fear", 0)) < 30 \
-			and (end_morale_tier == "steady" or end_morale_tier == "inspired"):
+			and EmotionService.get_morale_tier(int(_actor.get("morale", 50))) in ["steady", "inspired"]:
 		context_key = "combat_banter"
 	# Priority 8.5: combat_calling_skill — actor used a calling-specific skill action
 	elif action_type in ["actor.interpose", "actor.hold_ground", "actor.steady_call",
@@ -941,15 +939,6 @@ func _select_bark(
 		# (see the Priority 2 comment above).
 		if context_key == "combat_divergence":
 			_actor["_divergence_bark_next_t"] = t + divergence_cooldown_ticks
-
-
-# Returns an ordinal rank for morale tiers (higher = better).
-static func _morale_tier_rank(tier: String) -> int:
-	match tier:
-		"inspired": return 3
-		"steady":   return 2
-		"shaken":   return 1
-	return 0  # broken
 
 
 # V2-VOICE-002: Tick gap before next routine bark (~3–6 rounds at 7 ticks/round).

@@ -2114,6 +2114,10 @@ static func state_config_errors(balance_data: Dictionary) -> Array[String]:
 			var limit: float = max_abs if key == "afraid_points_override" else INF
 			if (entry as Dictionary).has(key) and not _numbers_within((entry as Dictionary)[key], actions, limit):
 				errors.append("maturity_expression.calling_behavior.%s.%s" % [calling, key])
+	var initiative: Dictionary = (balance_data.get("combat", {}) as Dictionary).get("initiative_modifiers", {}) as Dictionary
+	for key: String in ["afraid_points", "bold_points"]:
+		if not _is_finite_number(initiative.get(key, null)):
+			errors.append("combat.initiative_modifiers.%s" % key)
 	return errors
 
 

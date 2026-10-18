@@ -24,7 +24,7 @@ var actors: Array = []
 var placement_seed: int = 0
 # COMBAT-001: combat state dict — set by EncounterRoundsState.enter() via combat.init.
 var combat_state: Dictionary = {}
-# COMBAT-002: initiative config — set by EncounterSetupService.setup() from balance.json data.combat.initiative_modifiers.
+# COMBAT-002: initiative config — set by EncounterSetupService.setup() from CombatState.initiative_cfg(data.combat).
 var initiative_cfg: Dictionary = {}
 # V2-COMBAT-003: stalemate config — set by EncounterSetupService.setup() from balance.json
 # data.combat.stalemate. Read once by EncounterRoundsState.enter() to seed CombatState's

@@ -1905,13 +1905,9 @@
 					"pillar": -2.0,
 					"nurturer": -2.0
 				},
-				"by_morale_tier": {
-					"_comment": "V2-COMBAT-001: Readiness modifier by morale tier at combat start. Mirrors EmotionService.get_morale_tier() thresholds (inspired>=75, steady>=50, shaken>=25, broken<25). Calculated once at combat start — mid-combat morale recovery does not re-sort.",
-					"inspired":  4,
-					"steady":    0,
-					"shaken":   -3,
-					"broken":   -6
-				}
+				"_comment_state_points": "PROPOSED DEFAULT. Readiness from the emotional status at combat start: afraid x afraid_points + bold x bold_points, from the unsoftened status lean (data.combat.movement.felt_state.band_lean), linear. Fractions are kept. Calculated once at combat start.",
+				"afraid_points": -6.0,
+				"bold_points": 5.0
 			},
 			"objective_modes": {
 				"_comment": "V2-STAGE-004 Phase 3: per-mode combat tuning. Read by FlowEncounterState at encounter start (data.combat.objective_modes[mode]); scaled by realm completion order; a populated ObjectiveModel.params overrides. recover=hold a relic; protect=keep entity alive N rounds; endure=survive N rounds of waves.",

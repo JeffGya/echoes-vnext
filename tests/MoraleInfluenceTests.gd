@@ -18,6 +18,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("morale/calling_signature_scales_by_afraid",          Callable(MoraleInfluenceTests, "_t_calling_signature_scales_by_afraid"))
 	runner.register_test("morale/bold_status_raises_melee",                    Callable(MoraleInfluenceTests, "_t_bold_status_raises_melee"))
 	runner.register_test("morale/afraid_curve_values",                         Callable(MoraleInfluenceTests, "_t_afraid_curve_values"))
+	runner.register_test("morale/bark_triggers_follow_the_status",             Callable(MoraleInfluenceTests, "_t_bark_triggers_follow_the_status"))
 	runner.register_test("morale/state_config_valid",                          Callable(MoraleInfluenceTests, "_t_state_config_valid"))
 	runner.register_test("morale/state_config_rejects_bad_values",             Callable(MoraleInfluenceTests, "_t_state_config_rejects_bad_values"))
 
@@ -261,6 +262,27 @@ static func _t_afraid_curve_values() -> Dictionary:
 	return _pass()
 
 
+static func _bark_context(start_status: String, end_status: String, action_type: String) -> String:
+	var asm := ActorStateMachine.new({"id": "echo.bark", "fear": 0, "morale": 50}, null, {})
+	asm._expression_band = "whole"
+	asm._select_bark("proud", "", action_type, 0, 0, start_status, end_status, false, false, "", 0, 0)
+	return asm._bark_context
+
+
+## "morale falling" fires when the status gets worse, for any cause; "inspired" fires at radiant.
+static func _t_bark_triggers_follow_the_status() -> Dictionary:
+	if _bark_context("grounded", "burdened", "actor.guard") != "combat_morale_falling":
+		return _fail("a worse status must select combat_morale_falling")
+	if _bark_context("burdened", "grounded", "actor.guard") == "combat_morale_falling" \
+			or _bark_context("pressed", "pressed", "actor.guard") == "combat_morale_falling":
+		return _fail("a better or equal status must not select combat_morale_falling")
+	if _bark_context("radiant", "radiant", "melee_attack") != "combat_inspired":
+		return _fail("radiant + melee must select combat_inspired")
+	if _bark_context("whole", "whole", "melee_attack") == "combat_inspired":
+		return _fail("only radiant selects combat_inspired")
+	return _pass()
+
+
 static func _t_state_config_valid() -> Dictionary:
 	var errors: Array[String] = BehaviorArbiter.state_config_errors(_data())
 	if not errors.is_empty():
@@ -274,6 +296,10 @@ static func _t_state_config_rejects_bad_values() -> Dictionary:
 			d["actor"]["afraid_curve_exponent"] = 4.5],
 		["actor.afraid_curve_exponent", func(d: Dictionary) -> void:
 			d["actor"]["afraid_curve_exponent"] = 0.5],
+		["combat.initiative_modifiers.bold_points", func(d: Dictionary) -> void:
+			d["combat"]["initiative_modifiers"]["bold_points"] = "high"],
+		["combat.initiative_modifiers.afraid_points", func(d: Dictionary) -> void:
+			(d["combat"]["initiative_modifiers"] as Dictionary).erase("afraid_points")],
 		["actor.state_action_points.melee_attack", func(d: Dictionary) -> void:
 			var limit: float = float(d["actor"]["state_action_points"]["max_abs"])
 			d["actor"]["state_action_points"]["melee_attack"]["bold"] = limit + 1.0],
