@@ -1,0 +1,29 @@
+name: probe-shard-solo-time
+on:
+  push:
+    branches: [claude/ci-probe-tmp]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [reward, fingerprint_determinism_guide_spirit, combat_baseline]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Godot and import
+        run: |
+          version="$(sed -n 's/^config\/features=PackedStringArray("\([0-9][0-9.]*\)".*/\1/p' project.godot)"
+          zip="Godot_v${version}-stable_linux.x86_64.zip"
+          curl -fsSL --retry 3 -o "$zip" "https://github.com/godotengine/godot-builds/releases/download/${version}-stable/$zip"
+          unzip -q "$zip" && mv "Godot_v${version}-stable_linux.x86_64" godot-bin && chmod +x godot-bin
+          nproc; grep -m1 "model name" /proc/cpuinfo; lscpu | grep -E "Thread|Core|Socket"
+          ./godot-bin --headless --import --path . > /dev/null 2>&1 || true
+          ./godot-bin --headless --import --path . > /dev/null 2>&1 || true
+      - name: Run one suite alone
+        run: |
+          start=$(date +%s)
+          ECHOES_TEST_SAVE_DIR=/tmp/probe-saves ./godot-bin --headless --quit --path . -- tests =${{ matrix.suite }} > out.log 2>&1 || true
+          echo "SOLO_ELAPSED suite=${{ matrix.suite }} secs=$(( $(date +%s) - start ))"
+          grep -E 'TIMING_SUITE|Tests:' out.log | sed 's/.*Debug output //' | head -3
