@@ -38,10 +38,20 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Godot version from project.godot: $version"
 
+      # The import cache key is computed ONCE, before the import. The import writes new .import
+      # files; a key computed after it would differ from the key of the next run's restore.
+      # The key hashes the asset files and the .import files, NOT the .gd files, so a script
+      # change does not throw the cache away.
+      - name: Compute the import cache key
+        id: key
+        run: echo "import=godot-import-${{ steps.godot.outputs.version }}-${{ hashFiles('project.godot', '**/*.import', '**/*.png', '**/*.svg', '**/*.ttf') }}" >> "$GITHUB_OUTPUT"
+
       # The cache key holds the version, so a new version downloads a new binary.
-      - name: Cache the Godot binary
+      # The caches are saved by explicit steps right after setup. The automatic save at the end
+      # of a job is skipped when the job fails, and then a red suite would never warm the caches.
+      - name: Restore the Godot binary cache
         id: cache-godot
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/godot-bin
           key: godot-linux-x86_64-${{ steps.godot.outputs.version }}
@@ -61,20 +71,27 @@ jobs:
           mv ~/godot-bin/"Godot_v${version}-stable_linux.x86_64" ~/godot-bin/godot
           chmod +x ~/godot-bin/godot
 
+      - name: Save the Godot binary cache
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/godot-bin
+          key: godot-linux-x86_64-${{ steps.godot.outputs.version }}
+
       - name: Check the Godot version
         run: ~/godot-bin/godot --version
 
-      # The import cache holds converted assets only. The key hashes the asset files and the
-      # .import files, NOT the .gd files, so a script change does not throw the cache away.
+      # The import cache holds converted assets only.
       # THE STALE-CACHE TRAP (AGENTS.md "Rebuild the script class cache"): a restored .godot can
       # hold an old class cache, and then tests fail with "Identifier not declared" or with
       # drifted fingerprint hashes that look like real regressions. The next step therefore ALWAYS
       # runs `--import`, which rebuilds the class cache, even on a cache hit.
-      - name: Cache the import cache
-        uses: actions/cache@v4
+      - name: Restore the import cache
+        id: cache-import
+        uses: actions/cache/restore@v4
         with:
           path: .godot
-          key: godot-import-${{ steps.godot.outputs.version }}-${{ hashFiles('project.godot', '**/*.import', '**/*.png', '**/*.svg', '**/*.ttf') }}
+          key: ${{ steps.key.outputs.import }}
           restore-keys: |
             godot-import-${{ steps.godot.outputs.version }}-
 
@@ -93,6 +110,13 @@ jobs:
           echo "::error::Import still prints errors after 3 attempts"
           cat import.log
           exit 1
+
+      - name: Save the import cache
+        if: steps.cache-import.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .godot
+          key: ${{ steps.key.outputs.import }}
 
       - name: Run the sharded suite
         id: suite
