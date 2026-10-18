@@ -139,18 +139,18 @@ static func _t_production_golden() -> Dictionary:
 	enemy["grid_pos"] = {"col": 1, "row": 0}
 	actual = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 2})
 	_strip_trace_reporting(actual)
-	# melee_attack's ranked-candidate score (39.77) is a genuine arithmetic result
+	# melee_attack's ranked-candidate score (36.83) is a genuine arithmetic result
 	# (not a clean decimal literal), so it lands on a double a few ULPs off whatever
-	# GDScript's own "39.77" literal parses to — is_equal_approx it separately, then
+	# GDScript's own "36.83" literal parses to — is_equal_approx it separately, then
 	# normalize it in `actual` so the single exact-equality dict compare below still
 	# works for every other (exact) field.
 	var stationary_candidates: Array = ((actual.get("_divergence_probe", {}) as Dictionary).get("directive_candidates", []) as Array)
 	for candidate_v: Variant in stationary_candidates:
 		var candidate: Dictionary = candidate_v as Dictionary
 		if str(candidate.get("action_type", "")) == "melee_attack":
-			if not is_equal_approx(float(candidate.get("score", 0.0)), 39.77):
+			if not is_equal_approx(float(candidate.get("score", 0.0)), 36.83):
 				return _fail("melee_attack ranked-candidate score drifted: %s" % str(candidate.get("score", 0.0)))
-			candidate["score"] = 39.77
+			candidate["score"] = 36.83
 	var expected_stationary: Dictionary = {
 		"action_type": "actor.guard", "target_id": "", "priority": 0.0,
 		"emotional_status": "hollow", "state_points": 0.0, "archetype_birth": "", "archetype_modifier": 0,
@@ -174,7 +174,7 @@ static func _t_production_golden() -> Dictionary:
 					"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
 				},
 				{
-					"action_type": "melee_attack", "target_id": "enemy.a", "score": 39.77,
+					"action_type": "melee_attack", "target_id": "enemy.a", "score": 36.83,
 					"directive_bonus": 0.0, "directive_bonus_nascent": 0.0,
 				},
 			],

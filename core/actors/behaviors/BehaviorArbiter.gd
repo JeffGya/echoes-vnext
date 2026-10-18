@@ -25,7 +25,7 @@
 #   - archetype_bonus: flat constant from archetype_action_muls[action_type][archetype_birth]
 #   - state_points: afraid × state_action_points[action_type].afraid + bold × [action_type].bold
 #   - fear_factor: clamp(1.0 - afraid × fear_active_dampen, 0, 1) for active intents only
-#   afraid and bold are the two ends of the status lean, softened by composure once (_state_lean).
+#   afraid (curved) and bold are the two ends of the status lean, softened by composure once (_state_ends).
 #   - directive_bonus: sum(dir_weight × directive_action_muls[action_type][key]) × directive_base_bonus
 #
 # Tiebreak: alphabetically smallest action_type string (deterministic).
@@ -147,7 +147,8 @@ const _DEFAULTS := {
 	# {} = the status adds no points. Real values live in data.actor.state_action_points.
 	"state_action_points": {},
 	"directive_base_bonus":  20.0,
-	"fear_active_dampen":    0.45,
+	"fear_active_dampen":    0.55,
+	"afraid_curve_exponent": 1.0,  # 1.0 = linear; the real value lives in data.actor
 	"fear_passive_actions":  ["actor.idle", "actor.guard"],
 	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
@@ -507,7 +508,7 @@ func select_intent(context: Dictionary) -> Dictionary:
 
 	# Status metadata — for ActorStateMachine to log and snapshot.
 	winner["emotional_status"] = EmotionStatusLean.status_of(actor)
-	winner["state_points"]     = _state_points(str(winner.get("action_type", "")), _state_lean(actor, composure), calling_behavior)
+	winner["state_points"]     = _state_points(str(winner.get("action_type", "")), _state_ends(actor, composure), calling_behavior)
 
 	# Archetype metadata — for ActorStateMachine logging.
 	var winner_arch: String       = str(actor.get("archetype_birth", ""))
@@ -759,7 +760,7 @@ func select_movement_intent(
 	# themed, so "a vow is active" reads as fully Ward-leaning until a vow carries its
 	# own Ward/Break strain signal. See the story report's OPEN block.
 	var style_growth: Dictionary = _style_growth_of(actor, interpretation_width)
-	var state_lean: float = _state_lean(actor, composure)
+	var state_ends: Array = _state_ends(actor, composure)
 	var style_inputs: Dictionary = {
 		"actor":            actor,
 		"bonds":            bonds_ctx if is_echo_faction else [],
@@ -767,8 +768,8 @@ func select_movement_intent(
 		"vector_scores":    actor.get("vector_scores", {}) as Dictionary,
 		"calling_family":   str(context.get("calling_family", "")),
 		"traits":           actor.get("traits", {}) as Dictionary,
-		"afraid":           EmotionStatusLean.afraid(state_lean),
-		"bold":             EmotionStatusLean.bold(state_lean),
+		"afraid":           state_ends[0],
+		"bold":             state_ends[1],
 		"vector_mul":       style_growth["vector_mul"],
 		"trait_mul":        style_growth["trait_mul"],
 		"vow_lean":         0.0 if active_vow.is_empty() else -1.0,
@@ -1787,8 +1788,8 @@ func _score(
 	var traits: Dictionary     = actor.get("traits", {})
 	var vectors: Dictionary    = actor.get("vector_scores", {})
 	# The only emotional input: composure enters here and nowhere else in this function.
-	var lean: float   = _state_lean(actor, composure)
-	var afraid: float = EmotionStatusLean.afraid(lean)
+	var ends: Array   = _state_ends(actor, composure)
+	var afraid: float = float(ends[0])
 
 	# 1. Base weight from calling_origin table.
 	# Skill-gated candidates carry skill_base_bonus (pre-resolved via intent_weight_tag + bonus);
@@ -1851,7 +1852,7 @@ func _score(
 		fear_factor = clampf(1.0 - float(_cfg_get("fear_active_dampen")) * afraid, 0.0, 1.0)
 
 	# 5. State points live inside the bracket, so the fear factor dampens them too.
-	var state_points: float = _state_points(action_type, lean, calling_behavior)
+	var state_points: float = _state_points(action_type, ends, calling_behavior)
 	# PROG-009: Okofor passive — anchor bonus on guard/protect_ally per stationary round.
 	if calling_origin == "okofor" and (action_type == "actor.guard" or action_type == "protect_ally"):
 		var anchor_rounds: int = int(actor.get("_anchor_rounds", 0))
@@ -1936,11 +1937,25 @@ func _score(
 
 ## Points the status adds to one action: afraid x its afraid end + bold x its bold end.
 ## A calling's afraid_points_override replaces the afraid end for the actions it names.
-func _state_points(action_type: String, lean: float, calling_behavior: Dictionary) -> float:
+func _state_points(action_type: String, ends: Array, calling_behavior: Dictionary) -> float:
 	var row: Dictionary = (_cfg_get("state_action_points") as Dictionary).get(action_type, {}) as Dictionary
 	var override: Dictionary = calling_behavior.get("afraid_points_override", {}) as Dictionary
 	var afraid_points: float = float(override.get(action_type, row.get("afraid", 0.0)))
-	return EmotionStatusLean.afraid(lean) * afraid_points + EmotionStatusLean.bold(lean) * float(row.get("bold", 0.0))
+	return float(ends[0]) * afraid_points + float(ends[1]) * float(row.get("bold", 0.0))
+
+
+## [afraid, bold] of the actor's status for the action layer and style, each softened once by
+## composure. Afraid is curved by afraid_curve_exponent; bold stays linear. [0, 0] without a table.
+func _state_ends(actor: Dictionary, composure: float) -> Array:
+	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
+	if table.is_empty():
+		return [0.0, 0.0]
+	var lean: float = EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table)
+	var dampen: float = composure_dampen(_cfg)
+	return [
+		EmotionStatusLean.curved_afraid(lean, float(_cfg_get("afraid_curve_exponent")), composure, dampen),
+		EmotionStatusLean.bold(EmotionStatusLean.soften(lean, composure, dampen)),
+	]
 
 
 ## Maps directive semantic intent_weights keys → action bonus.
@@ -2065,6 +2080,9 @@ static func state_config_errors(balance_data: Dictionary) -> Array[String]:
 		for action: Variant in (row as Dictionary if row is Dictionary else {}):
 			if not actions.has(action):
 				actions.append(action)
+	var exponent: Variant = actor_cfg.get("afraid_curve_exponent", null)
+	if not _is_finite_number(exponent) or float(exponent) < 1.0 or float(exponent) > 4.0:
+		errors.append("actor.afraid_curve_exponent")
 	var points: Variant = actor_cfg.get("state_action_points", {})
 	var max_abs: float = -1.0
 	if points is Dictionary and _is_finite_number((points as Dictionary).get("max_abs", null)):

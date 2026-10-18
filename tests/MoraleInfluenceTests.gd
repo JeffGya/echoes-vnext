@@ -17,6 +17,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("morale/enemy_reads_the_status",                      Callable(MoraleInfluenceTests, "_t_enemy_reads_the_status"))
 	runner.register_test("morale/calling_signature_scales_by_afraid",          Callable(MoraleInfluenceTests, "_t_calling_signature_scales_by_afraid"))
 	runner.register_test("morale/bold_status_raises_melee",                    Callable(MoraleInfluenceTests, "_t_bold_status_raises_melee"))
+	runner.register_test("morale/afraid_curve_values",                         Callable(MoraleInfluenceTests, "_t_afraid_curve_values"))
 	runner.register_test("morale/state_config_valid",                          Callable(MoraleInfluenceTests, "_t_state_config_valid"))
 	runner.register_test("morale/state_config_rejects_bad_values",             Callable(MoraleInfluenceTests, "_t_state_config_rejects_bad_values"))
 
@@ -38,9 +39,10 @@ static func _arbiter(data: Dictionary) -> BehaviorArbiter:
 ## The afraid and bold ends the arbiter should see for this actor and composure.
 static func _ends(data: Dictionary, actor: Dictionary, composure: float) -> Array:
 	var table: Dictionary = EmotionStatusLean.table_of((data["combat"] as Dictionary)["movement"] as Dictionary)
-	var lean: float = EmotionStatusLean.soften(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table),
-		composure, BehaviorArbiter.composure_dampen(_actor_cfg(data)))
-	return [EmotionStatusLean.afraid(lean), EmotionStatusLean.bold(lean)]
+	var lean: float = float(table[EmotionStatusLean.status_of(actor)])
+	var keep: float = 1.0 - BehaviorArbiter.composure_dampen(_actor_cfg(data)) * composure
+	var exponent: float = float((data["actor"] as Dictionary)["afraid_curve_exponent"])
+	return [pow(maxf(0.0, -lean), exponent) * keep, maxf(0.0, lean) * keep]
 
 
 static func _points(data: Dictionary, action_type: String, ends: Array) -> float:
@@ -242,6 +244,23 @@ static func _t_bold_status_raises_melee() -> Dictionary:
 	return _pass()
 
 
+## The curve acts on the unsoftened lean, then composure softens once; slices 5 and 6 stay linear.
+static func _t_afraid_curve_values() -> Dictionary:
+	var table: Dictionary = EmotionStatusLean.table_of(_data()["combat"]["movement"] as Dictionary)
+	for status: String in ["hollow", "burdened", "hesitant"]:
+		var lean: float = float(table[status])
+		var raw: float = -lean
+		if not is_equal_approx(EmotionStatusLean.curved_afraid(lean, 2.5, 0.0, 0.4), pow(raw, 2.5)):
+			return _fail("%s: curve at k 2.5 must be %f" % [status, pow(raw, 2.5)])
+		if not is_equal_approx(EmotionStatusLean.curved_afraid(lean, 2.5, 0.5, 0.4), pow(raw, 2.5) * 0.8):
+			return _fail("%s: composure must scale the curved value once" % status)
+		if not is_equal_approx(EmotionStatusLean.afraid(EmotionStatusLean.soften(lean, 0.5, 0.4)), raw * 0.8):
+			return _fail("%s: the linear afraid() of slices 5 and 6 changed" % status)
+	if EmotionStatusLean.curved_afraid(float(table["radiant"]), 2.5, 0.0, 0.4) != 0.0:
+		return _fail("a bold status must have no afraid value")
+	return _pass()
+
+
 static func _t_state_config_valid() -> Dictionary:
 	var errors: Array[String] = BehaviorArbiter.state_config_errors(_data())
 	if not errors.is_empty():
@@ -251,6 +270,10 @@ static func _t_state_config_valid() -> Dictionary:
 
 static func _t_state_config_rejects_bad_values() -> Dictionary:
 	var cases: Array = [
+		["actor.afraid_curve_exponent", func(d: Dictionary) -> void:
+			d["actor"]["afraid_curve_exponent"] = 4.5],
+		["actor.afraid_curve_exponent", func(d: Dictionary) -> void:
+			d["actor"]["afraid_curve_exponent"] = 0.5],
 		["actor.state_action_points.melee_attack", func(d: Dictionary) -> void:
 			var limit: float = float(d["actor"]["state_action_points"]["max_abs"])
 			d["actor"]["state_action_points"]["melee_attack"]["bold"] = limit + 1.0],

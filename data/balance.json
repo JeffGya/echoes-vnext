@@ -697,16 +697,18 @@
 				}
 			},
 			"state_action_points": {
-				"_comment": "PROPOSED DEFAULT. Points the emotional status adds to an action, inside the fear bracket: afraid x afraid + bold x bold, where afraid and bold are the two ends of the status lean (data.combat.movement.felt_state.band_lean) after composure. A calm status adds nothing. max_abs is the largest allowed size of one end.",
-				"max_abs": 25.0,
-				"melee_attack": { "afraid": -10.0, "bold": 17.0 },
-				"protect_ally": { "afraid": -4.0, "bold": 9.0 },
-				"actor.guard": { "afraid": 10.0, "bold": -7.0 },
-				"actor.idle": { "afraid": 8.0, "bold": -7.0 },
-				"actor.move": { "afraid": -10.0, "bold": 14.0 }
+				"_comment": "PROPOSED DEFAULT. Points the emotional status adds to an action, inside the fear bracket: afraid x afraid + bold x bold, where afraid and bold are the two ends of the status lean (data.combat.movement.felt_state.band_lean) after composure; afraid is curved by afraid_curve_exponent. A calm status adds nothing. max_abs is the largest allowed size of one end.",
+				"max_abs": 30.0,
+				"melee_attack": { "afraid": -20.0, "bold": 13.0 },
+				"protect_ally": { "afraid": -8.0, "bold": 8.0 },
+				"actor.guard": { "afraid": 25.0, "bold": -9.0 },
+				"actor.idle": { "afraid": 19.0, "bold": -9.0 },
+				"actor.move": { "afraid": -20.0, "bold": 11.0 }
 			},
 			"directive_base_bonus": 20.0,
-			"fear_active_dampen": 0.45,
+			"fear_active_dampen": 0.55,
+			"_comment_afraid_curve_exponent": "PROPOSED DEFAULT. The action layer and style read afraid = afraid(lean)^exponent, then composure softens it once. 1.0 is linear. Allowed 1.0 to 4.0.",
+			"afraid_curve_exponent": 2.5,
 			"fear_passive_actions": [
 				"actor.idle",
 				"actor.guard"
@@ -937,7 +939,7 @@
 					"sight":  { "lateral": 6.0, "careful": 6.0 }
 				},
 				"fear_weight": {
-					"_comment": "× afraid (0-1, the afraid end of the status lean after composure). Fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
+					"_comment": "× afraid (0-1, the curved afraid end of the status lean after composure). Fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
 					"direct": 0.0,
 					"restrained": 10.0,
 					"careful": 22.0,
@@ -951,7 +953,7 @@
 				},
 				"follow_through_bias": {
 					"_comment": "PROPOSED DEFAULT. Each end x its part of the status lean after composure (0-1). The afraid end reads as hesitation (careful/restrained); the bold end as follow-through (forceful/direct). A calm status adds nothing.",
-					"afraid": { "careful": 5.0, "restrained": 5.0, "forceful": -3.0, "overcommitted": -3.0 },
+					"afraid": { "careful": 10.0, "restrained": 10.0, "forceful": -6.0, "overcommitted": -6.0 },
 					"bold":   { "forceful": 11.0, "direct": 11.0 }
 				},
 				"bond_weight": {
