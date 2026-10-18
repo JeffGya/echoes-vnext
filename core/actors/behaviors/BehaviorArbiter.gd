@@ -767,6 +767,7 @@ func select_movement_intent(
 	# own Ward/Break strain signal. See the story report's OPEN block.
 	var style_growth: Dictionary = _style_growth(interpretation_width) if is_echo_faction \
 		else {"vector_mul": 1.0, "trait_mul": 1.0}
+	var state_lean: float = _state_lean(actor, composure)
 	var style_inputs: Dictionary = {
 		"actor":            actor,
 		"bonds":            bonds_ctx if is_echo_faction else [],
@@ -774,8 +775,8 @@ func select_movement_intent(
 		"vector_scores":    actor.get("vector_scores", {}) as Dictionary,
 		"calling_family":   str(context.get("calling_family", "")),
 		"traits":           actor.get("traits", {}) as Dictionary,
-		"fear":             maxf(float(actor.get("fear", 0)), float(actor.get("fear_base", 0))),
-		"morale_tier":      EmotionService.get_morale_tier(int(actor.get("morale", 50))),
+		"afraid":           EmotionStatusLean.afraid(state_lean),
+		"bold":             EmotionStatusLean.bold(state_lean),
 		"vector_mul":       style_growth["vector_mul"],
 		"trait_mul":        style_growth["trait_mul"],
 		"vow_lean":         0.0 if active_vow.is_empty() else -1.0,
@@ -2212,8 +2213,8 @@ func _style_alignment(candidate: Dictionary, inputs: Dictionary) -> float:
 		inputs["vector_scores"] as Dictionary,
 		str(inputs["calling_family"]),
 		inputs["traits"] as Dictionary,
-		float(inputs["fear"]),
-		str(inputs["morale_tier"]),
+		float(inputs["afraid"]),
+		float(inputs["bold"]),
 		_movement_style_bond_pressure(
 			inputs["bonds"] as Array,
 			inputs["actor"] as Dictionary,

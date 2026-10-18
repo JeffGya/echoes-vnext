@@ -358,9 +358,9 @@ static func _felt_rows(config: ConfigService, balance: Dictionary, bdata: Dictio
 		var judgment: float = float(expression["judgment"])
 		var growth: Dictionary = BehaviorArbiter.new({}, movement)._style_growth(judgment)
 		var plain: float = MovementStyleService.style_alignment_score("forceful", "advance", actor["vector_scores"] as Dictionary,
-			"", actor.get("traits", {}) as Dictionary, 0.0, "steady", 0.0, 0.0, style_cfg)
+			"", actor.get("traits", {}) as Dictionary, 0.0, 0.0, 0.0, 0.0, style_cfg)
 		var grown: float = MovementStyleService.style_alignment_score("forceful", "advance", actor["vector_scores"] as Dictionary,
-			"", actor.get("traits", {}) as Dictionary, 0.0, "steady", 0.0, 0.0, style_cfg, float(growth["vector_mul"]), float(growth["trait_mul"]))
+			"", actor.get("traits", {}) as Dictionary, 0.0, 0.0, 0.0, 0.0, style_cfg, float(growth["vector_mul"]), float(growth["trait_mul"]))
 		SpatialTermProbe._say("FELT_F3 standing=%d judgment=%.3f vector_mul=%.3f trait_mul=%.3f score=%.3f grown=%.3f" % [
 			standing, judgment, float(growth["vector_mul"]), float(growth["trait_mul"]), plain, grown])
 	SpatialTermProbe._say("### FELT F-4 afraid Echo, standing 3, pressed: cells of the chosen route with the switches off and on (stop-short is not modelled here)")

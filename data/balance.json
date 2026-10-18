@@ -936,7 +936,7 @@
 				}
 			},
 			"movement_style_weights": {
-				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/stories/v2-combat-003.5/decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + morale_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
+				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/stories/v2-combat-003.5/decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + follow_through_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
 				"_comment_alignment_weight": "PROPOSED DEFAULT — alignment_weight converts identity units into arbiter score units. The raw terms below reach ~50 for a maxed dominant vector, which would outweigh _score() itself; 0.06 makes style a few points of nudge — the same order as a leadership bonus. Lowered from 0.1 by the V2-COMBAT-003.5 Phase 3c fix (decision #33), where style outranked the whole distance-closing decision in a chase.",
 				"alignment_weight": 0.06,
 				"_comment_urgency_style_damping": "PROPOSED DEFAULT — decision #33. The applied style term is scaled by (1 - urgency_style_damping x goal.urgency). Urgency damps how much style OUTRANKS the board, never what the style is: at urgency 0 she moves entirely as herself, at urgency 1 manners are worth a quarter of that and the board decides.",
@@ -961,7 +961,7 @@
 					"sight":  { "lateral": 6.0, "careful": 6.0 }
 				},
 				"fear_weight": {
-					"_comment": "× fear/100. High fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
+					"_comment": "× afraid (0-1, the afraid end of the status lean after composure). Fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
 					"direct": 0.0,
 					"restrained": 10.0,
 					"careful": 22.0,
@@ -973,12 +973,10 @@
 					"retreating": 30.0,
 					"overcommitted": -20.0
 				},
-				"morale_bias": {
-					"_comment": "Flat, by EmotionService.get_morale_tier(). Low morale reads as hesitation (careful/restrained); high morale as follow-through (forceful/direct). steady is the neutral baseline.",
-					"broken":   { "careful": 10.0, "restrained": 10.0, "forceful": -6.0, "overcommitted": -6.0 },
-					"shaken":   { "careful": 5.0, "restrained": 5.0 },
-					"steady":   {},
-					"inspired": { "forceful": 8.0, "direct": 8.0 }
+				"follow_through_bias": {
+					"_comment": "PROPOSED DEFAULT. Each end x its part of the status lean after composure (0-1). The afraid end reads as hesitation (careful/restrained); the bold end as follow-through (forceful/direct). A calm status adds nothing.",
+					"afraid": { "careful": 5.0, "restrained": 5.0, "forceful": -3.0, "overcommitted": -3.0 },
+					"bold":   { "forceful": 11.0, "direct": 11.0 }
 				},
 				"bond_weight": {
 					"_comment": "× bond_pressure (0-1, scoped to the scored candidate's own goal subject — see BehaviorArbiter._movement_style_bond_pressure). A bonded ally pulls toward closing the gap or covering it.",

@@ -175,7 +175,7 @@ static func build(echoes: Array, directive: Dictionary, stance_cfg: Dictionary, 
 	return stance
 
 
-# Vector term only (family "", fear 0, no morale tier): the stance already leans on those (design 2 rule 1).
+# Vector term only (family "", not afraid, not bold): the stance already leans on those (design 2 rule 1).
 static func _best_style(actor: Dictionary, cfg_data: Dictionary) -> Dictionary:
 	var style_cfg := _d(_d(cfg_data.get("actor", {})).get("movement_style_weights", {}))
 	var best := {"style": "", "score": 0.0}
@@ -187,7 +187,7 @@ static func _best_style(actor: Dictionary, cfg_data: Dictionary) -> Dictionary:
 		if route.is_empty():
 			continue
 		var score := MovementStyleService.style_alignment_score(
-			route, "reposition", _d(actor.get("vector_scores", {})), "", {}, 0.0, "", 0.0, 0.0, style_cfg)
+			route, "reposition", _d(actor.get("vector_scores", {})), "", {}, 0.0, 0.0, 0.0, 0.0, style_cfg)
 		if first or score > float(best["score"]):
 			best = {"style": style, "score": score}
 			first = false

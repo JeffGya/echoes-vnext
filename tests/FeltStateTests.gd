@@ -632,14 +632,14 @@ static func _t_frightened_carrier() -> Dictionary:
 static func _style_cfg() -> Dictionary:
 	return {
 		"vector_bias": {"protector": {"guarded": 1.0}}, "calling_family_bias": {"anchor": {"guarded": 2.0}},
-		"fear_weight": {"guarded": 4.0}, "morale_bias": {"steady": {"guarded": 8.0}},
+		"fear_weight": {"guarded": 4.0}, "follow_through_bias": {"afraid": {"guarded": 8.0}},
 		"bond_weight": {"guarded": 16.0}, "vow_ward_weight": {"guarded": 32.0}, "trait_nudge": {"bold": {"guarded": 64.0}},
 	}
 
 
 static func _style_score(vector_mul: float, trait_mul: float) -> float:
 	return MovementStyleService._score_style(
-		"guarded", {"protector": 1.0}, "anchor", {"bold": 1.0}, 100.0, "steady", 1.0, -1.0, _style_cfg(), vector_mul, trait_mul)
+		"guarded", {"protector": 1.0}, "anchor", {"bold": 1.0}, 1.0, 0.0, 1.0, -1.0, _style_cfg(), vector_mul, trait_mul)
 
 
 static func _t_style_growth_identity_only() -> Dictionary:
