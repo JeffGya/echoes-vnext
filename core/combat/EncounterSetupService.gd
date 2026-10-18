@@ -219,6 +219,8 @@ func setup(t: int) -> void:
 					var _emo_e: Dictionary = echo_2.get("emotion", {})
 					flow_ctx.encounter_ctx.pre_encounter_morale[str(echo_2.get("id", ""))] = \
 						int(_emo_e.get("morale_current", 50))
+					flow_ctx.encounter_ctx.pre_encounter_fear[str(echo_2.get("id", ""))] = \
+						int(_emo_e.get("fear_current", 0))
 		echo_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
 		# V2-COMBAT-001: config-driven enemy spawn via actors.json spawn groups.
