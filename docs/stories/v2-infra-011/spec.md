@@ -81,6 +81,10 @@ Both stories change `MovementPathService.gd` and share the equivalence method. T
 7. **Fix 4.** Reduce key-string and dictionary work in the `shortest_path` loop. One change per commit, each with the harness.
 8. **Fix 2 (analysis only).** Report whether the repeated searches can be merged or reused without changing a tie-break. Do not implement it without Jeff's approval. The deviation term depends on the destination, so a merge is probably not byte-safe.
 9. **Re-profile and re-measure.** Same probe, same seed. Run the sharded suite twice. Compare with the baseline.
+   The sharded run is a full run: its merge step judges `movement_fallback` on the ledgers of all shards with the serial verdict
+   (AGENTS.md "movement_fallback in a sharded run"). Choose one full mode and do not run both (LESSONS #34).
+   The merge step also prints how many real fallbacks it ignores (57 on 2026-10-18, all from `combat_roundtrip`).
+   That number must not change: a change means a movement-path change altered which boards fall back.
 10. **Docs.** Update the timing table, the best-case wall-clock figure and the slow-test list in `AGENTS.md`. Update `docs/LESSONS.md` if a rule changes.
 11. **Jeff's play test.** Combat on Fast on a guide-spirit stage. The result must feel the same and faster.
 12. **Verification.** One independent `qa-verifier` checks the combined tree and tries to prove an equivalence break. Remove every probe line and the harness.
