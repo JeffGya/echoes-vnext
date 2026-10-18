@@ -73,13 +73,28 @@ fi
 # make every process slower. The shards start in map order (longest first), and a finished shard
 # frees its slot for the next one in the queue.
 detect_cpu_count() {
-  local n
+  local n quota="" period=""
   n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || true)"
-  if [[ "$n" =~ ^[1-9][0-9]*$ ]]; then
-    echo "$n"
-  else
-    echo 2
+  if ! [[ "$n" =~ ^[1-9][0-9]*$ ]]; then
+    n=2
   fi
+  # A container can have a CPU quota below the number of visible cores (Docker --cpus, a
+  # Kubernetes limit, a cloud sandbox). Starting one process per visible core would then
+  # overcommit the quota, make every shard slower, and risk the shard alarms.
+  # CGROUP_ROOT exists so the test can use fake files.
+  local cg="${CGROUP_ROOT:-/sys/fs/cgroup}"
+  if [[ -r "$cg/cpu.max" ]]; then
+    read -r quota period < "$cg/cpu.max" || true                      # cgroup v2: "max 100000" or "200000 100000"
+  elif [[ -r "$cg/cpu/cpu.cfs_quota_us" && -r "$cg/cpu/cpu.cfs_period_us" ]]; then
+    quota="$(cat "$cg/cpu/cpu.cfs_quota_us")"                          # cgroup v1: "-1" means no quota
+    period="$(cat "$cg/cpu/cpu.cfs_period_us")"
+  fi
+  if [[ "$quota" =~ ^[0-9]+$ && "$period" =~ ^[1-9][0-9]*$ ]]; then
+    local limit=$((quota / period))                                   # whole cores only: no contention
+    [[ "$limit" -lt 1 ]] && limit=1
+    [[ "$limit" -lt "$n" ]] && n="$limit"
+  fi
+  echo "$n"
 }
 CPU_COUNT="$(detect_cpu_count)"
 SHARD_JOBS="${SHARD_JOBS:-$CPU_COUNT}"
