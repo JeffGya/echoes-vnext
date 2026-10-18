@@ -3417,7 +3417,8 @@ static func test_live_direct_option_id_is_contract_valid() -> Dictionary:
 			continue
 		t += 1
 		var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
-			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
+			mover, ectx, ectx.combat_state, board_cfg, bdata, t,
+			MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 		if not bool(prepared.get("valid", false)):
 			continue
 		var mover_origin: Dictionary = (prepared["movement_context"] as Dictionary).get("origin", {}) as Dictionary
@@ -3570,7 +3571,8 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 		}
 
 	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, board_cfg, bdata, 300)
+		mover, ectx, ectx.combat_state, board_cfg, bdata, 300,
+		MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "live movement context invalid: %s" % str(prepared.get("reason", "")) }
 	if not bool(prepared.get("selection_enabled", false)):
@@ -3794,7 +3796,8 @@ static func _selection_census(runtime: FlowRuntime, ectx: EncounterContext, t0: 
 			continue
 		t += 1
 		var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
-			mover, ectx, ectx.combat_state, board_cfg, bdata, t)
+			mover, ectx, ectx.combat_state, board_cfg, bdata, t,
+			MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 		if not bool(prepared.get("valid", false)) or not bool(prepared.get("selection_enabled", false)):
 			continue
 		eligible += 1
@@ -3873,7 +3876,8 @@ static func test_unroutable_goals_keep_selection_enabled() -> Dictionary:
 		var cfg: Dictionary = board_cfg.duplicate(true)
 		cfg["walkable"] = walled
 		var attempt: Dictionary = _lm(runtime).prepare_live_movement_context(
-			candidate, ectx, ectx.combat_state, cfg, bdata, t)
+			candidate, ectx, ectx.combat_state, cfg, bdata, t,
+			MaturityExpressionService.composure_of(candidate, {"all_actors": ectx.actors}, bdata))
 		if not bool(attempt.get("valid", false)):
 			continue
 		if (attempt.get("goals", []) as Array).is_empty():
@@ -4090,7 +4094,8 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 	var bdata: Dictionary = runtime.config_service.get_balance().get("data", {}) as Dictionary
 	var board_cfg: Dictionary = _movement_board_cfg(runtime, ectx)
 	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
-		high, ectx, ectx.combat_state, board_cfg, bdata, 900)
+		high, ectx, ectx.combat_state, board_cfg, bdata, 900,
+		MaturityExpressionService.composure_of(high, {"all_actors": ectx.actors}, bdata))
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "stacked mover prepare invalid: %s" % str(prepared.get("reason", "")) }
 	var prepared_occupancy: Dictionary = (prepared["movement_context"] as Dictionary).get("occupancy", {}) as Dictionary
@@ -4199,7 +4204,8 @@ static func test_published_option_carries_truthful_control_and_hazards() -> Dict
 	hostile["grid_pos"] = stand_off.duplicate(true)
 
 	var prepared: Dictionary = _lm(runtime).prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, board_cfg, bdata, 920)
+		mover, ectx, ectx.combat_state, board_cfg, bdata, 920,
+		MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 	if not bool(prepared.get("valid", false)):
 		return { "ok": false, "error": "live movement context invalid" }
 	var options: Array = prepared.get("options", []) as Array

@@ -88,7 +88,8 @@ static func _env(standing: int, enemy_cols: Array, opts: Dictionary = {}) -> Dic
 		"walkable": BehaviorCharacterizationTests._full_walkable(10, 10),
 	}
 	var prepared: Dictionary = LiveMovement.new(flow_ctx, logger).prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, board_cfg, bdata, 0)
+		mover, ectx, ectx.combat_state, board_cfg, bdata, 0,
+		MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 	var context: Dictionary = {
 		"actor": mover, "all_actors": actors, "board_cfg": board_cfg, "t": 0, "round": 0,
 		"cfg": { "data": bdata },

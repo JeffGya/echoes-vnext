@@ -224,7 +224,8 @@ static func _build(mover: Dictionary, others: Array) -> Dictionary:
 		"bdata": bdata,
 		"board_cfg": board_cfg,
 		"prepared": LiveMovement.new(flow_ctx, logger).prepare_live_movement_context(
-			mover, ectx, ectx.combat_state, board_cfg, bdata, 0),
+			mover, ectx, ectx.combat_state, board_cfg, bdata, 0,
+			MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata)),
 	}
 
 

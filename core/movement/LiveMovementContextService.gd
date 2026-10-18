@@ -130,7 +130,7 @@ func prepare_live_movement_context(
 	movement_board_cfg: Dictionary,
 	bdata: Dictionary,
 	t: int,
-	composure: float = 0.0
+	composure: float
 ) -> Dictionary:
 	if bool(actor.get("is_structure", false)):
 		return {"valid": false, "reason": "structure_no_live_movement"}
