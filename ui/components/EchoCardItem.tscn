@@ -204,3 +204,4 @@ offset_bottom = 25.0
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
+texture_filter = 4

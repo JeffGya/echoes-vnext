@@ -44,6 +44,7 @@ const _TESTS: Array = [
 	"live_observe_vs_skill_mark",
 	"ledger_observe_total_only_guard_both",
 	"report_rides_on_this_calls_entry",
+	"live_directive_cause_stops_through_actor_state_machine",
 ]
 
 const _TAG: String = "stop_short_wiring"
@@ -75,8 +76,10 @@ static func _plan(action_type: String, target_id: String = "") -> Dictionary:
 static func _cfg(over: Dictionary = {}) -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
-	var cfg: Dictionary = (((cs.get_balance().get("data", {}) as Dictionary).get("actor", {}) as Dictionary)
-		.get("stop_short", {}) as Dictionary).duplicate(true)
+	var data: Dictionary = cs.get_balance().get("data", {}) as Dictionary
+	var cfg: Dictionary = StopShortContextService.with_judgment_scale(
+		((data.get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary),
+		((data.get("combat", {}) as Dictionary).get("movement", {}) as Dictionary)).duplicate(true)
 	cfg["enabled"] = true
 	for k: String in over.keys():
 		cfg[k] = over[k]
@@ -197,7 +200,7 @@ static func _style_of(option_id: String, goal_id: String) -> String:
 
 static func _actor(over: Dictionary = {}) -> Dictionary:
 	var actor: Dictionary = {
-		"id": "echo_0001", "actor_type": "echo", "faction": "echo", "fear": 45, "fear_base": 0, "morale": 60,
+		"id": "echo_0001", "actor_type": "echo", "faction": "echo", "fear": 85, "fear_base": 0, "morale": 60,
 		"dominant_vector": "", "stats": { "def": 5 }, "guard_state": false,
 	}
 	for k: String in over.keys():
@@ -260,9 +263,12 @@ static func _t_screen_keeps_legal_and_records_bias() -> Dictionary:
 	_eq(errs, "tagged", stop.get("benefit_id", ""), "guard")
 	_eq(errs, "direct untouched", (cands[1] as Dictionary).has("_stop_short"), false)
 	var bias: float = StopShortContextService.record_bias(cands[0] as Dictionary)
-	_eq(errs, "bias is weight x strength", is_equal_approx(bias, 6.0), true)
+	var cfg: Dictionary = _cfg()
+	var strength: float = maxf(0.0, -float((cfg["band_lean"] as Dictionary)[EmotionService.get_emotional_status(60, 85)]))
+	var want_bias: float = float(cfg["stop_short_weight"]) * strength
+	_eq(errs, "bias is weight x strength", strength > 0.0 and is_equal_approx(bias, want_bias), true)
 	_eq(errs, "bias recorded under the cause key",
-		is_equal_approx(float(((cands[0] as Dictionary)["_score_bias"] as Dictionary).get("stop_short.fear", 0.0)), 6.0), true)
+		is_equal_approx(float(((cands[0] as Dictionary)["_score_bias"] as Dictionary).get("stop_short.fear", 0.0)), want_bias), true)
 	_eq(errs, "no bias on a normal route", StopShortContextService.record_bias(cands[1] as Dictionary), 0.0)
 	var tag: Dictionary = StopShortContextService.trace_tag(cands[0] as Dictionary)
 	_eq(errs, "tag", [tag["cause_id"], tag["benefit_id"], tag["source"], tag["code"]], ["fear", "guard", "emotion", "fear"])
@@ -754,11 +760,12 @@ static func _live_turn(tag: String, overrides: Dictionary, actor_over: Dictionar
 
 
 ## Weight high enough that the stop-short wins on every fixture below (shipped is 6.0).
-const _ON: Dictionary = { "enabled": true, "stop_short_weight": 40.0 }
+## The empty `directive` block removes the Directive cause, so these fixtures test fear and identity only.
+const _ON: Dictionary = { "enabled": true, "stop_short_weight": 40.0, "directive": {} }
 
 
 ## Feature off in this encounter's config copy (balance.json ships it on) with the strong weight.
-const _OFF: Dictionary = { "enabled": false, "stop_short_weight": 40.0 }
+const _OFF: Dictionary = { "enabled": false, "stop_short_weight": 40.0, "directive": {} }
 
 
 static func _t_live_guard_stop_short_contract() -> Dictionary:
@@ -813,8 +820,8 @@ static func _t_live_off_keeps_empty_stop_short() -> Dictionary:
 	for type: String in r["types"]:
 		_eq(errs, "no stop-short log " + type, type.begins_with("movement.stop_short"), false)
 	_eq(errs, "no streak key", (r["actor"] as Dictionary).has(StopShortContextService.STREAK_KEY), false)
-	# Control S2: shipped weight, no fear, no broken morale.
-	var calm: Dictionary = _live_turn("guard_calm", { "enabled": true }, { "fear": 0, "fear_base": 0, "morale": 60, "dominant_vector": "" }, 4)
+	# Control: shipped weight, no Directive block, no fear, no broken morale. No cause is left, so no stop.
+	var calm: Dictionary = _live_turn("guard_calm", { "enabled": true, "directive": {} }, { "fear": 0, "fear_base": 0, "morale": 60, "dominant_vector": "" }, 4)
 	if not bool(calm["ok"]):
 		return calm
 	_eq(errs, "calm echo does not stop", ((calm["last"] as Dictionary).get("stop_short", {"x": 1}) as Dictionary).is_empty(), true)
@@ -1016,4 +1023,33 @@ static func _t_report_rides_on_this_calls_entry() -> Dictionary:
 	_eq(errs, "one new entry", ectx.last_round_results.size(), 2)
 	_eq(errs, "old entry untouched", (ectx.last_round_results[0] as Dictionary).has("stop_short"), false)
 	_eq(errs, "new entry carries report", (ectx.last_round_results[1] as Dictionary).has("stop_short"), true)
+	return _res(errs)
+
+
+## The calm Echo has no fear, morale or identity cause. Only the Directive in the turn context can stop it.
+static func _t_live_directive_cause_stops_through_actor_state_machine() -> Dictionary:
+	var errs: Array = []
+	var calm: Dictionary = { "fear": 0, "fear_base": 0, "morale": 60, "dominant_vector": "", "guard_state": false,
+		StopShortContextService.STREAK_KEY: false }
+	var on: Dictionary = _live_turn("directive_on", { "enabled": true, "stop_short_weight": 40.0, "identity": {} }, calm, 4)
+	if not bool(on["ok"]):
+		return on
+	var ss: Dictionary = (on["last"] as Dictionary).get("stop_short", {}) as Dictionary
+	if ss.is_empty():
+		errs.append("the calm Echo did not stop; types: %s" % str(on["types"]))
+		return _res(errs)
+	_eq(errs, "benefit", ss["benefit"], "guard")
+	var primary: Dictionary = (ss["trace"] as Dictionary)["primary"] as Dictionary
+	_eq(errs, "trace source", primary["source"], "directive")
+	_eq(errs, "trace code", primary["code"], "directive_order")
+	var cause_id: String = ""
+	for e_v: Variant in (on["logger"] as StructuredLogger).get_logs():
+		if str((e_v as Dictionary).get("type", "")) == "movement.stop_short_selected":
+			cause_id = str(((e_v as Dictionary)["data"] as Dictionary).get("cause_id", ""))
+	_eq(errs, "selected log cause", cause_id, "directive")
+	var off: Dictionary = _live_turn("directive_off", { "enabled": true, "stop_short_weight": 40.0, "identity": {}, "directive": {} }, calm, 4)
+	if not bool(off["ok"]):
+		return off
+	_eq(errs, "without the Directive block the same Echo does not stop",
+		((off["last"] as Dictionary).get("stop_short", {"x": 1}) as Dictionary).is_empty(), true)
 	return _res(errs)

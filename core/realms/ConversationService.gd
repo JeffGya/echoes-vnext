@@ -99,9 +99,7 @@ static func generate_responses(
 		# Emotional status — canonical 10-tier system from EmotionService
 		var emo_v: Variant = echo.get("emotion", {})
 		var emo: Dictionary = emo_v if emo_v is Dictionary else {}
-		var fear_current := int(emo.get("fear_current", 0))
-		var morale_current := int(emo.get("morale_current", 50))
-		var emotional_status := EmotionService.get_emotional_status(morale_current, fear_current)
+		var emotional_status := EmotionStatusLean.status_of_emotion(emo)
 
 		# Virtue alignment — dominant_vector always takes priority, calling is fallback
 		var virtue_alignment := _calling_to_virtue(calling, echo, cfg)

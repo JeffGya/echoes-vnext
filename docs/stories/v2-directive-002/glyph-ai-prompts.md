@@ -2,7 +2,7 @@
 
 Author: sr-game-artist. Status: proposal for Jeff. Nothing here is approved art.
 Notes to Jeff are in STE. The prompts are for the image tool and use the tool's own style.
-Sources: `glyph-shapes.md`, `design.md` 3a, `mockups/review/art-notes.md`, the six SVGs in `assets/ui/stage_stop_glyphs/`.
+Sources: `glyph-shapes.md`, `design.md` 3a, the six PNGs in `assets/ui/stage_stop_glyphs/`.
 
 ## 1. Read this first: what to ask for, what to expect
 

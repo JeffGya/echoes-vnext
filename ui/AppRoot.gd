@@ -624,6 +624,7 @@ func _run_tests(parts: Array) -> void:
 	IdentityIntegrityTests.register(runner)  # V2-PROG-012 Phase 9: canonical vector/virtue/calling identity tables
 	BarkPopupLayerTests.register(runner)  # V2-PROG-012 playtest fix: combat_divergence bark visual distinctness
 	FlowFingerprintTests.register(runner)  # V2-INFRA-003: seven resolution-mode characterization fingerprints
+	FlowFingerprintSeekTests.register(runner)  # V2-DIRECTIVE-002 phase D: the same seven fingerprints under Seek
 	FlowTransactionTests.register(runner)  # V2-INFRA-003 Phase 2B: single-flush-per-dispatch + action registration proof
 	FlowSnapshotFingerprintTests.register(runner)  # V2-INFRA-003 Phase 3 entry gate: sanctum/stage_explore fingerprints + snapshot purity probes
 	SnapshotContractTests.register(runner)  # V2-INFRA-003 Phase 3 Slice B1: universal snapshot contract (type/meta.t/data/actions)
