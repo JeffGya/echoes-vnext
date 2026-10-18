@@ -110,7 +110,9 @@ statinit structure support terrain thread trace traversal unified_resolve vector
 venture_char voice vow weave
 ```
 Added since that capture: `board_camera.bounds board_camera.echo_detail board_camera.input
-board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera` (all in shard9), `directive_char` (shard5), `contact_cfg` (shard4), `stage_stop_ui` (shard1), `fingerprint_seek` (shard8) and `felt_state` (shard1).
+board_camera.view board_camera.zoom board_camera.pointer board_pointer combat_camera stage_camera`,
+`directive_char`, `contact_cfg`, `stage_stop_ui`, `felt_state` and `fingerprint_seek`. This list can be stale: run the command above, or
+`scripts/check-shard-map.sh`, which compares the live list with the shard map.
 Names that look right and are WRONG: `guide_spirit` (it is under `movement`), `stage_explore`
 (it is `explore`), `stage_objective` (it is `objective`), `stage004` (it is `seam`),
 `fingerprint` (now `fingerprint_combat`, `fingerprint_purify_shrine`, `fingerprint_recover`,
@@ -196,19 +198,23 @@ starting one. A full run takes minutes and blocks the machine.
 
 ### Sharded full-suite runs (parallel, same restriction as the FULL suite)
 
-**Pass `timeout: 1800000` (30 minutes) on the Bash call that runs this script** — real margin over
-shard7's 900s override (the current per-shard maximum) plus process-teardown time. A shorter
-timeout risks the same "tool auto-backgrounds, subagent never notified, work lost" failure called
-out above for the full serial suite.
+**Pass `timeout: 3600000` (60 minutes) on the Bash call that runs this script.** The run takes about 18
+minutes on 4 cores and about 31 minutes on 2 cores. A shorter timeout risks the failure that is called out
+above for the full serial suite: the tool moves the run to the background, a subagent is never notified,
+and the work is lost.
 
 ```bash
 scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"
 ```
 
-Two environment variables configure the script. `GODOT_BIN` is the Godot binary (default
-`/opt/homebrew/bin/godot`). `ALARM_SCALE` is an integer that multiplies every shard alarm (default 1).
-Use `ALARM_SCALE` on a machine with fewer cores than shards: the shards then run slower than the
-alarms assume. Never set it below 1.
+Environment variables (all optional):
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `GODOT_BIN` | Godot binary | `/opt/homebrew/bin/godot` |
+| `SHARD_JOBS` | How many shards run at the same time | number of CPU cores (`getconf _NPROCESSORS_ONLN`) |
+| `ALARM_SCALE` | Integer that multiplies every shard alarm. Never below 1. Use a value above 1 on a slower or busier machine, or when `SHARD_JOBS` is above the core count. | 1 |
+| `SHARD_MAP_FILE` | Another shard map, for example one suite per shard to measure suite times | `scripts/test-shard-map.sh` |
 
 **`movement_fallback` in a sharded run (changed 2026-10-18).** `MovementFallbackGuardTests` reads a
 process-wide ledger of legacy-selector fallbacks (`ActorStateMachine.legacy_selector_uses`). In its
@@ -234,95 +240,53 @@ equals the serial verdict. If `behavior_char/legacy_selector_fallback_is_loud` i
 `LegacyLedgerFile.SERIAL_WIPE_TEST` in the same commit; otherwise the merge step fails and says so.
 Whether to remove the clearing is a decision for Jeff (open follow-up).
 
-Launches several headless Godot processes at once — each with its own `ECHOES_TEST_SAVE_DIR`
-under `/tmp/echoes-vnext-sharded/` and a single `tests =<exact suite names>` invocation — and sums
-every shard's `Tests: N total, N passed, M failed` line into one combined result. Wall-clock is
-driven by the single slowest shard, not `serial time / shard count` — line-count-balanced shards
-do NOT balance runtime (measured 2026-09-20: one 18-suite shard took 763s against a ~270-280s
-second-slowest tier). See the shard-map comment in the script for the current split and its
-rationale.
+**How a sharded run works.** The script first runs `scripts/check-shard-map.sh` (see below). Then it starts
+the shards of `scripts/test-shard-map.sh` in map order, at most `SHARD_JOBS` at a time. A finished shard frees
+its slot for the next one. Each shard is one headless Godot process with its own `ECHOES_TEST_SAVE_DIR`
+under `/tmp/echoes-vnext-sharded/saves/` and one call `tests =<exact suite names>`. After the last shard the
+script runs the `movement_fallback` merge step, adds up every `Tests: N total, N passed, M failed` line,
+and prints the timing tables. Wall-clock time is set by the longest shard, not by `serial time / shard count`.
 
-**Measured result (qa-verifier, 2026-09-20, final): 546-666s (9m06s-11m06s) sharded across repeat
-runs, down from a 788s pre-split baseline and a ~1090s serial baseline — a real, substantial
-improvement, though repeat measurements show enough contention variance on this machine that the
-low end of that range (not a single-run figure) should not be treated as guaranteed.** History: the
-whole `fingerprint` suite (8 tests, one shared suite name) was originally one indivisible
-registered suite measured at 623s SOLO/UNCONTENDED, and a 900s alarm under 10-way contention still
-fired while it was running — a hard floor no amount of shard rebalancing could lower, because
-suite-name sharding cannot split one suite. It was split into 8 per-mode suite names
-(`fingerprint_<mode>`, one per resolution mode, plus `fingerprint_determinism_self_check`), then
-`fingerprint_determinism_self_check` was split further into 7 per-mode
-`fingerprint_determinism_<mode>` suites — this second split is what actually delivered the 788→546s
-win, since the first split alone left `fingerprint_determinism_self_check` as the new 787s
-critical path, essentially unchanged from before. A further attempt to split the `seam` suite
-(tests/Stage004SeamTests.gd, the shard that became the new bottleneck after the fingerprint work)
-was tried and MEASURED to give no improvement — `seam` was never the real cost; the actual driver
-of that shard is `fingerprint_pursue`/`fingerprint_determinism_pursue`, two tests each running one
-full combat encounter to completion. That's a real, further-unreducible-by-sharding floor: making
-it cheaper means changing the test's own encounter length/assertions, out of scope here. `seam` was
-reverted back to a single suite name. shard7 (which holds `seam` plus the two pursue suites) carries
-a 900s alarm override for real margin over its measured range (539-666s across repeat runs).
+**Measured on 2026-10-18 (4-core cloud machine, Godot 4.6-stable, 2194 tests):**
 
-**Same restriction as the full suite: only the orchestrator and the QA/verification role may run
-it.** It is still exclusive-resource-heavy (several concurrent Godot processes hitting disk) even
-though the wall-clock is shorter — do not run it alongside anything else that touches
+| Run | Wall-clock |
+|---|---|
+| Serial full suite (reported, Oct 2026) | about 53 min |
+| Sharded, 9 shards of the Sept 2026 map, all at once | 22m33s |
+| Sharded, 12 shards from measured times, 4 at a time | **17m40s** |
+
+All test time added up is 3637 s (60.6 min). The longest suite is `reward` at 1054 s, and one test in it,
+`reward/pace_guide_spirit_runtime_escort_vs_protect`, takes 991 s. A suite is never split, so about 1058 s
+(17.6 min) is the best wall-clock time for any shard count or core count, until a slow test changes. Five tests
+take 2527 s, which is 69% of all test time: `reward/pace_guide_spirit_runtime_escort_vs_protect` (991 s),
+`fingerprint_determinism_guide_spirit` (775 s), `combat_baseline/emotion_trace_guide_spirit` (281 s),
+`fingerprint_guide_spirit` (279 s) and `fingerprint_determinism_pursue` (201 s). Cutting the cost of these
+tests is the next gain. It needs a decision by Jeff and is not part of the runner work.
+
+**Shard map and counts.** The map has 12 shards and one merge suite for the 133 registered suites. The runner
+checks the map before it starts a shard (`scripts/check-shard-map.sh`, see above). The comment at the top of
+`scripts/test-shard-map.sh` describes how the map was packed and how to pack it again from new timing data
+(`scripts/rebalance-shards.sh`). Update the counts in this file in the same commit that changes the map.
+
+**Per-shard alarm is a HANG CEILING, not an expected duration.** The runner waits for each shard to exit
+on its own. A shard that finishes early does not wait out its alarm. The alarm kills a shard only if it is
+still running after that many seconds. Three verification passes on 2026-09-20 mistook an alarm value
+for a run time. Read the real duration from the `elapsed_secs=` line at the end of the shard log. Each map
+entry has its own alarm in its third field: 4 times its estimated time, never below 600 s.
+
+If any shard's log has no `Tests:` line, the script fails (exit 1) and does not treat it as a pass. This
+is the same trap as an unmatched filter, which runs nothing and exits 0.
+
+**Same restriction as the full suite: only the orchestrator and the QA/verification role may run it.** It
+starts several Godot processes that write to disk. Do not run it next to anything else that touches
 `/tmp/echoes-vnext-*`.
-
-**Exact-match shard map — no collisions, no duplicate counting.** Each shard passes a single
-`tests =<name1>,<name2>,...` invocation (exact suite-name equality, see "Tests" above), so the 133
-live registered suites (regenerated 2026-09-20, updated same day after
-`fingerprint_determinism_self_check` was split into 7 per-mode `fingerprint_determinism_<mode>`
-suites, one shared suite name becoming 7) are split into 9 disjoint sets — every suite appears in
-exactly one shard, none selected twice, none dropped. `qa-verifier`: a sharded run's combined
-total should equal a serial full run's total exactly, no adjustment needed. **When a suite list
-changes** (a new `*Tests.gd` file registered in `ui/AppRoot.gd`, or a suite-registration rename
-like this one), the shard map in `scripts/test-shard-map.sh` and the counts in this file must be
-updated together. `scripts/check-shard-map.sh` now checks the map (2026-10-18): it reads the registered
-suite names from the runner (`tests __nomatch__`), compares them with `SHARDS`, and exits 1 when a
-registered suite is missing from the map, a suite appears twice, the map names an unregistered suite,
-or the map has an empty entry. `scripts/run-tests-sharded.sh` runs it before it starts any shard. You can
-also run it alone (about 10 s): `GODOT_BIN=... scripts/check-shard-map.sh`.
-
-**Per-shard timeout is a HANG CEILING, not an expected duration — `wait` returns as soon as each
-shard's process exits on its own, so a shard that finishes early does not wait out the rest of
-its alarm.** The alarm only fires, and kills the shard, if it is still running past that many
-seconds. Three separate verification passes on 2026-09-20 misread a fired-or-not-yet-fired alarm
-value ("900s") as the run's actual duration — it is not; it is only the point past which we know
-the shard was still running, not how long it actually took.
-
-`ALARM_SECS` in the script (700s as of 2026-09-20) is the DEFAULT, applied to any shard whose map
-entry has no per-shard override. A real measured run found one shard (18 suites,
-line-count-balanced) taking 763s — 4 of 7 shards were killed by the old 200s alarm before that was
-caught. The shard map was then split further (see the script's shard-map comment); this still left
-500s unsafe — qa-verifier's re-measurement found shard6 (then the whole `fingerprint` suite alone)
-taking 623s SOLO/UNCONTENDED, and three more shards landing within 2-42s of the 500s alarm under
-10-way contention. A subsequent global 900s alarm then STILL killed shard6 under 10-way contention
-while it was still running, proving that suite did not fit any value sized for the other 9 shards.
-The `fingerprint` suite registration was then split into 8 per-mode suite names, 7 of which rode
-in shard1-5/7/8 with unrelated suites, leaving shard6 holding only
-`fingerprint_determinism_self_check` (2400s override) — the one test that still re-ran all seven
-modes internally. That suite has now been split the same way, into 7 per-mode
-`fingerprint_determinism_<mode>` suites, one joining each of shard1-5/7/8 alongside its
-corresponding `fingerprint_<mode>` main suite. **shard6 no longer exists.** shard7 carries a 900s
-override (see below); every other shard uses the 700s default.
-
-**The shard map (`SHARDS` in `scripts/test-shard-map.sh`) has a per-shard alarm override as its third
-`|`-delimited field**, empty meaning "use the default": 700s covers eight of the nine shards with
-real margin (all measured well under 400s in the final timed run). shard7 (`seam` +
-`fingerprint_pursue` + `fingerprint_determinism_pursue`) is the one exception, overridden to 900s
-— real margin over its measured range (539-666s across repeat runs); the 700s default would have
-left as little as 34s of margin against the highest observed figure,
-thin enough to risk a false alarm-kill under contention.
-
-If any shard's log is missing a `Tests:` line, the script fails loudly (exit 1) rather than
-treating a silent zero as a pass — the same "unmatched filter runs nothing and exits 0" trap
-described above, just per-shard.
 
 **Always run the FULL suite before committing.** This codebase has cross-cutting guards — a
 one-file change has broken tests in unrelated suites more than once (the dispatch-action count
 guard, and a UI test that wired nodes from another screen). Filter while iterating; never ship on a
 filtered run alone. The sharded run is a full run: since 2026-10-18 it also judges `movement_fallback`
-on the ledgers of all shards (see above), with the same verdict as the serial run.
+on the ledgers of all shards (see above), with the same verdict as the serial run. Choose one full mode
+(sharded or serial) and run it once.
 
 **Only ONE suite run at a time.** Tests share `/tmp/echoes-vnext-tests/`; two concurrent runs
 corrupt each other's save fixtures.

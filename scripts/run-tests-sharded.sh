@@ -27,33 +27,20 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKOUT="${1:-$(cd "$SCRIPT_DIR/.." && pwd)}"
-# ALARM_SECS is a per-shard HANG CEILING, not an expected duration. `wait` below returns as
-# soon as each backgrounded godot process exits on its own — a shard that finishes in 90s does
-# not wait out the rest of its alarm. The alarm only fires (and kills the shard) if it is still
-# running past that many seconds, which is why every past verification pass that read "900s" as
-# "the run takes 900s" was wrong: it was actually "the alarm didn't fire before 900s", i.e. the
-# shard was still running at kill time with the true contended cost unknown beyond that lower
-# bound. Three separate verification passes made this misreading; do not repeat it.
-#
-# Default (700s) covers shard1-5, shard7-10: real margin over the ~500s worst case measured
-# for shard2/shard3/shard10 under contention across multiple runs — no other shard has come
-# close to needing more.
-#
-# The old single `fingerprint` suite (8 tests, one shared suite name) forced all 8 to run
-# serially in one shard — qa-verifier measured that shard at 623s SOLO/UNCONTENDED, and a
-# subsequent 900s alarm under 10-way contention STILL fired while it was running. Both the main
-# suite and its determinism self-check have since been split into 7 per-mode suite names each
-# (see tests/FlowFingerprintTests.gd's register()), which lets all 14 spread across shard1-5/7/8
-# alongside unrelated suites instead of one dedicated shard. No shard currently needs an alarm
-# override as a result — 700s covers the measured ~500s worst case with margin even after adding
-# one ~2x-cost determinism suite per shard. Re-verify ALARM_SECS after any suite-list change.
+# ALARM_SECS is a per-shard HANG CEILING, not an expected duration. The runner waits for each
+# shard process to exit on its own. A shard that finishes in 90 s does not wait out its alarm. The
+# alarm only fires, and kills the shard, if the shard is still running after that many seconds.
+# Read a shard's real duration from the "elapsed_secs=" line at the end of its log. Three earlier
+# verification passes mistook an alarm value for a duration (docs/LESSONS.md #23).
+# Every entry in scripts/test-shard-map.sh sets its own alarm: 4 times its estimated time, never
+# below 600 s. ALARM_SECS applies only to an entry whose alarm field is empty.
 # The Godot binary path is configurable: GODOT_BIN=/path/to/godot scripts/run-tests-sharded.sh
 # The default is the macOS Homebrew path that the project documents everywhere else.
 GODOT_BIN="${GODOT_BIN:-/opt/homebrew/bin/godot}"
 ALARM_SECS=700
-# ALARM_SCALE multiplies every shard alarm (default 1 = the values in this file). Use a value
-# above 1 on a machine with fewer cores than shards: the shards then run slower than the
-# measured times below, and an unscaled alarm would kill them. Only integers; never below 1.
+# ALARM_SCALE multiplies every shard alarm (default 1 = the values in the shard map). Use a value
+# above 1 on a machine that is slower or busier than the 4-core machine where the map was
+# measured, or when you set SHARD_JOBS above the core count. Only integers; never below 1.
 ALARM_SCALE="${ALARM_SCALE:-1}"
 if ! [[ "$ALARM_SCALE" =~ ^[1-9][0-9]*$ ]]; then
   echo "FATAL: ALARM_SCALE must be a positive integer, got '$ALARM_SCALE'." >&2
@@ -68,18 +55,54 @@ rm -rf "$LOG_DIR"
 mkdir -p "$LOG_DIR" "$SAVE_ROOT"
 
 # The shard map (SHARDS, with the history of how it was balanced) lives in scripts/test-shard-map.sh.
-# scripts/check-shard-map.sh reads the same file.
-# shellcheck disable=SC1091
-source "$SCRIPT_DIR/test-shard-map.sh"
+# scripts/check-shard-map.sh reads the same file. SHARD_MAP_FILE selects another map, for example
+# a map with one suite per shard to measure suite times.
+MAP_FILE="${SHARD_MAP_FILE:-$SCRIPT_DIR/test-shard-map.sh}"
+# shellcheck disable=SC1090
+source "$MAP_FILE"
 
 # Fail before any shard starts if the map and the registered suites disagree. A suite missing
 # from the map would never run in a sharded run; a suite listed twice would run twice.
-if ! "$SCRIPT_DIR/check-shard-map.sh" "$CHECKOUT"; then
+if ! "$SCRIPT_DIR/check-shard-map.sh" --map-file "$MAP_FILE" "$CHECKOUT"; then
   echo "FATAL: shard map check failed. No shard was started." >&2
   exit 1
 fi
 
-echo "Sharding across ${#SHARDS[@]} shards. Logs: $LOG_DIR"
+# SHARD_JOBS is how many shards run at the same time. The default is the number of CPU cores of
+# this machine. A headless Godot test process uses one core, so more processes than cores only
+# make every process slower. The shards start in map order (longest first), and a finished shard
+# frees its slot for the next one in the queue.
+detect_cpu_count() {
+  local n quota="" period=""
+  n="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || true)"
+  if ! [[ "$n" =~ ^[1-9][0-9]*$ ]]; then
+    n=2
+  fi
+  # A container can have a CPU quota below the number of visible cores (Docker --cpus, a
+  # Kubernetes limit, a cloud sandbox). Starting one process per visible core would then
+  # overcommit the quota, make every shard slower, and risk the shard alarms.
+  # CGROUP_ROOT exists so the test can use fake files.
+  local cg="${CGROUP_ROOT:-/sys/fs/cgroup}"
+  if [[ -r "$cg/cpu.max" ]]; then
+    read -r quota period < "$cg/cpu.max" || true                      # cgroup v2: "max 100000" or "200000 100000"
+  elif [[ -r "$cg/cpu/cpu.cfs_quota_us" && -r "$cg/cpu/cpu.cfs_period_us" ]]; then
+    quota="$(cat "$cg/cpu/cpu.cfs_quota_us")"                          # cgroup v1: "-1" means no quota
+    period="$(cat "$cg/cpu/cpu.cfs_period_us")"
+  fi
+  if [[ "$quota" =~ ^[0-9]+$ && "$period" =~ ^[1-9][0-9]*$ ]]; then
+    local limit=$((quota / period))                                   # whole cores only: no contention
+    [[ "$limit" -lt 1 ]] && limit=1
+    [[ "$limit" -lt "$n" ]] && n="$limit"
+  fi
+  echo "$n"
+}
+CPU_COUNT="$(detect_cpu_count)"
+SHARD_JOBS="${SHARD_JOBS:-$CPU_COUNT}"
+if ! [[ "$SHARD_JOBS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "FATAL: SHARD_JOBS must be a positive integer, got '$SHARD_JOBS'." >&2
+  exit 1
+fi
+echo "Sharding: ${#SHARDS[@]} shards, $SHARD_JOBS at a time ($CPU_COUNT CPU cores). Logs: $LOG_DIR"
 
 pids=()
 shard_names=()
@@ -144,6 +167,11 @@ for entry in "${SHARDS[@]}"; do
   shard_log="$LOG_DIR/$name.log"
   rm -rf "$shard_save_dir"
   mkdir -p "$shard_save_dir"
+
+  # Wait for a free slot. `jobs -rp` lists the running background jobs of this script.
+  while [[ "$(jobs -rp | wc -l | tr -d ' ')" -ge "$SHARD_JOBS" ]]; do
+    sleep 1
+  done
 
   (
     : > "$shard_log"
