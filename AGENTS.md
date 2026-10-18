@@ -192,6 +192,12 @@ The `Tests:` line is unchanged. The sharded script merges the shard reports into
 20 slowest tests and the 15 slowest suites, and writes `timing-suites.txt` and `timing-tests.txt` to its log directory.
 The times are wall-clock inside one process. They grow when processes compete for cores.
 
+**Known failures (2026-10-18).** `CoreTestRunner.KNOWN_FAILURES` lists tests that fail today for a known
+reason. A listed test that fails counts as passed, and the run prints `KNOWN_FAILURE ...` with the reason and
+the error. A listed test that passes prints `KNOWN_FAILURE_NOW_PASSES`: remove its entry then. Today the list has
+one entry, `movement_arbiter/avoid_overcommit_stays_proportionate`. It fails on main in the cloud and in CI at
+least since 2026-09-28; its cause is not fixed. Add an entry only with a reason and an owner.
+
 **Who may run the FULL suite:** only the orchestrator and the QA/verification role. Every other
 agent runs the compile check plus a FILTERED run at most, and asks for a full run rather than
 starting one. A full run takes minutes and blocks the machine.

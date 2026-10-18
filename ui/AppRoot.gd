@@ -760,6 +760,9 @@ func _run_tests(parts: Array) -> void:
 			for fail_line in (s.get("failures", []) as Array):
 				_debug_print(str(fail_line))
 
+	for known_line in CoreTestRunner.format_known_failure_lines(results):
+		_debug_print(str(known_line))
+
 	for timing_line in CoreTestRunner.format_timing_report(results, 20):
 		_debug_print(str(timing_line))
 

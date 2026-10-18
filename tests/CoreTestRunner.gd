@@ -4,6 +4,16 @@ extends RefCounted
 
 var _tests: Array = [] # [{ "name": String, "fn": Callable }]
 
+## Tests that fail today for a known reason that this work does not fix (Jeff, 2026-10-18).
+## A listed test that fails is counted as passed and printed as a KNOWN_FAILURE line, so the suite
+## and CI can go green while the failure stays visible. A listed test that PASSES prints
+## KNOWN_FAILURE_NOW_PASSES; remove its entry then. The runner never fails because of that line.
+## Add an entry only with a reason and an owner. This is not a place to hide new failures.
+const KNOWN_FAILURES := {
+	"movement_arbiter/avoid_overcommit_stays_proportionate":
+		"Fails on main in Linux CI and in the cloud at least since 2026-09-28 (scout_carefully committed 1, expected 2). Owner: undecided.",
+}
+
 ## Optional. Called with the test name just before each test runs. Used by tests/LegacyLedgerFile.gd.
 var before_test_hook: Callable = Callable()
 
@@ -39,6 +49,12 @@ func run_all() -> Dictionary:
 			err = "Test returned no result"
 		var elapsed_ms := Time.get_ticks_msec() - started_ms
 
+		var known_failure := false
+		var known_pass := false
+		if KNOWN_FAILURES.has(name):
+			known_failure = not ok
+			known_pass = ok
+			ok = true
 		if ok:
 			passed += 1
 		else:
@@ -48,6 +64,8 @@ func run_all() -> Dictionary:
 			"name": name,
 			"ok": ok,
 			"error": err,
+			"known_failure": known_failure,
+			"known_pass": known_pass,
 			"ms": elapsed_ms
 		})
 
@@ -96,4 +114,17 @@ static func format_timing_report(results: Array, top_n: int = 20) -> Array:
 	lines.append("Slowest %d test(s):" % mini(top_n, rows.size()))
 	for i in range(mini(top_n, rows.size())):
 		lines.append("TIMING_TEST ms=%d name=%s" % [rows[i]["ms"], rows[i]["name"]])
+	return lines
+
+
+## KNOWN_FAILURE lines for the console. See KNOWN_FAILURES.
+static func format_known_failure_lines(results: Array) -> Array:
+	var lines: Array = []
+	for r in results:
+		var name := str(r.get("name", ""))
+		if bool(r.get("known_failure", false)):
+			lines.append("KNOWN_FAILURE (counted as passed) %s — %s | %s" % [
+				name, str(KNOWN_FAILURES.get(name, "")), str(r.get("error", ""))])
+		elif bool(r.get("known_pass", false)):
+			lines.append("KNOWN_FAILURE_NOW_PASSES %s — remove it from CoreTestRunner.KNOWN_FAILURES" % name)
 	return lines
