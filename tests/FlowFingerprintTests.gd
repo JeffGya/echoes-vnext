@@ -742,7 +742,7 @@ static func test_combat() -> Dictionary:
 # Re-recorded: stop_short.enabled true, then cell_search.enabled true (ROUNDS and FINAL moved).
 # Re-recorded: Scout route exposure acceptance (tolerance 0.3 - offset 0.5) x weight 17 changes 2 Scout moves. ROUNDS moved; FINAL, SAVE held.
 # Re-recorded: Directive stop cause. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
+# Re-recorded: emotional-state pull and state steps in route scoring. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
 const PURIFY_SHRINE_ROUNDS_HASH := "a5de64833b482ce453007632b137b21eae06b979e27368a2ff4270f7bd7820e3"
 const PURIFY_SHRINE_FINAL_HASH  := "24c3b92582022ad8558bb323c5e9f7513126b8f1bb04308648d003a1eebcf7e8"
 const PURIFY_SHRINE_SAVE_HASH   := "930439633fdb06e3230da43ce270f90c35b86e4f6cb60f46f953bfb19aa282d4"
@@ -764,7 +764,7 @@ static func test_purify_shrine() -> Dictionary:
 # ase 59 -> 53, ekwan 7 -> 6, rank S (0 of 2 enemies reached). FINAL and SAVE move. ROUNDS held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
 # Re-recorded: Directive stop cause. RECOVER_ROUNDS_HASH moved; RECOVER_FINAL_HASH and RECOVER_SAVE_HASH held.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). RECOVER_ROUNDS_HASH and RECOVER_FINAL_HASH moved; RECOVER_SAVE_HASH held.
+# Re-recorded: emotional-state pull and state steps in route scoring. RECOVER_ROUNDS_HASH and RECOVER_FINAL_HASH moved; RECOVER_SAVE_HASH held.
 const RECOVER_ROUNDS_HASH := "abb0ae771dc0c5c4b5b392cc3bc350f506a7d3d12db595f1a59b2e4e1e975cb3"
 const RECOVER_FINAL_HASH  := "33e43352f7aa027a6d034a3d24c07308825adb4b62ae3227310c03856d1626e7"
 const RECOVER_SAVE_HASH   := "0b9bb5db21150c1e886ab7b3401b83287d6c82c168317d3d15e239dfa88b12b6"
@@ -787,7 +787,7 @@ static func test_recover() -> Dictionary:
 # Pace bonus re-record: no-pace mode. Rank A -> S: the ceiling drops the old speed term (9) and
 # counts 1 reached enemy, 110/115. FINAL moves on rank only; ase 50 and SAVE held. ROUNDS held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). PROTECT_ROUNDS_HASH moved; PROTECT_FINAL_HASH and PROTECT_SAVE_HASH held.
+# Re-recorded: emotional-state pull and state steps in route scoring. PROTECT_ROUNDS_HASH moved; PROTECT_FINAL_HASH and PROTECT_SAVE_HASH held.
 const PROTECT_ROUNDS_HASH := "5da870dce4f2880d0fe05107241d133a915bad8cc0fe24ac0adaaf2b970c98bc"
 const PROTECT_FINAL_HASH  := "298e2a9335ad20092d836eef06602c82bd297fe6013642836080af8bbc4648a7"
 const PROTECT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
@@ -813,7 +813,7 @@ static func test_protect() -> Dictionary:
 # Pace bonus re-record: no-pace mode. Rank B -> S: 2 of 6 enemies reached and no speed term,
 # 110/120. FINAL moves on rank only; ase 50 and SAVE held. ROUNDS held.
 # Re-recorded: Directive stop cause. ENDURE_ROUNDS_HASH and ENDURE_FINAL_HASH moved; ENDURE_SAVE_HASH held.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH and ENDURE_SAVE_HASH moved; none held.
+# Re-recorded: emotional-state pull and state steps in route scoring. ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH and ENDURE_SAVE_HASH moved; none held.
 const ENDURE_ROUNDS_HASH := "ad5899a6e5cbf278c5a16ae407827cb29852117a14449c8a3a701f0741659f28"
 const ENDURE_FINAL_HASH  := "b71e750707ca784e8a002b6b122a80ca37a952234f7355372d31b3e698ac6b39"
 const ENDURE_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
@@ -933,7 +933,7 @@ static func test_pursue() -> Dictionary:
 # 49 -> 60, ase 50, ekwan 6, rank S. SAVE held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved (FINAL too). The fight now ends in 24 rounds.
 # Re-recorded: Directive stop cause. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
+# Re-recorded: emotional-state pull and state steps in route scoring. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
 const GUIDE_SPIRIT_ROUNDS_HASH := "8d6a8b2a3f914b323b675fd2452ad7caea42796f297bf09e253408bee6c25bf5"
 const GUIDE_SPIRIT_FINAL_HASH  := "cf0012793e3ae7385e32b55d95ae345b9789dff7b53a07a9a27b376a7c9b571e"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"

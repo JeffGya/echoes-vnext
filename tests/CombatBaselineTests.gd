@@ -353,7 +353,7 @@ const PURIFY_SHRINE_EMOTION_HASHES: Array = [
 ]
 # Phase 2d: 2 -> 3 rounds, both existing hashes byte-identical and one appended. The recover
 # cell is further from the party on the larger map, so the hold takes one more round to finish.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). RECOVER_EMOTION_HASHES 3 -> 2 rounds; indices 0-1 byte-identical; 1 round(s) removed.
+# Re-recorded: emotional-state pull and state steps in route scoring. RECOVER_EMOTION_HASHES 3 -> 2 rounds; indices 0-1 byte-identical; 1 round(s) removed.
 const RECOVER_EMOTION_HASHES: Array = [
 	"61cb0af978317b7b9a7925e250137a68fe5435c3193120a861b317971919dfcd",
 	"42b2541c3e3490c69dd8b76eac35d95a26de37c310a16ccb713930c1effbc3fd",
@@ -367,7 +367,7 @@ const RECOVER_EMOTION_HASHES: Array = [
 # fixed (decisions #32-38). Round count holds at 5; indices 0-2 stay byte-identical, diverging
 # from index 3.
 # Re-recorded: stop_short.enabled true. Only the last index (4) moved; 5 rounds held.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). PROTECT_EMOTION_HASHES 5 -> 5 rounds; indices 0-3 byte-identical; diverges from index 4.
+# Re-recorded: emotional-state pull and state steps in route scoring. PROTECT_EMOTION_HASHES 5 -> 5 rounds; indices 0-3 byte-identical; diverges from index 4.
 const PROTECT_EMOTION_HASHES: Array = [
 	"814a9f2f861b64efcdf5f9391b44a370fef37fef54cac82b5d0278a3034fea10",
 	"207c3c93af6281a71ce9a544e588891fde6bffaafda26bcb86016212ea059f42",
@@ -384,7 +384,7 @@ const PROTECT_EMOTION_HASHES: Array = [
 # byte-identical, diverging from index 2 — the accepted rank/reward regression (decision #39)
 # shows up here as a later, not earlier, split.
 # Re-recorded: Directive stop cause. 5 rounds; indices 0-1 byte-identical, diverging from index 2.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). ENDURE_EMOTION_HASHES 5 -> 5 rounds; indices 0-1 byte-identical; diverges from index 2.
+# Re-recorded: emotional-state pull and state steps in route scoring. ENDURE_EMOTION_HASHES 5 -> 5 rounds; indices 0-1 byte-identical; diverges from index 2.
 const ENDURE_EMOTION_HASHES: Array = [
 	"93b71ed7260bf0483a28fada3159b989edce9c56edd047317e891c8341089a2a",
 	"18c88d4e3436998a3f4c7c0607b098ba0703d36af315095a00834e2481b290c6",
@@ -425,7 +425,7 @@ const PURSUE_EMOTION_HASHES: Array = [
 # Re-recorded: stop_short.enabled true. 25 -> 24 rounds: indices 0-23 are byte-identical and the
 # last round is gone, because the fight now ends one round earlier.
 # Re-recorded: Directive stop cause. 24 -> 22 rounds; indices 0-21 byte-identical; the fight ends two rounds earlier.
-# Re-recorded: emotional-status rework and slices 5 to 7 (felt-state pull, state steps, Standing-scaled style). GUIDE_SPIRIT_EMOTION_HASHES 22 -> 24 rounds; indices 0-21 byte-identical; 2 round(s) appended.
+# Re-recorded: emotional-state pull and state steps in route scoring. GUIDE_SPIRIT_EMOTION_HASHES 22 -> 24 rounds; indices 0-21 byte-identical; 2 round(s) appended.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
 	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
