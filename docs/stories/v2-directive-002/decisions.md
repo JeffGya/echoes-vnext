@@ -583,3 +583,18 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 
 ### D-100. lean-table-and-runs
 **A:** (Jeff, 2026-10-18) `felt_state.band_lean` stays where it is. Items 5, C6, C7 and the two small readers are one change with one record run, then one re-record (D-86), in separate commits. Numbers for `state_action_points`, `follow_through_bias`, initiative points and the signature table are PROPOSED DEFAULT; `mid-game-designer` authors them with an offline re-score. Targets: hollow stack near the old worst case; burdened-by-fear within 25 percent of the old fear 45 effect; radiant near the old inspired.
+
+### D-101. afraid-curve
+**Q:** The numbers check (hand arithmetic, `mid-game-designer`) showed that linear `A` cannot meet both D-100 targets: Burdened by fear 45 would lose about 65 percent more attack than before.
+**A:** (Jeff, 2026-10-18) Convex curve. `A = afraid(L)^k x composure softening`, where the curve acts on the unsoftened lean and composure scales the result once. New function in `EmotionStatusLean`; `afraid(L_eff)` stays as it is, so slices 5 and 6 are not touched. Config `data.actor.afraid_curve_exponent` (PROPOSED DEFAULT 2.5; validator: finite, 1.0 to 4.0). `fear_active_dampen` 0.45 becomes 0.55 (PROPOSED DEFAULT; change the code default with it). Afraid points return to the full old `broken` values; bold points come from the old `inspired` shift at composure 0.5 divided by B 0.56. `state_action_points` (PROPOSED DEFAULT): melee -20/+13, protect -8/+8, guard +25/-9, idle +19/-9, move -20/+11. Validator limit on absolute value: raise to 30 so guard 25 has margin. Source: numbers note of agent N, 2026-10-18.
+
+### D-102. style-and-signatures
+**A:** (Jeff, 2026-10-18)
+- Style (C6) reads the same curved `A` as the action layer (D-96: compute once). The afraid style bias rises to the old `broken` values: careful +10, restrained +10, forceful -6, overcommitted -6 (PROPOSED DEFAULT). Bold bias stays forceful +11, direct +11.
+- Calling signatures: all numbers, including Kra Soro `fear_move_bonus`, move into `calling_behavior.<calling>.afraid_signature` (points at `A` = 1, equal to the old values at fear 100). The key `fear_move_bonus` is removed (game is not live). Readers to update: `BehaviorArbiter.gd` ~1923, `tests/MovementArbitrationTests.gd` ~576, `tests/PassiveIdentityTests.gd` ~25-230, `balance.json` ~1146 and ~1192. Kra Soro move: +12 and idle -8 at `A` = 1; Okomfo idle +15; Onyamesu move -15; Okofor protect_ally +10.
+
+### D-103. accepted-losses
+**A:** (Jeff, 2026-10-18) Accepted: (1) fear below 45 with morale 40 or more has no fear effect; (2) Burdened because of morale 21 to 24 acts like Burdened by fear, so most of the old `broken` penalty is gone for that case; (3) initiative points may be fractions.
+
+### D-104. stop-short-fixture
+**A:** (Jeff, 2026-10-18) `StopShortSearchTests._env` switches `felt_state.steps.enabled` off. Reason: those tests check the stop-short window at a fixed capacity; composure on the first activation is now real, not the old default.
