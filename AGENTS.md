@@ -294,6 +294,28 @@ filtered run alone. The sharded run is a full run: since 2026-10-18 it also judg
 on the ledgers of all shards (see above), with the same verdict as the serial run. Choose one full mode
 (sharded or serial) and run it once.
 
+### CI (GitHub Actions, added 2026-10-18)
+
+`.github/workflows/tests.yml` runs the sharded suite (`scripts/run-tests-sharded.sh`) on every pull request,
+on one `ubuntu-latest` job (4 cores for a public repo).
+- **Godot version.** The job reads it from `config/features` in `project.godot` (today `4.6`) and downloads
+  `<version>-stable` from `godot-builds`, with a SHA-512 check. No version is written in the workflow.
+- **Caches.** The Godot binary is cached by version. The `.godot` import cache is cached by a hash of the asset
+  and `.import` files (not `.gd` files). Explicit save steps run before the tests, because the automatic
+  save is skipped when a job fails.
+- **Stale-cache trap.** The job ALWAYS runs `godot --import` after a cache restore (until it prints no errors,
+  at most 3 times). That rebuilds the script class cache. Never remove this step: a stale class cache makes
+  fingerprint tests fail with drifted hashes (see "Rebuild the script class cache" above).
+- **Failure rules.** The job fails when the runner script exits 1 (a failed test, a shard without a `Tests:`
+  line, a shard without a ledger, a crashed or killed shard). A separate step also fails the job when any log
+  in the shard log directory has no `Tests:` line. Shard logs are uploaded as the artifact `shard-logs`.
+- **Measured (GitHub-hosted runner, 12 shards, 4 at a time).** Run 3, warm caches: suite 958 s, job 16m37s,
+  whole run 17m42s, `COMBINED: 2194 total, 2194 passed, 0 failed`. Run 1, cold caches: suite 1352 s, job 23m27s.
+  Runner speed varies by about 40% between runs.
+- **One job or one job per shard?** One job. A probe ran the heaviest suites each alone on a fresh runner:
+  `reward` took 821 s alone against 946 s in the pool. A matrix would save about 125 s on that shard and add
+  about 45 s of setup per job plus a merge job, so the net gain is near zero. The floor is the `reward` suite.
+
 **Only ONE suite run at a time.** Tests share `/tmp/echoes-vnext-tests/`; two concurrent runs
 corrupt each other's save fixtures.
 
