@@ -598,3 +598,8 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 
 ### D-104. stop-short-fixture
 **A:** (Jeff, 2026-10-18) `StopShortSearchTests._env` switches `felt_state.steps.enabled` off. Reason: those tests check the stop-short window at a fixed capacity; composure on the first activation is now real, not the old default.
+
+### D-105. qa-fixes-group-a
+**Q:** Which QA findings on the combined tree (2026-10-19) are fixed in PR 118?
+**A:** (Jeff, 2026-10-19) Fixed in this PR: (1) divergence at the spatial cap: the Echo's own score is `value - clamp(raw - route_part, -cap, cap)` so a clamped value stays correct, with a test where the cap bites; (3) stale docs (`CONVENTIONS.md` lines about `by_morale_tier` and `get_morale_tier`, `group-a-design.md` superseded numbers, `design.md` `morale_bias`); (6) `composure` becomes a required argument of `prepare_live_movement_context`, all callers updated; banter bark trigger moves to the status (calm statuses: grounded, whole, radiant), bark text unchanged.
+**Not fixed here (cleanup batch or notes):** (4) runtime validator for the new config (a CI test covers the shipped file); (5) `_compute_bark_cooldown` compares an int morale to tier names (broken before this story; to be fixed together with the cooldown rules in the cleanup PR); (7) the guidance reason text "morale" now also covers fear and bold causes (wording is Jeff's, with `mid-game-designer`); (8) `action_weight_modifier` is 0 on the movement path; (9) some arbiter tests run with the code-default exponent 1.0; (10) the keeper intro never fills `pre_encounter_fear` or `pre_encounter_morale`.
