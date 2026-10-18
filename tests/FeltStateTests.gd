@@ -194,7 +194,7 @@ static func _t_arbiter_rejects_bad_table() -> Dictionary:
 static func _t_fear_lean_is_softened_by_composure() -> Dictionary:
 	var movement: Dictionary = _movement()
 	var arbiter := BehaviorArbiter.new({}, movement)
-	var actor: Dictionary = {"morale": 50, "fear": 60, "fear_base": 0}
+	var actor: Dictionary = {"faction": "echo", "morale": 50, "fear": 60, "fear_base": 0}
 	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])
 	var afraid: float = maxf(0.0, -float(_table()[EmotionService.get_emotional_status(50, 60)]))
 	for composure: float in [0.0, 0.3, 1.0]:
@@ -225,7 +225,7 @@ static func _t_fear_lowers_judgment_through_the_status() -> Dictionary:
 	var table: Dictionary = _table()
 	var judgments: Dictionary = {}
 	for label_pair: Array in [["calm", 50, 0], ["burdened", 50, 50], ["low_morale", 20, 0]]:
-		var actor: Dictionary = {"rank": 3, "morale": label_pair[1], "fear": label_pair[2], "fear_base": 0, "calling": "okofor"}
+		var actor: Dictionary = {"faction": "echo", "rank": 3, "morale": label_pair[1], "fear": label_pair[2], "fear_base": 0, "calling": "okofor"}
 		var inputs: Dictionary = MaturityExpressionService.build_ctx_inputs(actor, [], {}, data, {}, {}, 0.0)
 		if inputs["band_lean"] != table:
 			return _fail("build_ctx_inputs must carry the band_lean table")
@@ -415,6 +415,26 @@ static func _t_temporary_ally_has_no_lean_or_steps() -> Dictionary:
 		texts.append(var_to_str(result))
 	if texts[0] != texts[1]:
 		return _fail("a temporary ally at fear 95 must decide the same with the lean on and off")
+	var growing := BehaviorArbiter.new({}, _felt(false, false, true))
+	var temp_ally: Dictionary = {"faction": "echo", "actor_type": "enemy"}
+	if float(growing._style_growth_of(temp_ally, 1.0)["vector_mul"]) != 1.0:
+		return _fail("a temporary ally must not receive style growth")
+	if float(growing._style_growth_of({"faction": "echo", "actor_type": "echo"}, 1.0)["vector_mul"]) <= 1.0:
+		return _fail("a real Echo must receive style growth")
+	var ally_arbiter := BehaviorArbiter.new({}, _movement())
+	var scared: Dictionary = {"faction": "echo", "actor_type": "enemy", "morale": 50, "fear": 90, "fear_base": 0}
+	if ally_arbiter._fear_lean(scared, 0.0) != 0.0:
+		return _fail("a temporary ally must get no exposure fear lean")
+	scared["actor_type"] = "echo"
+	if ally_arbiter._fear_lean(scared, 0.0) <= 0.0:
+		return _fail("fixture broken: a real Echo at fear 90 must get a fear lean")
+	var data: Dictionary = _data()
+	var pressure: Array = []
+	for who: String in ["enemy", "echo"]:
+		var pressed: Dictionary = {"faction": "echo", "actor_type": who, "rank": 3, "morale": 50, "fear": 90, "fear_base": 0, "calling": "okofor"}
+		pressure.append(MaturityExpressionService._fear_pressure(pressed, MaturityExpressionService.build_ctx_inputs(pressed, [], {}, data, {}, {}, 0.0)))
+	if pressure[0] != 0.0 or pressure[1] <= 0.0:
+		return _fail("fear pressure must be zero for a temporary ally and positive for an Echo: %s" % str(pressure))
 	var on: Dictionary = _felt(false, true, false)
 	var ally: Dictionary = _mover(3, 90, 50, 0.2)
 	ally["actor_type"] = "enemy"
@@ -428,7 +448,7 @@ static func _t_config_sections_validated() -> Dictionary:
 	var ranges: Dictionary = (_movement()["felt_state"] as Dictionary)["ranges"] as Dictionary
 	var bad_cases: Array = [
 		["lean", "progress_floor", NAN], ["lean", "cohesion_max", INF], ["lean", "progress_max", "1.2"], ["lean", "enabled", "yes"],
-		["steps", "composure_default", NAN], ["style_growth", "enabled", 1],
+		["style_growth", "enabled", 1],
 	]
 	var good_cases: Array = []
 	for section: String in ["lean", "steps"]:
@@ -534,8 +554,10 @@ static func _live_profile(mover: Dictionary, movement: Dictionary, env: Dictiona
 	if env.is_empty():
 		env = _live_env(mover, movement)
 	var ectx: EncounterContext = env["ectx"]
+	var composure: float = float(mover["_composure"]) if mover.has("_composure") \
+		else MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, env["bdata"])
 	var prepared: Dictionary = (env["live"] as LiveMovementContextService).prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, env["board_cfg"], env["bdata"], 0)
+		mover, ectx, ectx.combat_state, env["board_cfg"], env["bdata"], 0, composure)
 	return prepared.get("profile", {}) as Dictionary
 
 
@@ -617,11 +639,12 @@ static func _t_state_steps_each_activation() -> Dictionary:
 	if not (before == 3 and during == 2 and after == 3):
 		return _fail("capacity must follow the state each activation: %d, %d, %d" % [before, during, after])
 	var fresh: Dictionary = _mover(3, 45, 50)
-	var default_composure: float = float(((on["felt_state"] as Dictionary)["steps"] as Dictionary)["composure_default"])
-	var lean: float = EmotionStatusLean.soften(float(_table()["burdened"]), default_composure, _dampen())
+	var env_fresh: Dictionary = _live_env(fresh, on)
+	var computed: float = MaturityExpressionService.composure_of(fresh, {"all_actors": (env_fresh["ectx"] as EncounterContext).actors}, env_fresh["bdata"])
+	var lean: float = EmotionStatusLean.soften(float(_table()["burdened"]), computed, _dampen())
 	var expected: int = 2 if lean <= -float(((on["felt_state"] as Dictionary)["steps"] as Dictionary)["penalty_at"]) else 3
-	if int(_live_profile(fresh, on)["capacity"]) != expected:
-		return _fail("without a previous composure the config default must be used")
+	if int(_live_profile(fresh, on, env_fresh)["capacity"]) != expected:
+		return _fail("an Echo with no stored composure must use the composure computed for this activation")
 	return _pass()
 
 

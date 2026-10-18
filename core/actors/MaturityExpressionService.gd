@@ -291,11 +291,37 @@ static func build_ctx_inputs(actor: Dictionary, bonds: Array, living_party_ids: 
 	}
 
 
+# The Judgment inputs of one actor in one turn context. Runs for every actor (echo, enemy, structure):
+# the shared reader coerces defensively. ctx: the turn context (all_actors, bonds, bond_thresholds,
+# active_vow, instability).
+static func ctx_inputs_of(actor: Dictionary, ctx: Dictionary, cfg_data: Dictionary) -> Dictionary:
+	var living_party_ids: Dictionary = {}
+	for a_v in _as_array(ctx.get("all_actors", [])):
+		if a_v is Dictionary:
+			var a: Dictionary = a_v
+			if str(a.get("faction", "")) == "echo" and not bool(a.get("is_dead", false)):
+				living_party_ids[str(a.get("id", ""))] = true
+	return build_ctx_inputs(
+		actor,
+		_as_array(ctx.get("bonds", [])),
+		living_party_ids,
+		cfg_data,
+		_as_dict(ctx.get("bond_thresholds", {})),
+		_as_dict(ctx.get("active_vow", {})),
+		float(ctx.get("instability", 0.0)))
+
+
+# The composure of an actor at the start of its activation, from the same inputs the activation uses.
+static func composure_of(actor: Dictionary, ctx: Dictionary, cfg_data: Dictionary) -> float:
+	var expr_cfg: Dictionary = _as_dict(cfg_data.get("maturity_expression", {}))
+	return float(derive_expression(actor, ctx_inputs_of(actor, ctx, cfg_data), expr_cfg).get("composure", 0.0))
+
+
 # Fear pressing on Judgment: the afraid part of the emotional status (the one fear and morale
-# reading). 0.0 when ctx_inputs carries no band_lean table.
+# reading). 0.0 for a non-Echo or when ctx_inputs carries no band_lean table.
 static func _fear_pressure(actor: Dictionary, ctx_inputs: Dictionary) -> float:
 	var table: Dictionary = _as_dict(ctx_inputs.get("band_lean", {}))
-	if table.is_empty():
+	if table.is_empty() or not EmotionStatusLean.is_echo(actor):
 		return 0.0
 	return EmotionStatusLean.afraid(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table))
 

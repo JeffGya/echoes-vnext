@@ -345,7 +345,7 @@ static func _felt_rows(config: ConfigService, balance: Dictionary, bdata: Dictio
 			mover["morale"] = int(state[2])
 			mover["_composure"] = float(expression["composure"])
 			var base: Dictionary = MovementProfileService.derive_profile(mover, capacity_cfg)
-			var profile: Dictionary = live._with_state_steps(base, mover, movement, bdata)
+			var profile: Dictionary = live._with_state_steps(base, mover, movement, bdata, float(mover["_composure"]))
 			var generated: Dictionary = MovementOptionService.generate_options(
 				f2_board["movement_context"] as Dictionary, profile, (f2_board["goals"] as Array)[0] as Dictionary)
 			SpatialTermProbe._say("FELT_F2 standing=%d state=%s base_capacity=%d capacity=%d options=%d" % [
@@ -376,7 +376,7 @@ static func _felt_rows(config: ConfigService, balance: Dictionary, bdata: Dictio
 		mover["morale"] = int(pressed[2])
 		mover["_composure"] = float(expression["composure"])
 		var base: Dictionary = MovementProfileService.derive_profile(mover, capacity_cfg)
-		var profile: Dictionary = live._with_state_steps(base, mover, arm[1] as Dictionary, bdata)
+		var profile: Dictionary = live._with_state_steps(base, mover, arm[1] as Dictionary, bdata, float(mover["_composure"]))
 		var arm_def: Dictionary = def.duplicate(true)
 		arm_def["capacity"] = int(profile["capacity"])
 		var board: Dictionary = build(arm_def)

@@ -765,8 +765,7 @@ func select_movement_intent(
 	# ASSUMED: only one vow (tikoro_nko_agyina) exists and it is protective/cohesion-
 	# themed, so "a vow is active" reads as fully Ward-leaning until a vow carries its
 	# own Ward/Break strain signal. See the story report's OPEN block.
-	var style_growth: Dictionary = _style_growth(interpretation_width) if is_echo_faction \
-		else {"vector_mul": 1.0, "trait_mul": 1.0}
+	var style_growth: Dictionary = _style_growth_of(actor, interpretation_width)
 	var style_inputs: Dictionary = {
 		"actor":            actor,
 		"bonds":            bonds_ctx if is_echo_faction else [],
@@ -1462,10 +1461,10 @@ func _exposure_acceptance_parts(directive: Dictionary, fear_lean: float, judgmen
 
 
 ## Fall in exposure acceptance from this actor's emotional state: `fear_lean_bound` x the afraid
-## part of the status lean, softened by composure. 0.0 when the bound or the table is absent.
+## part of the status lean, softened by composure. 0.0 for a non-Echo or when the bound or the table is absent.
 func _fear_lean(actor: Dictionary, composure: float) -> float:
 	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
-	if not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
+	if not EmotionStatusLean.is_echo(actor) or not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
 		return 0.0
 	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
 	var dampen: float = composure_dampen(_cfg)
@@ -1498,6 +1497,13 @@ static func felt_pull(lean_value: float, lean_cfg: Dictionary) -> Array:
 	if lean_value > 0.0:
 		return [1.0 + t * (float(lean_cfg["progress_max"]) - 1.0), 1.0 - t * (1.0 - float(lean_cfg["cohesion_min"]))]
 	return [1.0, 1.0]
+
+
+## `_style_growth` for a real Echo; a temporary ally keeps the neutral multipliers.
+func _style_growth_of(actor: Dictionary, judgment: float) -> Dictionary:
+	if not EmotionStatusLean.is_echo(actor):
+		return {"vector_mul": 1.0, "trait_mul": 1.0}
+	return _style_growth(judgment)
 
 
 ## Growth of the Echo's own style by Judgment, on the action layer's identity scale.
@@ -1605,7 +1611,11 @@ func _spatial_utility(
 	var cap: float = float(config["cap"])
 	var value: float = clampf(raw, -cap, cap)
 	out_parts["parts"] = parts
-	out_parts["directive_exposure_part"] = float(config["directive_exposure_acceptance_weight"]) * float(acceptance_parts["D_scaled"]) * exposure
+	var exposure_part: float = float(config["directive_exposure_acceptance_weight"]) * float(acceptance_parts["D_scaled"]) * exposure
+	out_parts["directive_exposure_part"] = exposure_part
+	out_parts["directive_route_part"] = exposure_part + float(parts["directive_objective_advance"]) \
+		+ float(parts["directive_avoid_overcommit"]) + float(parts["directive_ally_protection"]) \
+		+ float(parts["directive_threat_interception"])
 	out_parts["acceptance_parts"] = acceptance_parts
 	out_parts["raw"]   = raw
 	out_parts["cap"]   = cap
@@ -2060,13 +2070,14 @@ func _rank_directive_candidates(
 	return ranked
 
 
-## The Directive's voice inside a route candidate's score beyond the per-type bonus: the Directive
-## share of the exposure term (the Echo's own fear lean stays out) and the Directive stop-short bias. Subtracted with the type bonus to get the
-## Echo's own score. 0.0 for a candidate that is not a route.
+## The Directive's voice inside a route candidate's score beyond the per-type bonus: the five Directive
+## spatial terms (the exposure term keeps the Echo's own fear lean out) and the Directive stop-short bias.
+## Subtracted with the type bonus to get the Echo's own score. 0.0 for a candidate that is not a route.
+## The spatial value is clamped, so a removal past the cap takes out more than the clamped score held.
 static func _route_directive_part(candidate: Dictionary) -> float:
 	var spatial: Dictionary = candidate.get("_spatial_components", {}) as Dictionary
 	var bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
-	return float(spatial.get("directive_exposure_part", 0.0)) \
+	return float(spatial.get("directive_route_part", 0.0)) \
 		+ float(bias.get(StopShortService.bias_key("directive"), 0.0))
 
 
