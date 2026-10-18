@@ -1,0 +1,146 @@
+# Runs the full GDScript test suite, sharded, on every pull request.
+#
+# The Godot version is NOT written here. The "Read the Godot version" step reads it from
+# `config/features` in project.godot, so a version change in the project changes CI with it.
+# AGENTS.md "Sharded full-suite runs" describes the runner. The runner exits 1 when any shard
+# has no "Tests:" line, when any test fails, and when a shard wrote no legacy-selector ledger.
+
+name: tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sharded-suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SHARD_LOG_DIR: /tmp/echoes-vnext-sharded/logs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the Godot version from project.godot
+        id: godot
+        run: |
+          version="$(sed -n 's/^config\/features=PackedStringArray("\([0-9][0-9.]*\)".*/\1/p' project.godot)"
+          if [ -z "$version" ]; then
+            echo "::error::Cannot read the Godot version from config/features in project.godot"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Godot version from project.godot: $version"
+
+      # The cache key holds the version, so a new version downloads a new binary.
+      - name: Cache the Godot binary
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot-bin
+          key: godot-linux-x86_64-${{ steps.godot.outputs.version }}
+
+      - name: Download Godot
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          version="${{ steps.godot.outputs.version }}"
+          base="https://github.com/godotengine/godot-builds/releases/download/${version}-stable"
+          zip="Godot_v${version}-stable_linux.x86_64.zip"
+          mkdir -p ~/godot-dl ~/godot-bin
+          cd ~/godot-dl
+          curl -fsSL --retry 3 -o "$zip" "$base/$zip"
+          curl -fsSL --retry 3 -o SHA512-SUMS.txt "$base/SHA512-SUMS.txt"
+          grep " $zip\$" SHA512-SUMS.txt | sha512sum -c -
+          unzip -q "$zip" -d ~/godot-bin
+          mv ~/godot-bin/"Godot_v${version}-stable_linux.x86_64" ~/godot-bin/godot
+          chmod +x ~/godot-bin/godot
+
+      - name: Check the Godot version
+        run: ~/godot-bin/godot --version
+
+      # The import cache holds converted assets only. The key hashes the asset files and the
+      # .import files, NOT the .gd files, so a script change does not throw the cache away.
+      # THE STALE-CACHE TRAP (AGENTS.md "Rebuild the script class cache"): a restored .godot can
+      # hold an old class cache, and then tests fail with "Identifier not declared" or with
+      # drifted fingerprint hashes that look like real regressions. The next step therefore ALWAYS
+      # runs `--import`, which rebuilds the class cache, even on a cache hit.
+      - name: Cache the import cache
+        uses: actions/cache@v4
+        with:
+          path: .godot
+          key: godot-import-${{ steps.godot.outputs.version }}-${{ hashFiles('project.godot', '**/*.import', '**/*.png', '**/*.svg', '**/*.ttf') }}
+          restore-keys: |
+            godot-import-${{ steps.godot.outputs.version }}-
+
+      # The first import of a fresh project prints font errors and a second import is clean
+      # (observed on a cold checkout). Import until clean, at most 3 times; fail if it never is.
+      - name: Import the project (always, also after a cache hit)
+        run: |
+          for attempt in 1 2 3; do
+            ~/godot-bin/godot --headless --import --path . > import.log 2>&1 || true
+            if ! grep -q "^ERROR" import.log; then
+              echo "Import clean on attempt $attempt"
+              exit 0
+            fi
+            echo "Import attempt $attempt printed errors:"; grep "^ERROR" import.log | head -5
+          done
+          echo "::error::Import still prints errors after 3 attempts"
+          cat import.log
+          exit 1
+
+      - name: Run the sharded suite
+        id: suite
+        run: |
+          export GODOT_BIN="$HOME/godot-bin/godot"
+          started=$(date +%s)
+          set +e
+          scripts/run-tests-sharded.sh "$GITHUB_WORKSPACE" 2>&1 | tee suite.out
+          code=${PIPESTATUS[0]}
+          set -e
+          echo "suite_secs=$(( $(date +%s) - started ))" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      # Independent of the runner script: every shard log and the merge log must have a Tests: line.
+      - name: Check that every shard printed a Tests line
+        if: always()
+        run: |
+          missing=0
+          for log in "$SHARD_LOG_DIR"/*.log; do
+            if ! grep -q "Tests: [0-9]* total, [0-9]* passed, [0-9]* failed" "$log"; then
+              echo "::error::No 'Tests:' line in $log"
+              missing=1
+            fi
+          done
+          if [ ! -d "$SHARD_LOG_DIR" ] || [ -z "$(ls "$SHARD_LOG_DIR"/*.log 2>/dev/null)" ]; then
+            echo "::error::No shard logs found in $SHARD_LOG_DIR"
+            missing=1
+          fi
+          exit "$missing"
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Sharded test suite"
+            echo ""
+            echo "Godot ${{ steps.godot.outputs.version }}. Suite wall-clock: ${{ steps.suite.outputs.suite_secs }} s."
+            echo ""
+            echo '```'
+            sed -n '/=== Per-shard results ===/,/=== 20 slowest tests/p' suite.out | sed '$d'
+            sed -n '/^COMBINED/,$p' suite.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the shard logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-logs
+          path: ${{ env.SHARD_LOG_DIR }}
+          if-no-files-found: warn
