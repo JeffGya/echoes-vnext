@@ -79,6 +79,13 @@ for entry in "${SHARDS[@]}"; do
   shard="${entry%%|*}"
   rest="${entry#*|}"
   suites="${rest%%|*}"
+  # An unnamed shard would write its logs and saves to the root directory, and its pairs would
+  # be dropped from the table below (field 1 would be a suite name). Reject it here.
+  if [[ -z "${shard//[[:space:]]/}" ]]; then
+    echo "PROBLEM: a map entry has an empty shard name (entry: '$entry')." >&2
+    problems=$((problems + 1))
+    continue
+  fi
   echo "$shard" >> "$WORK_DIR/shard_names"
   if [[ -z "$suites" || "$rest" == "$entry" ]]; then
     echo "PROBLEM: shard '$shard' has no suite list." >&2
