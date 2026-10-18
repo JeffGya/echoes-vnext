@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bvv231x86mu1v"
-path="res://.godot/imported/stop_arrived_at.svg-1d0b4ebb990ddceffbed638535bf6bed.ctex"
+uid="uid://ejifrq52dp8t"
+path="res://.godot/imported/stop_spotted_ahead.png-3d7e9a2ad37c8289dc754554bb57cbe7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/ui/stage_stop_glyphs/stop_arrived_at.svg"
-dest_files=["res://.godot/imported/stop_arrived_at.svg-1d0b4ebb990ddceffbed638535bf6bed.ctex"]
+source_file="res://assets/ui/stage_stop_glyphs/stop_spotted_ahead.png"
+dest_files=["res://.godot/imported/stop_spotted_ahead.png-3d7e9a2ad37c8289dc754554bb57cbe7.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

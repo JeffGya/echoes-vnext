@@ -46,6 +46,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("stage_stop_ui/token_tap_rules", Callable(StageStopUITests, "_t_token_tap_rules"))
 	runner.register_test("stage_stop_ui/same_holder_old_glyph_fades_then_new_settles", Callable(StageStopUITests, "_t_same_holder_fade"))
 	runner.register_test("stage_stop_ui/no_directive_id_literal_in_ui", Callable(StageStopUITests, "_t_no_directive_literal"))
+	runner.register_test("stage_stop_ui/glyph_textures_are_256_rgba", Callable(StageStopUITests, "_t_glyph_textures"))
+	runner.register_test("stage_stop_ui/no_svg_glyph_left", Callable(StageStopUITests, "_t_no_svg_glyph"))
+	runner.register_test("stage_stop_ui/glyph_rects_use_mipmap_filter", Callable(StageStopUITests, "_t_glyph_filter"))
+	runner.register_test("stage_stop_ui/six_glyphs_differ", Callable(StageStopUITests, "_t_glyphs_differ"))
 
 
 static func _mount(scene: PackedScene, view_size := Vector2i(1280, 720)) -> Array:
@@ -961,3 +965,45 @@ static func _t_motion_no_leak() -> Dictionary:
 	m[0].free()
 	var leaked := tweens.any(func(x: Variant) -> bool: return (x as Tween).is_valid())
 	return { "ok": not leaked and before == [snap1.hash(), snap2.hash()], "error": "a tween outlived the screen, or a snapshot changed" }
+
+
+static func _t_glyph_textures() -> Dictionary:
+	for kind in StopGlyphs.KINDS:
+		var tex := StopGlyphs.texture(kind)
+		if tex == null:
+			return { "ok": false, "error": "%s: no texture" % kind }
+		var img := tex.get_image()
+		if tex.get_width() != 256 or tex.get_height() != 256 or not img.detect_alpha():
+			return { "ok": false, "error": "%s: must be 256 x 256 with alpha" % kind }
+	if StopGlyphs.texture("not_a_kind") != null:
+		return { "ok": false, "error": "an unknown kind must give null" }
+	return { "ok": true }
+
+
+static func _t_no_svg_glyph() -> Dictionary:
+	for f in DirAccess.get_files_at("res://assets/ui/stage_stop_glyphs"):
+		if f.contains(".svg"):
+			return { "ok": false, "error": "svg glyph left: %s" % f }
+	if FileAccess.get_file_as_string("res://ui/components/StopGlyphs.gd").contains(".svg"):
+		return { "ok": false, "error": "StopGlyphs.gd still names .svg" }
+	return { "ok": true }
+
+
+static func _t_glyph_filter() -> Dictionary:
+	var card := CardScene.instantiate() as Control
+	var why := WhyCardScene.instantiate() as Control
+	var ok: bool = (card.get_node("%StopGlyph") as TextureRect).texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+		and (why.get_node("%HeaderGlyph") as TextureRect).texture_filter == CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	card.free()
+	why.free()
+	return { "ok": ok, "error": "both glyph rects need linear-with-mipmaps filtering" }
+
+
+static func _t_glyphs_differ() -> Dictionary:
+	var seen := {}
+	for kind in StopGlyphs.KINDS:
+		var h := StopGlyphs.texture(kind).get_image().get_data().hex_encode().hash()
+		if seen.has(h):
+			return { "ok": false, "error": "%s has the same image as %s" % [kind, seen[h]] }
+		seen[h] = kind
+	return { "ok": true }
