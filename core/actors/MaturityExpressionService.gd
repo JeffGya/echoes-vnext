@@ -292,10 +292,10 @@ static func build_ctx_inputs(actor: Dictionary, bonds: Array, living_party_ids: 
 
 
 # Fear pressing on Judgment: the afraid part of the emotional status (the one fear and morale
-# reading). 0.0 when ctx_inputs carries no band_lean table.
+# reading). 0.0 for a non-Echo or when ctx_inputs carries no band_lean table.
 static func _fear_pressure(actor: Dictionary, ctx_inputs: Dictionary) -> float:
 	var table: Dictionary = _as_dict(ctx_inputs.get("band_lean", {}))
-	if table.is_empty():
+	if table.is_empty() or not EmotionStatusLean.is_echo(actor):
 		return 0.0
 	return EmotionStatusLean.afraid(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table))
 

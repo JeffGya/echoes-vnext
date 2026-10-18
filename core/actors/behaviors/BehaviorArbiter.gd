@@ -765,8 +765,7 @@ func select_movement_intent(
 	# ASSUMED: only one vow (tikoro_nko_agyina) exists and it is protective/cohesion-
 	# themed, so "a vow is active" reads as fully Ward-leaning until a vow carries its
 	# own Ward/Break strain signal. See the story report's OPEN block.
-	var style_growth: Dictionary = _style_growth(interpretation_width) if is_echo_faction \
-		else {"vector_mul": 1.0, "trait_mul": 1.0}
+	var style_growth: Dictionary = _style_growth_of(actor, interpretation_width)
 	var style_inputs: Dictionary = {
 		"actor":            actor,
 		"bonds":            bonds_ctx if is_echo_faction else [],
@@ -1462,10 +1461,10 @@ func _exposure_acceptance_parts(directive: Dictionary, fear_lean: float, judgmen
 
 
 ## Fall in exposure acceptance from this actor's emotional state: `fear_lean_bound` x the afraid
-## part of the status lean, softened by composure. 0.0 when the bound or the table is absent.
+## part of the status lean, softened by composure. 0.0 for a non-Echo or when the bound or the table is absent.
 func _fear_lean(actor: Dictionary, composure: float) -> float:
 	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
-	if not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
+	if not EmotionStatusLean.is_echo(actor) or not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
 		return 0.0
 	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
 	var dampen: float = composure_dampen(_cfg)
@@ -1498,6 +1497,13 @@ static func felt_pull(lean_value: float, lean_cfg: Dictionary) -> Array:
 	if lean_value > 0.0:
 		return [1.0 + t * (float(lean_cfg["progress_max"]) - 1.0), 1.0 - t * (1.0 - float(lean_cfg["cohesion_min"]))]
 	return [1.0, 1.0]
+
+
+## `_style_growth` for a real Echo; a temporary ally keeps the neutral multipliers.
+func _style_growth_of(actor: Dictionary, judgment: float) -> Dictionary:
+	if not EmotionStatusLean.is_echo(actor):
+		return {"vector_mul": 1.0, "trait_mul": 1.0}
+	return _style_growth(judgment)
 
 
 ## Growth of the Echo's own style by Judgment, on the action layer's identity scale.
