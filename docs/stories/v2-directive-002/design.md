@@ -2,7 +2,7 @@
 
 Revised 2026-10-12 with D-25 to D-43.
 
-Visual reference: `mockups/v3/index.html` (approved look, marker style 3) and `mockups/review/real-stage-maps.json` (the real stage maps the mockup uses).
+Visual reference: `mockups/v3/index.html` (approved look, marker style 3). Its real stage maps are in `mockups/v3/assets/maps.js`.
 
 Status: Approved by Jeff 2026-10-12 (D-43). Notion Spec State set to Locked 2026-10-12. No number in this file is final. Every proposed number is `PROPOSED DEFAULT, to be authored` by `mid-game-designer`. Numbers already authored in `data/balance.json` are quoted as authored.
 Decisions D-00 to D-43 are final and are not re-opened here. Section 12 lists what is resolved and what is still open.
@@ -444,7 +444,7 @@ Re-record rule (D-01, LESSONS):
 | Marker form | Marker style 3. Board shows nothing extra. Kind glyph on the named Echo's card. Six shapes. No head, pole or ring. Re-openable at any time until the next Advance. | D-41 |
 | Look of Advance and step bar | The old mockup's Advance button, big step diamonds with red crosses, and Echo band. Improvements 5 and 10 of the v3 list are not used. | D-41 |
 | Echo card tap | Opens nothing today (Jeff confirmed). Free for the why. | D-41 |
-| Real stage maps | The mockup board uses the real maps (`mockups/review/real-stage-maps.json`). | D-41 |
+| Real stage maps | The mockup board uses the real maps (`mockups/v3/assets/maps.js`). | D-41 |
 | Advance label | The blank live label is a real defect. A separate task. | D-41 |
 | No Echo named | A party chip beside the Echo cards holds the glyph. It exists only when no Echo is named. Tap opens the why. `ui-ux-designer` places it. | D-42 |
 | Step count label | Removed. The step row shows diamonds only; lost steps are crossed out. The build deletes the live count label (`StepFractionLabel`). | D-43 |
@@ -501,5 +501,5 @@ Feasibility checks for `mechanics-developer` (not for Jeff):
 | 14 | One meaning of "60" in the conversation code | D-33 names "the reactive threshold 60" | The same file holds a second, different 60: NPC fear in the turn score (`ConversationService.gd:287`), and a third in `ContactConversationService.gd:74`. Each needs its own config key, not the reactive key. |
 | 15 | D-29 on stop timing | D-29: Scout stops for any new find | Stage reveals in one sweep after the walk (`StageExploreTurnService.gd:309`). The stop rule needs a per-step reveal. This is feasibility check 2, not a decision change. |
 | 16 | Minimum window size | `AGENTS.md` says desktop windows may shrink to 960x540 | D-39: B+C is designed and checked at 1280x720 and 1920x1080. `AGENTS.md` is not edited here. OPEN item for Jeff. |
-| 17 | Step bar draws no second number | Earlier text of section 8 item 5 and `uiux-notes.md` (cut the fraction) | RESOLVED by D-43: the step row shows diamonds only and lost steps are crossed out. The live count label (`StepFractionLabel`, "n/n") is deleted in the build. |
+| 17 | Step bar draws no second number | Earlier text of section 8 item 5 and the UI review notes (removed in D-92; cut the fraction) | RESOLVED by D-43: the step row shows diamonds only and lost steps are crossed out. The live count label (`StepFractionLabel`, "n/n") is deleted in the build. |
 | 18 | Two uses of "glyph" | Section 8 item 6 (D-40 item 11): the Directive tint and glyph | Section 8.1: the stop kind glyph. Different things. Item 6 means the Directive's own mark. |
