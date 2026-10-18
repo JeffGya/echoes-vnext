@@ -556,3 +556,30 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-94. cleanup-done
 **Q:** What did the story folder cleanup (D-92) leave?
 **A:** The removed files are gone, the kept files are patched, and the glyph path is now `.png`. See D-92 and D-93.
+
+### D-95. group-a-scope
+**Q:** Which follow-ups from "Found in phase D final QA and docs pass" does Jeff fix now, and in which story?
+**A:** (Jeff, 2026-10-18) Group A, inside V2-DIRECTIVE-002 (new branch `claude/v2-directive-002-group-a`, own PR). Items:
+1. Divergence check: remove the four other `directive_*` spatial parts from the Echo's own judgment. Mode mandates (PROTECT, PURSUE, PURIFY_SHRINE, GUIDE_SPIRIT, RECOVER) count as Directive voice. Checked first: only Scout sets `avoid_overcommit`; the other three come from encounter modes only. The removal acts per term, so a future Directive is covered.
+2. One Echo gate: `EmotionStatusLean.is_echo` for slices 2, 5, 6 and 7. A temporary ally gets no lean, steps or growth.
+3. C6 and C7: style alignment and the action layer move to the status (D-96 to D-100).
+4. Resolve screen pre-fight fear: the fear before the surprise bump. Held in `EncounterContext` beside `pre_encounter_morale`. No save change.
+5. Composure for slice 6 is computed before the profile, in the right order. Remove `composure_default` (D-88: no dead config), with its range and test lines.
+6. `felt_state.ranges` accepted. Tighten `steps.bonus_at` max to 0.7 and `steps.penalty_at` max to 0.8 so the validator rejects a value that does nothing.
+**Not in this story (Jeff):** the known red test `movement_arbiter/avoid_overcommit_stays_proportionate` stays as is (known and intended). The stale suite-count comments are fixed by other PRs; the item is dropped.
+
+### D-96. status-two-channels
+**Q:** The GDD gives fear (threat response) and morale (follow-through, recovery) different roles. The status does not tell the cause. How do C6 and C7 read it?
+**A:** (Jeff, 2026-10-18) Two channels, one status. Per activation compute `L_eff = soften(band_lean[status], composure)` once; `A = afraid(L_eff)`, `B = bold(L_eff)`. Threat channel (`A`): lowers active actions, pulls from exposure. Follow-through channel (`A` and `B`): low state raises guard and idle; high state raises melee and move. The four morale tiers become two ends (afraid, bold). Composure enters once (no second composure term in `eff_dampen`). Softening is symmetric (Q7): composure softens the bold side too, as in slices 5 and 6.
+
+### D-97. enemies-read-status
+**A:** (Jeff, 2026-10-18) Enemies read the same status in the action layer and in style. They already have real fear and morale (`ActorStateMachine.gd` ~291-298). Slices 5 to 7 stay Echo-only.
+
+### D-98. aduro-and-signatures
+**A:** (Jeff, 2026-10-18) Aduro: the override replaces his afraid end, scaled by `A`; the fear multiplier still dampens his melee. Calling signatures (Kra Soro, Okomfo, Onyamesu, Okofor) read `A` and their numbers move to config (`calling_behavior.<calling>.afraid_signature`). Delete the dead `data.actor.broken_morale_overrides`. Kra Soro `fear_move_bonus` scales by `A` (its comment and code disagreed).
+
+### D-99. initiative-and-barks
+**A:** (Jeff, 2026-10-18) Initiative at combat start reads the unsoftened status lean (no composure exists yet): afraid and bold points in config (PROPOSED DEFAULT -6 and +5). Bark triggers keep their context keys and change only the trigger: "morale falling" fires when the status gets worse; "inspired" fires at radiant. Open: the bark wording for a fear-caused fall needs a content check (Jeff and `mid-game-designer`).
+
+### D-100. lean-table-and-runs
+**A:** (Jeff, 2026-10-18) `felt_state.band_lean` stays where it is. Items 5, C6, C7 and the two small readers are one change with one record run, then one re-record (D-86), in separate commits. Numbers for `state_action_points`, `follow_through_bias`, initiative points and the signature table are PROPOSED DEFAULT; `mid-game-designer` authors them with an offline re-score. Targets: hollow stack near the old worst case; burdened-by-fear within 25 percent of the old fear 45 effect; radiant near the old inspired.
