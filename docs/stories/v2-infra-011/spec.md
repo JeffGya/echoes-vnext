@@ -145,6 +145,6 @@ A sharded suite run takes about 18 minutes. A profile run takes about 5 minutes.
 |---|---|---|
 | Q-01 | Merge with V2-INFRA-010 or keep two stories? | Open |
 | Q-02 | Targets: at least 30% shorter guide-spirit fight; sharded suite at most 13 minutes. | Proposed |
-| Q-03 | Priority (proposed P2) and Order (proposed 254.8, after V2-INFRA-010 at 254.7). | Proposed |
+| Q-03 | Priority (proposed P2). Order: V2-INFRA-011 comes after V2-INFRA-010 (Jeff, 2026-10-18). Notion: 254.8 (V2-INFRA-010 is 254.7). The backlog CSV export is behind Notion and still has V2-INFRA-010 at 262.9, so the CSV row of V2-INFRA-011 is 262.95. A refresh of the CSV from Notion makes both agree. | Order decided; priority proposed |
 | Q-04 | Is the determinism test for guide-spirit allowed to keep 2 x 30 rounds of an unfinished fight? | Open, outside this story |
 | Q-05 | Is `movement_arbiter/avoid_overcommit_stays_proportionate` (a known failure in the runner) in scope? | No. Listed for completeness. |
