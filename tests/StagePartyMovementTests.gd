@@ -90,7 +90,7 @@ static func register(runner: CoreTestRunner) -> void:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 	# V2-DIRECTIVE-002 B+C slice S2b: the party stance.
-	for n in ["stance_ordering_per_dial", "stance_party_order_shuffle_identical", "stance_standing_floor_leans_at_standing_1", "stance_judgment_never_adds_steps", "stance_readiness_lower_only", "stance_all_shaken_party_keeps_one_step", "stance_bond_rule_changes_width", "stance_commitment_never_exceeds_effective_steps", "stance_directive_without_profile_keeps_readiness"]:
+	for n in ["stance_ordering_per_dial", "stance_party_order_shuffle_identical", "stance_standing_floor_leans_at_standing_1", "stance_judgment_never_adds_steps", "stance_readiness_lower_only", "stance_same_status_same_lean", "stance_status_matches_combat_reading", "stance_dial_bound_still_clamps", "stance_readiness_status_table_matches_old_examples", "stance_no_state_ramps_key_or_reader", "stance_all_shaken_party_keeps_one_step", "stance_bond_rule_changes_width", "stance_commitment_never_exceeds_effective_steps", "stance_directive_without_profile_keeps_readiness"]:
 		runner.register_test("movement/stage_party/" + n, Callable(StagePartyMovementTests, "_t_" + n))
 
 	# V2-DIRECTIVE-002 B+C slice S2c: category-weight bend.
@@ -2151,6 +2151,87 @@ static func _t_stance_bond_rule_changes_width() -> Dictionary:
 		return _fail("a living bond must raise width: with %s without %s" % [w1, w0])
 	if with_b == without:
 		return _fail("bonds must reach the stance")
+	return _pass()
+
+
+static func _with_state(actor: Dictionary, fear: int, fear_base: int, morale: int) -> Dictionary:
+	var a := actor.duplicate(true)
+	a["fear"] = fear
+	a["fear_base"] = fear_base
+	a["morale"] = morale
+	return a
+
+
+static func _t_stance_same_status_same_lean() -> Dictionary:
+	var env := _stance_env()
+	var base := _stance_actor("e", "okofor", 3, 0, 50)
+	var split_a := Stance.read_echo(_with_state(base, 0, 60, 50), [], {}, env["data"])
+	var split_b := Stance.read_echo(_with_state(base, 60, 0, 50), [], {}, env["data"])
+	if split_a["status"] != split_b["status"] or split_a["status"] == "grounded":
+		return _fail("expected one non-calm status for both splits, got %s and %s" % [split_a["status"], split_b["status"]])
+	for dial: String in Stance.DIALS:
+		if Stance.echo_lean(split_a, dial, env["cfg"]) != Stance.echo_lean(split_b, dial, env["cfg"]):
+			return _fail("%s lean differs for the same status" % dial)
+	return _pass()
+
+
+static func _t_stance_status_matches_combat_reading() -> Dictionary:
+	var env := _stance_env()
+	var table := EmotionStatusLean.table_of(env["data"]["combat"]["movement"])
+	for st in [[0, 70], [30, 50], [50, 40], [60, 50], [90, 5]]:
+		var actor := _with_state(_stance_actor("e", "okofor", 3, 0, 50), st[0], 15, st[1])
+		var echo := Stance.read_echo(actor, [], {}, env["data"])
+		if echo["status"] != EmotionStatusLean.status_of(actor) or echo["status"] != EmotionService.get_emotional_status(st[1], maxi(st[0], 15)):
+			return _fail("stage status %s differs from the shared reading for %s" % [echo["status"], st])
+		if not is_equal_approx(EmotionStatusLean.afraid(float(echo["lean"])), EmotionStatusLean.afraid_of(actor, table, 0.0, 0.0)):
+			return _fail("stage and combat afraid part differ for %s" % [st])
+	return _pass()
+
+
+static func _t_stance_dial_bound_still_clamps() -> Dictionary:
+	var env := _stance_env()
+	var party: Array = []
+	for i in 6:
+		party.append(_with_state(_stance_actor("e%d" % i, "okofor", 1, 0, 50), 95, 15, 2))
+	for d: Dictionary in [env["scout"], env["seek"]]:
+		var st := _stance_of(party, d, env)
+		var base := float(d["exposure_tolerance"])
+		var bound := float(env["cfg"]["bounds"]["exposure_tolerance"])
+		var v := float(st["dials"]["exposure_tolerance"])
+		if v < base - bound - 0.0001 or v > base + bound + 0.0001:
+			return _fail("exposure_tolerance %s left base %s +- %s" % [v, base, bound])
+	return _pass()
+
+
+# Old bands: calm and uneasy lost 0, shaken (fear >= 55) lost 1, low morale (< 40) lost 1.
+static func _t_stance_readiness_status_table_matches_old_examples() -> Dictionary:
+	var env := _stance_env()
+	var cases := [["calm", 0, 70, 0], ["uneasy", 40, 70, 0], ["shaken", 60, 50, 1], ["low morale", 0, 30, 1]]
+	for c in cases:
+		var echo := Stance.read_echo(_with_state(_stance_actor("e", "okofor", 3, 0, 50), c[1], 0, c[2]), [], {}, env["data"])
+		var lost := Stance.readiness_steps_lost([echo], env["cfg"])
+		if lost != c[3]:
+			return _fail("%s party lost %d steps, expected %d" % [c[0], lost, c[3]])
+	var table: Dictionary = env["cfg"]["readiness"]["status_steps_lost"]
+	for status: String in EmotionService.STATUS_LADDER:
+		if not table.has(status):
+			return _fail("status_steps_lost has no %s" % status)
+	return _pass()
+
+
+static func _t_stance_no_state_ramps_key_or_reader() -> Dictionary:
+	var env := _stance_env()
+	var cfg: Dictionary = env["cfg"]
+	if cfg.has("state_ramps"):
+		return _fail("party_stance still has state_ramps")
+	for key in ["fear_shaken_at", "fear_uneasy_at", "morale_low_below", "steps_lost", "low_morale_steps_lost"]:
+		if (cfg["readiness"] as Dictionary).has(key):
+			return _fail("readiness still has %s" % key)
+	for path in ["res://core/movement/StagePartyStance.gd", "res://core/realms/StageCounterfactualService.gd", "res://core/realms/StageExploreTurnService.gd", "res://core/combat/BehaviorArbiter.gd"]:
+		var text := FileAccess.get_file_as_string(path)
+		for key in ["state_ramps", "fear_ramp", "fear_shaken_at", "morale_low_below"]:
+			if text.contains(key):
+				return _fail("%s still mentions %s" % [path, key])
 	return _pass()
 
 

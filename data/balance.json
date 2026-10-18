@@ -3152,7 +3152,7 @@
 						"dispositional_floor": 0.35
 					},
 					"leans": {
-						"_comment": "PROPOSED DEFAULT. Signed coefficient of the dial bound at full strength. Coefficient 1.0 is a primary lean, 0.5 and 0.25 are secondary. Per Echo: lean = coefficient * bound * strength. Party dial = baseline + sum over Echoes of lean / party size, then clamped to the bound. Primary lean per input (design section 2): Anchor = exposure_tolerance and escape_bonus; Edge = exposure_tolerance and commitment_fraction; Sight = intel weight and stop_willingness; fear = exposure_tolerance and stop_willingness; morale = commitment_fraction.",
+						"_comment": "PROPOSED DEFAULT. Signed coefficient of the dial bound at full strength. Coefficient 1.0 is a primary lean, 0.5 and 0.25 are secondary. Per Echo: lean = coefficient * bound * strength. Party dial = baseline + sum over Echoes of lean / party size, then clamped to the bound. Primary lean per input (design section 2): Anchor = exposure_tolerance and escape_bonus; Edge = exposure_tolerance and commitment_fraction; Sight = intel weight and stop_willingness; fear = exposure_tolerance and stop_willingness; morale = commitment_fraction. State terms read one number, the band lean of the emotional status (data.combat.movement.felt_state.band_lean): fear and morale_low coefficients x the afraid part, morale coefficient x the signed lean (the bold part only on a dial that also has a fear coefficient).",
 						"exposure_tolerance": {
 							"calling_anchor": -1.0,
 							"calling_edge": 1.0,
@@ -3186,13 +3186,6 @@
 							}
 						}
 					},
-					"state_ramps": {
-						"_comment": "PROPOSED DEFAULT. fear lean = clamp((fear - fear_start) / (fear_full - fear_start), 0, 1). morale lean = clamp((morale - morale_neutral) / morale_neutral, -1, 1). morale_low lean (return safety only) = clamp((escape_morale_below - morale) / escape_morale_below, 0, 1). fear is the Echo's current fear on the actor view for the stage. Read by the stage only.",
-						"fear_start": 20,
-						"fear_full": 70,
-						"morale_neutral": 50,
-						"escape_morale_below": 35
-					},
 					"identity": {
 						"_comment": "PROPOSED DEFAULT. Virtue domains bend only through MovementStyleService (D-35). alignment_gain turns one style_alignment_score (already multiplied by alignment_weight, about 3 at most) into a fraction of the exposure_tolerance bound: lean = clamp(score * alignment_gain, -1, 1) * tolerance_by_style[best-aligned style]. tolerance_by_style is the one mapping from a route style to the tolerance dial.",
 						"alignment_gain": 0.33,
@@ -3205,16 +3198,11 @@
 						}
 					},
 					"readiness": {
-						"_comment": "PROPOSED DEFAULT. Readiness only LOWERS effective steps (D-27). Party fear is the mean current fear of the party, party morale the mean current morale (assumed, same as the party-return check). Steps lost = min(bounds.readiness_steps, max(steps_lost[fear band], low_morale_steps_lost if morale is below morale_low_below)). Effective steps never go below 1.",
-						"fear_uneasy_at": 35,
-						"fear_shaken_at": 55,
-						"morale_low_below": 40,
-						"steps_lost": {
-							"calm": 0,
-							"uneasy": 0,
-							"shaken": 1
-						},
-						"low_morale_steps_lost": 1
+						"_comment": "PROPOSED DEFAULT. Readiness only LOWERS effective steps. The party status is the emotional status (EmotionService.get_emotional_status) of the party mean morale, mean fear and mean base fear. Steps lost = min(bounds.readiness_steps, status_steps_lost[status]). Effective steps never go below 1. Keyed by all ten statuses.",
+						"status_steps_lost": {
+							"hollow": 1, "fraying": 1, "strained": 1, "pressed": 1, "burdened": 1,
+							"hesitant": 1, "uncertain": 0, "grounded": 0, "whole": 0, "radiant": 0
+						}
 					},
 					"exposure": {
 						"_comment": "PROPOSED DEFAULT. Exposure map and its price (design section 3b). Exposure of a cell near a known hostile situation = hostile_peak * (1 - distance / (hostile_radius + 1)) for distance <= hostile_radius, on a 0 to 1 scale (assumed). Entry cost = 1 + round(exposure * (1 - effective tolerance) * price_scale); path costs must be integers >= 1 (MovementPathService._entry_cost). A party pauses before a cell when exposure * (1 - effective tolerance) * stop_willingness >= pause_trigger.",
@@ -3231,8 +3219,9 @@
 						"_comment_pause_cap_per_advance": "PROPOSED DEFAULT. Set by D-45, probe 2026-10-12. Safety cap for the party bends. No probed Advance reached 3 pauses. Re-measure after the backend lands."
 					},
 					"counterfactual": {
-						"_comment": "PROPOSED DEFAULT. Caps for the 'who decided' dry runs (D-04). Cap = party size + extra_replans_per_reason_class * number of reason_classes.",
+						"_comment": "PROPOSED DEFAULT. Caps for the 'who decided' dry runs (D-04). Cap = party size + extra_replans_per_reason_class * number of reason_classes. neutral_morale is the morale the 'morale' reason class gives the named Echo in its dry run.",
 						"extra_replans_per_reason_class": 1,
+						"neutral_morale": 50,
 						"reason_classes": [
 							"calling",
 							"temperament",

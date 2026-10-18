@@ -1227,8 +1227,7 @@ static func _t_fear_bound_is_combat_owned() -> Dictionary:
 	var before: float = arbiter._fear_lean(afraid, 0.0)
 	var party_stance: Dictionary = (data["stages"] as Dictionary)["party_stance"] as Dictionary
 	(party_stance["bounds"] as Dictionary)["exposure_tolerance"] = 0.45
-	(party_stance["state_ramps"] as Dictionary)["fear_start"] = 0
-	(party_stance["state_ramps"] as Dictionary)["fear_full"] = 10
+	(party_stance["leans"] as Dictionary)["exposure_tolerance"] = { "fear": -5.0 }
 	var after: float = arbiter._fear_lean(afraid, 0.0)
 	var want: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"]) * _afraid_part(afraid)
 	if before <= 0.0 or after != before or not is_equal_approx(after, want):
@@ -1961,7 +1960,7 @@ static func _scan_for_stage_keys(dir_path: String, hits: Array, scanned: Diction
 			var code: String = line.strip_edges()
 			if code.begins_with("#") or code.begins_with("##"):
 				continue
-			for key: String in ["\"directive_profile\"", "\"lean_strength\"", "\"leans\"", "\"state_ramps\""]:
+			for key: String in ["\"directive_profile\"", "\"lean_strength\"", "\"leans\""]:
 				if code.contains(key):
 					hits.append("%s:%d %s" % [path, line_no, key])
 			if code.contains("\"party_stance\"") and path != "res://core/combat/CombatTurnContextService.gd":

@@ -12,21 +12,34 @@ static var builds: int = 0
 static var dry_builds: int = 0
 
 
-## Lean inputs of one Echo. Judgment comes from the same reader combat uses (bonds included, D-26).
+## Lean inputs of one Echo. Judgment comes from the same reader combat uses (bonds included).
 static func read_echo(actor: Dictionary, bonds: Array, living_ids: Dictionary, cfg_data: Dictionary) -> Dictionary:
 	var thresholds := _d(_d(cfg_data.get("sanctum", {})).get("bond_thresholds", {}))
 	var ctx := MaturityExpressionService.build_ctx_inputs(actor, bonds, living_ids, cfg_data, thresholds, {}, 0.0)
 	var expr := MaturityExpressionService.derive_expression(actor, ctx, _d(cfg_data.get("maturity_expression", {})))
 	var best := _best_style(actor, cfg_data)
-	return {
+	var echo := {
 		"id": str(actor.get("id", "")),
 		"family": str(ctx.get("calling_family", "")),
 		"width": clampf(float(expr.get("judgment", 0.0)), 0.0, 1.0),
-		"fear": float(actor.get("fear", 0)),
-		"morale": float(actor.get("morale", 50)),
 		"best_style": best["style"],
 		"style_score": best["score"],
 	}
+	return restate(echo, int(actor.get("morale", 50)), int(actor.get("fear", 0)), int(actor.get("fear_base", 0)), cfg_data)
+
+
+## Copy of `echo` with a new emotional state: the status and its band lean are re-read from the
+## shared helper and table, so no caller can set the numbers and leave the status behind.
+static func restate(echo: Dictionary, morale: int, fear: int, fear_base: int, cfg_data: Dictionary) -> Dictionary:
+	var status := EmotionStatusLean.status_from(morale, fear, fear_base)
+	var table := EmotionStatusLean.table_of(_d(_d(cfg_data.get("combat", {})).get("movement", {})))
+	var out := echo.duplicate()
+	out["morale"] = morale
+	out["fear"] = fear
+	out["fear_base"] = fear_base
+	out["status"] = status
+	out["lean"] = EmotionStatusLean.lean(status, table)
+	return out
 
 
 ## The saved party as `read_echo` dicts, with the real save bonds (D-26). `exclude_id` drops one
@@ -46,32 +59,22 @@ static func read_party(save_data: Dictionary, cfg_data: Dictionary, exclude_id: 
 	return echoes
 
 
-## Fear ramp 0..1 from `state_ramps`. Only the stage reads it.
-static func fear_ramp(fear: float, ramps: Dictionary) -> float:
-	var fear_start := _num(ramps, "fear_start")
-	return clampf((fear - fear_start) / maxf(_num(ramps, "fear_full") - fear_start, 0.001), 0.0, 1.0)
-
-
 ## One Echo's signed lean on one dial, in dial units (coefficient x bound x strength).
 ## `category` selects one coefficient set inside a category dial (`category_weight`).
 static func echo_lean(echo: Dictionary, dial: String, stance_cfg: Dictionary, category: String = "") -> float:
 	var coeffs := _d(_d(stance_cfg.get("leans", {})).get(dial, {}))
 	if category != "":
 		coeffs = _d(coeffs.get(category, {}))
-	var ramps := _d(stance_cfg.get("state_ramps", {}))
 	var floor_ := _num(_d(stance_cfg.get("lean_strength", {})), "dispositional_floor")
 	var strength := floor_ + (1.0 - floor_) * float(echo.get("width", 0.0))
-	var fear := float(echo.get("fear", 0.0))
-	var morale := float(echo.get("morale", 50.0))
-	var neutral := _num(ramps, "morale_neutral")
-	var low_below := _num(ramps, "escape_morale_below")
-	var fear_lean := fear_ramp(fear, ramps)
-	var morale_lean := clampf((morale - neutral) / maxf(neutral, 0.001), -1.0, 1.0)
-	var low_lean := clampf((low_below - morale) / maxf(low_below, 0.001), 0.0, 1.0)
+	var state := float(echo.get("lean", 0.0))
+	var afraid := EmotionStatusLean.afraid(state)
+	# A dial with a fear term already counts the afraid side, so its morale term adds only the bold side.
+	var fear_c := _num(coeffs, "fear")
 	var sum := _num(coeffs, "calling_" + str(echo.get("family", ""))) * strength \
-		+ _num(coeffs, "fear") * fear_lean \
-		+ _num(coeffs, "morale") * morale_lean \
-		+ _num(coeffs, "morale_low") * low_lean
+		+ fear_c * afraid \
+		+ _num(coeffs, "morale") * (state if fear_c == 0.0 else EmotionStatusLean.bold(state)) \
+		+ _num(coeffs, "morale_low") * afraid
 	if dial == "exposure_tolerance":
 		var ident := _d(stance_cfg.get("identity", {}))
 		var by_style := _d(ident.get("tolerance_by_style", {}))
@@ -80,24 +83,21 @@ static func echo_lean(echo: Dictionary, dial: String, stance_cfg: Dictionary, ca
 	return sum * _num(_d(stance_cfg.get("bounds", {})), dial)
 
 
-## Steps the party loses to fear and morale: party means, banded, capped by `bounds.readiness_steps`.
+## Steps the party loses to its emotional status: the status of the party's mean morale, fear and
+## base fear, looked up in `readiness.status_steps_lost`, capped by `bounds.readiness_steps`.
 static func readiness_steps_lost(echoes: Array, stance_cfg: Dictionary) -> int:
 	if echoes.is_empty():
 		return 0
-	var cfg := _d(stance_cfg.get("readiness", {}))
-	var fear_sum := 0.0
-	var morale_sum := 0.0
+	var morale := 0.0
+	var fear := 0.0
+	var fear_base := 0.0
 	for e in echoes:
-		fear_sum += float(e.get("fear", 0.0))
-		morale_sum += float(e.get("morale", 50.0))
-	var fear := fear_sum / echoes.size()
-	var morale := morale_sum / echoes.size()
-	var by_band := _d(cfg.get("steps_lost", {}))
-	var band := "shaken" if fear >= _num(cfg, "fear_shaken_at") \
-		else ("uneasy" if fear >= _num(cfg, "fear_uneasy_at") else "calm")
-	var lost := int(_num(by_band, band))
-	if morale < _num(cfg, "morale_low_below"):
-		lost = maxi(lost, int(_num(cfg, "low_morale_steps_lost")))
+		morale += float(e.get("morale", 50.0))
+		fear += float(e.get("fear", 0.0))
+		fear_base += float(e.get("fear_base", 0.0))
+	var n := float(echoes.size())
+	var status := EmotionStatusLean.status_from(int(morale / n), int(fear / n), int(fear_base / n))
+	var lost := int(_num(_d(_d(stance_cfg.get("readiness", {})).get("status_steps_lost", {})), status))
 	return clampi(lost, 0, int(_num(_d(stance_cfg.get("bounds", {})), "readiness_steps")))
 
 
