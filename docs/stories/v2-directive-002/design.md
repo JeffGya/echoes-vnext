@@ -2,7 +2,7 @@
 
 Revised 2026-10-12 with D-25 to D-43.
 
-Visual reference: `mockups/v3/index.html` (approved look, marker style 3) and `mockups/review/real-stage-maps.json` (the real stage maps the mockup uses).
+Visual reference: `mockups/v3/index.html` (approved look, marker style 3). Its real stage maps are in `mockups/v3/assets/maps.js`.
 
 Status: Approved by Jeff 2026-10-12 (D-43). Notion Spec State set to Locked 2026-10-12. No number in this file is final. Every proposed number is `PROPOSED DEFAULT, to be authored` by `mid-game-designer`. Numbers already authored in `data/balance.json` are quoted as authored.
 Decisions D-00 to D-43 are final and are not re-opened here. Section 12 lists what is resolved and what is still open.
@@ -444,7 +444,7 @@ Re-record rule (D-01, LESSONS):
 | Marker form | Marker style 3. Board shows nothing extra. Kind glyph on the named Echo's card. Six shapes. No head, pole or ring. Re-openable at any time until the next Advance. | D-41 |
 | Look of Advance and step bar | The old mockup's Advance button, big step diamonds with red crosses, and Echo band. Improvements 5 and 10 of the v3 list are not used. | D-41 |
 | Echo card tap | Opens nothing today (Jeff confirmed). Free for the why. | D-41 |
-| Real stage maps | The mockup board uses the real maps (`mockups/review/real-stage-maps.json`). | D-41 |
+| Real stage maps | The mockup board uses the real maps (`mockups/v3/assets/maps.js`). | D-41 |
 | Advance label | The blank live label is a real defect. A separate task. | D-41 |
 | No Echo named | A party chip beside the Echo cards holds the glyph. It exists only when no Echo is named. Tap opens the why. `ui-ux-designer` places it. | D-42 |
 | Step count label | Removed. The step row shows diamonds only; lost steps are crossed out. The build deletes the live count label (`StepFractionLabel`). | D-43 |

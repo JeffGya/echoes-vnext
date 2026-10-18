@@ -1,11 +1,10 @@
 # Stop marker mockup, v3 (round 4)
 
 One animated page. Three modes play the same Advance run on the same real stage map, so you can compare the feel.
-`../v2/` is not changed.
 
 ## Open it
 
-Open `index.html` in a browser. No server is needed. `assets/` holds the tile, the fonts and `maps.js` (the four real maps from `../review/real-stage-maps.json`).
+Open `index.html` in a browser. No server is needed. `assets/` holds the tile, the fonts and `maps.js` (the four real stage maps).
 The page plays one Advance on load. One small strip above the frame holds all controls. The frame is 1280x720 at true size.
 
 | Control | Use |
@@ -27,13 +26,13 @@ The page plays one Advance on load. One small strip above the frame holds all co
 | Mode | Content |
 |---|---|
 | Current game | The stage screen as it is today. Parchment HUD, navy badge, one snippet line, `Steps` with three diamonds and the count, wide gold bar, one Echo pill. No stop marker. No cause. No crossed-out steps. The Advance label is readable here. The live button has a blank label (a known defect). |
-| Old mockup | The UI and the marker of `../stage-stop-marker-mockup.html`, option 1, unchanged: dark HUD, always-on journey box, blue-outlined badge, big diamonds with red crosses, narrow Advance, dark Echo band with round portraits, six coloured stop-kind markers (ring, pole, head, ray for "spotted ahead"), dark five-slot why card. Fonts are Spectral and Iosevka instead of the sketch font. |
+| Old mockup | The UI and the marker of the first stop marker mockup (removed on the cleanup, D-92), option 1, unchanged: dark HUD, always-on journey box, blue-outlined badge, big diamonds with red crosses, narrow Advance, dark Echo band with round portraits, six coloured stop-kind markers (ring, pole, head, ray for "spotted ahead"), dark five-slot why card. Fonts are Spectral and Iosevka instead of the sketch font. |
 | New mockup | The old mockup plus the 8 improvements below that Jeff kept, plus the shaken beat. It uses the Old mockup's Advance button, step diamonds and Echo band. A checkbox switches each improvement. All off gives exactly the Old mockup. |
 
 ## The board (the same in all modes)
 
 - Real map data: `walkable`, `bridge_cells`, `revealed_turn0`, `revealed_after_advance`, the start cell, the real first Advance path (3 tiles), and the content markers the snapshot shows after Advance.
-- Projection from `real-stage-maps.md`: centre x = 64 * (col + row) + 64, y = 32 * (row - col) + 32. One layer of tiles, a second tinted layer for bridges (0.87, 0.58, 0.24, 0.55), fog as black tiles at 65 percent on walkable unrevealed cells. Colours match the real screenshot (checked by pixel average).
+- Projection of the real stage maps: centre x = 64 * (col + row) + 64, y = 32 * (row - col) + 32. One layer of tiles, a second tinted layer for bridges (0.87, 0.58, 0.24, 0.55), fog as black tiles at 65 percent on walkable unrevealed cells. Colours match the real screenshot (checked by pixel average).
 - Camera zoom 1.3 (tile 166 px wide, as in `real-screen-1280x720.png`). The camera follows the token with the game's lerp (speed 5 per second, `BoardCamera.gd`), so the token moves tile to tile on screen and the map settles after the walk.
 - Fog lifts around the party at each tile (0.35 s). Cells reveal when they are within 3 tiles of the party.
 - Ground `#120E0C`. Blue token with "P". Blue ghost footprints. Green bubble. Blue diamond for a content marker, blue circle with gold ring for an objective.
@@ -87,9 +86,9 @@ Jeff removed improvement 5 (step bar) and improvement 10 (wide Advance bar, Retu
 
 | # | Change | Reason |
 |---|---|---|
-| 1 | Top bar is the parchment card of the live game. | The dark box is not in the game. Parchment cards sit on the clay board (art-notes.md). |
+| 1 | Top bar is the parchment card of the live game. | The dark box is not in the game. Parchment cards sit on the clay board. |
 | 2 | No always-on journey box. The entry is in the why card. | D-32: the why shows on demand only. A standing text block adds noise (uiux-notes.md, feel-notes.md). |
-| 3 | A quiet mark replaces the old marker. No pole, no ring, one gold edge, clear of other marks. Four styles. | Jeff, round 4. Shape carries the kind, not colour (art-notes.md). |
+| 3 | A quiet mark replaces the old marker. No pole, no ring, one gold edge, clear of other marks. Four styles. | Jeff, round 4. Shape carries the kind, not colour. |
 | 4 | The mark settles once in 0.25 s. | Gives "it happened" without a loop (feel-notes.md). |
 | 5 | Removed by Jeff. | Old step diamonds stay. |
 | 6 | Lost steps scratch in with the mark. In the New mockup the old red-cross diamonds fade in at 0.6 s. | The shaken beat and the step icons say the same fact. One beat, not two (feel-notes.md). |
@@ -118,10 +117,9 @@ Not shown because it is not visible: each tap area (at least 48 units) is clampe
 
 All new strings are `[Jeff's wording]`. The Directive cause shows as `Directive` (D-40 item 7). HUD text, badge text, snippet line, Echo status words and the button labels `Advance` are copied from the live screen. `Return Home` is no longer shown in the New mockup.
 
-## Preview images (map 2, 1280x720, headless Firefox)
+## Frozen views
 
-`preview-cur-map2.png`, `preview-old-map2.png`, `preview-new-map2.png` (calm, style 1). `-midwalk` (frozen at 0.25 s). Old and new also: `-why` (Directive run, card open), `-shaken`, `-edge` (card open). `preview-new-map2-1920.png` at 1920x1080.
-New in round 4: `preview-new-map2-style1.png` to `-style4.png` (calm, one per marker style) and `preview-new-map2-shaken-midshake.png` (frozen at 0.644 s, the token is shifted). The `preview-old-*` and `preview-cur-*` images are unchanged. The `preview-new-*` images were made again.
+The preview images were removed on the cleanup (D-92). Make them again with the URL hash below.
 Frozen views use a URL hash, for example `#shot=1&m=new&map=2&s=edge&t=250&why=1&z=1080&ms=3`. Switch off improvements with `&off=hud,journey`.
 
 ## What was tested
@@ -142,7 +140,7 @@ Not tested:
 
 ## Assumptions
 
-- Tile art sits with the diamond centred on the cell centre. `real-stage-maps.md` says the art reaches 64 up from the centre. The real screenshot shows the token on the diamond centre, so I followed the screenshot.
+- Tile art sits with the diamond centred on the cell centre. The map notes (removed, D-92) said the art reaches 64 up from the centre. The real screenshot shows the token on the diamond centre, so I followed the screenshot.
 - Old and New mockups use 5 baseline steps (3 spent by the walk). Shaken shows 2 lost. The Current game uses 3, as the live screen does.
 - In the Current game the step bar stays at 0/3 after the walk. I did not check what the live bar does after the walk.
 - Linear walk easing and a bubble of about 2.6 s are assumed.

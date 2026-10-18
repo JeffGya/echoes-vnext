@@ -3,6 +3,8 @@
 Findings from phase A that are not part of phase A. Each item names its source and its owner today.
 Jeff decides scope. Nothing here is fixed unless it says so.
 
+Files named in this log that are not in this folder were removed on the cleanup (D-92). They stay in git history.
+
 ## Contact window (screenshot review, 2026-10-11)
 
 **Decision (Jeff, 2026-10-11, D-22): these are a separate story for later, not part of V2-DIRECTIVE-002. Pick them up another time.** A candidate title: "Contact window: readable Echo cards". Nothing is fixed. No Notion story exists yet; create one only when Jeff asks.
@@ -44,7 +46,7 @@ Owner: phase B+C, which edits the same guard.
 - Under Scout, a calm party cannot change the first plan with today's numbers (opus, S2e). Commitment depth is always 2 (D-50). Scout's weights have no tie that a category bend breaks. The exposure price rounds per cell; the Scout tolerance stays between 0.18 and 0.42, so a cell with exposure 0.67 always costs 3 (rounding boundary at tolerance 0.4375). So Scout naming can name only fear or morale. Design contrasts S1 and P1 cannot occur under Scout. Question for `mid-game-designer` and Jeff: change the `exposure_tolerance` bound or the price rounding so that a Scout lean can change a route? Test P1 was built on Seek.
 - `StagePartyStance.build` raises the `builds` counter. When S3 calls naming inside `advance_turn`, `traversal/one_stance_per_advance` counts the dry runs too. S3 must separate Advance builds from dry-run builds.
 - A frontier target pays the reachable region twice (`select_frontier` builds its own region; D-51 gives it no new argument). Cost is small (15 to 22 ms).
-- Stale rows in `backend-plan.md`: the S2c "Files" row names `select_frontier`; the "Fingerprints that move" row mentions `route_character` (deferred, D-51). FIXED (QA package C, 2026-10-13).
+- Stale rows in the backend plan (file removed, D-92): the S2c "Files" row names `select_frontier`; the "Fingerprints that move" row mentions `route_character` (deferred, D-51). FIXED (QA package C, 2026-10-13).
 
 ## Found in slice S3 attribution (2026-10-13), for Jeff (opus review)
 - F1 Exposure pause exemptions: no pause on the first step of an Advance (supports design 9, no soft-lock) and no pause before the target cell (the builder's own rule; no design text supports it; inconsistent: in `gen100_scout` the party paused one cell before the hostile target, but not on the target cell). Options: keep; exempt the whole route when the target is the exposure source; remove the exemption and re-record `p5_tier1_hard_stops_on_arrival` and `fog_light_bias_seek_engages`.

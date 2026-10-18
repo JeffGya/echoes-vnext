@@ -1,9 +1,10 @@
 # V2-DIRECTIVE-002 B+C: stop glyph shapes
+SVG draft notes below are history; the finished glyphs are 256 px PNG files (D-93).
 
-Author: sr-game-artist. Sources: `design.md` 3a and 8.1, decisions D-36, D-41, D-42, `mockups/review/art-notes.md`, `mockups/v3/index.html`, `ui/components/EchoCardItem.tscn`.
+Author: sr-game-artist. Sources: `design.md` 3a and 8.1, decisions D-36, D-41, D-42, `mockups/v3/index.html`, `ui/components/EchoCardItem.tscn`.
 Player wording: [Jeff's wording]. These shapes carry no text.
 
-Files: `assets/ui/stage_stop_glyphs/stop_<kind>.png` (6 files). Finished glyphs: see decision D-93; PNG 256 px with rim. Contact sheet: `mockups/stage-stop-glyph-sheet.png`.
+Files: `assets/ui/stage_stop_glyphs/stop_<kind>.png` (6 files). Finished glyphs: see decision D-93; PNG 256 px with rim.
 
 ## 1. The six shapes
 
@@ -31,7 +32,7 @@ Pair checks for confusable shapes:
 
 ## 2. Contact sheet
 
-PNG: `mockups/stage-stop-glyph-sheet.png`. Rendered with headless Firefox from a scratch HTML page. Rows: parchment card `#F3E7D3`, dark card `#2C2E36`, then both in greyscale. Each glyph at 20, 28 and 48 px.
+Contact sheet (removed on the cleanup, D-92). Rows: parchment card `#F3E7D3`, dark card `#2C2E36`, then both in greyscale. Each glyph at 20, 28 and 48 px.
 
 Reading result (my own eye check, not a user test):
 - 28 px and 48 px: all six read at once.

@@ -3,6 +3,8 @@
 Source: planning interview with Jeff, 2026-10-10. Plan file: `~/.claude/plans/jolly-cooking-crescent.md`.
 Background: the session first planned V2-COMBAT-004. Its dependencies V2-DIRECTIVE-002 and V2-INFRA-004 are not built. INFRA-004 also needs V2-ITEM-002 and V2-ITEM-003. Jeff switched to V2-DIRECTIVE-002 first (D-00).
 
+Files named in this log that are not in this folder were removed on the cleanup (D-92). They stay in git history.
+
 | # | Slug | Decision | Date |
 |---|------|----------|------|
 | D-00 | switch-from-combat-004 | Plan V2-DIRECTIVE-002 before V2-COMBAT-004. DIRECTIVE-002 dependencies are all Done. INFRA-004 stays unbuilt and out of scope. The COMBAT-004 recon stays on file. | 2026-10-10 |
@@ -550,3 +552,7 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - **Work files:** the scratchpad folder with the glyph work (processed PNGs, preview sheets, a Python venv with Pillow) is cleaned when the glyph PR is done.
 - **Integration needs (for that PR):** `StopGlyphs.gd` load path from `.svg` to `.png`; six PNGs with mipmaps on; delete the six draft SVGs and their `.import` files; update the docs that name the `.svg` path; a visual check at 960x540 on a real card; no tint (modulate stays white).
 - **Closed outlines accepted as made (Jeff, 2026-10-18):** the processed outlines of `interrupted` and `no_route` are accepted. Known limits seen only at 256 px or more: the new bottom stroke is slightly thinner than the side strokes, its corners are tighter, it has no thin dashed light line, and `no_route` has a small notch at the bottom-left join. No regeneration. Ship set: six 256x256 RGBA PNGs with the cream rim (`stop_<kind>.png`); the game must not crop the texture. Capacity_spent and spotted_ahead stay marginal at 24 px (still read as a pouch and an eye).
+
+### D-94. cleanup-done
+**Q:** What did the story folder cleanup (D-92) leave?
+**A:** The removed files are gone, the kept files are patched, and the glyph path is now `.png`. See D-92 and D-93.
