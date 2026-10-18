@@ -73,6 +73,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/acceptance_own_side_equals_identity_scale", _t_acceptance_own_side_equals_identity_scale)
 	runner.register_test("movement_arbiter/judgment_reaches_acceptance_through_actor_state_machine", _t_judgment_reaches_acceptance_through_actor_state_machine)
 	runner.register_test("movement_arbiter/directive_stop_is_not_own_judgment", _t_directive_stop_is_not_own_judgment)
+	runner.register_test("movement_arbiter/fear_lean_stays_in_own_score", _t_fear_lean_stays_in_own_score)
 	runner.register_test("movement_arbiter/style_growth_reaches_movement_style_through_actor_state_machine", _t_style_growth_reaches_movement_style_through_actor_state_machine)
 
 
@@ -1844,7 +1845,7 @@ static func _t_directive_stop_is_not_own_judgment() -> Dictionary:
 		return _fail("fixture: the Scout Echo did not stop on the Directive cause: %s" % str(winner["bias"]))
 	var chosen: Dictionary = on.probe["chosen"] as Dictionary
 	var parts: Dictionary = (winner["spatial"] as Dictionary)["parts"] as Dictionary
-	var want: float = float((winner["components"] as Dictionary)["directive_bonus"]) + bias + float(parts["directive_exposure_acceptance"])
+	var want: float = float((winner["components"] as Dictionary)["directive_bonus"]) + bias + float((winner["spatial"] as Dictionary)["directive_exposure_part"])
 	if not is_equal_approx(float(chosen["directive_bonus"]), want):
 		return _fail("directive_bonus %s, wanted type bonus + stop bias + acceptance = %s" % [chosen["directive_bonus"], want])
 	var off := _scout_stop_turn(false)
@@ -1852,9 +1853,42 @@ static func _t_directive_stop_is_not_own_judgment() -> Dictionary:
 	if (off_winner["bias"] as Dictionary).has(key):
 		return _fail("fixture: the stop cause is still present with the Directive stop block removed")
 	var off_parts: Dictionary = (off_winner["spatial"] as Dictionary)["parts"] as Dictionary
-	var off_want: float = float((off_winner["components"] as Dictionary)["directive_bonus"]) + float(off_parts["directive_exposure_acceptance"])
+	var off_want: float = float((off_winner["components"] as Dictionary)["directive_bonus"]) + float((off_winner["spatial"] as Dictionary)["directive_exposure_part"])
 	if not is_equal_approx(float((off.probe["chosen"] as Dictionary)["directive_bonus"]), off_want):
 		return _fail("an Echo with no Directive stop must keep the plain directive_bonus")
+	return _pass()
+
+
+## The route Directive part is weight x D_scaled x exposure. The Echo's own fear lean stays in its own score.
+static func _t_fear_lean_stays_in_own_score() -> Dictionary:
+	var shipped: Dictionary = _shipped_movement_and_directives()
+	var movement: Dictionary = shipped["movement"] as Dictionary
+	var cfg: Dictionary = movement["spatial_utility"] as Dictionary
+	var seek: Dictionary = (shipped["directives"] as Dictionary)["directive.seek_signs"] as Dictionary
+	var weight: float = float(cfg["directive_exposure_acceptance_weight"])
+	var d: float = clampf(float(seek["exposure_tolerance"]) - float((movement["exposure_acceptance"] as Dictionary)["offset"]), -1.0, 1.0)
+	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"])
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var bdata: Dictionary = cs.get_balance()["data"] as Dictionary
+	var arbiter := BehaviorArbiter.new({}, movement)
+	var fear_part: Array = []
+	for fear: int in [0, 60]:
+		var actor: Dictionary = _judgment_actor(bdata, 1, "okofor", fear)
+		var spatial: Dictionary = {}
+		arbiter._spatial_utility({"urgency": 0.0, "purpose": "advance"}, _exposed_option(0.0), seek, cfg, spatial, arbiter._fear_lean(actor, 0.0), 0.0)
+		var term: float = float((spatial["parts"] as Dictionary)["directive_exposure_acceptance"])
+		var route: float = BehaviorArbiter._route_directive_part({"_spatial_components": spatial})
+		var want_f: float = bound * _afraid_part(actor)
+		if not is_equal_approx(route, weight * d):
+			return _fail("fear %d: route Directive part %s, wanted weight x D_scaled x exposure = %s" % [fear, route, weight * d])
+		if not is_equal_approx(term, weight * clampf(d - want_f, -1.0, 1.0)):
+			return _fail("fear %d: whole term %s does not match weight x acceptance" % [fear, term])
+		fear_part.append(term - route)
+	if not is_zero_approx(float(fear_part[0])):
+		return _fail("calm Echo: the Directive part must equal the whole term, fear part %s" % fear_part[0])
+	if float(fear_part[1]) >= -0.01:
+		return _fail("afraid Echo: the fear penalty %s must stay in the Echo's own score" % fear_part[1])
 	return _pass()
 
 
