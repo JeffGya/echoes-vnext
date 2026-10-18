@@ -13,10 +13,25 @@ static func table_of(movement_cfg: Dictionary) -> Dictionary:
 	return table as Dictionary if table is Dictionary else {}
 
 
-## Status of an actor view. Fear is max(fear, fear_base), as every other combat reader does.
+## True for a real Echo: Echo faction and Echo kind. A temporary ally has the faction but not the kind.
+## The one gate for the felt-state lean and the state steps.
+static func is_echo(actor: Dictionary) -> bool:
+	return str(actor.get("faction", "")) == "echo" and str(actor.get("kind", actor.get("actor_type", "echo"))) == "echo"
+
+
+## The one status rule: fear is max(fear, fear_base).
+static func status_from(morale: int, fear: int, fear_base: int) -> String:
+	return EmotionService.get_emotional_status(morale, maxi(fear, fear_base))
+
+
+## Status of an actor view (flat morale, fear, fear_base).
 static func status_of(actor: Dictionary) -> String:
-	var fear: int = maxi(int(actor.get("fear", 0)), int(actor.get("fear_base", 0)))
-	return EmotionService.get_emotional_status(int(actor.get("morale", 50)), fear)
+	return status_from(int(actor.get("morale", 50)), int(actor.get("fear", 0)), int(actor.get("fear_base", 0)))
+
+
+## Status of a saved emotion block (morale_current, fear_current, fear_base).
+static func status_of_emotion(emotion: Dictionary) -> String:
+	return status_from(int(emotion.get("morale_current", 50)), int(emotion.get("fear_current", 0)), int(emotion.get("fear_base", 0)))
 
 
 ## Lean of a status. 0.0 when the table has no entry for it.

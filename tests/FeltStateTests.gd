@@ -23,6 +23,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("felt_state/spatial_utility_scales_only_the_pull_terms", _t_spatial_utility_scales_only_the_pull_terms)
 	runner.register_test("felt_state/afraid_and_bold_contrast_through_state_machine", _t_contrast_through_state_machine)
 	runner.register_test("felt_state/enemy_has_no_lean", _t_enemy_has_no_lean)
+	runner.register_test("felt_state/temporary_ally_has_no_lean_or_steps", _t_temporary_ally_has_no_lean_or_steps)
 	runner.register_test("felt_state/config_sections_validated", _t_config_sections_validated)
 	runner.register_test("felt_state/all_switches_off_equals_block_absent", _t_all_switches_off_equals_absent)
 	runner.register_test("felt_state/neutral_state_leaves_lean_and_steps_unchanged", _t_neutral_state_unchanged)
@@ -397,32 +398,76 @@ static func _t_enemy_has_no_lean() -> Dictionary:
 	return _pass()
 
 
+## A temporary ally has the Echo faction and an enemy kind. Slices 5 and 6 use one gate, EmotionStatusLean.is_echo.
+static func _t_temporary_ally_has_no_lean_or_steps() -> Dictionary:
+	if EmotionStatusLean.is_echo({"faction": "echo", "actor_type": "enemy"}) or not EmotionStatusLean.is_echo({"faction": "echo", "actor_type": "echo"}):
+		return _fail("is_echo must reject a temporary ally and accept an Echo")
+	var texts: Array = []
+	for movement: Dictionary in [_felt(true, false, false), _felt(false, false, false)]:
+		var fixture: Dictionary = MovementArbitrationTests._open_fixture(20, 4, {}, {})
+		var context: Dictionary = fixture["context"] as Dictionary
+		var actor: Dictionary = context["actor"] as Dictionary
+		actor["actor_type"] = "enemy"
+		actor["fear"] = 95
+		var result: Dictionary = BehaviorArbiter.new({}, movement).select_movement_intent(
+			context, fixture["movement_context"] as Dictionary, fixture["profile"] as Dictionary,
+			fixture["goals"] as Array, fixture["options"] as Array)
+		texts.append(var_to_str(result))
+	if texts[0] != texts[1]:
+		return _fail("a temporary ally at fear 95 must decide the same with the lean on and off")
+	var on: Dictionary = _felt(false, true, false)
+	var ally: Dictionary = _mover(3, 90, 50, 0.2)
+	ally["actor_type"] = "enemy"
+	ally.erase("kind")
+	if int(_live_profile(ally, on)["capacity"]) != int(MovementProfileService.derive_profile(ally, _movement()["capacity"] as Dictionary)["capacity"]):
+		return _fail("a temporary ally must not lose steps")
+	return _pass()
+
+
 static func _t_config_sections_validated() -> Dictionary:
+	var ranges: Dictionary = (_movement()["felt_state"] as Dictionary)["ranges"] as Dictionary
 	var bad_cases: Array = [
-		["lean", "progress_floor", 0.49], ["lean", "progress_floor", 0.91], ["lean", "progress_max", 0.99],
-		["lean", "progress_max", 1.41], ["lean", "cohesion_max", 1.46], ["lean", "cohesion_max", 0.9],
-		["lean", "cohesion_min", 0.69], ["lean", "cohesion_min", 1.01], ["lean", "progress_floor", NAN],
-		["lean", "cohesion_max", INF], ["lean", "progress_max", "1.2"], ["lean", "enabled", "yes"],
-		["steps", "penalty_at", 0.29], ["steps", "penalty_at", 0.91], ["steps", "bonus_at", 0.39],
-		["steps", "bonus_at", 1.01], ["steps", "penalty_steps", 2], ["steps", "bonus_steps", -1],
-		["steps", "composure_default", 1.1], ["steps", "composure_default", NAN], ["style_growth", "enabled", 1],
+		["lean", "progress_floor", NAN], ["lean", "cohesion_max", INF], ["lean", "progress_max", "1.2"], ["lean", "enabled", "yes"],
+		["steps", "composure_default", NAN], ["style_growth", "enabled", 1],
 	]
+	var good_cases: Array = []
+	for section: String in ["lean", "steps"]:
+		var section_ranges: Dictionary = ranges[section] as Dictionary
+		for key: String in section_ranges:
+			var bounds: Array = section_ranges[key] as Array
+			bad_cases.append([section, key, float(bounds[0]) - 0.01])
+			bad_cases.append([section, key, float(bounds[1]) + 0.01])
+			good_cases.append([section, key, bounds[0]])
+			good_cases.append([section, key, bounds[1]])
+	var counts: Array = ranges["step_counts"] as Array
+	for key: String in ["penalty_steps", "bonus_steps"]:
+		bad_cases.append(["steps", key, int(counts.max()) + 1])
+		bad_cases.append(["steps", key, int(counts.min()) - 1])
+		for count: Variant in counts:
+			good_cases.append(["steps", key, count])
 	for case: Array in bad_cases:
 		var movement: Dictionary = _movement().duplicate(true)
 		((movement["felt_state"] as Dictionary)[case[0]] as Dictionary)[case[1]] = case[2]
 		var verdict: Dictionary = BehaviorArbiter.new({}, movement)._validate_spatial_config()
 		if bool(verdict["valid"]):
 			return _fail("%s.%s = %s was accepted" % [case[0], case[1], str(case[2])])
+		((movement["felt_state"] as Dictionary)[case[0]] as Dictionary)["enabled"] = false
+		if case[1] != "enabled" and not bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
+			return _fail("%s.%s = %s was rejected while the section is off" % [case[0], case[1], str(case[2])])
 	for section: String in ["lean", "steps", "style_growth"]:
 		var movement: Dictionary = _movement().duplicate(true)
 		(movement["felt_state"] as Dictionary).erase(section)
 		if not bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
 			return _fail("a missing %s section must stay valid (off)" % section)
-	for bound: Array in [["lean", "progress_floor", 0.5], ["lean", "cohesion_max", 1.45], ["steps", "penalty_steps", 0], ["steps", "bonus_at", 1.0]]:
+	for bound: Array in good_cases:
 		var movement: Dictionary = _movement().duplicate(true)
 		((movement["felt_state"] as Dictionary)[bound[0]] as Dictionary)[bound[1]] = bound[2]
 		if not bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
 			return _fail("%s.%s = %s sits on the allowed range and was rejected" % [bound[0], bound[1], str(bound[2])])
+	var no_ranges: Dictionary = _movement().duplicate(true)
+	(no_ranges["felt_state"] as Dictionary).erase("ranges")
+	if bool(BehaviorArbiter.new({}, no_ranges)._validate_spatial_config()["valid"]):
+		return _fail("an enabled section without felt_state.ranges must fail loudly")
 	return _pass()
 
 

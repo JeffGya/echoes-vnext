@@ -91,10 +91,7 @@ static func _build_echo_detail_roster(
 				"cha": int(stats.get("cha", 0)),
 				"speed": int(stats.get("speed", 0)),
 			},
-			"emotional_status": EmotionService.get_emotional_status(
-				int(emotion.get("morale_current", 50)),
-				int(emotion.get("fear_current", 0))
-			),
+			"emotional_status": EmotionStatusLean.status_of_emotion(emotion),
 			"sanctum_bark": str(bark.get("line", "")),
 			"in_party": str(echo.get("id", "")) in active_party_ids,
 			"calling_confirmed": not str(echo.get("calling", "")).strip_edges().is_empty(),

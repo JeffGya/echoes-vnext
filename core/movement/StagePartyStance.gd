@@ -46,7 +46,7 @@ static func read_party(save_data: Dictionary, cfg_data: Dictionary, exclude_id: 
 	return echoes
 
 
-## Fear ramp 0..1 from `state_ramps`. Stage leans and combat exposure acceptance share it.
+## Fear ramp 0..1 from `state_ramps`. Only the stage reads it.
 static func fear_ramp(fear: float, ramps: Dictionary) -> float:
 	var fear_start := _num(ramps, "fear_start")
 	return clampf((fear - fear_start) / maxf(_num(ramps, "fear_full") - fear_start, 0.001), 0.0, 1.0)

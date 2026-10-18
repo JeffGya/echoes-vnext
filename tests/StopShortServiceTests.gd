@@ -903,10 +903,13 @@ static func _t_directive_swing_within_declared_budget() -> Dictionary:
 	var data: Dictionary = _balance().get("data", {}) as Dictionary
 	var budget: float = float((((data["maturity_expression"] as Dictionary)["interpretation_swing_max"] as Dictionary)["layer_max"] as Dictionary)["stop"])
 	var block: Dictionary = _cfg()["directive_judgment"] as Dictionary
-	var swing: float = DirectiveJudgmentScale.swing(block)
+	# Convention: the own side is the identity scale at J = 1, base + (1 - base) x 1.
+	var base: float = float((_cfg()["identity"] as Dictionary)["judgment_base"])
+	var own_side: float = base + (1.0 - base)
+	var swing: float = DirectiveJudgmentScale.swing(block, own_side)
 	if not swing <= budget:
 		errs.append("stop swing %s is above the stop layer ceiling %s" % [swing, budget])
-	_near(errs, "swing is 1 / floor", swing, 1.0 / float(block["judgment_floor"]))
+	_near(errs, "swing is own side / floor", swing, own_side / float(block["judgment_floor"]))
 	return _res(errs)
 
 

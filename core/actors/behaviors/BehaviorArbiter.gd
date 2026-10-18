@@ -788,7 +788,7 @@ func select_movement_intent(
 		StopShortContextService.with_judgment_scale(_cfg.get("stop_short", {}) as Dictionary, _movement_cfg))
 	var spatial_cfg: Dictionary = _movement_cfg["spatial_utility"] as Dictionary
 	var pull: Array = [1.0, 1.0]
-	var lean_cfg: Dictionary = _felt_section("lean") if is_echo_faction else {}
+	var lean_cfg: Dictionary = _felt_section("lean") if EmotionStatusLean.is_echo(actor) else {}
 	if not lean_cfg.is_empty():
 		pull = felt_pull(_state_lean(actor, composure), lean_cfg)
 	for candidate: Dictionary in candidates:
@@ -915,16 +915,19 @@ func select_movement_intent(
 	# (actor_type "enemy", faction "echo") reasoning, the miscalibration it fixes,
 	# and why the gate sits on the probe rather than on this accumulation loop.
 	var _dbonus_by_type: Dictionary = {}
+	var _type_bonus: Dictionary = {}
 	var _repr_by_type: Dictionary = {}
 	var _decision_scale: float = 0.0
 	var _self_score_min: float = INF
 	var _self_score_max: float = -INF
 	for c: Dictionary in candidates:
 		var _atype: String = str((c["_movement_plan"] as Dictionary)["type"])
-		if not _dbonus_by_type.has(_atype):
-			_dbonus_by_type[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior, leadership_dir_mul)
+		if not _type_bonus.has(_atype):
+			_type_bonus[_atype] = _directive_bonus(_atype, directive, interpretation_width, calling_behavior, leadership_dir_mul)
+		var _cbonus: float = float(_type_bonus[_atype]) + _route_directive_part(c)
+		if not _dbonus_by_type.has(_atype) or _cbonus > float(_dbonus_by_type[_atype]):
+			_dbonus_by_type[_atype] = _cbonus
 			_repr_by_type[_atype] = c
-		var _cbonus: float = float(_dbonus_by_type[_atype])
 		var _cscore: float = float(c.get("_score", 0.0))
 		if _cscore < 9999.0:
 			var _cself_score: float = _cscore - _cbonus
@@ -1002,10 +1005,10 @@ func select_movement_intent(
 				"action_type":             _w_action_type,
 				"target_id":               str(winner.get("target_id", "")),
 				"score":                   _winner_score,
-				"directive_bonus":         float(_dbonus_by_type.get(_w_action_type, 0.0)),
+				"directive_bonus":         float(_type_bonus.get(_w_action_type, 0.0)) + _route_directive_part(winner),
 				# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
 				# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
-				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, 0.0, calling_behavior, leadership_dir_mul),
+				"directive_bonus_nascent": _directive_bonus(_w_action_type, directive, 0.0, calling_behavior, leadership_dir_mul) + _route_directive_part(winner),
 				"components":              _w_components,
 			},
 			# V2-PROG-012 Phase 4 fix: see select_intent()'s equivalent block for why
@@ -1385,15 +1388,11 @@ func _validate_spatial_config() -> Dictionary:
 	return {"valid": true, "intent": {}, "reason": "", "field": ""}
 
 
-const _FELT_RANGES := {
-	"lean": { "progress_floor": [0.5, 0.9], "progress_max": [1.0, 1.4], "cohesion_max": [1.0, 1.45], "cohesion_min": [0.7, 1.0] },
-	"steps": { "penalty_at": [0.3, 0.9], "bonus_at": [0.4, 1.0], "composure_default": [0.0, 1.0] },
-}
-
-
-## Checks the switches and the numbers of the lean, steps and style_growth sections. A section that
-## is absent is off. Returns {} when valid.
+## Checks the switches and the numbers of the lean, steps and style_growth sections against
+## `felt_state.ranges`. A section that is absent is off; a section that is switched off is not
+## checked beyond its switch. Returns {} when valid.
 func _validate_felt_sections(felt: Dictionary) -> Dictionary:
+	var all_ranges: Variant = felt.get("ranges", null)
 	for section: String in ["lean", "steps", "style_growth"]:
 		if not felt.has(section):
 			continue
@@ -1401,7 +1400,11 @@ func _validate_felt_sections(felt: Dictionary) -> Dictionary:
 		var field_path: String = "movement_cfg.felt_state.%s" % section
 		if not block is Dictionary or not (block as Dictionary).get("enabled", null) is bool:
 			return _movement_failure("invalid_felt_state_section", field_path)
-		var ranges: Dictionary = _FELT_RANGES.get(section, {}) as Dictionary
+		if not bool((block as Dictionary)["enabled"]) or section == "style_growth":
+			continue
+		if not all_ranges is Dictionary:
+			return _movement_failure("invalid_felt_state_ranges", "movement_cfg.felt_state.ranges")
+		var ranges: Dictionary = (all_ranges as Dictionary).get(section, {}) as Dictionary
 		for key: String in ranges:
 			var value: Variant = (block as Dictionary).get(key, null)
 			var bounds: Array = ranges[key] as Array
@@ -1409,9 +1412,13 @@ func _validate_felt_sections(felt: Dictionary) -> Dictionary:
 					or float(value) < float(bounds[0]) or float(value) > float(bounds[1]):
 				return _movement_failure("invalid_felt_state_value", "%s.%s" % [field_path, key])
 		if section == "steps":
+			var allowed: Variant = (all_ranges as Dictionary).get("step_counts", null)
+			if not allowed is Array:
+				return _movement_failure("invalid_felt_state_ranges", "movement_cfg.felt_state.ranges.step_counts")
 			for key: String in ["penalty_steps", "bonus_steps"]:
 				var count: Variant = (block as Dictionary).get(key, null)
-				if not (count is int or count is float) or not (float(count) == 0.0 or float(count) == 1.0):
+				if not (count is int or count is float) or not is_finite(float(count)) \
+						or not (allowed as Array).any(func(v: Variant) -> bool: return float(v) == float(count)):
 					return _movement_failure("invalid_felt_state_value", "%s.%s" % [field_path, key])
 	return {}
 
@@ -1442,10 +1449,6 @@ func _validate_spatial_directive(directive: Dictionary) -> Dictionary:
 ## `exposure_tolerance` - offset (0.0 when either is absent) and D_scaled = D x the
 ## DirectiveJudgmentScale. The fear lean is not scaled. An EMPTY Directive (enemies, keeper
 ## trial) gives 0.0 and takes no lean. `intent_weights.exposure_acceptance` is not read here.
-func _exposure_acceptance(directive: Dictionary, fear_lean: float = 0.0, judgment: float = 0.0) -> float:
-	return float(_exposure_acceptance_parts(directive, fear_lean, judgment)["acceptance"])
-
-
 func _exposure_acceptance_parts(directive: Dictionary, fear_lean: float, judgment: float) -> Dictionary:
 	if directive.is_empty():
 		return {"D_scaled": 0.0, "F": 0.0, "acceptance": 0.0}
@@ -1465,7 +1468,7 @@ func _fear_lean(actor: Dictionary, composure: float) -> float:
 	if not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
 		return 0.0
 	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
-	var dampen: float = float((_cfg_get("composure_dampen_scale") as Dictionary).get("value", 0.4))
+	var dampen: float = composure_dampen(_cfg)
 	return float((block as Dictionary)["fear_lean_bound"]) * EmotionStatusLean.afraid_of(actor, table, composure, dampen)
 
 
@@ -1483,7 +1486,7 @@ func _state_lean(actor: Dictionary, composure: float) -> float:
 	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
 	if table.is_empty():
 		return 0.0
-	var dampen: float = float((_cfg_get("composure_dampen_scale") as Dictionary).get("value", 0.4))
+	var dampen: float = composure_dampen(_cfg)
 	return EmotionStatusLean.soften(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table), composure, dampen)
 
 
@@ -1503,8 +1506,8 @@ func _style_growth(judgment: float) -> Dictionary:
 		return {"vector_mul": 1.0, "trait_mul": 1.0}
 	var id_scale: Dictionary = _cfg_get("identity_weight_scale")
 	return {
-		"vector_mul": 1.0 + judgment * float(id_scale.get("vector", 0.6)),
-		"trait_mul": 1.0 + judgment * float(id_scale.get("trait", 0.6)),
+		"vector_mul": 1.0 + judgment * float(id_scale["vector"]),
+		"trait_mul": 1.0 + judgment * float(id_scale["trait"]),
 	}
 
 
@@ -1845,7 +1848,7 @@ func _score(
 	var fear_factor: float     = 1.0
 	if action_type not in passive_actions:
 		var dampen: float   = float(_cfg_get("fear_active_dampen"))
-		var d_scale: float  = float((_cfg_get("composure_dampen_scale") as Dictionary).get("value", 0.4))
+		var d_scale: float  = composure_dampen(_cfg)
 		var eff_dampen: float = dampen * (1.0 - composure * d_scale)
 		fear_factor = clamp(1.0 - (fear / 100.0) * eff_dampen, 0.0, 1.0)
 
@@ -2051,9 +2054,25 @@ func _rank_directive_candidates(
 			# V2-PROG-012 Phase 6: interpretation_width=0.0 is the new "most literal"
 			# floor (was band string "nascent" — see _directive_bonus()'s doc comment).
 			"directive_bonus_nascent": _directive_bonus(atype, directive, 0.0, calling_behavior,
-				leadership_directive_mul),
+				leadership_directive_mul) + _route_directive_part(repr_candidate),
 		})
 	return ranked
+
+
+## The Directive's voice inside a route candidate's score beyond the per-type bonus: the exposure
+## acceptance part and the Directive stop-short bias. Subtracted with the type bonus to get the
+## Echo's own score. 0.0 for a candidate that is not a route.
+static func _route_directive_part(candidate: Dictionary) -> float:
+	var parts: Dictionary = (candidate.get("_spatial_components", {}) as Dictionary).get("parts", {}) as Dictionary
+	var bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
+	return float(parts.get("directive_exposure_acceptance", 0.0)) \
+		+ float(bias.get(StopShortService.bias_key("directive"), 0.0))
+
+
+## The composure dampen scale of an actor config (data.maturity_expression merged in), _DEFAULTS when absent.
+static func composure_dampen(actor_cfg: Dictionary) -> float:
+	var block: Dictionary = actor_cfg.get("composure_dampen_scale", _DEFAULTS["composure_dampen_scale"]) as Dictionary
+	return float(block["value"])
 
 
 ## Config accessor — falls back to _DEFAULTS when _cfg is empty or key is missing.
@@ -2081,7 +2100,7 @@ func _cfg_get(key: String) -> Variant:
 ## independently by rank/band, with nothing checking their COMBINED effect. The
 ## companion test (tests/BehaviorArbiterTests.gd) fails loudly if a future tuning
 ## pass raises identity_weight_scale or lowers directive_interpretation_mul.low
-## without also raising interpretation_swing_max to match — the two config blocks
+## without also raising interpretation_swing_max.layer_max.action to match — the two config blocks
 ## can no longer drift apart unnoticed.
 static func compute_interpretation_swing(
 	identity_weight_scale: Dictionary,
@@ -2201,7 +2220,9 @@ func _style_alignment(candidate: Dictionary, inputs: Dictionary) -> float:
 			inputs["bond_thresholds"] as Dictionary
 		),
 		float(inputs["vow_lean"]),
-		inputs["cfg"] as Dictionary
+		inputs["cfg"] as Dictionary,
+		float(inputs["vector_mul"]),
+		float(inputs["trait_mul"])
 	)
 
 

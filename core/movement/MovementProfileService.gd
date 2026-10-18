@@ -158,7 +158,7 @@ static func derive_profile(actor: Dictionary, capacity_cfg: Dictionary, options:
 ## the par reads it too.
 static func apply_state_steps(profile: Dictionary, delta: int, capacity_cfg: Dictionary) -> Dictionary:
 	var before: int = int(profile["capacity"])
-	var after: int = clampi(before + delta, int(capacity_cfg.get("floor", 0)), int(capacity_cfg.get("cap", 6)))
+	var after: int = clampi(before + delta, int(capacity_cfg["floor"]), int(capacity_cfg["cap"]))
 	if after == before or not (profile["authored_override"] as Dictionary).is_empty():
 		return profile
 	var source_terms: Array = (profile["source_terms"] as Array).duplicate(true)

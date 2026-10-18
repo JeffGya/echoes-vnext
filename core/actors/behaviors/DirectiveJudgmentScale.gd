@@ -24,8 +24,8 @@ static func is_valid(cfg: Dictionary) -> bool:
 	return float(floor_v) >= float(cfg.get("judgment_floor_min", 0.0)) and float(floor_v) <= 1.0
 
 
-## Own side at J = 1 (`own_side`, 1.0 when nothing else scales with J) over the scale at J = 1.
-## `own_side` without a floor.
+## Swing: `own_side` over the scale at J = 1, which is the floor. `own_side` is the multiplier on the
+## Echo's own side at J = 1 (1.0 when nothing else scales with J). Without a floor the swing is `own_side`.
 static func swing(cfg: Dictionary, own_side: float = 1.0) -> float:
 	if not cfg.has("judgment_floor"):
 		return own_side

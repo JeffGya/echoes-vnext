@@ -84,10 +84,7 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_t
 			"id":               str(_a.get("id", "")),
 			"name":             str(_a.get("name", "")),
 			"calling_origin":   str(_a.get("calling_origin", "")),
-			"emotional_status": EmotionService.get_emotional_status(
-				int(_a.get("morale", 50)),
-				int(_a.get("fear",   0))
-			),
+			"emotional_status": EmotionStatusLean.status_of(_a),
 		})
 
 	# V2-INFRA-003 Phase 5 Slice B: the two one-shot fields used to be zeroed HERE, which made a

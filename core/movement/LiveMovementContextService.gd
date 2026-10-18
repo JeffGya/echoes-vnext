@@ -106,7 +106,7 @@ func _with_state_steps(profile: Dictionary, actor: Dictionary, movement_cfg: Dic
 	var steps: Variant = (felt as Dictionary).get("steps", {}) if felt is Dictionary else {}
 	if not steps is Dictionary or not bool((steps as Dictionary).get("enabled", false)):
 		return profile
-	if str(actor.get("faction", "")) != "echo" or str(profile["actor_kind"]) != "echo":
+	if not EmotionStatusLean.is_echo(actor):
 		return profile
 	for key: String in ["penalty_at", "bonus_at", "penalty_steps", "bonus_steps", "composure_default"]:
 		if not (steps as Dictionary).has(key):
@@ -114,7 +114,7 @@ func _with_state_steps(profile: Dictionary, actor: Dictionary, movement_cfg: Dic
 	var table: Dictionary = EmotionStatusLean.table_of(movement_cfg)
 	if table.is_empty():
 		return profile
-	var dampen: float = float(((bdata.get("maturity_expression", {}) as Dictionary).get("composure_dampen_scale", {}) as Dictionary).get("value", 0.4))
+	var dampen: float = BehaviorArbiter.composure_dampen(bdata.get("maturity_expression", {}) as Dictionary)
 	var composure: float = float(actor.get("_composure", (steps as Dictionary)["composure_default"]))
 	var lean: float = EmotionStatusLean.soften(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table), composure, dampen)
 	var delta: int = 0

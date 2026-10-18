@@ -501,16 +501,17 @@ static func _t_exposure_acceptance_never_attractor() -> Dictionary:
 	return { "ok": true }
 
 
-## Step rule: at the largest step of the status table, the fall in the fear lean (bound x step) must
-## cover the rise that the same fear opens through Judgment ((1 - floor) x fear_pressure_weight x max|D| x step),
-## and the bound must cover the whole Judgment path.
-static func _fear_rule_error(bound: float, floor_a: float, pressure: float, step: float, max_d: float) -> String:
+## Fear lean fall must cover the rise that the same fear opens through Judgment. The lean is softened by
+## composure, up to (1 - dampen), the Judgment path is not, so the rule uses the softest lean (composure 1).
+## `step` is the largest step of the afraid part of the status table.
+static func _fear_rule_error(bound: float, floor_a: float, pressure: float, step: float, max_d: float, dampen: float) -> String:
+	var soft_bound: float = bound * (1.0 - dampen)
 	var judgment_rise: float = (1.0 - floor_a) * pressure * max_d * step
-	if bound * step < judgment_rise:
-		return "bound x largest step %s is below the Judgment path rise %s" % [bound * step, judgment_rise]
+	if soft_bound * step < judgment_rise:
+		return "softened bound x largest afraid step %s is below the Judgment path rise %s" % [soft_bound * step, judgment_rise]
 	var total: float = (1.0 - floor_a) * pressure * max_d
-	if bound < total:
-		return "bound %s is below the total Judgment path (1 - floor) x fpw x max|D| = %s" % [bound, total]
+	if soft_bound < total:
+		return "softened bound %s is below the total Judgment path (1 - floor) x fpw x max|D| = %s" % [soft_bound, total]
 	return ""
 
 
@@ -522,21 +523,24 @@ static func _t_fear_lean_bound_exceeds_fear_judgment_path() -> Dictionary:
 	var block: Dictionary = data["combat"]["movement"]["exposure_acceptance"]
 	var floor_a: float = float(data["combat"]["movement"]["directive_judgment"]["judgment_floor"])
 	var pressure: float = float(data["maturity_expression"]["autonomy_outputs"]["judgment"]["fear_pressure_weight"])
+	var dampen: float = float(data["maturity_expression"]["composure_dampen_scale"]["value"])
 	var table: Dictionary = data["combat"]["movement"]["felt_state"]["band_lean"]
 	var step := 0.0
 	for i: int in range(1, EmotionService.STATUS_LADDER.size()):
-		step = maxf(step, float(table[EmotionService.STATUS_LADDER[i]]) - float(table[EmotionService.STATUS_LADDER[i - 1]]))
+		var afraid_now: float = EmotionStatusLean.afraid(float(table[EmotionService.STATUS_LADDER[i]]))
+		var afraid_before: float = EmotionStatusLean.afraid(float(table[EmotionService.STATUS_LADDER[i - 1]]))
+		step = maxf(step, absf(afraid_now - afraid_before))
 	var max_d := 0.0
 	for entry_value: Variant in ConfigService.get_directives_cfg(cs).values():
 		if (entry_value as Dictionary).has("exposure_tolerance"):
 			max_d = maxf(max_d, absf(float((entry_value as Dictionary)["exposure_tolerance"]) - float(block["offset"])))
 	if max_d <= 0.0 or step <= 0.0:
 		return { "ok": false, "error": "no Directive tolerance (%s) or no table step (%s)" % [max_d, step] }
-	var error: String = _fear_rule_error(float(block["fear_lean_bound"]), floor_a, pressure, step, max_d)
+	var error: String = _fear_rule_error(float(block["fear_lean_bound"]), floor_a, pressure, step, max_d, dampen)
 	if not error.is_empty():
 		return { "ok": false, "error": error }
-	var path: float = (1.0 - floor_a) * pressure * max_d
-	if _fear_rule_error(0.9 * path, floor_a, pressure, step, max_d).is_empty():
+	var path: float = (1.0 - floor_a) * pressure * max_d / (1.0 - dampen)
+	if _fear_rule_error(0.9 * path, floor_a, pressure, step, max_d, dampen).is_empty():
 		return { "ok": false, "error": "the rule accepted a bound %s below its limit" % (0.9 * path) }
 	return { "ok": true }
 

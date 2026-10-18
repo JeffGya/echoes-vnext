@@ -72,6 +72,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("movement_arbiter/judgment_reaches_arbiter_through_turn_context", _t_judgment_reaches_arbiter_through_turn_context)
 	runner.register_test("movement_arbiter/acceptance_own_side_equals_identity_scale", _t_acceptance_own_side_equals_identity_scale)
 	runner.register_test("movement_arbiter/judgment_reaches_acceptance_through_actor_state_machine", _t_judgment_reaches_acceptance_through_actor_state_machine)
+	runner.register_test("movement_arbiter/directive_stop_is_not_own_judgment", _t_directive_stop_is_not_own_judgment)
+	runner.register_test("movement_arbiter/style_growth_reaches_movement_style_through_actor_state_machine", _t_style_growth_reaches_movement_style_through_actor_state_machine)
 
 
 ## The winner also carries the score decomposition DecisionTrace reads
@@ -1183,20 +1185,20 @@ static func _t_fear_lean_needs_a_directive() -> Dictionary:
 	var arbiter := BehaviorArbiter.new({}, movement)
 	var afraid: Dictionary = _actor()
 	afraid["fear"] = 100
-	if arbiter._exposure_acceptance({}, 0.12) != 0.0:
+	if arbiter._exposure_acceptance_parts({}, 0.12, 0.0)["acceptance"] != 0.0:
 		return _fail("an empty Directive must give acceptance 0 whatever the fear lean")
 	if _acceptance_at(arbiter, cfg, {}, afraid) != 0.0:
 		return _fail("frightened actor with an empty Directive scored a non-zero acceptance term")
 	var no_tolerance: Dictionary = {"intent_weights": {"exposure_acceptance": 1.0}}
-	if not is_equal_approx(arbiter._exposure_acceptance(no_tolerance, 0.12), -0.12):
+	if not is_equal_approx(arbiter._exposure_acceptance_parts(no_tolerance, 0.12, 0.0)["acceptance"], -0.12):
 		return _fail("a Directive without tolerance must give D = 0 minus the lean")
-	if arbiter._exposure_acceptance(no_tolerance, 0.0) != 0.0:
+	if arbiter._exposure_acceptance_parts(no_tolerance, 0.0, 0.0)["acceptance"] != 0.0:
 		return _fail("a Directive without tolerance and a calm actor must give 0")
 	var bound: float = float((movement["exposure_acceptance"] as Dictionary)["fear_lean_bound"]) * _afraid_part(afraid)
 	if not is_equal_approx(_acceptance_at(arbiter, cfg, no_tolerance, afraid), -bound):
 		return _fail("frightened actor without tolerance should score -fear_lean_bound")
 	var bare := BehaviorArbiter.new({}, {"spatial_utility": cfg})
-	if bare._exposure_acceptance({"exposure_tolerance": 0.8}, 0.0) != 0.0:
+	if bare._exposure_acceptance_parts({"exposure_tolerance": 0.8}, 0.0, 0.0)["acceptance"] != 0.0:
 		return _fail("a missing exposure_acceptance block must give D = 0")
 	return _pass()
 
@@ -1593,7 +1595,7 @@ static func _t_judgment_floor_validated_and_neutral_when_missing() -> Dictionary
 		return _fail("a block without judgment_floor must stay valid")
 	var offset: float = float((movement["exposure_acceptance"] as Dictionary)["offset"])
 	for j: float in [0.0, 0.5, 1.0]:
-		if not is_equal_approx(arbiter._exposure_acceptance(seek, 0.0, j), float(seek["exposure_tolerance"]) - offset):
+		if not is_equal_approx(arbiter._exposure_acceptance_parts(seek, 0.0, j)["acceptance"], float(seek["exposure_tolerance"]) - offset):
 			return _fail("a missing judgment_floor must scale by 1.0 (J %s)" % j)
 	return _pass()
 
@@ -1673,11 +1675,9 @@ static func _t_more_fear_never_more_accepting_across_judgment() -> Dictionary:
 	return _pass()
 
 
-## Own side of the acceptance swing is 1.0 only while no Judgment input reaches the style
-## alignment: the style_inputs literal, _style_alignment, _style_urgency_factor and
-## MovementStyleService must not mention Judgment or interpretation width in code.
-## Judgment enters style only as the two identity multipliers of the action layer's scale. The
-## state parts staying at 1.0 is pinned by felt_state/style_growth_scales_only_identity_parts.
+## Judgment reaches the style alignment only as the two identity multipliers, 1 + J x
+## identity_weight_scale (the action layer's scale). The state parts stay unscaled; that is pinned by
+## felt_state/style_growth_scales_only_identity_parts.
 static func _t_acceptance_own_side_equals_identity_scale() -> Dictionary:
 	var cs := ConfigService.new()
 	cs.load_balance()
@@ -1698,6 +1698,7 @@ static func _t_acceptance_own_side_equals_identity_scale() -> Dictionary:
 ## Standing, then read back from the decision inputs the arbiter returned.
 class _InputsArbiter extends BehaviorArbiter:
 	var inputs: Dictionary = {}
+	var probe: Dictionary = {}
 
 	func _init(actor_cfg: Dictionary = {}, movement_cfg: Dictionary = {}) -> void:
 		super(actor_cfg, movement_cfg)
@@ -1705,6 +1706,7 @@ class _InputsArbiter extends BehaviorArbiter:
 	func select_movement_intent(context: Dictionary, movement_context: Dictionary, profile: Dictionary, goals: Array, options: Array) -> Dictionary:
 		var result: Dictionary = super(context, movement_context, profile, goals, options)
 		inputs = result.get("_decision_inputs", {}) as Dictionary
+		probe = result.get("_divergence_probe", {}) as Dictionary
 		return result
 
 
@@ -1747,6 +1749,113 @@ static func _t_judgment_reaches_acceptance_through_actor_state_machine() -> Dict
 		scaled.append(absf(float(found["D_scaled"])))
 	if float(scaled[1]) >= float(scaled[0]):
 		return _fail("the seasoned Echo's |D_scaled| %s must be smaller than the young Echo's %s" % [scaled[1], scaled[0]])
+	return _pass()
+
+
+## Movement-style bias the decision recorded for a seasoned Echo, through ActorStateMachine.
+## `growth_enabled` null removes the style_growth block.
+static func _style_bias_of(growth_enabled: Variant) -> float:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var shipped: Dictionary = _shipped_movement_and_directives()
+	var movement: Dictionary = (shipped["movement"] as Dictionary).duplicate(true)
+	var felt: Dictionary = movement["felt_state"] as Dictionary
+	if growth_enabled == null:
+		felt.erase("style_growth")
+	else:
+		(felt["style_growth"] as Dictionary)["enabled"] = growth_enabled
+	var bdata: Dictionary = cs.get_balance()["data"] as Dictionary
+	var scout: Dictionary = (shipped["directives"] as Dictionary)["directive.scout_carefully"] as Dictionary
+	var fixture: Dictionary = _open_fixture(20, 4, {}, scout)
+	var actor: Dictionary = _judgment_actor(bdata, 9, "okofor", 0)
+	actor["vector_scores"] = {"strategist": 150}
+	actor["id"] = "echo.a"
+	actor["grid_pos"] = {"col": 0, "row": 0}
+	var context: Dictionary = {
+		"actor": actor, "all_actors": [], "t": 1, "cfg": {"data": bdata}, "directive": scout,
+		"movement_context": fixture["movement_context"], "movement_profile": fixture["profile"],
+		"movement_goals": fixture["goals"], "movement_options": fixture["options"],
+	}
+	var actor_cfg: Dictionary = ConfigService.merge_actor_cfg(
+		bdata["actor"] as Dictionary, bdata["maturity_expression"] as Dictionary)
+	var module := _InputsArbiter.new(actor_cfg, movement)
+	ActorStateMachine.new(actor, module).advance_turn(context, StructuredLogger.new(), 1)
+	for key: String in ["winner", "runner_up"]:
+		var bias: Dictionary = (module.inputs.get(key, {}) as Dictionary).get("bias", {}) as Dictionary
+		if bias.has("movement_style"):
+			return float(bias["movement_style"])
+	return NAN
+
+
+static func _t_style_growth_reaches_movement_style_through_actor_state_machine() -> Dictionary:
+	var on: float = _style_bias_of(true)
+	var off: float = _style_bias_of(false)
+	var absent: float = _style_bias_of(null)
+	if is_nan(on) or is_nan(off) or is_nan(absent):
+		return _fail("no movement_style bias recorded (on %s off %s absent %s)" % [on, off, absent])
+	if is_equal_approx(on, off):
+		return _fail("style_growth on must change the seasoned Echo's movement_style bias; both are %s" % on)
+	if not is_equal_approx(off, absent):
+		return _fail("style_growth off %s must equal block absent %s" % [off, absent])
+	return _pass()
+
+
+## One Scout turn with a hostile in reach, through ActorStateMachine. `stop_directive` false removes the
+## Directive stop cause. Returns the arbiter module with its recorded inputs and divergence probe.
+static func _scout_stop_turn(stop_directive: bool) -> _InputsArbiter:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var shipped: Dictionary = _shipped_movement_and_directives()
+	var movement: Dictionary = shipped["movement"] as Dictionary
+	var bdata: Dictionary = cs.get_balance()["data"] as Dictionary
+	var scout: Dictionary = (shipped["directives"] as Dictionary)["directive.scout_carefully"] as Dictionary
+	var fixture: Dictionary = _open_fixture(20, 4, {"col": 5, "row": 1}, scout)
+	((fixture["goals"] as Array)[0] as Dictionary)["urgency"] = 0.0
+	var actor: Dictionary = _judgment_actor(bdata, 1, "okofor", 0)
+	(actor["stats"] as Dictionary)["def"] = 5
+	actor["id"] = "echo.a"
+	actor["grid_pos"] = {"col": 0, "row": 0}
+	var actor_cfg: Dictionary = ConfigService.merge_actor_cfg(
+		bdata["actor"] as Dictionary, bdata["maturity_expression"] as Dictionary).duplicate(true)
+	var stop: Dictionary = actor_cfg["stop_short"] as Dictionary
+	stop["enabled"] = true
+	stop["stop_short_weight"] = 40.0
+	stop["identity"] = {}
+	if not stop_directive:
+		stop["directive"] = {}
+	var context: Dictionary = {
+		"actor": actor, "all_actors": (fixture["context"] as Dictionary)["all_actors"], "t": 1, "cfg": {"data": bdata},
+		"directive": scout,
+		"movement_context": fixture["movement_context"], "movement_profile": fixture["profile"],
+		"movement_goals": fixture["goals"], "movement_options": fixture["options"],
+	}
+	var module := _InputsArbiter.new(actor_cfg, movement)
+	ActorStateMachine.new(actor, module).advance_turn(context, StructuredLogger.new(), 1)
+	return module
+
+
+## The Directive's voice in a route's score (stop bias, exposure acceptance) is removed from the
+## Echo's own score: a Scout Echo that stops on the Directive cause is not reported as acting on its own.
+static func _t_directive_stop_is_not_own_judgment() -> Dictionary:
+	var key: String = StopShortService.bias_key("directive")
+	var on := _scout_stop_turn(true)
+	var winner: Dictionary = on.inputs["winner"] as Dictionary
+	var bias: float = float((winner["bias"] as Dictionary).get(key, 0.0))
+	if bias <= 0.0:
+		return _fail("fixture: the Scout Echo did not stop on the Directive cause: %s" % str(winner["bias"]))
+	var chosen: Dictionary = on.probe["chosen"] as Dictionary
+	var parts: Dictionary = (winner["spatial"] as Dictionary)["parts"] as Dictionary
+	var want: float = float((winner["components"] as Dictionary)["directive_bonus"]) + bias + float(parts["directive_exposure_acceptance"])
+	if not is_equal_approx(float(chosen["directive_bonus"]), want):
+		return _fail("directive_bonus %s, wanted type bonus + stop bias + acceptance = %s" % [chosen["directive_bonus"], want])
+	var off := _scout_stop_turn(false)
+	var off_winner: Dictionary = off.inputs["winner"] as Dictionary
+	if (off_winner["bias"] as Dictionary).has(key):
+		return _fail("fixture: the stop cause is still present with the Directive stop block removed")
+	var off_parts: Dictionary = (off_winner["spatial"] as Dictionary)["parts"] as Dictionary
+	var off_want: float = float((off_winner["components"] as Dictionary)["directive_bonus"]) + float(off_parts["directive_exposure_acceptance"])
+	if not is_equal_approx(float((off.probe["chosen"] as Dictionary)["directive_bonus"]), off_want):
+		return _fail("an Echo with no Directive stop must keep the plain directive_bonus")
 	return _pass()
 
 
@@ -1826,7 +1935,7 @@ static func _t_judgment_reaches_arbiter_through_turn_context() -> Dictionary:
 static func _t_stage_bound_not_read_in_combat() -> Dictionary:
 	var hits: Array = []
 	var scanned := {"files": 0}
-	for dir_path: String in ["res://core/actors", "res://core/combat"]:
+	for dir_path: String in ["res://core/actors", "res://core/combat", "res://core/emotion", "res://core/movement"]:
 		_scan_for_stage_keys(dir_path, hits, scanned)
 	if scanned["files"] < 20:
 		return _fail("scan read only %d files" % scanned["files"])
@@ -1842,7 +1951,7 @@ static func _scan_for_stage_keys(dir_path: String, hits: Array, scanned: Diction
 	for sub: String in dir.get_directories():
 		_scan_for_stage_keys(dir_path + "/" + sub, hits, scanned)
 	for fname: String in dir.get_files():
-		if not fname.ends_with(".gd"):
+		if not fname.ends_with(".gd") or fname.begins_with("Stage"):
 			continue
 		scanned["files"] += 1
 		var path: String = dir_path + "/" + fname
@@ -1852,7 +1961,7 @@ static func _scan_for_stage_keys(dir_path: String, hits: Array, scanned: Diction
 			var code: String = line.strip_edges()
 			if code.begins_with("#") or code.begins_with("##"):
 				continue
-			for key: String in ["\"directive_profile\"", "\"lean_strength\"", "\"leans\""]:
+			for key: String in ["\"directive_profile\"", "\"lean_strength\"", "\"leans\"", "\"state_ramps\""]:
 				if code.contains(key):
 					hits.append("%s:%d %s" % [path, line_no, key])
 			if code.contains("\"party_stance\"") and path != "res://core/combat/CombatTurnContextService.gd":

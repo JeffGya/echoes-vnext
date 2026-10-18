@@ -1222,7 +1222,7 @@
 				"whole": 95
 			},
 			"identity_weight_scale": {
-				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus, scaled by interpretation_width (V2-PROG-012 Phase 6, derived from autonomy_outputs.judgment below — NOT rank_strength; see BehaviorArbiter._score()'s doc comment on the identity-weight-scaling block). At interpretation_width=0.0 multiplier=1.0x; at interpretation_width=1.0 multiplier=1.0+scale. Paired with directive_interpretation_mul below as the two halves of ONE budgeted axis — see interpretation_swing_max's _comment for the identity:directive ratio these two blocks are jointly checked against (config-integrity test: tests/BehaviorArbiterTests.gd). V2-PROG-012 Phase 6 Item 2: lowered from 0.6/0.6 (the pre-fix DEFECT 2 value) to 0.35/0.35 — PROPOSED DEFAULT, chosen to fit inside interpretation_swing_max: (1.0+0.35)/directive_interpretation_mul.low(0.75) = 1.80 <= 2.0. 0.6 would give (1.0+0.6)/0.75 = 2.13 > 2.0, failing the budget. The acceptance layer and the Directive stop cause share one floor under the same budget (data.combat.movement.directive_judgment).",
+				"_comment": "V2-PROG-010: Additional multiplier on trait_bonus and vector_bonus, scaled by interpretation_width (V2-PROG-012 Phase 6, derived from autonomy_outputs.judgment below — NOT rank_strength; see BehaviorArbiter._score()'s doc comment on the identity-weight-scaling block). At interpretation_width=0.0 multiplier=1.0x; at interpretation_width=1.0 multiplier=1.0+scale. Paired with directive_interpretation_mul below as the two halves of ONE budgeted axis — see interpretation_swing_max's _comment for the identity:directive ratio these two blocks are jointly checked against (config-integrity test: tests/BehaviorArbiterTests.gd). V2-PROG-012 Phase 6 Item 2: lowered from 0.6/0.6 (the pre-fix DEFECT 2 value) to 0.35/0.35 — PROPOSED DEFAULT, chosen to fit inside the action layer ceiling interpretation_swing_max.layer_max.action: (1.0 + scale) / directive_interpretation_mul.low must stay at or below it. The acceptance layer and the Directive stop cause share one floor under the same budget (data.combat.movement.directive_judgment).",
 				"trait": 0.35,
 				"vector": 0.35
 			},
@@ -1714,7 +1714,13 @@
 					},
 					"lean": { "enabled": true, "progress_floor": 0.65, "progress_max": 1.25, "cohesion_max": 1.4, "cohesion_min": 0.85 },
 					"steps": { "enabled": true, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1, "composure_default": 0.4 },
-					"style_growth": { "enabled": true }
+					"style_growth": { "enabled": true },
+					"ranges": {
+						"_comment": "PROPOSED DEFAULT. Limits [min, max] the validator accepts for each enabled lean and steps number, and the values allowed for penalty_steps and bonus_steps.",
+						"lean": { "progress_floor": [0.5, 0.9], "progress_max": [1.0, 1.4], "cohesion_max": [1.0, 1.45], "cohesion_min": [0.7, 1.0] },
+						"steps": { "penalty_at": [0.3, 0.9], "bonus_at": [0.4, 1.0], "composure_default": [0.0, 1.0] },
+						"step_counts": [0, 1]
+					}
 				},
 				"directive_judgment": {
 					"_comment": "PROPOSED DEFAULT. One Judgment scale for Directive influence, read by exposure acceptance (BehaviorArbiter) and by the Directive stop cause (StopShortService): scale = judgment_floor + (1 - judgment_floor) x (1 - J). judgment_floor must be in [judgment_floor_min, 1]; a missing floor scales by 1. The swing 1 / judgment_floor must stay at or under data.maturity_expression.interpretation_swing_max.value.",
@@ -3181,7 +3187,7 @@
 						}
 					},
 					"state_ramps": {
-						"_comment": "PROPOSED DEFAULT. fear lean = clamp((fear - fear_start) / (fear_full - fear_start), 0, 1). morale lean = clamp((morale - morale_neutral) / morale_neutral, -1, 1). morale_low lean (return safety only) = clamp((escape_morale_below - morale) / escape_morale_below, 0, 1). fear is the Echo's current fear on the actor view for the stage. Combat shares only fear_start and fear_full.",
+						"_comment": "PROPOSED DEFAULT. fear lean = clamp((fear - fear_start) / (fear_full - fear_start), 0, 1). morale lean = clamp((morale - morale_neutral) / morale_neutral, -1, 1). morale_low lean (return safety only) = clamp((escape_morale_below - morale) / escape_morale_below, 0, 1). fear is the Echo's current fear on the actor view for the stage. Read by the stage only.",
 						"fear_start": 20,
 						"fear_full": 70,
 						"morale_neutral": 50,

@@ -659,7 +659,7 @@ static func _build_keeper_intro_emotion_summary(ectx: EncounterContext) -> Array
 		var pre_morale := int(pre_morale_map.get(eid, 50))
 		var post_morale := int(actor.get("morale", 50))
 		var post_fear := int(actor.get("fear", 0))
-		var pre_status := EmotionService.get_emotional_status(pre_morale, 0)
+		var pre_status := EmotionStatusLean.status_from(pre_morale, 0, int(actor.get("fear_base", 0)))
 		var post_status := EmotionStatusLean.status_of(actor)
 		var pre_rank := _emotional_status_rank(pre_status)
 		var post_rank := _emotional_status_rank(post_status)
