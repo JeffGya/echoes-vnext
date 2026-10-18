@@ -3,6 +3,8 @@
 Author: `sr-game-designer`, 2026-10-17. Also number author for this note.
 Source: D-81 to D-86 in `decisions.md`, Jeff's rule D-87 ("one game; no multiple reinterpretations of the same system"), the state-systems study, `phase-d-design.md`, `phase-d-numbers.md`.
 This note edits no code and no data. It proposes no player text. Every number is PROPOSED DEFAULT.
+
+> **Status after phase D (docs pass, 2026-10-18):** the options C1 to C5 and C8 were taken (D-89) and the stage was aligned (D-91). Slices 5 to 7 are built on draft PR 108. The status module is `core/emotion/EmotionStatusLean.gd` (not `core/movement/FeltStateLean.gd`). The test IDs in section 8 are the plan; the real names are in `tests/FeltStateTests.gd` and `tests/MovementArbitrationTests.gd`. Options C6 and C7 stay deferred (follow-ups). Statements that phase D made false are marked in place.
 Written in ASD Simplified Technical English (STE).
 
 | Slice | What it does |
@@ -29,7 +31,7 @@ Written in ASD Simplified Technical English (STE).
 
 | # | Place (file:line) | System | Reads | How | Decision it shapes | Verdict |
 |---|---|---|---|---|---|---|
-| 1 | `EncounterSnapshotBuilder.gd:83,112`; `FlowEncounterState.gd:289-291`; Sanctum builders (`SanctumSnapshotBuilder.gd:166`, `FlowSanctumState.gd:94`, `FlowEchoPartyState.gd:127`); `VentureResolveSnapshotBuilder.gd:87`; `FlowStageState.gd:97` | Emotional state | morale, **raw fear** | Status (ten states) | What the player sees | KEEP. This is the one reading. |
+| 1 | `EncounterSnapshotBuilder.gd:83,112`; `FlowEncounterState.gd:289-291`; Sanctum builders (`SanctumSnapshotBuilder.gd:166`, `FlowSanctumState.gd:94`, `FlowEchoPartyState.gd:127`); `VentureResolveSnapshotBuilder.gd:87`; `FlowStageState.gd:97` | Emotional state | morale, **raw fear** (changed by D-91 S1: the larger of fear and base fear, through `EmotionStatusLean`) | Status (ten states) | What the player sees | KEEP. This is the one reading. |
 | 2 | `ConversationService.gd:104`, `:593-597`; `SituationEngagementService.gd:282,357,471,535` | Emotional state | morale, fear | Status, then three code bands (`_emotional_fit_band`) | Dialogue fit and engagement before/after | KEEP. Already the shared state. |
 | 3 | `MovementStyleService.gd:165-166`, fed by `BehaviorArbiter.gd:776` | Fear | `max(f, b)` | Linear x `fear_weight` | Route shape (careful, forceful ...) | MERGE |
 | 4 | `MovementStyleService.gd:168-170`, fed by `BehaviorArbiter.gd:777` | Morale | morale | Tier x `morale_bias` | Route shape | MERGE |
@@ -60,7 +62,7 @@ Written in ASD Simplified Technical English (STE).
 |---|---|
 | Rows 9 and 11 | The same Echo is "afraid enough to stop short" at fear 45 (full strength) but "half afraid" for exposure at fear 45 (ramp 0.5 of 20 to 70). |
 | Rows 1 and 3, 5, 9, 11, 12 | The chip says "burdened" at fear 45. Movement code treats fear 45 as a point on five different lines. No code switches on the chip. |
-| Row 1 and the rest | The chip uses raw fear. The sim uses `max(f, b)`. They differ when a kill drops fear below `fear_base`. |
+| Row 1 and the rest | The chip used raw fear. The sim uses `max(f, b)`. They differ whenever `fear_base` is above `fear` (from birth, not only after a kill). Fixed by D-91 S1: every status reader uses the larger of the two. |
 | Rows 11 and 12 | Fear moves exposure but morale does not. Fear moves Judgment but morale does not. Morale moves the style and the plan score. |
 | Slice 11 and slices 5, 6 (if built with their own ramp) | A frightened seasoned Echo would be steadier in pull and reach but equally cautious about exposure (composure does not enter row 11). |
 
@@ -68,13 +70,13 @@ Written in ASD Simplified Technical English (STE).
 
 | System | The one reading | Where it is computed | Who reads it |
 |---|---|---|---|
-| Fear and morale together | **The emotional status** from `get_emotional_status(morale, max(fear, fear_base))` and one config table **status to lean** | New pure file `core/movement/FeltStateLean.gd`. It calls `EmotionService`. | Slices 5 and 6 (new). Options for rows 3, 4, 5, 6, 9, 10, 11, 12. |
+| Fear and morale together | **The emotional status** from `get_emotional_status(morale, max(fear, fear_base))` and one config table **status to lean** | New pure file `core/emotion/EmotionStatusLean.gd`. It calls `EmotionService`. | Slices 5 and 6 (new). Options for rows 3, 4, 5, 6, 9, 10, 11, 12. |
 | Judgment | `J` from `derive_expression`, unchanged | `MaturityExpressionService.derive_expression` | Rows 15 to 18 and slice 7. No row builds a second Judgment. |
 | Composure | One value from `derive_expression`, softens every state effect by `1 - 0.4 x composure` | `MaturityExpressionService.derive_expression`; scale key `composure_dampen_scale` | Row 5, slices 5 and 6. Option for row 11. |
 | Exposure tolerance | `T`, unchanged | Directive entry | Rows 19 and slice 3, 4. |
 | "Identity grows with Judgment" | `1 + J x identity_weight_scale` | `identity_weight_scale` (0.35) | Row 15 and slice 7. No new gain key. |
 
-The fear input of the status is `max(fear, fear_base)`, as the sim already does at rows 3, 5, 9, 11, 12. The chip (row 1) uses raw fear. OPTION C1 below makes the chip use the same input.
+The fear input of the status is `max(fear, fear_base)`, as the sim already does at rows 3, 5, 9, 11, 12. The chip (row 1) used raw fear; D-91 S1 changed it. OPTION C1 below makes the chip use the same input.
 
 ### 1.4 Options for committed work (Jeff decides; I rework none)
 
@@ -82,10 +84,10 @@ Each option is the smallest change that makes the code follow the one reading. `
 
 | ID | Place | Smallest change | Cost |
 |---|---|---|---|
-| C1 | Chip input (row 1) | `EncounterSnapshotBuilder.gd:83` and `FlowEncounterState.gd:289-291` use `max(fear, fear_base)` | One line each. Chip may shift by one state after a kill. Snapshot fingerprints move. |
+| C1 | Chip input (row 1) | `EncounterSnapshotBuilder.gd:83` and `FlowEncounterState.gd:289-291` use `max(fear, fear_base)` | One line each. The chip differs from the old chip from birth wherever `fear_base` is above `fear`, not only after a kill. Built (D-89 C1, D-91 S1). Snapshot fingerprints did not move (no snapshot fingerprint test changed in phase D). |
 | C2 | Slice 2 fear lean (row 11) | `_fear_lean` returns `fear_lean_bound x afraid(status)`. Drop the `fear_start`/`fear_full` read. | Bound 0.12 stays: burdened 0.066, strained 0.108, hollow 0.12. Slice 2 values move. Tests F5 and F6 are re-derived from band steps (the D-83 slope rule becomes "largest step times bound"). Low morale now also lowers exposure acceptance. |
 | C3 | Slice 2 and composure (row 11) | Multiply the lean by `1 - composure_dampen_scale x composure` | Closes the gap in 1.2. One line. D-70 J3 and D-82 Q3 already point this way. |
-| C4 | Fear lowers Judgment (row 12) | `fear_pressure = afraid(status)` instead of `max(f, b) / 100`. Weight 0.25 stays. | At fear 50: J drops 0.1375 instead of 0.125. Morale now lowers J. All `J` readers (rows 15 to 18, slice 7) shift slightly. |
+| C4 | Fear lowers Judgment (row 12) | `fear_pressure = afraid(status)` instead of `max(f, b) / 100`. Weight 0.25 stays. | At fear 50: J drops 0.1375 instead of 0.125. Morale now lowers J. All `J` readers (rows 15 to 18, slice 7) shift slightly. **Built (D-89 C4).** Cost seen in code: calm Echoes gain Judgment, because the old pressure was `max(fear, fear_base) / 100` (an Echo with `fear_base` 20 had 0.2) and the pressure is now 0 in the grounded, whole and uncertain statuses. The stage moves too: the stage party lean reads the same Judgment (`StagePartyStance`, `ConversationService` bids). |
 | C5 | Stop-short fear and morale (rows 9, 10) | `fear_strength` returns `afraid(status)`. Delete `morale_strength`. Keep `max` and affinity (row 10b). | Removes the 20 to 45 ramp. Stop values move. Config keys `stop_short.fear.floor/full` and `morale_strength` become dead and are removed. |
 | C6 | Style (rows 3, 4) | `style_inputs` passes `afraid(status)` and `bold(status)` in place of `fear / 100` and the morale tier. `fear_weight` and `morale_bias` rows stay. | Moves style by under 2 points. All combat fingerprints that move for slices 5 and 6 move also here. |
 | C7 | Action layer (rows 5, 6) | Fear factor uses `afraid(status)` in place of `fear / 100`. `morale_action_muls` is re-keyed by status. | Largest change. Moves every combat fingerprint. I advise a separate story. |
@@ -236,6 +238,8 @@ What this means in play (PROPOSED DEFAULT `penalty_at` 0.50, `bonus_at` 0.45):
 By Standing (shipped formula; floor 2, cap 6): Standing 1 to 2 has base 2 (3 with agility 12 or more, or a Kra Soro). The penalty cannot act at base 2. The bonus gives 3. Standing 3 to 5: 3 becomes 2 when afraid, 4 when bold. Standing 6 and up: 4 becomes 3 or 5. The penalty never goes below 2, the capacity of every Standing 1 Echo, so it cannot cause a stall that the baseline does not allow.
 
 ### 4.3 Slice 7: Standing scales the Echo's own style (one reading)
+
+> **Status after phase D:** slice 7 is built and wired. The multipliers `vector_mul` and `trait_mul` reach `MovementStyleService.style_alignment_score` through `style_inputs` in `BehaviorArbiter` (gate: faction `echo`; the switch is `felt_state.style_growth.enabled`). The first build computed the multipliers and dropped them; the final QA fix (D-91 B1) wired them. Test through the real decision path: `movement_arbiter/style_growth_reaches_movement_style_through_actor_state_machine`.
 
 Reuse the scale the action layer already applies to identity (row 15): `1 + J x identity_weight_scale`. Do not add a new gain key.
 
@@ -388,6 +392,8 @@ Boards probe addition (`tools/ExposureChoiceBoards.gd`, `-- tests spatialprobe b
 
 ## 9. What an observer sees
 
+> The slice 7 row below is true since the final QA fix (D-91 B1). Before that fix the multipliers were not used. Stage party readiness (and so effective steps) now also follows the status (D-91 stage align): the stage also moves with the same state.
+
 | State | What the Echo does |
 |---|---|
 | Grounded or whole (the default) | As before |
@@ -398,7 +404,7 @@ Boards probe addition (`tools/ExposureChoiceBoards.gd`, `-- tests spatialprobe b
 | Seasoned, same state | Shows the same signs, weaker and later. Keeps full steps in burdened. |
 | Radiant | Pushes ahead and drifts from the group. Walks one step more unless very composed (above 0.89). |
 | Standing 1 | Never loses steps (floor 2). Can gain one. |
-| Standing 9, calm | No state effect. Its own manner shows more (x1.30 on identity style). Quiet. |
+| Standing 9, calm | No state effect. Its own manner shows more (x1.30 on identity style). Quiet. (Slice 7 is wired since the final QA fix, D-91 B1.) |
 
 The chip and the behaviour change at the same moment. No number needs to show.
 
@@ -413,7 +419,7 @@ The chip and the behaviour change at the same moment. No number needs to show.
 | R5 | Sizes come from 7 fixed fights, first turn | Named. V2-STAGE-010 watch note (D-85). |
 | R6 | A bad `felt_state` block discards the board (legacy fallback fails the suite) | T3-1 and the validator, as for `exposure_acceptance`. |
 | R7 | Slice 7 is quiet and loses the exact neutral point (4.3) | Q4. |
-| R8 | The chip uses raw fear, the sim `max(fear, fear_base)` | Option C1. |
+| R8 | The chip uses raw fear, the sim `max(fear, fear_base)` | Option C1. (closed by D-91 S1) |
 | R9 | Slices 2, 3 (J path) and stop-short keep their own fear lines unless Jeff takes C2, C4, C5 | Section 1.4, Q5. |
 | R10 | Tension with GDD 11.5 line 1441 for slice 6 | Q1. |
 | R11 | Spatial cap 28 clips a bold chase (logged maximum 27.6) | Bounded. |

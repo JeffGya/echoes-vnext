@@ -102,3 +102,21 @@ Owner: phase B+C, which edits the same guard.
 - Stale numbers in `scripts/run-tests-sharded.sh` comments: line ~21 says shard4 has "~16 sibling suites" (it has 19); line ~24 and `AGENTS.md` ~242 say "~124" suites (the count is 132); line ~93 says shard1 and shard7 are "the two smallest shards" (shard7 has 3 suites, shard1 has 9, shard8 has 10).
 - Shard 8 now holds `fingerprint_seek` (about 3 minutes). Its alarm is 700 s. A timed sharded run must read shard 8's `elapsed_secs`. If it nears 700 s, add an alarm override or move the suite.
 - The "Names that look right and are WRONG" paragraph in `AGENTS.md` lists fingerprint modes and does not mention `fingerprint_seek`.
+
+## Found in phase D final QA and docs pass (2026-10-18), for Jeff
+Nothing here is fixed. Jeff decides scope.
+
+- **Divergence check, four Directive parts.** The check removes the Directive acceptance part and the Directive stop bias from the Echo's own judgment. The four other `directive_*` spatial parts still count as the Echo's own judgment: `objective_advance`, `avoid_overcommit`, `ally_protection`, `threat_interception` (`spatial_utility.directive_*_weight`). Decide: remove them too, or keep.
+- **Resolve screen, pre-fight fear.** The real pre-fight fear is not saved. The resolve screen's `pre_status` uses the Echo's base fear (`status_from(pre_morale, 0, fear_base)` in `EncounterSnapshotBuilder`). The pre-fight chip can differ from the real state at fight start.
+- **Two Echo gates.** Slice 7 (style growth) uses the faction-only gate (`faction == "echo"`). Slices 5 and 6 use `EmotionStatusLean.is_echo` (faction and kind). A temporary ally gets style growth and no lean or steps. Decide: one gate (rule D-87).
+- **Probe output.** The `STOPRATE_SUMMARY` and `STOPCAUSE` lines of `tools/SpatialTermProbe.gd` did not appear in the output of the D-90 run (only the per-Echo lines). Who stops (Directive, fear or identity) is not measured.
+- **Stop-rate reference.** The 25 percent reference (stop-short decision #108) is not a config key. The probe prints rates and checks no ceiling (`echoes_above_ceiling=n/a`).
+- **Raw fear and morale readers left (options C6 and C7, deferred by Jeff, D-89 Q5).** Style alignment (`style_inputs`) and the action-layer fear factor (with `morale_action_muls`) still read raw fear and morale. They are a second reading of the same systems (D-87). They need their own story.
+- **Known red test** `movement_arbiter/avoid_overcommit_stays_proportionate` (`tests/MovementArbitrationTests.gd:41`, :835) has no owner. It was red before phase D.
+- **Stale comments in `scripts/run-tests-sharded.sh`** (see the slice 1 and 2 item above). The count of suites is now 133. The suites `felt_state` (shard 1) and `fingerprint_seek` (shard 8) are in the shard map since commit 32a55b0.
+- **`ConversationService.gd:591-595`** keeps a status-to-band literal (`_emotional_fit_band`): a second table of the ten statuses beside `EmotionService.STATUS_LADDER`.
+- **Dead text.** `data/shouts/stop_short_text.json` keeps `cause_clause.morale`. No cause row uses it (`StopShortService.CAUSE_ROWS` has fear, identity, directive). Low morale now acts through the fear row (the afraid part of the status).
+- **Composure for slice 6 is one activation old.** The profile is built before the activation's composure exists; `LiveMovementContextService._with_state_steps` reads `actor["_composure"]` from the previous activation (default `felt_state.steps.composure_default`). A fresh Echo uses the default.
+- **`felt_state.ranges`.** The validator limits in `felt_state.ranges` (lean, steps, step counts) are PROPOSED DEFAULT and Jeff has not reviewed them. They decide which config values the validator accepts.
+- **Stale test comment.** The doc comment above `_t_stage_bound_not_read_in_combat` (`tests/MovementArbitrationTests.gd:1933`) says "Combat code may read only the two shared ramp keys of the stage block". No ramp key exists any more. The test scans for `directive_profile`, `lean_strength` and `leans`. (Docs pass cannot edit tests.)
+- **Exposure choices are rare** (D-80: 1 to 2 percent of Echo decisions in the 7 fixed fights). Watch note on V2-STAGE-010 exists (D-85). Overlap with V2-COMBAT-004 slices 004B and 004D is for Jeff to settle.

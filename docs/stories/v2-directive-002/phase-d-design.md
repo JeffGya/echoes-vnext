@@ -1,6 +1,9 @@
 # V2-DIRECTIVE-002 phase D — design note: combat expression and stop-short Directive cause
 
 Status: DESIGN ONLY. No code, data or test changed. Author: sr-game-designer. First version 2026-10-16. Extended 2026-10-16 for D-70 (J2 = fear lean and Judgment scale, both inside phase D).
+
+> **Status after phase D (docs pass, 2026-10-18):** phase D is built and committed on draft PR 108. Passages about the fear ramp (`fear_start`, `fear_full`, `state_ramps`), the slope and pre-start rules, and the shared ramp helper are **superseded by D-89 (C2, C3, C4, C5) and D-91**. Fear and morale now enter movement only through the emotional status (`core/emotion/EmotionStatusLean.gd`, table `data.combat.movement.felt_state.band_lean`). The Judgment floor key is `data.combat.movement.directive_judgment.judgment_floor` (D-88). The swing budget is 2.5 with `layer_max` 2.0 for the action and stop layers (D-82 Q5, D-89 Q3). Marked passages stay as history.
+
 Inputs: D-05, D-08, D-09, D-10, D-14, D-69, D-70 (`decisions.md`), `design.md` lines 31, 100, 320, 349, ANSWERS #81 to #83, Working GDD sections 11.5, 10.6, 17.1, 22.4.
 Every number here is `PROPOSED DEFAULT`. `mid-game-designer` authors the final values.
 Player-facing text is Jeff's wording (D-69 Q6). This note proposes none.
@@ -19,7 +22,7 @@ Phase D has four parts. Each part is one named cause of change (section 10).
 
 The acceptance weight rises to 17 (D-73). D-73 replaces the D-70 J1 range (8 to 14). The probe sweep covered 0, 2, 8, 11, 14, 17, 19.
 Fear lowers Judgment, and we accept that (D-70 J3).
-The Judgment floors are 0.6 and `interpretation_swing_max` stays 2.0 (D-70 J4).
+The Judgment floors are 0.6 and `interpretation_swing_max` stays 2.0 (D-70 J4). (superseded by D-82 Q5 and D-89 Q3: `interpretation_swing_max.value` is 2.5; `layer_max.action` and `layer_max.stop` are 2.0.)
 Seek rarely has a Directive stop (D-70 J5).
 
 ---
@@ -116,7 +119,7 @@ Inputs, resolved once per Echo per turn (they do not change between candidates):
 | `J` | Judgment, clamped 0..1 | The value `BehaviorArbiter` already reads from `context.judgment` (`BehaviorArbiter.gd:695-696`, the same value as `interpretation_width`). No second Judgment value. |
 | `floor_a` | 0.6 (PROPOSED DEFAULT, range 0.55 to 0.6, D-70 J4) | Config. |
 | `fear` | `max(fear, fear_base)` of the actor | The same expression that `style_inputs.fear` uses (`BehaviorArbiter.gd:774`) and that `derive_expression` uses for `fear_pressure` (`MaturityExpressionService.gd:186`). |
-| `ramp(fear)` | `clamp((fear - fear_start) / (fear_full - fear_start), 0, 1)` | Same shape as `StagePartyStance.echo_lean` (`fear_lean`). `fear_start` 20 and `fear_full` 70 from `data.stages.party_stance.state_ramps` (see 2b). |
+| `ramp(fear)` | `clamp((fear - fear_start) / (fear_full - fear_start), 0, 1)` | Same shape as `StagePartyStance.echo_lean` (`fear_lean`). `fear_start` 20 and `fear_full` 70 from `data.stages.party_stance.state_ramps` (see 2b). **Superseded by D-89 (C2, C3) and D-91:** there is no ramp. The fear lean is `fear_lean_bound` x the afraid part of the status lean (`felt_state.band_lean`), softened by composure. No `fear_start` or `fear_full` is read. |
 | `fear_bound` | 0.12 (PROPOSED DEFAULT) | Combat-owned config key. Start equals the stage bound `bounds.exposure_tolerance` 0.12. |
 | `weight` | `directive_exposure_acceptance_weight`, 17 (D-73; the D-70 J1 range 8 to 14 is replaced) | EXISTS in `spatial_utility`. |
 
@@ -125,7 +128,7 @@ Order of operations:
 ```
 1. D        = clamp(T - offset, -1, 1)                      (Scout -0.2, Seek +0.3). The code clamps D before the scale.
 2. D_scaled = D x (floor_a + (1 - floor_a) x (1 - J))       Judgment scale. Sign kept. Magnitude falls.
-3. F        = fear_bound x ramp(fear)                       Fear lean. NOT scaled by J.
+3. F        = fear_bound x ramp(fear)                       Fear lean. NOT scaled by J.   (superseded by D-89 C2, C3: F = fear_lean_bound x afraid(status lean) x (1 - composure_dampen_scale x composure); no ramp)
 4. acceptance = clamp(D_scaled - F, -1, 1)
 5. term     = weight x acceptance x exposure                the existing term "directive_exposure_acceptance"
 ```
@@ -178,7 +181,7 @@ Rule to protect: `weight x max(acceptance) < |exposure_weight|`. The largest pos
 At weight 17 the rule fails for any Directive with `exposure_tolerance` of 0.853 or more (0.5 + 6/17). The test `directive_cfg/exposure_acceptance_never_attractor` catches a new Directive that does this (D-73).
 Phase D adds a config-integrity test for this rule (section 6).
 
-### 2b. Where the fear ramp comes from (the same shape, one source)
+### 2b. Where the fear ramp comes from (the same shape, one source) (superseded by D-89 C2 and D-91)
 
 `StagePartyStance.echo_lean` computes `fear_lean = clamp((fear - fear_start) / (fear_full - fear_start), 0, 1)`, with `fear_start` 20 and `fear_full` 70 in `data.stages.party_stance.state_ramps`. It multiplies by coefficient `-1.0` (`leans.exposure_tolerance.fear`) and by the bound 0.12 (`bounds.exposure_tolerance`).
 
@@ -190,7 +193,7 @@ Phase D adds a config-integrity test for this rule (section 6).
 | Judgment scale | none (state lean) | none |
 | Fear value | `actor.fear` | `max(fear, fear_base)`, as the arbiter already reads fear (ASSUMED A8). |
 
-Ramp reuse rule. One pure helper owns the ramp, so stage and combat cannot drift. It reads the two ramp values from `data.stages.party_stance.state_ramps`.
+Ramp reuse rule. One pure helper owns the ramp, so stage and combat cannot drift. It reads the two ramp values from `data.stages.party_stance.state_ramps`. **Superseded by D-89 C2 and D-91:** the ramp helper and `state_ramps` are gone. Stage and combat both read the emotional status through `EmotionStatusLean` and the band table `data.combat.movement.felt_state.band_lean`. The stage block is not read by combat at all.
 This touches test C14 (no stage key in combat). C14 narrows to: combat code never reads `interpretation_width`, `leans`, `lean_strength`, `directive_profile` or `bounds` from the stage block. Only `state_ramps.fear_start` and `fear_full` are shared. D-09 keeps its intent: the stage Judgment bound never enters combat. ASSUMED A9.
 
 ### 2c. Directive stop cause (Q3, Q4)
@@ -252,7 +255,7 @@ Values from `data/balance.json`:
 |---|---|
 | `identity_weight_scale` trait / vector | 0.35 / 0.35 |
 | `directive_interpretation_mul` low / high | 0.75 / 1.3 |
-| `interpretation_swing_max.value` | **2.0** (stays, D-70 J4) |
+| `interpretation_swing_max.value` | **2.0** (stays, D-70 J4) (superseded: 2.5 with `layer_max`, D-82 Q5, D-89 Q3) |
 
 ### 3a. The three layers
 
@@ -277,7 +280,7 @@ New test rule (for `mechanics-developer`):
 | Add | A static function for layer C: `identity_scale(J = 1) / floor_s`, from the `data.actor.stop_short` identity base and the new floor. |
 | Add | Tests `movement_arbiter/acceptance_swing_within_declared_budget` (B) and `stop_short/directive_swing_within_declared_budget` (C). Both read the SAME `interpretation_swing_max.value`. |
 | Why one budget key | A second key would let budgets drift. Q4 says scaling "must sit inside `interpretation_swing_max`". |
-| Floor location | B: `data.combat.movement.exposure_acceptance.judgment_floor`. C: `data.actor.stop_short.directive.judgment_floor`. Each test reads the block that owns its floor. |
+| Floor location | B: `data.combat.movement.exposure_acceptance.judgment_floor`. C: `data.actor.stop_short.directive.judgment_floor`. Each test reads the block that owns its floor. **Superseded by D-88:** one shared key `data.combat.movement.directive_judgment.judgment_floor` (minimum `judgment_floor_min`) serves B and C. |
 
 If layer B cannot use the same convention (it can, while A7 holds), the options are:
 
@@ -316,7 +319,7 @@ Why the two Directive layers (A and C) do not count the same pull twice: the fir
 | 1 | `_directive_bonus` (`BehaviorArbiter.gd:1835-1860`) | `intent_weights` x `directive_action_muls` | `interpretation_width` = J, lerp 1.30 to 0.75 | via J only | falls | layer A (1.80) | Shipped. Unchanged. |
 | 2 | Identity bonus in `_score` (trait, vector) | none | `1 + J x 0.35` | via composure bracket | rises | same budget (numerator) | Shipped. Unchanged. |
 | 3 | `_spatial_utility`, acceptance Directive part `D_scaled` (new) | `T - offset` | `floor_a + (1 - floor_a)(1 - J)` | via J only | falls | layer B (1.67) | No. Different decision from row 1 (route option, not plan). Section 3b. |
-| 4 | `_spatial_utility`, fear lean `F` (new) | none | none | `fear_bound x ramp(fear)` | flat | its own monotone rule (below) | See "fear in combat" table. |
+| 4 | `_spatial_utility`, fear lean `F` (new) | none | none | `fear_bound x ramp(fear)` | flat | its own monotone rule (below) | See "fear in combat" table. (superseded by D-89: `fear_lean_bound x afraid(status)`) |
 | 5 | Stop cause "directive" (new) | `(1 - T) x affinity` | `floor_s + (1 - floor_s)(1 - J)` | via J only | falls | layer C (1.67) | No. Different decision from row 1. |
 | 6 | Stop cause "identity" (shipped) | none | `0.5 + 0.5 J` | none | rises | same budget (numerator) | Shipped. Unchanged. |
 | 7 | Stop cause "fear" (shipped) | none | none | direct | flat | none needed | No. Fear is not scaled. |
@@ -344,7 +347,7 @@ Do F-a and F-b fight in the spatial term? They push the same way for Scout and o
 | Seek (D = +0.3) | +0.021 to +0.030 (more positive: bolder, because J is lower) | -0.12 | about -0.10 | Opposite direction, but F-b is 4 to 5 times larger. Net: shyer. A frightened veteran under Seek is more Directive-bound in principle, and shyer in practice. |
 
 The largest possible F-a effect is `(1 - floor_a) x fear_pressure_weight x max|D|` = 0.4 x 0.25 x 0.3 = **0.03** (at fear 100, J large enough not to clamp at 0).
-The fear lean reaches 0.12 at fear 70. So the fear lean is at least 4 times the F-a effect once `ramp` is full.
+The fear lean reaches 0.12 at fear 70. So the fear lean is at least 4 times the F-a effect once `ramp` is full. (superseded by D-89 C2: the lean reaches 0.12 at the `hollow` status, not at fear 70; it steps per status band)
 
 One readable rule (so the two never fight in play):
 
@@ -352,13 +355,13 @@ One readable rule (so the two never fight in play):
 
 Fear lowers Judgment (F-a). A lower Judgment raises the Directive part `D_scaled`. So acceptance may rise slightly with fear in two places:
 
-1. Just above `fear_start`, before the lean overtakes the Judgment path. The peak is 0.006 for Seek. The bound is 0.01.
-2. Above `fear_full` (fear 70 to 100). The lean is flat there. The rise is at most `judgment_slope` per fear point (0.0003) and about 0.009 in total for Seek.
+1. Just above `fear_start`, before the lean overtakes the Judgment path. The peak is 0.006 for Seek. The bound is 0.01. (superseded by D-89 C2: no `fear_start`; the rule is checked per status step, see tests F5 and F6)
+2. Above `fear_full` (fear 70 to 100). The lean is flat there. The rise is at most `judgment_slope` per fear point (0.0003) and about 0.009 in total for Seek. (superseded by D-89 C2: no `fear_full`)
 
 In both places acceptance stays below the calm value. The test tolerance is in section 5 (tests F5 and F6). The F5 test derives its window from config (D-83 A).
 
-Config-integrity rules (test F6, section 5): the slope rule, the pre-start bound and the total bound. Defaults: slope 0.12 / 50 = 0.0024 >= 0.0003; pre-start 0.006 <= 0.01; total 0.12 >= 0.03.
-Pre-start size: below `fear_start` (fear 0 to 20) the lean is zero, so F-a alone can raise Seek acceptance by at most `0.4 x 0.25 x 0.2 x 0.3 = 0.006`. That is 0.10 score points at weight 17.
+Config-integrity rules (test F6, section 5): the slope rule, the pre-start bound and the total bound. Defaults: slope 0.12 / 50 = 0.0024 >= 0.0003; pre-start 0.006 <= 0.01; total 0.12 >= 0.03. **Superseded by D-89 C2:** test F6 now checks two rules: (1) softened bound x largest afraid step of the band table >= the Judgment path rise `(1 - floor) x fear_pressure_weight x max abs(D) x step`; (2) softened bound >= the total Judgment path `(1 - floor) x fear_pressure_weight x max abs(D)`. The softened bound is `fear_lean_bound x (1 - composure_dampen_scale)`.
+Pre-start size: below `fear_start` (fear 0 to 20) the lean is zero, so F-a alone can raise Seek acceptance by at most `0.4 x 0.25 x 0.2 x 0.3 = 0.006`. That is 0.10 score points at weight 17. (superseded by D-89 C2: no pre-start window)
 
 Does this count fear twice by the stage rule (`design.md:31`: do not scale fear by Judgment again)? No. Fear lean is not scaled by J (step 3 follows step 2). Fear still enters J through the shipped F-a. That is the shipped, accepted path (D-70 J3). The stage has the same two paths and the same size relation.
 
@@ -387,7 +390,7 @@ Each test lands in the slice named in section 10.
 | C11 | Budget, layer C | Stop swing <= `interpretation_swing_max`. | `stop_short/directive_swing_within_declared_budget` | 4 |
 | C12 | Config integrity | `weight x max(acceptance) < abs(exposure_weight)`; offset exists in config; acceptance in -1..1. | `directive_cfg/exposure_acceptance_never_attractor` | 1 |
 | C13 | Data-only Directive (D-14) | A test-only third Directive with other tolerance produces a Directive cause and an acceptance value with no logic change; a grep test finds no Directive id literal in the new code. | `directive_char/synthetic_directive_reaches_stop_cause` and `directive_char/synthetic_directive_reaches_acceptance` | 1 and 4 |
-| C14 | Stage bound stays out (narrowed) | No `interpretation_width`, `leans`, `lean_strength`, `directive_profile` or `bounds` stage key is read in combat code. Only `state_ramps.fear_start` and `fear_full` are shared. | `stop_short/stage_bound_not_read_in_combat` | 2 |
+| C14 | Stage bound stays out (narrowed) | No `interpretation_width`, `leans`, `lean_strength`, `directive_profile` or `bounds` stage key is read in combat code. Only `state_ramps.fear_start` and `fear_full` are shared. | `stop_short/stage_bound_not_read_in_combat` | 2 (superseded by D-91: no ramp key is shared. The test `movement_arbiter/stage_bound_not_read_in_combat` scans combat code for `directive_profile`, `lean_strength` and `leans` only.) |
 | C15 | Fingerprints | Each slice moves Scout hashes for one named cause (section 10). | existing `fingerprint_*` suites, re-recorded by an `opus` agent per slice (D-69 Q1, D-70) | each |
 
 ### Fear lean (J2 B)
@@ -395,11 +398,11 @@ Each test lands in the slice named in section 10.
 | # | Contrast | Expected difference | Test name (proposed) |
 |---|---|---|---|
 | F1 | Calm vs afraid, same Echo, same Standing, same Directive | Afraid acceptance is lower, for Scout and for Seek. Same fear value both read. | `movement_arbiter/fear_lean_lowers_acceptance` |
-| F2 | Fear below `fear_start` | Lean is exactly 0. Fear 20 gives 0; fear 70 gives the full `fear_bound`. | `movement_arbiter/fear_lean_ramp_matches_stage_ramp` |
+| F2 | Fear below `fear_start` | Lean is exactly 0. Fear 20 gives 0; fear 70 gives the full `fear_bound`. | `movement_arbiter/fear_lean_ramp_matches_stage_ramp` (superseded by D-89 C2: the test is now `movement_arbiter/fear_lean_follows_status_band`; it checks the lean per status band. The test `fear_lean_ramp_matches_stage_ramp` no longer exists.) |
 | F3 | Same fear, Judgment 0.2 vs 0.85 (build J through production, hold fear fixed by setting the bonds and Standing, not by fear) | The lean `F` is equal. Only `D_scaled` differs. | `movement_arbiter/fear_lean_not_scaled_by_judgment` |
 | F4 | Fear read | Lean uses `max(fear, fear_base)`. A high `fear_base` with low `fear` still leans. | `movement_arbiter/fear_lean_reads_max_of_fear_and_base` |
-| F5 | The one readable rule | Acceptance(fear) <= acceptance(calm), for both Directives and J from 0 to 1, with F-a included, except two bounded rises. (a) Just above `fear_start`, before the lean overtakes: peak 0.006 for Seek, bound 0.01. (b) Above `fear_full` (fear 70 to 100): at most `judgment_slope` (0.0003) per fear point, about 0.009 in total for Seek. Acceptance stays below the calm value. The test derives its window from config (D-83 A). | `movement_arbiter/more_fear_never_more_accepting` |
-| F6 | Config integrity | Three rules. Slope: `fear_lean_bound / (fear_full - fear_start) >= (1 - floor) x fear_pressure_weight x max abs(D) / 100`. Pre-start bound: `(1 - floor) x fear_pressure_weight x fear_start / 100 x max abs(D) <= 0.01`. Total bound (kept): `fear_lean_bound >= (1 - floor) x fear_pressure_weight x max abs(D)` (0.03 at shipped values). The slope rule alone fails only below a bound of 0.015, so the total bound is kept to fail below 0.03. | `directive_cfg/fear_lean_bound_exceeds_fear_judgment_path` |
+| F5 | The one readable rule | Acceptance(fear) <= acceptance(calm), for both Directives and J from 0 to 1, with F-a included, except two bounded rises. (a) Just above `fear_start`, before the lean overtakes: peak 0.006 for Seek, bound 0.01. (b) Above `fear_full` (fear 70 to 100): at most `judgment_slope` (0.0003) per fear point, about 0.009 in total for Seek. Acceptance stays below the calm value. The test derives its window from config (D-83 A). | `movement_arbiter/more_fear_never_more_accepting` (superseded by D-89 C2: with Judgment fixed, more fear never raises acceptance; each fear point may lower it by at most the largest table step x the bound. No `fear_start` or `fear_full` window.) |
+| F6 | Config integrity | Three rules. Slope: `fear_lean_bound / (fear_full - fear_start) >= (1 - floor) x fear_pressure_weight x max abs(D) / 100`. Pre-start bound: `(1 - floor) x fear_pressure_weight x fear_start / 100 x max abs(D) <= 0.01`. Total bound (kept): `fear_lean_bound >= (1 - floor) x fear_pressure_weight x max abs(D)` (0.03 at shipped values). The slope rule alone fails only below a bound of 0.015, so the total bound is kept to fail below 0.03. | `directive_cfg/fear_lean_bound_exceeds_fear_judgment_path` (superseded by D-89 C2: two rules, see section 4 note; the test name is unchanged.) |
 | F7 | Seek stays a cost, not a ban | With default config, a frightened seasoned Seek Echo has acceptance above -0.05 (it hesitates, it does not refuse). This pins the answer to question O1 so a later change is deliberate. | `movement_arbiter/afraid_seek_still_treats_exposure_as_cost_not_ban` |
 | F8 | No stage leak | A fixture changes `data.stages.party_stance.bounds.exposure_tolerance`. Combat acceptance does not move. | `movement_arbiter/fear_bound_is_combat_owned` |
 
@@ -426,15 +429,15 @@ Standing 1 failure check: C6 and J1 together must show contrast at Standing 1 wi
 | Key (proposed path) | Purpose | Notes |
 |---|---|---|
 | `data.combat.movement.exposure_acceptance.offset` | Offset in `D = T - offset` | New sibling block of `spatial_utility`. Not in the closed block. |
-| `data.combat.movement.exposure_acceptance.judgment_floor` | `floor_a` | Range 0.55 to 0.6. Must be >= 0.55 (D-83 B). |
+| `data.combat.movement.exposure_acceptance.judgment_floor` | `floor_a` | Range 0.55 to 0.6. Must be >= 0.55 (D-83 B). (superseded by D-88: key is `data.combat.movement.directive_judgment.judgment_floor`) |
 | `data.combat.movement.exposure_acceptance.fear_lean_bound` | `fear_bound` | Combat-owned. Start equals the stage bound 0.12. Must satisfy F6. |
 | `data.combat.movement.spatial_utility.directive_exposure_acceptance_weight` | Weight of the acceptance term | EXISTS (2.0). Raised to 17 (D-73, which replaces the D-70 J1 range 8 to 14). Not a new key. |
-| `data.stages.party_stance.state_ramps.fear_start` / `fear_full` | Fear ramp | EXIST (20, 70). Read-only shared. Not copied. |
+| `data.stages.party_stance.state_ramps.fear_start` / `fear_full` | Fear ramp | EXIST (20, 70). Read-only shared. Not copied. (removed by D-91: `state_ramps` no longer exists) |
 | `data.actor.stop_short.directive.affinity.guard` | Affinity per benefit | Large. |
 | `data.actor.stop_short.directive.affinity.hold` | Affinity per benefit | Large. |
 | `data.actor.stop_short.directive.affinity.observe` | Affinity per benefit | Small. |
-| `data.actor.stop_short.directive.judgment_floor` | `floor_s` | Range 0.55 to 0.6. Must be >= 0.55 (D-83 B). |
-| `data.maturity_expression.interpretation_swing_max.value` | Budget | EXISTS (2.0). Unchanged (D-70 J4). |
+| `data.actor.stop_short.directive.judgment_floor` | `floor_s` | Range 0.55 to 0.6. Must be >= 0.55 (D-83 B). (superseded by D-88: removed; the stop cause reads the shared key) |
+| `data.maturity_expression.interpretation_swing_max.value` | Budget | EXISTS (2.0). Unchanged (D-70 J4). (superseded: 2.5, D-82 Q5) |
 | `data.maturity_expression.autonomy_outputs.judgment.fear_pressure_weight` | Fear to Judgment | EXISTS (0.25). Read by test F6. Not retuned in phase D. |
 | `data.actor.stop_short.min_cause_strength` | Cutoff | EXISTS (0.15). Do not retune in phase D (it moves fear and identity too). |
 | `data.actor.stop_short.stop_short_weight` | Bias weight | EXISTS (6.0). Same. |
@@ -452,7 +455,7 @@ No new Directive key (ANSWERS #81). The `_comment` fields use the project rule t
 | J1 | Acceptance weight | Raise to 17 (D-73 replaces the range 8 to 14) | 2a, slice 1 |
 | J2 | Acceptance matures or reacts to fear | BOTH: fear lean (B) and Judgment scale (C), inside phase D | 2a, 2b, 3, 4, 10 |
 | J3 | A frightened Echo follows the Directive more | Accept. One Judgment value. | 4 (fear paths) |
-| J4 | Reinterpretation depth against the budget | Floors 0.55 to 0.6 (start 0.6). `interpretation_swing_max` stays 2.0. | 3 |
+| J4 | Reinterpretation depth against the budget | Floors 0.55 to 0.6 (start 0.6). `interpretation_swing_max` stays 2.0. | 3 (superseded by D-82 Q5: budget 2.5) |
 | J5 | Seek rarely has a Directive stop | Accept | 2c |
 
 ### Still open (each changes what the player sees or a number)
@@ -497,7 +500,7 @@ Remaining open item from the first version: Q6, the player text for the Directiv
 | Judgment scale flattens Scout against Seek at Standing 9 | Gap 0.46 to 0.33 in the table. | Test J4 (never closes). Probe step 10. |
 | Fear is counted in too many movement paths | F-a to F-e (section 4). | Monotone rule (F5, F6). `fear_bound` is the one dial. Probe step 9. |
 | Fear lean makes Seek timid | Bound too large (O1). | Test F7. |
-| Shared fear ramp couples stage and combat | One config read crosses D-09. | Only `fear_start` and `fear_full` are shared. Test C14 (narrowed) and F8. |
+| Shared fear ramp couples stage and combat | One config read crosses D-09. | Only `fear_start` and `fear_full` are shared. Test C14 (narrowed) and F8. (superseded by D-91: no ramp is shared) |
 | Fixture hides the term | Default `judgment` 0.3 in ctx; empty bonds. | Section 5 fixture rule and test J8. |
 | Seek stop cause is dead weight | Most Seek values fall below 0.15. | Accepted (J5). Re-check after the probe. |
 | Stage bound leaks into combat | Same word "interpretation width". | Test C14; D-09. |
@@ -593,7 +596,7 @@ ASSUMED: A7. Style alignment (the Echo's own exposure habit in combat) is not sc
 
 ASSUMED: A8. Fear lean reads `max(fear, fear_base)`, not current fear alone as the stage does. | WHY: The arbiter's style inputs and `derive_expression` both use that max. One fear reading in the arbiter keeps F-a and F-b aligned (the monotone rule F5 relies on it). | WRONG IF: Jeff wants fear lean to ignore structural dread. Then F-a and F-b read different values and rule F5 needs a new proof.
 
-ASSUMED: A9. Combat may read `state_ramps.fear_start` and `fear_full` from the stage block through one shared helper, and D-09 stays intact. | WHY: D-09 blocks the Judgment bound (`interpretation_width`). A fear ramp is a state input, not a Judgment bound. The brief asked for the same config source. | WRONG IF: Jeff reads D-09 as "no stage config key at all in combat". Then copy the two values into combat keys and add a drift test (cost: a second place to tune).
+ASSUMED: A9. Combat may read `state_ramps.fear_start` and `fear_full` from the stage block through one shared helper, and D-09 stays intact. | WHY: D-09 blocks the Judgment bound (`interpretation_width`). A fear ramp is a state input, not a Judgment bound. The brief asked for the same config source. | WRONG IF: Jeff reads D-09 as "no stage config key at all in combat". Then copy the two values into combat keys and add a drift test (cost: a second place to tune). [Superseded by D-91: `state_ramps` is removed.]
 
 ASSUMED: A10. The two Judgment floors (`floor_a` for acceptance and `floor_s` for stops) are separate keys that start equal at 0.6. | WHY: Each layer has its own swing test and its own decision. | WRONG IF: Jeff wants one dial. Then merge to one key and keep both tests.
 
