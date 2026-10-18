@@ -49,8 +49,18 @@ CHECKOUT="${1:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 # alongside unrelated suites instead of one dedicated shard. No shard currently needs an alarm
 # override as a result — 700s covers the measured ~500s worst case with margin even after adding
 # one ~2x-cost determinism suite per shard. Re-verify ALARM_SECS after any suite-list change.
-GODOT_BIN="/opt/homebrew/bin/godot"
+# The Godot binary path is configurable: GODOT_BIN=/path/to/godot scripts/run-tests-sharded.sh
+# The default is the macOS Homebrew path that the project documents everywhere else.
+GODOT_BIN="${GODOT_BIN:-/opt/homebrew/bin/godot}"
 ALARM_SECS=700
+# ALARM_SCALE multiplies every shard alarm (default 1 = the values in this file). Use a value
+# above 1 on a machine with fewer cores than shards: the shards then run slower than the
+# measured times below, and an unscaled alarm would kill them. Only integers; never below 1.
+ALARM_SCALE="${ALARM_SCALE:-1}"
+if ! [[ "$ALARM_SCALE" =~ ^[1-9][0-9]*$ ]]; then
+  echo "FATAL: ALARM_SCALE must be a positive integer, got '$ALARM_SCALE'." >&2
+  exit 1
+fi
 
 SCRATCH_ROOT="/tmp/echoes-vnext-sharded"
 LOG_DIR="$SCRATCH_ROOT/logs"
@@ -192,6 +202,7 @@ for entry in "${SHARDS[@]}"; do
     echo "FATAL: shard '$name' has a non-numeric alarm value '$shard_alarm_secs'." >&2
     exit 1
   fi
+  shard_alarm_secs=$((shard_alarm_secs * ALARM_SCALE))
   shard_save_dir="$SAVE_ROOT/$name"
   shard_log="$LOG_DIR/$name.log"
   rm -rf "$shard_save_dir"
@@ -253,6 +264,39 @@ for entry in "${SHARDS[@]}"; do
   passed=$((passed + shard_passed))
   failed=$((failed + shard_failed))
 done
+
+# Timing. Every shard log carries "TIMING_SUITE ms=<n> tests=<n> suite=<name>" and
+# "TIMING_TEST ms=<n> name=<name>" lines (tests/CoreTestRunner.gd, format_timing_report).
+# A shard prints only its own 20 slowest tests, so the table below is the 20 slowest of the
+# union of those lists: exact for the overall top 20, because a test in the overall top 20 is
+# also in the top 20 of its own shard. Times are wall-clock inside one process; they grow when
+# shards compete for CPU cores, so compare them with each other and not with a solo run.
+TIMING_SUITES_FILE="$LOG_DIR/timing-suites.txt"
+TIMING_TESTS_FILE="$LOG_DIR/timing-tests.txt"
+: > "$TIMING_SUITES_FILE"
+: > "$TIMING_TESTS_FILE"
+for entry in "${SHARDS[@]}"; do
+  name="${entry%%|*}"
+  shard_log="$LOG_DIR/$name.log"
+  sed -n 's/.*TIMING_SUITE ms=\([0-9]*\) tests=\([0-9]*\) suite=\(.*\)"$/\1 \2 \3/p' "$shard_log" \
+    | awk -v shard="$name" '{print $1, $2, shard, $3}' >> "$TIMING_SUITES_FILE"
+  sed -n 's/.*TIMING_TEST ms=\([0-9]*\) name=\(.*\)"$/\1 \2/p' "$shard_log" \
+    | awk -v shard="$name" '{print $1, shard, $2}' >> "$TIMING_TESTS_FILE"
+done
+echo ""
+echo "=== Shard wall-clock (elapsed_secs from each shard log) ==="
+for entry in "${SHARDS[@]}"; do
+  name="${entry%%|*}"
+  elapsed="$(sed -n 's/^elapsed_secs=//p' "$LOG_DIR/$name.log" | tail -n 1)"
+  echo "  $name: ${elapsed:-unknown} s"
+done
+echo ""
+echo "=== 20 slowest tests, all shards (ms, shard, test) ==="
+sort -rn "$TIMING_TESTS_FILE" | head -n 20 | awk '{printf "  %9d ms  %-8s %s\n", $1, $2, $3}'
+echo ""
+echo "=== 15 slowest suites, all shards (ms, tests, shard, suite) ==="
+sort -rn "$TIMING_SUITES_FILE" | head -n 15 | awk '{printf "  %9d ms  %4d tests  %-8s %s\n", $1, $2, $3, $4}'
+echo "(All suites: $TIMING_SUITES_FILE   Top tests per shard: $TIMING_TESTS_FILE)"
 
 echo ""
 if [[ "$missing_lines" -eq 1 ]]; then
