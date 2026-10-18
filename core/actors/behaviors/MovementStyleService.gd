@@ -12,7 +12,7 @@
 # (data.actor.movement_style_weights) and every identity/emotion/social fact arrives
 # already resolved by the caller.
 #
-# alignment(style) = (vector_bias + calling_family_bias + fear_bias + morale_bias
+# alignment(style) = (vector_bias + calling_family_bias + fear_bias + follow_through_bias
 #                     + bond_bias + vow_bias + trait_nudge) * alignment_weight
 # `alignment_weight` converts identity units into arbiter score units. It exists
 # because these weights are now compared against `_score()`/`_spatial_utility`
@@ -99,22 +99,22 @@ static func eligible_styles(purpose: String) -> Array:
 ## ActorSchema), the same shape `BehaviorArbiter._score()` already reads.
 ## `calling_family`: "anchor" | "edge" | "sight" | "" — resolved by the caller from
 ## data.calling.definitions[calling_id].family.
-## `fear`: 0-100, the same floor-blended value `_score()` uses (max of fear/fear_base).
-## `morale_tier`: EmotionService.get_morale_tier()'s output.
+## `afraid` / `bold`: 0-1, the two ends of the actor's status lean, softened by composure once
+## (EmotionStatusLean). At most one of them is above 0.
 ## `bond_pressure`: 0.0-1.0, how strongly a bonded subject presses on THIS candidate's
 ## own goal subject.
 ## `vow_lean`: -1.0 (fully Ward — holding the vow) .. +1.0 (fully Break — straining
 ## against it). 0.0 when no vow is active.
 ## `vector_mul` / `trait_mul`: growth of the identity parts only (vector and family bias; trait
-## nudge). State parts (fear, morale, bond, vow) are never scaled.
+## nudge). State parts (afraid, bold, bond, vow) are never scaled.
 static func style_alignment_score(
 	route_style: String,
 	purpose: String,
 	vector_scores: Dictionary,
 	calling_family: String,
 	traits: Dictionary,
-	fear: float,
-	morale_tier: String,
+	afraid: float,
+	bold: float,
 	bond_pressure: float,
 	vow_lean: float,
 	cfg: Dictionary,
@@ -127,7 +127,7 @@ static func style_alignment_score(
 	if not eligible_styles(purpose).has(style):
 		return INELIGIBLE_ALIGNMENT
 	var raw: float = _score_style(
-		style, vector_scores, calling_family, traits, fear, morale_tier,
+		style, vector_scores, calling_family, traits, afraid, bold,
 		bond_pressure, vow_lean, cfg, vector_mul, trait_mul
 	)
 	return raw * float(cfg.get("alignment_weight", 1.0))
@@ -149,8 +149,8 @@ static func _score_style(
 	vector_scores: Dictionary,
 	calling_family: String,
 	traits: Dictionary,
-	fear: float,
-	morale_tier: String,
+	afraid: float,
+	bold: float,
 	bond_pressure: float,
 	vow_lean: float,
 	cfg: Dictionary,
@@ -169,11 +169,11 @@ static func _score_style(
 	total += float(family_row.get(style, 0.0)) * vector_mul
 
 	var fear_weight: Dictionary = cfg.get("fear_weight", {}) as Dictionary
-	total += (clampf(fear, 0.0, 100.0) / 100.0) * float(fear_weight.get(style, 0.0))
+	total += afraid * float(fear_weight.get(style, 0.0))
 
-	var morale_bias: Dictionary = cfg.get("morale_bias", {}) as Dictionary
-	var morale_row: Dictionary = morale_bias.get(morale_tier, {}) as Dictionary
-	total += float(morale_row.get(style, 0.0))
+	var follow_through: Dictionary = cfg.get("follow_through_bias", {}) as Dictionary
+	total += afraid * float((follow_through.get("afraid", {}) as Dictionary).get(style, 0.0))
+	total += bold * float((follow_through.get("bold", {}) as Dictionary).get(style, 0.0))
 
 	var bond_weight: Dictionary = cfg.get("bond_weight", {}) as Dictionary
 	total += clampf(bond_pressure, 0.0, 1.0) * float(bond_weight.get(style, 0.0))

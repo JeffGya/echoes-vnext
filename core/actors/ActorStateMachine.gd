@@ -64,8 +64,8 @@ var _last_decision_trace: Dictionary = {}
 var _last_guidance_response: Dictionary = {}
 var _last_action: Dictionary = {}
 var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; no movement phase
-var _last_morale_tier: String = "steady"  # ACTOR-007: morale tier of the winning intent
-var _last_morale_modifier: int = 0        # ACTOR-007: flat score modifier applied by morale tier
+var _last_emotional_status: String = ""  # emotional status the winning intent was scored at
+var _last_state_points: int = 0          # rounded points the status added to the winning action
 
 # V2-PROG-006: per-turn computed state (reset each advance_turn)
 var _expression_band: String = "nascent"
@@ -410,9 +410,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# would otherwise reset to {} on every turn — meaning situational conditions that depend
 	# on the previous action (repeated_move_penalty, repeated_guard_penalty) never fire.
 	_actor["last_intent"] = { "action_type": str(intent.get("action_type", "")) }
-	# ACTOR-007: read morale metadata annotated by BehaviorArbiter onto the winner.
-	_last_morale_tier     = str(intent.get("morale_tier",     "steady"))
-	_last_morale_modifier = int(intent.get("morale_modifier", 0))
+	# Status metadata annotated by BehaviorArbiter onto the winner.
+	_last_emotional_status = str(intent.get("emotional_status", EmotionStatusLean.status_of(_actor)))
+	_last_state_points     = roundi(float(intent.get("state_points", 0.0)))
 	logger.debug(t, "actor.intent", "Intent selected", {
 		"module_id": _behavior_module.get_module_id(),
 		"action_type": intent.get("action_type", ""),
@@ -433,8 +433,8 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"target_id":              _last_action["target_id"],
 		"target_distance":        _last_action["target_distance"],  # GRID-004
 		"damage":                 0,  # placeholder — real damage in COMBAT-001+
-		"morale_tier":            _last_morale_tier,                     # ACTOR-007
-		"action_weight_modifier": _last_morale_modifier,                 # ACTOR-007
+		"emotional_status":       _last_emotional_status,
+		"action_weight_modifier": _last_state_points,
 		"archetype_birth":        str(intent.get("archetype_birth", "")),
 		"archetype_modifier":     int(intent.get("archetype_modifier", 0)),
 	})
@@ -690,9 +690,9 @@ func get_snapshot() -> Dictionary:
 		# ACTOR-006: structure identity fields
 		"is_structure":     _actor.get("is_structure", false),
 		"movement_skipped": _movement_skipped,
-		# ACTOR-007: morale influence fields
-		"morale_tier":           _last_morale_tier,
-		"action_weight_modifier": _last_morale_modifier,
+		# Status influence fields
+		"emotional_status":       _last_emotional_status,
+		"action_weight_modifier": _last_state_points,
 		# ACTOR-008: death state fields
 		"status":      "dead" if _actor.get("is_dead", false) else "alive",
 		"death_round": int(_actor.get("death_round", 0)),
