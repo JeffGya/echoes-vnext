@@ -448,7 +448,7 @@ static func _t_config_sections_validated() -> Dictionary:
 	var ranges: Dictionary = (_movement()["felt_state"] as Dictionary)["ranges"] as Dictionary
 	var bad_cases: Array = [
 		["lean", "progress_floor", NAN], ["lean", "cohesion_max", INF], ["lean", "progress_max", "1.2"], ["lean", "enabled", "yes"],
-		["steps", "composure_default", NAN], ["style_growth", "enabled", 1],
+		["style_growth", "enabled", 1],
 	]
 	var good_cases: Array = []
 	for section: String in ["lean", "steps"]:
@@ -546,8 +546,10 @@ static func _live_profile(mover: Dictionary, movement: Dictionary, env: Dictiona
 	if env.is_empty():
 		env = _live_env(mover, movement)
 	var ectx: EncounterContext = env["ectx"]
+	var composure: float = float(mover["_composure"]) if mover.has("_composure") \
+		else MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, env["bdata"])
 	var prepared: Dictionary = (env["live"] as LiveMovementContextService).prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, env["board_cfg"], env["bdata"], 0)
+		mover, ectx, ectx.combat_state, env["board_cfg"], env["bdata"], 0, composure)
 	return prepared.get("profile", {}) as Dictionary
 
 
@@ -629,11 +631,12 @@ static func _t_state_steps_each_activation() -> Dictionary:
 	if not (before == 3 and during == 2 and after == 3):
 		return _fail("capacity must follow the state each activation: %d, %d, %d" % [before, during, after])
 	var fresh: Dictionary = _mover(3, 45, 50)
-	var default_composure: float = float(((on["felt_state"] as Dictionary)["steps"] as Dictionary)["composure_default"])
-	var lean: float = EmotionStatusLean.soften(float(_table()["burdened"]), default_composure, _dampen())
+	var env_fresh: Dictionary = _live_env(fresh, on)
+	var computed: float = MaturityExpressionService.composure_of(fresh, {"all_actors": (env_fresh["ectx"] as EncounterContext).actors}, env_fresh["bdata"])
+	var lean: float = EmotionStatusLean.soften(float(_table()["burdened"]), computed, _dampen())
 	var expected: int = 2 if lean <= -float(((on["felt_state"] as Dictionary)["steps"] as Dictionary)["penalty_at"]) else 3
-	if int(_live_profile(fresh, on)["capacity"]) != expected:
-		return _fail("without a previous composure the config default must be used")
+	if int(_live_profile(fresh, on, env_fresh)["capacity"]) != expected:
+		return _fail("an Echo with no stored composure must use the composure computed for this activation")
 	return _pass()
 
 

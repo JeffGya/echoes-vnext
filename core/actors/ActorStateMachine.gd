@@ -152,21 +152,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var cfg_data: Dictionary = context.get("cfg", {}).get("data", {})
 	var expr_cfg: Dictionary = cfg_data.get("maturity_expression", {})
 
-	# Runs for EVERY actor (echo, enemy, structure): the shared reader coerces defensively.
-	var living_party_ids: Dictionary = {}
-	for a_v in MaturityExpressionService._as_array(context.get("all_actors", [])):
-		if a_v is Dictionary:
-			var a: Dictionary = a_v
-			if str(a.get("faction", "")) == "echo" and not bool(a.get("is_dead", false)):
-				living_party_ids[str(a.get("id", ""))] = true
-	var ctx_inputs: Dictionary = MaturityExpressionService.build_ctx_inputs(
-		_actor,
-		MaturityExpressionService._as_array(context.get("bonds", [])),
-		living_party_ids,
-		cfg_data,
-		MaturityExpressionService._as_dict(context.get("bond_thresholds", {})),
-		MaturityExpressionService._as_dict(context.get("active_vow", {})),
-		float(context.get("instability", 0.0)))
+	var ctx_inputs: Dictionary = MaturityExpressionService.ctx_inputs_of(_actor, context, cfg_data)
 
 	var expr_result: Dictionary = MaturityExpressionService.derive_expression(_actor, ctx_inputs, expr_cfg)
 	_expression_band = str(expr_result.get("expression_band", "nascent"))

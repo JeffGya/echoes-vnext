@@ -1713,12 +1713,12 @@
 						"hesitant": -0.25, "uncertain": -0.1, "grounded": 0.0, "whole": 0.0, "radiant": 0.7
 					},
 					"lean": { "enabled": true, "progress_floor": 0.65, "progress_max": 1.25, "cohesion_max": 1.4, "cohesion_min": 0.85 },
-					"steps": { "enabled": true, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1, "composure_default": 0.4 },
+					"steps": { "enabled": true, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1 },
 					"style_growth": { "enabled": true },
 					"ranges": {
 						"_comment": "PROPOSED DEFAULT. Limits [min, max] the validator accepts for each enabled lean and steps number, and the values allowed for penalty_steps and bonus_steps.",
 						"lean": { "progress_floor": [0.5, 0.9], "progress_max": [1.0, 1.4], "cohesion_max": [1.0, 1.45], "cohesion_min": [0.7, 1.0] },
-						"steps": { "penalty_at": [0.3, 0.9], "bonus_at": [0.4, 1.0], "composure_default": [0.0, 1.0] },
+						"steps": { "penalty_at": [0.3, 0.9], "bonus_at": [0.4, 1.0] },
 						"step_counts": [0, 1]
 					}
 				},

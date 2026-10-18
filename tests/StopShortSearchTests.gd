@@ -70,6 +70,8 @@ static func _env(standing: int, enemy_cols: Array, opts: Dictionary = {}) -> Dic
 	var logger := StructuredLogger.new()
 	logger.set_level("debug")
 	var bdata: Dictionary = BehaviorCharacterizationTests._real_bdata()
+	# These boards test the stop-short window at a fixed capacity, not the state steps.
+	((((bdata["combat"] as Dictionary)["movement"] as Dictionary)["felt_state"] as Dictionary)["steps"] as Dictionary)["enabled"] = false
 	var block: Dictionary = ((bdata["actor"] as Dictionary)["stop_short"]) as Dictionary
 	block["enabled"] = bool(opts.get("parent", true))
 	var search: Dictionary = block["cell_search"] as Dictionary
