@@ -743,7 +743,8 @@ static func test_combat() -> Dictionary:
 # Re-recorded: Scout route exposure acceptance (tolerance 0.3 - offset 0.5) x weight 17 changes 2 Scout moves. ROUNDS moved; FINAL, SAVE held.
 # Re-recorded: Directive stop cause. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
 # Re-recorded: emotional-state pull and state steps in route scoring. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
-const PURIFY_SHRINE_ROUNDS_HASH := "a5de64833b482ce453007632b137b21eae06b979e27368a2ff4270f7bd7820e3"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
+const PURIFY_SHRINE_ROUNDS_HASH := "9bdc7074ef56462b6e8f1c81ef41a57c1ecacef763654e7c9874f76db2a69bf9"
 const PURIFY_SHRINE_FINAL_HASH  := "24c3b92582022ad8558bb323c5e9f7513126b8f1bb04308648d003a1eebcf7e8"
 const PURIFY_SHRINE_SAVE_HASH   := "930439633fdb06e3230da43ce270f90c35b86e4f6cb60f46f953bfb19aa282d4"
 
@@ -765,7 +766,8 @@ static func test_purify_shrine() -> Dictionary:
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
 # Re-recorded: Directive stop cause. RECOVER_ROUNDS_HASH moved; RECOVER_FINAL_HASH and RECOVER_SAVE_HASH held.
 # Re-recorded: emotional-state pull and state steps in route scoring. RECOVER_ROUNDS_HASH and RECOVER_FINAL_HASH moved; RECOVER_SAVE_HASH held.
-const RECOVER_ROUNDS_HASH := "abb0ae771dc0c5c4b5b392cc3bc350f506a7d3d12db595f1a59b2e4e1e975cb3"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. RECOVER_ROUNDS_HASH moved; RECOVER_FINAL_HASH and RECOVER_SAVE_HASH held.
+const RECOVER_ROUNDS_HASH := "3b2cc514b1eb2aac8f9a5925971a2e00a0ad4cc81a419d8a2f28ab0582bb3c40"
 const RECOVER_FINAL_HASH  := "33e43352f7aa027a6d034a3d24c07308825adb4b62ae3227310c03856d1626e7"
 const RECOVER_SAVE_HASH   := "0b9bb5db21150c1e886ab7b3401b83287d6c82c168317d3d15e239dfa88b12b6"
 
@@ -814,7 +816,8 @@ static func test_protect() -> Dictionary:
 # 110/120. FINAL moves on rank only; ase 50 and SAVE held. ROUNDS held.
 # Re-recorded: Directive stop cause. ENDURE_ROUNDS_HASH and ENDURE_FINAL_HASH moved; ENDURE_SAVE_HASH held.
 # Re-recorded: emotional-state pull and state steps in route scoring. ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH and ENDURE_SAVE_HASH moved; none held.
-const ENDURE_ROUNDS_HASH := "ad5899a6e5cbf278c5a16ae407827cb29852117a14449c8a3a701f0741659f28"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. ENDURE_ROUNDS_HASH moved; ENDURE_FINAL_HASH and ENDURE_SAVE_HASH held.
+const ENDURE_ROUNDS_HASH := "7eb074ef162ab29d4c7241fabeba3b8968b6bb6091a45b9c416d5a95add1ca1a"
 const ENDURE_FINAL_HASH  := "b71e750707ca784e8a002b6b122a80ca37a952234f7355372d31b3e698ac6b39"
 const ENDURE_SAVE_HASH   := "64dc78e3baf7dd7c3ea61b26536f842b3fecda7de923487fb9143904cffabe49"
 
@@ -848,9 +851,10 @@ static func test_endure() -> Dictionary:
 # with every stretch_fill set to "none" the previous hashes were reproduced exactly. Outcome: 5 -> 4
 # rounds, still all_enemies_defeated, ase 58, ekwan 7, rank S; contain_progress 0 -> 2. SAVE moves on
 # one field pair only (diffed field by field): the 25 kill XP goes from echo_0004 to echo_0003.
-const PURSUE_ROUNDS_HASH := "73a589295f5e7187ee68ade67f9f805a83a61ed58add7bf480c04b32511a9380"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURSUE_ROUNDS_HASH and PURSUE_SAVE_HASH moved; PURSUE_FINAL_HASH held.
+const PURSUE_ROUNDS_HASH := "2588337c3eea9e49db0b0988dfea40f634452ce5f9b1c38b9907b32cb27d8d49"
 const PURSUE_FINAL_HASH  := "9f9cd0632e4f01fbc25e25488d2ba969c222c49fe0bb15603affcf3d88ad1681"
-const PURSUE_SAVE_HASH   := "caca2686f263f70df3fb30a6a0638cadf1f10d749586cd8bc9cb4e36f9bd50ba"
+const PURSUE_SAVE_HASH   := "0458140c7144696073328049cafc901551ffda572649e45b0bd6f8ab5e82e352"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURSUE, "fp_pursue")
@@ -934,8 +938,9 @@ static func test_pursue() -> Dictionary:
 # Re-recorded: stop_short.enabled true. ROUNDS moved (FINAL too). The fight now ends in 24 rounds.
 # Re-recorded: Directive stop cause. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
 # Re-recorded: emotional-state pull and state steps in route scoring. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
-const GUIDE_SPIRIT_ROUNDS_HASH := "8d6a8b2a3f914b323b675fd2452ad7caea42796f297bf09e253408bee6c25bf5"
-const GUIDE_SPIRIT_FINAL_HASH  := "cf0012793e3ae7385e32b55d95ae345b9789dff7b53a07a9a27b376a7c9b571e"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
+const GUIDE_SPIRIT_ROUNDS_HASH := "43b180d506f1524f13b76b375d123c8268e5ab7ce2afc21cf5e340635dde9432"
+const GUIDE_SPIRIT_FINAL_HASH  := "af7bd3c7577970a1e7d9540a9c3f5a023de1c1ac8c7f9a6c7749c2e65aa03f78"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:
