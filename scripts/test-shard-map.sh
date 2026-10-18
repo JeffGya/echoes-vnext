@@ -16,7 +16,9 @@
 #      SHARD_JOBS equal to the number of cores. Each suite then runs alone in its own process and
 #      the times are close to solo times. The runner writes <log dir>/timing-suites.txt.
 #   2. scripts/rebalance-shards.sh <timing-suites.txt> <shard_count> prints the SHARDS block below.
-# Measured on a 4-core machine: 130 suites, 3637 s of test time, 12 shards. The runner starts at
+# Measured on a 4-core machine: 132 suites, 3987 s of test time, 13 shards. The first measurement
+# (2026-10-18) had 130 suites, 3637 s and 12 shards. `felt_state` (7 s) and `fingerprint_seek` (344 s,
+# measured alone) were added after V2-DIRECTIVE-002 phase D registered them; `fingerprint_seek` has its own shard. The runner starts at
 # most SHARD_JOBS shards at a time (default: the number of CPU cores), so the same map suits other
 # core counts. A suite is never split, so the longest suite is a floor under the wall-clock time.
 # Here the floor is `reward` (1054 s, of which the one test
@@ -33,15 +35,16 @@ SHARDS=(
   "shard1|reward|4216"  # est 1054 s, 1 suites
   "shard2|fingerprint_determinism_guide_spirit|3102"  # est 775 s, 1 suites
   "shard3|combat_baseline|1960"  # est 490 s, 1 suites
-  "shard4|fingerprint_guide_spirit|1115"  # est 279 s, 1 suites
-  "shard5|fingerprint_determinism_pursue|805"  # est 201 s, 1 suites
-  "shard6|combat_roundtrip|775"  # est 194 s, 1 suites
-  "shard7|terrain|600"  # est 149 s, 1 suites
-  "shard8|bark_popup,board_camera.bounds,board_camera.zoom,calling_behavior,combat_initiative,consequence,contact_actor,conversation_repair,fingerprint_pursue,maturity_baseline,movement_arbiter,movement_path,passive,recruit,skill_unlock,snapshot,stop_short,trace,traversal|600"  # est 99 s, 19 suites
-  "shard9|combat,combat_camera,combat_ui,contact,directive_cfg,economy,expr,fingerprint_determinism_purify_shrine,fingerprint_determinism_recover,flow_transaction,grid,guidance_bark,movement_option,movement_style,onboarding,save_integrity,stage,support,unified_resolve,venture_char|600"  # est 99 s, 20 suites
-  "shard10|arbiter,archetype,behavior_arbiter,board_camera.echo_detail,board_camera.view,bond_trigger,bridge,combat_terrain,continuity,derived,directive,divergence_bark,echo_party,echofactory,explore_p5,fingerprint_combat,fingerprint_determinism_protect,fingerprint_purify_shrine,intel,ko_death,leadership,live_movement_style,morale,movement,objective_combat,old_echo,realm_prog,realm_reward,sanctum.party,sanctum_pulse,shrine,sit_res,skill,skill_loadout,snapshot_fingerprint,social_graph,statinit,stop_short_wiring,thread,vector|600"  # est 99 s, 40 suites
-  "shard11|behavior_char,contact_cfg,cooldown,emotion,exclusive_action,explore,fingerprint_determinism_combat,fingerprint_determinism_endure,fingerprint_endure,identity,melee,objective,retreat,sanctum.layout,sanctum.summon,skill_reach,snapshot_contract,stage_stop_ui,stop_short_search,voice,vow,weave|600"  # est 99 s, 22 suites
-  "shard12|actor,behavior,board_camera.input,board_camera.pointer,board_pointer,calling,directive_char,divergence,fingerprint_protect,fingerprint_recover,foundation_ui,guidance,institution,pending_result,prog,realm,realm_ui,seam,situational,snapshot_purity,stage_camera,structure|600"  # est 99 s, 22 suites
+  "shard4|fingerprint_seek|1376"  # est 344 s, 1 suites
+  "shard5|fingerprint_guide_spirit|1115"  # est 279 s, 1 suites
+  "shard6|fingerprint_determinism_pursue|805"  # est 201 s, 1 suites
+  "shard7|combat_roundtrip|775"  # est 194 s, 1 suites
+  "shard8|terrain|600"  # est 149 s, 1 suites
+  "shard9|actor,arbiter,behavior,board_camera.bounds,bridge,calling_behavior,conversation_repair,explore,fingerprint_pursue,maturity_baseline,movement,passive,sanctum.layout,sanctum_pulse,save_integrity,stage,structure,support,traversal|600"  # est 100 s, 19 suites
+  "shard10|archetype,behavior_arbiter,board_camera.echo_detail,bond_trigger,combat_camera,combat_ui,continuity,cooldown,derived,directive,echo_party,echofactory,explore_p5,fingerprint_determinism_purify_shrine,fingerprint_determinism_recover,grid,guidance_bark,identity,intel,ko_death,live_movement_style,movement_arbiter,movement_option,movement_style,objective_combat,old_echo,onboarding,realm_prog,realm_reward,sanctum.party,shrine,sit_res,skill,skill_loadout,social_graph,statinit,thread,vector,venture_char,voice|600"  # est 100 s, 40 suites
+  "shard11|board_camera.zoom,combat,combat_initiative,combat_terrain,contact_actor,contact_cfg,divergence_bark,economy,fingerprint_combat,fingerprint_determinism_protect,fingerprint_purify_shrine,flow_transaction,guidance,objective,realm_ui,retreat,skill_reach,skill_unlock,snapshot_contract,stop_short_wiring|600"  # est 100 s, 20 suites
+  "shard12|behavior_char,board_camera.pointer,consequence,contact,directive_cfg,directive_char,divergence,emotion,exclusive_action,fingerprint_determinism_combat,fingerprint_determinism_endure,fingerprint_endure,fingerprint_recover,leadership,movement_path,realm,sanctum.summon,situational,snapshot_fingerprint,stop_short_search,vow,weave|600"  # est 100 s, 22 suites
+  "shard13|bark_popup,board_camera.input,board_camera.view,board_pointer,calling,expr,felt_state,fingerprint_protect,foundation_ui,institution,melee,morale,pending_result,prog,recruit,seam,snapshot,snapshot_purity,stage_camera,stage_stop_ui,stop_short,trace,unified_resolve|600"  # est 100 s, 23 suites
 )
 
 # Suites that run in the merge step and in NO shard (scripts/run-tests-sharded.sh).
