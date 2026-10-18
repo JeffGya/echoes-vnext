@@ -1689,6 +1689,8 @@ from 0 to −3; the shipped −6.0 sits just past its edge and buys 3 turns of t
 
 ### 22.4 `directive_exposure_acceptance` — DECISION: recorded as deliberately inert
 
+> Superseded for route exposure acceptance by V2-DIRECTIVE-002 phase D (D-69, D-73): the term now reads exposure_tolerance - offset.
+
 The brief offered three options. **The first is impossible**, and that is the finding.
 
 1. *Raise the weight so it can decide something.* On the default `directive.scout_carefully` the

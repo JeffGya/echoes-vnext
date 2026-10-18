@@ -94,10 +94,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 					"rank":             int(echo.get("rank", 1)),
 					"calling_origin":   str(echo.get("calling_origin", "")),
 					# V2-EMOTION-002: unified emotional status.
-					"emotional_status": EmotionService.get_emotional_status(
-						int(_emo_s.get("morale_current", 50)),
-						int(_emo_s.get("fear_current", 0))
-					),
+					"emotional_status": EmotionStatusLean.status_of_emotion(_emo_s),
 				})
 				break
 
