@@ -3,7 +3,7 @@
 Author: sr-game-artist. Sources: `design.md` 3a and 8.1, decisions D-36, D-41, D-42, `mockups/review/art-notes.md`, `mockups/v3/index.html`, `ui/components/EchoCardItem.tscn`.
 Player wording: [Jeff's wording]. These shapes carry no text.
 
-Files: `assets/ui/stage_stop_glyphs/stop_<kind>.svg` (6 files). Contact sheet: `mockups/stage-stop-glyph-sheet.png`.
+Files: `assets/ui/stage_stop_glyphs/stop_<kind>.png` (6 files). Finished glyphs: see decision D-93; PNG 256 px with rim. Contact sheet: `mockups/stage-stop-glyph-sheet.png`.
 
 ## 1. The six shapes
 
@@ -73,7 +73,7 @@ The fill is one colour for all six kinds, so a colour-vision difference changes 
 
 ## 6. What ui-ux-designer needs
 
-1. Import path: `res://assets/ui/stage_stop_glyphs/stop_<kind>.svg`. The main chat runs `--import`. Set the SVG import scale so 48 units import at 48 px. A `Texture2D` is rasterised at import, so 28 px display from a 48 px texture is a downscale. Use linear filter with mipmaps on, or import at scale 2 and display at 28.
+1. Import path: `res://assets/ui/stage_stop_glyphs/stop_<kind>.png`. The main chat runs `--import`. Set the SVG import scale so 48 units import at 48 px. A `Texture2D` is rasterised at import, so 28 px display from a 48 px texture is a downscale. Use linear filter with mipmaps on, or import at scale 2 and display at 28.
 2. Map: `kind` string from the stop to the texture. Six `preload` constants or one dictionary in the UI script. The kind names are exactly the file suffix.
 3. Node plan, card: one `TextureRect` named `StopGlyph` on `EchoCardItem`, `custom_minimum_size` 28 x 28, `expand_mode` ignore size, `stretch_mode` keep aspect centered, `mouse_filter` ignore (the card takes the tap), `visible` false by default.
 4. Node plan, chip: one `PanelContainer` named `PartyStopChip` beside the Echo cards, containing a `MarginContainer` and a `TextureRect` of the same set. `custom_minimum_size` 48 x 48. It takes the tap (`mouse_filter` stop).

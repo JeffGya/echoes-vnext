@@ -8,4 +8,4 @@ const KINDS: Array[String] = ["arrived_at", "capacity_spent", "interrupted", "sp
 
 
 static func texture(kind: String) -> Texture2D:
-	return load("res://assets/ui/stage_stop_glyphs/stop_%s.svg" % kind) as Texture2D if KINDS.has(kind) else null
+	return load("res://assets/ui/stage_stop_glyphs/stop_%s.png" % kind) as Texture2D if KINDS.has(kind) else null
