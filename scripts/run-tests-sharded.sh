@@ -16,14 +16,12 @@
 # Usage: scripts/run-tests-sharded.sh [checkout_path]
 #   checkout_path defaults to the git worktree this script lives in.
 #
-# KNOWN GAP — movement_fallback does not get full-suite validation here. MovementFallbackGuardTests
-# is registered LAST in ui/AppRoot.gd specifically because it inspects a legacy-selector ledger
-# that every earlier-registered suite in the SAME PROCESS may write to. Sharding puts it in shard4
-# with ~16 sibling suites, not all ~124 — a clean sharded PASS on movement_fallback does NOT mean
-# the real serial suite would also pass; a fallback triggered by a suite in another shard is
-# invisible to it here. This is not fixable by rebalancing shards (it would require running every
-# other suite first, in-process, defeating parallelism for this one guard). Always run the full
-# SERIAL suite before committing anything that could affect legacy-selector fallback behavior.
+# movement_fallback. MovementFallbackGuardTests judges a process-wide ledger of legacy-selector
+# fallbacks, so inside one shard it would see only that shard's suites. It is therefore in no shard.
+# After all shards finish, the "merge step" below runs it in one more process that has loaded the
+# ledger file of every shard (tests/LegacyLedgerFile.gd). The verdict equals the serial run's verdict,
+# including the serial rule that clears entries recorded before behavior_char (see AGENTS.md).
+# A shard that wrote no ledger file makes the whole run INVALID.
 
 set -uo pipefail
 
@@ -168,14 +166,44 @@ for i in "${!pids[@]}"; do
   fi
 done
 
+# Merge step: apply the movement_fallback guard to the ledger of the WHOLE run.
+# Every shard process wrote its legacy-selector ledger to <its save dir>/legacy_selector_ledger.json
+# (tests/LegacyLedgerFile.gd). MovementFallbackGuardTests is not in any shard. It runs here, in one
+# more process, after the ledger files are loaded into it (ECHOES_LEGACY_LEDGER_IN). A fallback
+# in any shard therefore fails this step, as it fails the serial run. The suite name comes from
+# MERGE_SUITES in scripts/test-shard-map.sh.
+ledger_files=()
+ledger_missing=0
+for name in "${shard_names[@]}"; do
+  ledger_file="$SAVE_ROOT/$name/legacy_selector_ledger.json"
+  if [[ -f "$ledger_file" ]]; then
+    ledger_files+=("$ledger_file")
+  else
+    echo "FATAL: shard '$name' wrote no legacy-selector ledger ($ledger_file). It crashed or was killed" \
+         "before its last test, so the movement_fallback guard cannot judge the whole run." >&2
+    ledger_missing=1
+  fi
+done
+merge_save_dir="$SAVE_ROOT/merge"
+merge_log="$LOG_DIR/merge.log"
+rm -rf "$merge_save_dir"
+mkdir -p "$merge_save_dir"
+merge_filter="$(IFS=,; echo "${MERGE_SUITES[*]}")"
+ledger_in="$(IFS=:; echo "${ledger_files[*]}")"
+: > "$merge_log"
+echo "=== merge filter==$merge_filter ledger_files=${#ledger_files[@]} ===" >> "$merge_log"
+ECHOES_TEST_SAVE_DIR="$merge_save_dir" ECHOES_LEGACY_LEDGER_IN="$ledger_in" \
+  /usr/bin/perl -e 'alarm shift; exec @ARGV' $((300 * ALARM_SCALE)) \
+  "$GODOT_BIN" --headless --quit --path "$CHECKOUT" -- tests "=$merge_filter" >> "$merge_log" 2>&1 \
+  || { echo "WARNING: the merge process exited non-zero (alarm fired?)." >&2; fail=1; }
+
 echo ""
 echo "=== Per-shard results ==="
 total=0
 passed=0
 failed=0
 missing_lines=0
-for entry in "${SHARDS[@]}"; do
-  name="${entry%%|*}"
+for name in "${shard_names[@]}" merge; do
   shard_log="$LOG_DIR/$name.log"
   shard_total=0
   shard_passed=0
@@ -246,11 +274,12 @@ fi
 echo "COMBINED: $total total, $passed passed, $failed failed"
 echo "(Exact-match shards: no suite selected twice, total should equal a serial full run's total.)"
 echo ""
-echo "NOTE: movement_fallback (MovementFallbackGuardTests) only saw its own shard's ~16 suites in" \
-     "this run, not all ~124 — it is a cross-suite ledger guard that must run LAST in the SAME" \
-     "process as everything else to be meaningful (see ui/AppRoot.gd 'REGISTER LAST'). A clean" \
-     "sharded result for movement_fallback does NOT have full-suite validity. Run the full SERIAL" \
-     "suite before committing anything that could affect legacy-selector fallback behavior."
+echo "movement_fallback: judged in the merge step on the legacy-selector ledgers of ${#ledger_files[@]} of ${#shard_names[@]} shards."
+grep -h "Legacy ledger:" "$merge_log" | sed 's/.*Debug output "\(.*\)"$/  \1/'
+if [[ "$ledger_missing" -eq 1 ]]; then
+  echo "COMBINED RESULT: INVALID — at least one shard wrote no legacy-selector ledger. See FATAL lines above." >&2
+  exit 1
+fi
 
 if [[ "$fail" -eq 1 ]]; then
   echo "COMBINED RESULT: INVALID — at least one shard's process exited non-zero (crashed or was" \
@@ -260,6 +289,8 @@ if [[ "$fail" -eq 1 ]]; then
 fi
 
 if [[ "$failed" -gt 0 ]]; then
+  echo "COMBINED RESULT: FAILED — $failed test(s) failed in the shards or in the movement_fallback merge step." >&2
   exit 1
 fi
+echo "COMBINED RESULT: PASSED"
 exit 0

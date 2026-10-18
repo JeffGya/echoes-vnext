@@ -5,6 +5,8 @@
 #   - a registered suite is missing from the map (its tests would silently never run sharded),
 #   - a suite appears more than once in the map (its tests would run twice and be counted twice),
 #   - the map names a suite that is not registered (stale name after a rename),
+#   - a suite is in both a shard and MERGE_SUITES (that is a duplicate too),
+#   - MERGE_SUITES is missing or empty,
 #   - the map has an empty suite name, an empty shard, or two shards with the same name,
 #   - the registered-suite list is empty (the list could not be read: that proves nothing).
 #
@@ -95,6 +97,21 @@ for entry in "${SHARDS[@]}"; do
   done
 done
 
+if [[ -z "${MERGE_SUITES+x}" || "${#MERGE_SUITES[@]}" -eq 0 ]]; then
+  echo "PROBLEM: '$MAP_FILE' defines no MERGE_SUITES (the merge step needs movement_fallback)." >&2
+  problems=$((problems + 1))
+else
+  for raw_name in "${MERGE_SUITES[@]}"; do
+    name="$(echo "$raw_name" | tr 'A-Z' 'a-z' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    if [[ -z "$name" ]]; then
+      echo "PROBLEM: MERGE_SUITES has an empty name." >&2
+      problems=$((problems + 1))
+      continue
+    fi
+    echo "merge $name" >> "$WORK_DIR/pairs"
+  done
+fi
+
 dup_shards="$(sort "$WORK_DIR/shard_names" | uniq -d)"
 if [[ -n "$dup_shards" ]]; then
   while IFS= read -r s; do
@@ -133,5 +150,5 @@ if [[ "$problems" -gt 0 ]]; then
   echo "SHARD MAP CHECK: FAILED ($problems problem(s)). Fix $MAP_FILE and the shard counts in AGENTS.md together." >&2
   exit 1
 fi
-echo "SHARD MAP CHECK: OK ($registered_count registered suites, each in exactly one of $shard_count shards)."
+echo "SHARD MAP CHECK: OK ($registered_count registered suites, each in exactly one of $shard_count shards or the merge step)."
 exit 0
