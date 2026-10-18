@@ -319,7 +319,7 @@ static func _t_ineligible_runner_up_does_not_inflate_margin() -> Dictionary:
 		{"spatial_utility": _spatial_cfg()}
 	)
 	var result: Dictionary = arbiter.select_movement_intent(
-		{"actor": actor, "all_actors": [_enemy()], "t": 1},
+		{"actor": actor, "all_actors": [_enemy()], "t": 1, "judgment": 0.3},
 		_movement_context(),
 		MovementProfile.build(4, [], true, "echo", {}),
 		[goal],
@@ -350,7 +350,7 @@ static func _t_ineligible_winner_style_not_published_on_intent() -> Dictionary:
 		{"spatial_utility": _spatial_cfg()}
 	)
 	var result: Dictionary = arbiter.select_movement_intent(
-		{"actor": actor, "all_actors": [_enemy()], "t": 1},
+		{"actor": actor, "all_actors": [_enemy()], "t": 1, "judgment": 0.3},
 		_movement_context(),
 		MovementProfile.build(4, [], true, "echo", {}),
 		[goal],
@@ -383,7 +383,7 @@ static func _select_two_route_fixture(
 		{"spatial_utility": _spatial_cfg()}
 	)
 	return arbiter.select_movement_intent(
-		{"actor": actor, "all_actors": [_enemy()], "t": 1},
+		{"actor": actor, "all_actors": [_enemy()], "t": 1, "judgment": 0.3},
 		_movement_context(faction),
 		MovementProfile.build(4, [], true, faction, {}),
 		[goal],

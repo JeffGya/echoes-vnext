@@ -254,6 +254,7 @@ static func _select(fixture: Dictionary, style_cfg: Dictionary) -> Dictionary:
 			"board_cfg": fixture["board_cfg"],
 			"t": 0,
 			"round": 0,
+			"judgment": 0.3,
 		},
 		prepared["movement_context"],
 		prepared["profile"],

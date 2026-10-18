@@ -105,6 +105,8 @@ static func eligible_styles(purpose: String) -> Array:
 ## own goal subject.
 ## `vow_lean`: -1.0 (fully Ward — holding the vow) .. +1.0 (fully Break — straining
 ## against it). 0.0 when no vow is active.
+## `vector_mul` / `trait_mul`: growth of the identity parts only (vector and family bias; trait
+## nudge). State parts (fear, morale, bond, vow) are never scaled.
 static func style_alignment_score(
 	route_style: String,
 	purpose: String,
@@ -115,7 +117,9 @@ static func style_alignment_score(
 	morale_tier: String,
 	bond_pressure: float,
 	vow_lean: float,
-	cfg: Dictionary
+	cfg: Dictionary,
+	vector_mul: float = 1.0,
+	trait_mul: float = 1.0
 ) -> float:
 	var style: String = movement_style_for(route_style)
 	if style.is_empty():
@@ -124,7 +128,7 @@ static func style_alignment_score(
 		return INELIGIBLE_ALIGNMENT
 	var raw: float = _score_style(
 		style, vector_scores, calling_family, traits, fear, morale_tier,
-		bond_pressure, vow_lean, cfg
+		bond_pressure, vow_lean, cfg, vector_mul, trait_mul
 	)
 	return raw * float(cfg.get("alignment_weight", 1.0))
 
@@ -149,18 +153,20 @@ static func _score_style(
 	morale_tier: String,
 	bond_pressure: float,
 	vow_lean: float,
-	cfg: Dictionary
+	cfg: Dictionary,
+	vector_mul: float = 1.0,
+	trait_mul: float = 1.0
 ) -> float:
 	var total: float = 0.0
 
 	var vector_bias: Dictionary = cfg.get("vector_bias", {}) as Dictionary
 	for vector_key: String in vector_scores:
 		var row: Dictionary = vector_bias.get(vector_key, {}) as Dictionary
-		total += float(vector_scores[vector_key]) * float(row.get(style, 0.0))
+		total += float(vector_scores[vector_key]) * float(row.get(style, 0.0)) * vector_mul
 
 	var family_bias: Dictionary = cfg.get("calling_family_bias", {}) as Dictionary
 	var family_row: Dictionary = family_bias.get(calling_family, {}) as Dictionary
-	total += float(family_row.get(style, 0.0))
+	total += float(family_row.get(style, 0.0)) * vector_mul
 
 	var fear_weight: Dictionary = cfg.get("fear_weight", {}) as Dictionary
 	total += (clampf(fear, 0.0, 100.0) / 100.0) * float(fear_weight.get(style, 0.0))
@@ -182,6 +188,6 @@ static func _score_style(
 	var trait_nudge: Dictionary = cfg.get("trait_nudge", {}) as Dictionary
 	for trait_key: String in traits:
 		var trait_row: Dictionary = trait_nudge.get(trait_key, {}) as Dictionary
-		total += float(traits[trait_key]) * float(trait_row.get(style, 0.0))
+		total += float(traits[trait_key]) * float(trait_row.get(style, 0.0)) * trait_mul
 
 	return total

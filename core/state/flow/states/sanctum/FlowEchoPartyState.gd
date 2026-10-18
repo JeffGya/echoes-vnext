@@ -70,8 +70,6 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 		var xp_total: int = int(e.get("xp_total", 0))
 		var level: int = int(e.get("level", 1))
-		var fear: int = int(e.get("emotion", {}).get("fear_current", 0))
-		var morale: int = int(e.get("emotion", {}).get("morale_current", 50))
 		var max_hp: int = int(e.get("stats", {}).get("max_hp", 0))
 
 		var eff_thresholds: Array = ProgressionService.get_effective_thresholds(int(e.get("rank", 1)), prog_cfg)
@@ -124,7 +122,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"speed": int(stats.get("speed", 0)),
 			},
 			# V2-EMOTION-002: unified emotional status (replaces morale + fear + morale_status).
-			"emotional_status":      EmotionService.get_emotional_status(morale, fear),
+			"emotional_status":      EmotionStatusLean.status_of_emotion(e.get("emotion", {})),
 			"in_party":              str(e.get("id", "")) in party_ids,
 			"current_shout":         "",
 			"standing_up_eligible":  rank_up_eligible,

@@ -37,6 +37,12 @@
 
 class_name EmotionService
 
+## The ten emotional statuses, worst to best. The one place that holds their order.
+const STATUS_LADDER: Array = [
+	"hollow", "fraying", "strained", "pressed", "burdened",
+	"hesitant", "uncertain", "grounded", "whole", "radiant",
+]
+
 const DEFAULTS := {
 	"faith":          50,
 	"morale_base":    50,
