@@ -35,6 +35,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("emotion/emotional_status_ten_tier_boundaries", Callable(EmotionTests, "_t_emotional_status_ten_tier_boundaries"))
 	runner.register_test("emotion/project_actor_emotional_status",   Callable(EmotionTests, "_t_project_actor_emotional_status"))
 	runner.register_test("emotion/resolve_emotion_summary_unified",  Callable(EmotionTests, "_t_resolve_emotion_summary_unified"))
+	runner.register_test("emotion/resolve_pre_status_keeps_pre_fight_fear", Callable(EmotionTests, "_t_resolve_pre_status_keeps_pre_fight_fear"))
 	# V2-EMOTION-003 tests
 	runner.register_test("emotion/fear_base_birth_from_traits",      Callable(EmotionTests, "_t_fear_base_birth_from_traits"))
 	runner.register_test("emotion/fear_base_clamp",                  Callable(EmotionTests, "_t_fear_base_clamp"))
@@ -528,6 +529,38 @@ static func _t_resolve_emotion_summary_unified() -> Dictionary:
 	if bool(row.get("refused", true)):
 		return { "ok": false, "error": "Expected refused==false for fear=70 (threshold is 80)" }
 
+	return { "ok": true }
+
+
+## An Echo that starts the fight with fear 40 and morale 60 reads "grounded", not "whole".
+static func _t_resolve_pre_status_keeps_pre_fight_fear() -> Dictionary:
+	var ctx := FlowContext.new()
+	ctx.config_service = null
+	var ectx := EncounterContext.new()
+	ectx.encounter_id  = "test_enc_pre_fear"
+	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
+	ectx.combat_state  = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 2 }
+	ectx.actors = [{
+		"id": "echo_01", "name": "Kojo", "faction": "echo",
+		"current_hp": 80, "stats": { "max_hp": 100 },
+		"grid_pos": { "col": 0, "row": 0 },
+		"is_dead": false, "guard_state": false, "is_structure": false,
+		"morale": 60, "fear": 40,
+		"calling_origin": "Okofor", "skill_slots": [""],
+	}]
+	ectx.pre_encounter_morale["echo_01"] = 60
+	ectx.pre_encounter_fear["echo_01"] = 40
+	ctx.encounter_ctx = ectx
+	var rows: Array = FlowEncounterState.build_final_snapshot(ctx, 1).get("data", {}).get("emotion_summary", [])
+	if rows.size() != 1 or str((rows[0] as Dictionary).get("pre_emotional_status", "")) != "grounded":
+		return { "ok": false, "error": "resolve pre status must use pre-fight fear, got %s" % str(rows) }
+	var intro: Array = EncounterSnapshotBuilder._build_keeper_intro_emotion_summary(ectx)
+	if intro.size() != 1 or str((intro[0] as Dictionary).get("pre_emotional_status", "")) != "grounded":
+		return { "ok": false, "error": "keeper intro pre status must use pre-fight fear, got %s" % str(intro) }
+	ectx.pre_encounter_fear.clear()
+	rows = FlowEncounterState.build_final_snapshot(ctx, 1).get("data", {}).get("emotion_summary", [])
+	if str((rows[0] as Dictionary).get("pre_emotional_status", "")) != "whole":
+		return { "ok": false, "error": "a missing pre-fight fear entry must read as 0" }
 	return { "ok": true }
 
 
