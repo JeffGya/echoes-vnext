@@ -13,6 +13,24 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 40 — A guard that reads process-wide state needs a proof that it can fail, in the mode you rely on
+
+**Rule:** Before you trust a green `movement_fallback` (or any guard that reads a process-wide ledger), induce one real violation and watch the guard fail. Do this in the run mode you rely on (serial, sharded, CI). Read what the guard clears or consumes before it reads.
+**Why:** Test-speed work, 2026-10-18. The sharded run could not validate `movement_fallback`, because a shard saw only its own suites. When the ledgers of all shards were merged, 57 real fallbacks appeared (`combat_roundtrip`, `perceived_actor_kind_mismatch`, `guide_spirit_01`). The serial run never judged them: `behavior_char/legacy_selector_fallback_is_loud` clears the ledger at its start, so the serial guard judges only entries from suites registered after it (today `pending_result`). Jeff decided: the sharded verdict matches the serial verdict, and the hidden entries print as a warning.
+**How to apply:** For a guard, find every `take_*`/clear call on its state (`grep take_legacy_selector_uses`). Induce a fallback in a suite registered AFTER the clearing test. An induced fallback in an earlier suite is ignored by the serial run too. Follow-up for Jeff: whether `behavior_char` should save and restore the ledger and not clear it.
+**Mistake count:** 0 (found before it caused a wrong decision)
+
+---
+
+### 39 — Pack test shards by measured time, and expect a few tests to set the floor
+
+**Rule:** Balance shards with measured per-suite times (`scripts/rebalance-shards.sh`), measured with one suite per process and as many processes as cores. Never balance by line count. Before you add shards, compute the floor: the longest suite.
+**Why:** Test-speed work, 2026-10-18. Line-count shards ran 22m33s on 4 cores. Measured packing ran 17m40s, which is the floor: `reward` takes 1054 s because one test takes 991 s. Five tests take 2527 s of 3637 s total (69%). More shards or more cores cannot go below the floor. Only a cheaper slow test can.
+**How to apply:** After any change that adds a slow test, run the one-suite-per-shard measurement (`SHARD_MAP_FILE`, `SHARD_JOBS`) and read the `TIMING_TEST` table. A test above 60 s needs an owner and a decision from Jeff. Times measured with more processes than cores are inflated, so compare them only with each other.
+**Mistake count:** 0
+
+---
+
 ### 38 — A feature that fires rarely needs a measured rate, not a passing test
 
 **Rule:** When a feature is meant to fire for the player (here: the game names the Echo that decided an Advance), measure how often it fires in real runs before you call it done. Do this before you tune it. Check that a tuning lever can move the output before you run a large matrix of variants.
