@@ -259,9 +259,10 @@ and prints the timing tables. Wall-clock time is set by the longest shard, not b
 |---|---|
 | Serial full suite (reported, Oct 2026) | about 53 min |
 | Sharded, 9 shards of the Sept 2026 map, all at once | 22m33s |
-| Sharded, 12 shards from measured times, 4 at a time | **17m40s** |
+| Sharded, 12 shards from measured times, 4 at a time (130 suites) | **17m40s** |
+| Sharded, 13 shards, 132 suites plus the merge suite | not measured yet; `fingerprint_seek` (344 s) adds about 350 s of test time |
 
-All test time added up is 3637 s (60.6 min). The longest suite is `reward` at 1054 s, and one test in it,
+All test time added up was 3637 s (60.6 min) for the first 130 suites, and is 3987 s with `felt_state` (7 s) and `fingerprint_seek` (344 s). The longest suite is `reward` at 1054 s, and one test in it,
 `reward/pace_guide_spirit_runtime_escort_vs_protect`, takes 991 s. A suite is never split, so about 1058 s
 (17.6 min) is the best wall-clock time for any shard count or core count, until a slow test changes. Five tests
 take 2527 s, which is 69% of all test time: `reward/pace_guide_spirit_runtime_escort_vs_protect` (991 s),
@@ -269,7 +270,7 @@ take 2527 s, which is 69% of all test time: `reward/pace_guide_spirit_runtime_es
 `fingerprint_guide_spirit` (279 s) and `fingerprint_determinism_pursue` (201 s). Cutting the cost of these
 tests is the next gain. It needs a decision by Jeff and is not part of the runner work.
 
-**Shard map and counts.** The map has 12 shards and one merge suite for the 133 registered suites. The runner
+**Shard map and counts.** The map has 13 shards and one merge suite for the 133 registered suites. The runner
 checks the map before it starts a shard (`scripts/check-shard-map.sh`, see above). The comment at the top of
 `scripts/test-shard-map.sh` describes how the map was packed and how to pack it again from new timing data
 (`scripts/rebalance-shards.sh`). Update the counts in this file in the same commit that changes the map.
