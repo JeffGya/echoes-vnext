@@ -59,7 +59,7 @@ const _COMPONENT_LABELS: Dictionary = {
 ##                 arbiter's own winner-sort actually compared (this may include
 ##                 spatial_utility / purifier-override adjustments the caller
 ##                 applied on top of _score()'s return — see BehaviorArbiter).
-##   directive_bonus:         float — _directive_bonus() at the ACTUAL expression_band.
+##   directive_bonus:         float — _directive_bonus() at the ACTUAL expression_band, plus a route's own Directive parts.
 ##   directive_bonus_nascent: float — _directive_bonus() re-evaluated at band "nascent".
 ##   components: Dictionary — the raw _score() term breakdown, used only for primary_reason.
 ##
@@ -163,7 +163,8 @@ static func detect(
 		# Phase 6; field name `directive_bonus_nascent` is unchanged for contract
 		# stability, but it is now computed at interpretation_width=0.0, not band
 		# "nascent"). self_score already excludes directive_bonus, so it is
-		# interpretation_width-invariant by construction; adding the most-literal
+		# interpretation_width-invariant by construction. The route Directive parts
+		# ride in both bonus fields and cancel; adding the most-literal
 		# bonus back in answers "would D have beaten W if this Echo had judgment at
 		# its floor instead of her actual level?"
 		var w_nascent: float = w_self_score + float(chosen.get("directive_bonus_nascent", 0.0))

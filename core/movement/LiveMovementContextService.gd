@@ -99,6 +99,32 @@ func _init(flow_ctx_ref: FlowContext, logger_ref: StructuredLogger) -> void:
 	logger = logger_ref
 
 
+## Moves an Echo's capacity by its emotional status. Composure is the one the actor kept from its
+## previous activation, because the profile is built before this activation's composure exists.
+func _with_state_steps(profile: Dictionary, actor: Dictionary, movement_cfg: Dictionary, bdata: Dictionary) -> Dictionary:
+	var felt: Variant = movement_cfg.get("felt_state", {})
+	var steps: Variant = (felt as Dictionary).get("steps", {}) if felt is Dictionary else {}
+	if not steps is Dictionary or not bool((steps as Dictionary).get("enabled", false)):
+		return profile
+	if not EmotionStatusLean.is_echo(actor):
+		return profile
+	for key: String in ["penalty_at", "bonus_at", "penalty_steps", "bonus_steps", "composure_default"]:
+		if not (steps as Dictionary).has(key):
+			return profile
+	var table: Dictionary = EmotionStatusLean.table_of(movement_cfg)
+	if table.is_empty():
+		return profile
+	var dampen: float = BehaviorArbiter.composure_dampen(bdata.get("maturity_expression", {}) as Dictionary)
+	var composure: float = float(actor.get("_composure", (steps as Dictionary)["composure_default"]))
+	var lean: float = EmotionStatusLean.soften(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table), composure, dampen)
+	var delta: int = 0
+	if lean <= -float((steps as Dictionary)["penalty_at"]):
+		delta = -int((steps as Dictionary)["penalty_steps"])
+	elif lean >= float((steps as Dictionary)["bonus_at"]):
+		delta = int((steps as Dictionary)["bonus_steps"])
+	return MovementProfileServiceScript.apply_state_steps(profile, delta, movement_cfg.get("capacity", {}) as Dictionary)
+
+
 func prepare_live_movement_context(
 	actor: Dictionary,
 	ectx: EncounterContext,
@@ -164,6 +190,7 @@ func prepare_live_movement_context(
 	var edge_costs: Dictionary = control_build["edge_costs"] as Dictionary
 	var edge_sources: Dictionary = control_build["edge_sources"] as Dictionary
 	var profile: Dictionary = MovementProfileServiceScript.derive_profile(actor, capacity_cfg, {})
+	profile = _with_state_steps(profile, actor, movement_cfg, bdata)
 	var goals_result: Dictionary = CombatPressureServiceScript.build_goals(movement_context, pressure_cfg)
 	if not bool(goals_result.get("valid", false)):
 		return {

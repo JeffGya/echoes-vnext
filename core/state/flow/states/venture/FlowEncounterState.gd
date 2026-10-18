@@ -286,8 +286,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		var post_morale: int = int(ea.get("morale", 50))
 		var post_fear: int   = int(ea.get("fear", 0))
 		# P1 CLOSE: compute pre/post status for direction comparison.
-		var _pre_status  := EmotionService.get_emotional_status(pre_morale, 0)
-		var _post_status := EmotionService.get_emotional_status(post_morale, post_fear)
+		var _pre_status  := EmotionStatusLean.status_from(pre_morale, 0, int(ea.get("fear_base", 0)))
+		var _post_status := EmotionStatusLean.status_of(ea)
 		var _pre_rank  := EncounterSnapshotBuilder._emotional_status_rank(_pre_status)
 		var _post_rank := EncounterSnapshotBuilder._emotional_status_rank(_post_status)
 		var _direction: String

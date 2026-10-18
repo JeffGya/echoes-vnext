@@ -13,6 +13,33 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 41 — One reading per system: grep for the existing reading before a mechanic reads fear, morale or Judgment
+
+**Rule:** Each game system has one definition. Fear and morale together are the emotional status (`EmotionStatusLean`, the larger of fear and base fear). Judgment, composure and exposure tolerance are one value each. Before a mechanic reads one of them, grep the code for the existing reading and use it. Check every design option against the GDD generation model: stages and boards are procedural by seed, so no authored arenas.
+**Why:** V2-DIRECTIVE-002 phase D, D-84 and D-87, 2026-10-17. The first note for slices 5 to 7 took the larger of fear and low morale. The audit then found fear and morale read in seven ways in combat movement, and the chip used raw fear while the simulation used the larger of fear and base fear. Jeff: "This is 1 game." Seven readers were merged (D-89, D-91). An earlier option, authored arenas, went against the GDD and was withdrawn.
+**How to apply:** Put an audit table in the design note: each place that reads the system, with keep, merge or conflict. Add no second reading. Style alignment and the action-layer fear factor still read raw values (follow-ups C6, C7). Leave them as named debt, not as a model.
+**Mistake count:** 1
+
+---
+
+### 40 — A probe whose input is invalid proves nothing; check the action counts of an arm first
+
+**Rule:** Before you read a probe result, check that the arm did what you meant. Print the count of the actions the arm should produce. A zero or a flood means the input was invalid.
+**Why:** V2-DIRECTIVE-002 phase D, D-76, 2026-10-16. The fear 70 arms were reported as "the lean changes no move". Every Echo turn in those arms was `actor.refuse` (the refusal threshold is 65), so no movement was scored. The probe also set `fear_base` 70, outside the legal range 0 to 40. QA found it. Only two arms were valid.
+**How to apply:** For each arm, print the count of the action the test needs (here: movement decisions) and the count of the action that voids it (refusals). Keep inputs inside the legal range of the config. State which arms are valid before you give a result.
+**Mistake count:** 1
+
+---
+
+### 39 — A feature can be built, tested piece by piece and still be unwired
+
+**Rule:** For every new input to a decision, add one test through the real decision path. Pure unit tests of the parts are not enough.
+**Why:** V2-DIRECTIVE-002 phase D slice 7, D-91 B1, 2026-10-17. `MovementStyleService` accepted the multipliers and `BehaviorArbiter` computed them, but the style call dropped them. Unit tests of both parts passed. Final QA found it. A test through the real path (`movement_arbiter/style_growth_reaches_movement_style_through_actor_state_machine`) closed it.
+**How to apply:** In the plan, list the entry point of the decision (here `ActorStateMachine`, then the arbiter). Write one test that changes the new input there and asserts the decision changes. Add it in the same slice as the feature.
+**Mistake count:** 1
+
+---
+
 ### 38 — A feature that fires rarely needs a measured rate, not a passing test
 
 **Rule:** When a feature is meant to fire for the player (here: the game names the Echo that decided an Advance), measure how often it fires in real runs before you call it done. Do this before you tune it. Check that a tuning lever can move the output before you run a large matrix of variants.

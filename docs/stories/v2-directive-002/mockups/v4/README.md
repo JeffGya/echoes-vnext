@@ -10,7 +10,7 @@ The stop glyph sits on the named Echo's card, or on the party card when no Echo 
 | `overview-1280x720.png`, `overview-1920x1080.png` | Three variants side by side. Parties of 1, 3 and 5 Echoes. Four states each. Scaled down (0.5 and 0.4). |
 | `detail-<size>-p1/p3/p5.png` | Same content at true size. Variants stacked. Magenta dashed box = tap target. |
 | `anatomy.png` | Card sizes, tap targets, glyph corner options, the 5-Echo scroll, the width table. |
-| `*.html`, `assets/` | Sources. Fonts come from `../v3/assets/`. Glyphs are copies of `assets/ui/stage_stop_glyphs/`. |
+| `*.html`, `assets/` | Sources. Fonts come from `../v3/assets/`. Glyphs in `assets/` are SVG draft copies; the finished glyphs are PNG files in `assets/ui/stage_stop_glyphs/` (D-93). |
 
 States: (1) no stop yet. (2) stop, no Echo named: glyph on the party card. (3) stop, Echo named: glyph on that Echo's card; the party card has no glyph. (4) why card open from the party card: centred above the card, above the step row, clamped inside the 16 px safe margin.
 

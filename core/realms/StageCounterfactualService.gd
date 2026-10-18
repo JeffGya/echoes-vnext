@@ -236,23 +236,18 @@ func _pick_target(em: Dictionary, directive: Dictionary, stance: Dictionary, wal
 ## party mean alone: "steadied" (D-54 S2), which needs no dry run.
 func _reason_class(id: String, echoes: Array, classes: Array, stance_cfg: Dictionary, real: Dictionary,
 		plan_for: Callable, cap: int) -> String:
-	var ramps_v: Variant = stance_cfg.get("state_ramps", {})
-	var neutral := {
-		"calling": ["family", ""],
-		"temperament": ["style_score", 0.0],
-		"fear": ["fear", 0.0],
-		"morale": ["morale", ExposureScript.cfg_num(ramps_v if ramps_v is Dictionary else {}, "morale_neutral")],
-	}
+	var cf_v: Variant = stance_cfg.get("counterfactual", {})
+	var neutral_morale := int(ExposureScript.cfg_num(cf_v if cf_v is Dictionary else {}, "neutral_morale"))
 	var best := ""
 	var best_n := 0
 	for cls in classes:
-		if not neutral.has(cls) or dry_runs >= cap:
+		if not ["calling", "temperament", "fear", "morale"].has(cls) or dry_runs >= cap:
 			continue
 		var party: Array = []
 		for e in echoes:
 			var copy: Dictionary = (e as Dictionary).duplicate()
 			if str(copy["id"]) == id:
-				copy[neutral[cls][0]] = neutral[cls][1]
+				copy = _neutralised(copy, str(cls), neutral_morale)
 			party.append(copy)
 		var n := plan_changes(real, plan_for.call(party))
 		if n > best_n:
@@ -261,6 +256,20 @@ func _reason_class(id: String, echoes: Array, classes: Array, stance_cfg: Dictio
 	if best.is_empty() and classes.has("steadied"):
 		return "steadied"
 	return best
+
+
+## The Echo with one reason class removed. Fear and morale go through `restate`, so the status follows.
+func _neutralised(e: Dictionary, cls: String, neutral_morale: int) -> Dictionary:
+	match cls:
+		"calling":
+			e["family"] = ""
+		"temperament":
+			e["style_score"] = 0.0
+		"fear":
+			return StanceScript.restate(e, int(e["morale"]), 0, 0, _cfg_data())
+		"morale":
+			return StanceScript.restate(e, neutral_morale, int(e["fear"]), int(e["fear_base"]), _cfg_data())
+	return e
 
 
 ## Cause order when no Echo is named: terrain, objective, situation, then party or directive.

@@ -163,10 +163,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 				"faith":             int(_emo.get("faith",          50)),
 				"morale_current":    int(_emo.get("morale_current", 50)),
 				"fear_current":      int(_emo.get("fear_current",   0)),
-				"emotional_status":  EmotionService.get_emotional_status(
-					int(_emo.get("morale_current", 50)),
-					int(_emo.get("fear_current",   0))
-				),
+				"emotional_status":  EmotionStatusLean.status_of_emotion(_emo),
 				"last_drift_event":  _last_drift_v if _last_drift_v is Dictionary else {},
 			},
 			# V2-VOICE-001: sanctum bark for this echo (written by FlowRuntime bark helpers).
@@ -447,10 +444,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 					"step":             int(echo2.get("level", 1)),
 					"standing":         int(echo2.get("rank", 1)),
 					# V2-EMOTION-002: unified emotional status.
-					"emotional_status": EmotionService.get_emotional_status(
-						int(_emo_p.get("morale_current", 50)),
-						int(_emo_p.get("fear_current", 0))
-					),
+					"emotional_status": EmotionStatusLean.status_of_emotion(_emo_p),
 					# V2-STAGE-004 P4 S15 UI-A3: player-facing companion attribute (no id exposed).
 					"origin":           str(echo2.get("origin", "")),
 				})

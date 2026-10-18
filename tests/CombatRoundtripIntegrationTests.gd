@@ -3627,7 +3627,7 @@ static func test_objective_route_truncates_and_stays_movement_aware() -> Diction
 		var probe := BehaviorArbiter.new(
 			bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
 		var diagnosis: Dictionary = probe.select_movement_intent(
-			ctx, prepared["movement_context"], prepared["profile"], prepared["goals"], prepared["options"])
+			ctx.merged({"judgment": 0.3}), prepared["movement_context"], prepared["profile"], prepared["goals"], prepared["options"])
 		return {
 			"ok": false,
 			"error": "legacy fallback ran — intent has no planned_action (%s); arbiter said %s" % [
@@ -3802,6 +3802,7 @@ static func _selection_census(runtime: FlowRuntime, ectx: EncounterContext, t0: 
 			"actor": mover, "all_actors": ectx.actors, "board_cfg": board_cfg,
 			"cfg": runtime.config_service.get_balance(), "t": t,
 			"round": int(ectx.combat_state.get("round_counter", 0)),
+			"judgment": 0.3,
 		}
 		var arbiter := BehaviorArbiter.new(
 			bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
@@ -3910,6 +3911,7 @@ static func test_unroutable_goals_keep_selection_enabled() -> Dictionary:
 		"cfg": runtime.config_service.get_balance(),
 		"t": t,
 		"round": int(ectx.combat_state.get("round_counter", 0)),
+		"judgment": 0.3,
 	}
 	var arbiter := BehaviorArbiter.new(
 		bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
@@ -4108,6 +4110,7 @@ static func test_stacked_actors_keep_selection_alive() -> Dictionary:
 		"cfg": runtime.config_service.get_balance(),
 		"t": 900,
 		"round": int(ectx.combat_state.get("round_counter", 0)),
+		"judgment": 0.3,
 	}
 	var arbiter := BehaviorArbiter.new(
 		bdata.get("actor", {}) as Dictionary, prepared.get("movement_cfg", {}) as Dictionary)
