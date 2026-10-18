@@ -3,15 +3,16 @@
 #
 # Tests:
 #   1. Warder anchor: guard/protect_ally score boosted by +8 per stationary round (cap +24).
-#   2. Blade broken morale: broken_morale_override applies guard penalty + melee bonus.
+#   2. Blade afraid: afraid_points_override applies guard penalty + melee bonus.
 #   3. Seer directive aura: seer_directive_aura situational condition fires when seer present.
-#   4. Ranger fear move bonus: fear increases move score via fear_move_bonus.
+#   4. Ranger fear move bonus: afraid_signature raises the move score when afraid.
 #   5. EchoActor passes equipped_skills through from echo dict.
 #   6. V2-COMBAT-003: ActorStateMachine._update_passive_state writes _anchor_rounds and
 #      _stationary_rounds for the V2 calling ids, and a V1 id ("warder") writes nothing —
 #      guards against the match regressing to V1 arms.
 #
-# Tests 1-4 use BehaviorArbiter.new({}) with inline cfg_data where needed.
+# Tests 1 and 3 use BehaviorArbiter.new({}); tests 2 and 4 use the production config (the status
+# lean table lives there).
 # Test 5 is a pure data-mapping test (no arbiter).
 # Test 6 exercises ActorStateMachine directly (the writer), not BehaviorArbiter (the reader).
 
@@ -52,11 +53,11 @@ static func _make_blade_broken() -> Dictionary:
 	return {
 		"id":             "echo_blade_p_01",
 		"faction":        "echo",
-		"calling_origin": "aduro",   # V2 name for blade (melee base=65, broken_morale_override passive)
+		"calling_origin": "aduro",   # V2 name for blade (melee base=65, afraid_points_override passive)
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           0,
-		"morale":         10,  # broken tier (< 25)
+		"morale":         10,  # an afraid status
 		"grid_pos":       { "col": 0, "row": 0 },
 		"current_hp":     100,
 		"stats":          { "max_hp": 100 },
@@ -75,7 +76,7 @@ static func _make_ranger(fear: int) -> Dictionary:
 	return {
 		"id":             "echo_ranger_p_01",
 		"faction":        "echo",
-		"calling_origin": "kra_soro",   # V2 name for ranger (move bias, fear_move_bonus passive)
+		"calling_origin": "kra_soro",   # V2 name for ranger (move bias, afraid_signature passive)
 		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
 		"vector_scores":  {},
 		"fear":           fear,
@@ -97,24 +98,9 @@ static func _distant_enemy() -> Dictionary:
 		"grid_pos": { "col": 2, "row": 0 },
 	}
 
-## Returns a calling_behavior config block for aduro with broken_morale_override.
-static func _blade_cfg() -> Dictionary:
-	return {
-		"maturity_expression": {
-			"calling_behavior": {
-				"aduro": {
-					"retreat_threshold": 0.30,
-					"press_advantage":   true,
-					"directive_mul":     1.0,
-					"leadership_radius": 3,
-					"broken_morale_override": {
-						"melee_attack": 8.0,
-						"actor.guard":  -5.0,
-					},
-				}
-			}
-		}
-	}
+## The production calling_behavior entry of one calling.
+static func _calling_behavior(data: Dictionary, calling: String) -> Dictionary:
+	return ((data["maturity_expression"] as Dictionary)["calling_behavior"] as Dictionary)[calling] as Dictionary
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -147,29 +133,20 @@ static func _t_warder_anchor_boosts_guard() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 2: Blade broken morale override.
-# When blade morale=10 (broken) and broken_morale_override is in cfg_data:
-#   melee_attack gets +8.0 morale bonus (instead of normal negative)
-#   actor.guard gets -5.0 morale bonus (penalty)
-# Without override, broken morale would dampen melee. With override, melee stays strong.
-# We verify: blade + broken morale + adjacent enemy → melee_attack wins (not guard or idle).
+# Test 2: an afraid blade charges: afraid_points_override replaces the afraid end of its melee and
+# guard points, so blade + afraid status + adjacent enemy → melee_attack wins (not guard or idle).
 static func _t_blade_broken_morale_override() -> Dictionary:
-	var actor  := _make_blade_broken()
-	var enemy  := _adjacent_enemy()
-	var arbiter := BehaviorArbiter.new(_blade_cfg())
+	var data: Dictionary = MoraleInfluenceTests._data()
 	var ctx := {
-		"actor": actor, "all_actors": [enemy], "t": 1,
-		# calling_behavior must be injected manually — BehaviorArbiter reads it from context,
-		# not from cfg_data. ActorStateMachine normally injects this in advance_turn().
-		"calling_behavior": _blade_cfg().get("maturity_expression", {}).get("calling_behavior", {}).get("aduro", {}),
+		"actor": _make_blade_broken(), "all_actors": [_adjacent_enemy()], "t": 1,
+		# ActorStateMachine normally injects calling_behavior in advance_turn().
+		"calling_behavior": _calling_behavior(data, "aduro"),
 	}
-	var intent: Dictionary = arbiter.select_intent(ctx)
-
-	# Blade broken morale override: melee +8 bonus → melee wins even in broken state.
+	var intent: Dictionary = MoraleInfluenceTests._arbiter(data).select_intent(ctx)
 	if str(intent.get("action_type", "")) != "melee_attack":
 		return {
 			"ok": false,
-			"error": "Expected melee_attack (blade broken_morale_override +8), got: %s" % str(intent.get("action_type"))
+			"error": "Expected melee_attack (blade afraid_points_override), got: %s" % str(intent.get("action_type"))
 		}
 	return { "ok": true }
 
@@ -209,25 +186,22 @@ static func _t_seer_directive_aura_fires() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 4: Ranger fear move bonus — fear raises move score via fear_move_bonus.
-# Ranger at fear=60 with enemy at dist=2 (move is the normal candidate).
-# fear_move_bonus=12 from calling_behavior adds to move score under fear.
-# Without fear: ranger move=55 (already highest). With fear: move+12 = 67. Still wins — but
-# we verify fear doesn't suppress move (which is the anti-pattern for other callings).
+# Test 4: Ranger fear move bonus — the afraid_signature move points keep move dominant at fear 60
+# (an afraid status), so fear does not suppress move (the anti-pattern for other callings).
 static func _t_ranger_fear_move_bonus() -> Dictionary:
-	var actor_no_fear   := _make_ranger(0)
-	var actor_with_fear := _make_ranger(60)
+	var data: Dictionary = MoraleInfluenceTests._data()
+	var arbiter: BehaviorArbiter = MoraleInfluenceTests._arbiter(data)
 	var enemy           := _distant_enemy()
-	var arbiter         := BehaviorArbiter.new({})
+	var behavior: Dictionary = _calling_behavior(data, "kra_soro")
 
-	var intent_no_fear: Dictionary   = arbiter.select_intent({ "actor": actor_no_fear,   "all_actors": [enemy], "t": 1 })
-	var intent_with_fear: Dictionary = arbiter.select_intent({ "actor": actor_with_fear, "all_actors": [enemy], "t": 1 })
+	var intent_no_fear: Dictionary   = arbiter.select_intent({ "actor": _make_ranger(0),  "all_actors": [enemy], "t": 1, "calling_behavior": behavior })
+	var intent_with_fear: Dictionary = arbiter.select_intent({ "actor": _make_ranger(60), "all_actors": [enemy], "t": 1, "calling_behavior": behavior })
 
 	# Both should prefer actor.move (ranger move=55 is dominant at dist=2).
 	if str(intent_no_fear.get("action_type", "")) != "actor.move":
 		return { "ok": false, "error": "Expected actor.move for ranger at no fear, got: %s" % str(intent_no_fear.get("action_type")) }
 	if str(intent_with_fear.get("action_type", "")) != "actor.move":
-		return { "ok": false, "error": "Expected actor.move for ranger at fear=60 (fear_move_bonus keeps move dominant), got: %s" % str(intent_with_fear.get("action_type")) }
+		return { "ok": false, "error": "Expected actor.move for ranger at fear=60 (afraid_signature keeps move dominant), got: %s" % str(intent_with_fear.get("action_type")) }
 	return { "ok": true }
 
 

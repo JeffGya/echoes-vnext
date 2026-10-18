@@ -89,7 +89,7 @@ static func _strip_trace_reporting(winner: Dictionary) -> void:
 static func _t_production_golden() -> Dictionary:
 	var actor: Dictionary = _actor()
 	var enemy: Dictionary = _enemy("enemy.a", {"col": 3, "row": 0})
-	var arbiter := BehaviorArbiter.new({})
+	var arbiter := BehaviorArbiter.new({}, MoraleInfluenceTests._data()["combat"]["movement"] as Dictionary)
 	var actual: Dictionary = arbiter.select_intent({"actor": actor, "all_actors": [enemy], "t": 1})
 	_strip_trace_reporting(actual)
 	# V2-PROG-012 Phase 4: select_intent() now also attaches `_divergence_probe`
@@ -107,7 +107,7 @@ static func _t_production_golden() -> Dictionary:
 	var expected: Dictionary = {
 		"action_type": "actor.move", "target_id": "enemy.a", "target_pos": {"col": 3, "row": 0},
 		"target_distance": 3, "target_hp_ratio": 1.0, "priority": 1.0,
-		"morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0,
+		"emotional_status": "grounded", "state_points": 0.0, "archetype_birth": "", "archetype_modifier": 0,
 		"_divergence_probe": {
 			"chosen": {
 				"action_type": "actor.move", "target_id": "enemy.a", "score": 44.0,
@@ -152,7 +152,7 @@ static func _t_production_golden() -> Dictionary:
 			candidate["score"] = 39.77
 	var expected_stationary: Dictionary = {
 		"action_type": "actor.guard", "target_id": "", "priority": 0.0,
-		"morale_tier": "steady", "morale_modifier": 0, "archetype_birth": "", "archetype_modifier": 0,
+		"emotional_status": "hollow", "state_points": 0.0, "archetype_birth": "", "archetype_modifier": 0,
 		"_divergence_probe": {
 			"chosen": {
 				"action_type": "actor.guard", "target_id": "", "score": 50.0,
@@ -531,11 +531,14 @@ static func _t_identity_one_factor() -> Dictionary:
 	actor = _actor(); actor["archetype_birth"] = "valiant"
 	if not is_equal_approx(arbiter._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) - base, 20.0):
 		return _fail("Archetype factor missing")
+	# The status factors need the lean table and the state points; a calm actor scores as `base`.
+	var data: Dictionary = MoraleInfluenceTests._data()
+	var leaning := BehaviorArbiter.new({"state_action_points": data["actor"]["state_action_points"]}, data["combat"]["movement"] as Dictionary)
 	actor = _actor(); actor["fear"] = 100
-	if arbiter._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) >= base:
+	if leaning._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) >= base:
 		return _fail("Fear factor missing")
 	actor = _actor(); actor["morale"] = 80
-	if arbiter._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) <= base:
+	if leaning._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) <= base:
 		return _fail("Morale factor missing")
 	var directive: Dictionary = {"intent_weights": {"objective_advance_priority": 1.0}}
 	if arbiter._score("actor.move", _actor(), directive, {}, "nascent", {}, candidate, 0.1, 0.0) <= base:
@@ -572,8 +575,9 @@ static func _t_maturity_skill_passive() -> Dictionary:
 	if forming <= nascent:
 		return _fail("Maturity wound-chase factor missing")
 	actor["calling_origin"] = "kra_soro"; actor["fear"] = 50
-	var no_passive: float = arbiter._score("actor.move", actor, {}, {}, "nascent", {}, {}, 0.1, 0.0)
-	var passive: float = arbiter._score("actor.move", actor, {}, {}, "nascent", {"fear_move_bonus": 20.0}, {}, 0.1, 0.0)
+	var leaning := BehaviorArbiter.new({}, MoraleInfluenceTests._data()["combat"]["movement"] as Dictionary)
+	var no_passive: float = leaning._score("actor.move", actor, {}, {}, "nascent", {}, {}, 0.1, 0.0)
+	var passive: float = leaning._score("actor.move", actor, {}, {}, "nascent", {"afraid_signature": {"actor.move": 20.0}}, {}, 0.1, 0.0)
 	if passive <= no_passive:
 		return _fail("Calling passive factor missing")
 	var fixture: Dictionary = _fixture()

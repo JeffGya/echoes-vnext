@@ -485,8 +485,11 @@ static func _decision_text(movement: Dictionary, fear: int, morale: int) -> Stri
 
 
 static func _t_all_switches_off_equals_absent() -> Dictionary:
+	# The action layer and style read band_lean with no switch, so "absent" keeps the table.
+	var sections_absent: Dictionary = _felt(null, null, null, true)
+	sections_absent["felt_state"] = {"band_lean": EmotionStatusLean.table_of(_movement())}
 	for state: Array in [[60, 50], [95, 3], [0, 90]]:
-		var absent: String = _decision_text(_felt(null, null, null, true), int(state[0]), int(state[1]))
+		var absent: String = _decision_text(sections_absent, int(state[0]), int(state[1]))
 		var off: String = _decision_text(_felt(false, false, false), int(state[0]), int(state[1]))
 		if absent != off:
 			return _fail("fear %d morale %d: switches off differ from the block absent" % [int(state[0]), int(state[1])])

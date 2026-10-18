@@ -91,6 +91,12 @@ static func register(runner: CoreTestRunner) -> void:
 # Setup: guardian echo at (0,0), enemy at (1,0) dist=1, threatened ally present.
 # Expected: protect_ally wins (guardian base=65 vs melee base=20).
 # Demonstrates: calling_origin gives a strong natural tendency that other echoes must work hard to override.
+## Default actor config plus the production status lean table and state points.
+static func _leaning() -> BehaviorArbiter:
+	var data: Dictionary = MoraleInfluenceTests._data()
+	return BehaviorArbiter.new({"state_action_points": data["actor"]["state_action_points"]}, data["combat"]["movement"] as Dictionary)
+
+
 static func _t_guardian_origin_prefers_protect_ally() -> Dictionary:
 	var actor := {
 		"id":             "echo_001",
@@ -173,7 +179,7 @@ static func _t_high_faith_warrior_can_guard() -> Dictionary:
 	return { "ok": true }
 
 
-# Test 3: high_fear_guards_despite_adjacent_enemy
+# Test 3: high_fear_guards_despite_adjacent_enemy (fear 100 reads hollow; the fear factor follows its afraid end)
 # Setup: echo at (0,0), fear=100, enemy at (1,0) dist=1. No threatened ally.
 # Expected: actor.guard wins (highest passive score).
 # Score check with uncalled defaults, zeroed traits:
@@ -199,7 +205,7 @@ static func _t_high_fear_idles_despite_adjacent_enemy() -> Dictionary:
 		"grid_pos": { "col": 1, "row": 0 },
 	}
 
-	var arbiter := BehaviorArbiter.new({})
+	var arbiter := _leaning()
 	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
 	var intent: Dictionary = arbiter.select_intent(context)
 
@@ -797,7 +803,7 @@ static func _t_repeated_guard_breaks_to_melee() -> Dictionary:
 			"id": "enemy_gd_001", "faction": "enemy",
 			"is_dead": false, "grid_pos": { "col": 1, "row": 0 },
 		}
-		var arbiter := BehaviorArbiter.new({})
+		var arbiter := _leaning()
 		var intent: Dictionary = arbiter.select_intent({ "actor": actor, "all_actors": [enemy], "t": 1 })
 		if str(intent.get("action_type", "")) == "actor.guard":
 			return {
@@ -833,7 +839,7 @@ static func _t_repeated_guard_breaks_to_melee() -> Dictionary:
 		"id": "enemy_p2", "faction": "enemy",
 		"is_dead": false, "grid_pos": { "col": 1, "row": 0 },
 	}
-	var arbiter_p2 := BehaviorArbiter.new({})
+	var arbiter_p2 := _leaning()
 	var intent_p2: Dictionary = arbiter_p2.select_intent({
 		"actor": actor_p2, "all_actors": [dead_ally_p2, enemy_p2], "t": 1
 	})
@@ -862,7 +868,7 @@ static func _t_repeated_guard_breaks_to_melee() -> Dictionary:
 		"id": "enemy_crit", "faction": "enemy",
 		"is_dead": false, "grid_pos": { "col": 1, "row": 0 },
 	}
-	var arbiter_crit := BehaviorArbiter.new({})
+	var arbiter_crit := _leaning()
 	var intent_crit: Dictionary = arbiter_crit.select_intent({
 		"actor": actor_crit, "all_actors": [enemy_crit], "t": 1
 	})

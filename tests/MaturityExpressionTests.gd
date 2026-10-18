@@ -703,7 +703,7 @@ static func _t_composure_rank9_vs_rank1() -> Dictionary:
 		"fear": 60, "fear_base": 0, "morale": 50,
 		"grid_pos": { "col": 0, "row": 0 },
 	}
-	var arbiter := BehaviorArbiter.new({})
+	var arbiter := BehaviorArbiter.new({}, MoraleInfluenceTests._data()["combat"]["movement"] as Dictionary)
 
 	var score_low_composure: float = arbiter._score(
 		"melee_attack", actor_base, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.0)
@@ -1294,7 +1294,7 @@ static func _t_composure_not_rank_drives_fear_dampen() -> Dictionary:
 	if not is_equal_approx(rank_strength, float(r_high.get("rank_strength", 0.0))):
 		return { "ok": false, "error": "Precondition failed: rank_strength differs between actors of the same rank" }
 
-	var arbiter := BehaviorArbiter.new({})
+	var arbiter := BehaviorArbiter.new({}, bdata["combat"]["movement"] as Dictionary)
 	var score_low_dread: float = arbiter._score(
 		"melee_attack", actor_low_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_low)
 	var score_high_dread: float = arbiter._score(
@@ -1350,7 +1350,7 @@ static func _t_high_fear_base_more_disruption_at_equal_rank() -> Dictionary:
 	if composure_low <= composure_high:
 		return { "ok": false, "error": "Precondition failed: expected lower fear_base (2) to yield HIGHER composure than higher fear_base (35); got low=%.4f high=%.4f" % [composure_low, composure_high] }
 
-	var arbiter := BehaviorArbiter.new({})
+	var arbiter := BehaviorArbiter.new({}, bdata["combat"]["movement"] as Dictionary)
 	var score_low_dread: float = arbiter._score(
 		"melee_attack", actor_low_dread, {}, {}, "grounded", {}, {}, 0.1, rank_strength, composure_low)
 	var score_high_dread: float = arbiter._score(
