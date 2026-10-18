@@ -1611,7 +1611,11 @@ func _spatial_utility(
 	var cap: float = float(config["cap"])
 	var value: float = clampf(raw, -cap, cap)
 	out_parts["parts"] = parts
-	out_parts["directive_exposure_part"] = float(config["directive_exposure_acceptance_weight"]) * float(acceptance_parts["D_scaled"]) * exposure
+	var exposure_part: float = float(config["directive_exposure_acceptance_weight"]) * float(acceptance_parts["D_scaled"]) * exposure
+	out_parts["directive_exposure_part"] = exposure_part
+	out_parts["directive_route_part"] = exposure_part + float(parts["directive_objective_advance"]) \
+		+ float(parts["directive_avoid_overcommit"]) + float(parts["directive_ally_protection"]) \
+		+ float(parts["directive_threat_interception"])
 	out_parts["acceptance_parts"] = acceptance_parts
 	out_parts["raw"]   = raw
 	out_parts["cap"]   = cap
@@ -2066,13 +2070,14 @@ func _rank_directive_candidates(
 	return ranked
 
 
-## The Directive's voice inside a route candidate's score beyond the per-type bonus: the Directive
-## share of the exposure term (the Echo's own fear lean stays out) and the Directive stop-short bias. Subtracted with the type bonus to get the
-## Echo's own score. 0.0 for a candidate that is not a route.
+## The Directive's voice inside a route candidate's score beyond the per-type bonus: the five Directive
+## spatial terms (the exposure term keeps the Echo's own fear lean out) and the Directive stop-short bias.
+## Subtracted with the type bonus to get the Echo's own score. 0.0 for a candidate that is not a route.
+## The spatial value is clamped, so a removal past the cap takes out more than the clamped score held.
 static func _route_directive_part(candidate: Dictionary) -> float:
 	var spatial: Dictionary = candidate.get("_spatial_components", {}) as Dictionary
 	var bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
-	return float(spatial.get("directive_exposure_part", 0.0)) \
+	return float(spatial.get("directive_route_part", 0.0)) \
 		+ float(bias.get(StopShortService.bias_key("directive"), 0.0))
 
 
