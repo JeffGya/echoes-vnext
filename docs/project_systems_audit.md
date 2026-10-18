@@ -324,7 +324,8 @@ Analysis:
 - V2-STAGE-004 Phase 5 (2026-07-09) tightened two traversal edges: **frontier chaining** (tier-3 frontier targets lift fog per step and re-target `nearest_unexplored` until `step_budget` is spent, so an advance now binds to the directive budget instead of stopping ~`reveal_radius`+1 tiles out) and **mid-path stop** (stepping onto an unresolved, un-passed situation parks the party for resolution — walking onto a situation always triggers the resolution flow). Pass/resolved invariants preserved.
 - V2-STAGE-004 Phase 4 (final phase — story now fully Done) closed the last gap between `ConversationService`/`SituationResolutionService` (STAGE-003) and combat: a good `temporary_ally` conversation outcome now auto-joins the next fight (`ContactActorBuilder`), a failed Claimant routes straight into real combat, and a failed non-objective Charge leaves a one-time pressure marker consumed by the next PROTECT/ENDURE encounter. A pre-existing Phase 3c soft-lock was folded in and fixed: `guide_spirit` was missing from `SituationResolutionService._ASYNC_OBJ_TYPES`, so a guide_spirit OBJECTIVE fell through to flavor text and never completed. Directive state and intel remain the two live seams called out below — Phase 4 did not touch either.
 - V2-COMBAT-002 Slice 5 (2026-07-21) corrected a convention seam in traversal: a traveled path now holds **destinations only** and excludes the cell departed from, matching the movement contracts' path-excludes-origin rule. The pre-move cell is carried by the new additive `traveled_origin` / `last_traveled_origin` fields; on-screen animation, ghost trail, and step-diamond count are unchanged, and the save change is additive. Live exploration **routing** is deliberately untouched — the dormant `StagePartyMovementAdapter` holds the corrected edge and tie-break rules until the Slice-6 cutover, so `StageTerrain.nearest_unexplored` / `next_step` and `FlowRuntime._find_explore_target` tiers 1–2 still carry their known directional bias. See `docs/integration-map.md` for the Slice-6 carry-forward list.
-- V2-DIRECTIVE-002 phases B+C (built 2026-10-15, draft PR #107) make one Advance profile-sensitive. `StagePartyStance` turns the Directive baseline plus the Echo leans into dials. `StageExposureMap` prices routes by known hostile situations. `StageStopPolicy` names six stop kinds. `StageCounterfactualService` names the deciding Echo, and only when the model plan equals the real walk. The result is saved as `last_stop`, `travel_why`, `last_effective_steps`, `last_commitment_depth` and `leg_start_length` (additive, repaired on load). Contact bids now scale by Judgment and fear, and the contact literals read config.
+- V2-DIRECTIVE-002 phases B+C (built 2026-10-15, PR #107, merged) make one Advance profile-sensitive. `StagePartyStance` turns the Directive baseline plus the Echo leans into dials. `StageExposureMap` prices routes by known hostile situations. `StageStopPolicy` names six stop kinds. `StageCounterfactualService` names the deciding Echo, and only when the model plan equals the real walk. The result is saved as `last_stop`, `travel_why`, `last_effective_steps`, `last_commitment_depth` and `leg_start_length` (additive, repaired on load). Contact bids now scale by Judgment and fear, and the contact literals read config.
+- V2-DIRECTIVE-002 phase D (built 2026-10-17, draft PR #108; B+C are merged) carries the Directive into combat. Route scoring reads the Directive `exposure_tolerance` (acceptance = tolerance minus an offset, scaled by Judgment, lowered by the fear lean). The Directive is also a stop cause in `StopShortService`. One Judgment floor (`data.combat.movement.directive_judgment`) and one helper (`DirectiveJudgmentScale`) serve both. The stage party stance now reads the emotional status, and the old stage fear and morale ramps are gone. No save field and no snapshot field was added.
 - Open in this area: 52% of proposed Echo names are dropped by `confirm_walk` (target 15% or less), and naming for calm and own parties is rare. Both are follow-ups for Jeff to scope. `leg_start_length` has no writer yet (the C1 detour rule, D-48).
 - The legacy-versus-canonical Directive state seam (phase A) is closed. See section B below.
 - Before phase A, the biggest live seam was directive state split between canonical and legacy paths.
@@ -375,9 +376,11 @@ Main files:
 
 - [core/emotion/EmotionService.gd](../core/emotion/EmotionService.gd)
 - [core/emotion/EmotionRecoveryService.gd](../core/emotion/EmotionRecoveryService.gd)
+- [core/emotion/EmotionStatusLean.gd](../core/emotion/EmotionStatusLean.gd)
 
 Analysis:
 
+- V2-DIRECTIVE-002 phase D (draft PR #108) made the emotional status the one fear-and-morale reading for the simulation. `EmotionStatusLean` takes the larger of fear and base fear, and maps the status to a lean through `data.combat.movement.felt_state.band_lean`. Combat movement, stop-short, Judgment pressure, the stage party stance and every snapshot builder read it. Style alignment and the action-layer fear factor still read raw fear and morale (follow-ups C6 and C7, deferred by Jeff).
 - Emotion is one of the most central systems in the game fantasy.
 - It is also one of the clearest duplicate-data seams.
 - save echoes use `emotion.*`
@@ -491,6 +494,8 @@ Why it matters:
 > **Update 2026-10-11 (V2-DIRECTIVE-002 phase A done, merged in PR #106):** The legacy readers are removed. All readers now use `DirectiveService.active_id` / `resolve` (with `ConfigService.get_directives_cfg`) over `stage_context.active_directive_id`. Phases B+C (profile sensitivity, stage expression) and D (combat expression) are pending. The hazard input stays a seam only (D-02).
 
 ### C. Emotion Has Two Live Models
+
+> **Update 2026-10-17 (V2-DIRECTIVE-002 phase D, draft PR #108):** the split of the stored data remains. The reading is now one: `EmotionStatusLean.status_from/status_of/status_of_emotion` (larger of fear and base fear). Raw fear and morale still feed the style alignment and the action-layer fear factor.
 
 Current split:
 

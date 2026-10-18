@@ -47,6 +47,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("emotion/sanctum_tick_fear_above_base",     Callable(EmotionTests, "_t_sanctum_tick_fear_above_base"))
 	runner.register_test("emotion/sanctum_tick_fear_below_base",     Callable(EmotionTests, "_t_sanctum_tick_fear_below_base"))
 	runner.register_test("emotion/sanctum_tick_fear_at_base",        Callable(EmotionTests, "_t_sanctum_tick_fear_at_base"))
+	runner.register_test("emotion/one_status_for_every_reader",         Callable(EmotionTests, "_t_one_status_for_every_reader"))
 	runner.register_test("emotion/arbiter_floor_blend",              Callable(EmotionTests, "_t_arbiter_floor_blend"))
 	runner.register_test("emotion/resist_fear_reduces_combat_exit_loss", Callable(EmotionTests, "_t_resist_fear_reduces_combat_exit_loss"))
 	runner.register_test("emotion/resist_fear_slows_sanctum_tick_rise",  Callable(EmotionTests, "_t_resist_fear_slows_sanctum_tick_rise"))
@@ -449,6 +450,40 @@ static func _t_project_actor_emotional_status() -> Dictionary:
 	var proj := EncounterSnapshotBuilder._project_actor(actor)
 	if str(proj.get("emotional_status", "")) != "whole":
 		return { "ok": false, "error": "Expected emotional_status='whole' for morale=60/fear=20, got '%s'" % proj.get("emotional_status", "") }
+	return { "ok": true }
+
+
+# One status reading: a floor fear of 18 with fear 0 and morale 72 shows the same status on the Sanctum map
+# and the combat chip, and an Echo that did not change shows "steady" on the resolve screen.
+static func _t_one_status_for_every_reader() -> Dictionary:
+	var want: String = EmotionService.get_emotional_status(72, 18)
+	if EmotionService.get_emotional_status(72, 0) == want:
+		return { "ok": false, "error": "Fixture does not separate fear 0 from base fear 18 at morale 72" }
+	var echo := { "id": "echo_01", "name": "Kojo", "faction": "echo", "kind": "echo",
+		"emotion": { "morale_current": 72, "fear_current": 0, "fear_base": 18 } }
+	var sanctum_status := ""
+	for occupant_v: Variant in SanctumLayoutService.snapshot_occupants({ "sanctum": {} }, [echo], ["echo_01"]):
+		var occupant: Dictionary = occupant_v
+		if str(occupant.get("id", "")) == "echo_01":
+			sanctum_status = str(occupant.get("emotional_status", ""))
+	var actor := { "id": "echo_01", "name": "Kojo", "faction": "echo", "current_hp": 80, "stats": { "max_hp": 100 },
+		"grid_pos": { "col": 0, "row": 0 }, "is_dead": false, "guard_state": false, "is_structure": false,
+		"morale": 72, "fear": 0, "fear_base": 18, "calling_origin": "Okofor", "skill_slots": [""] }
+	var combat_status := str(EncounterSnapshotBuilder._project_actor(actor).get("emotional_status", ""))
+	if sanctum_status != want or combat_status != want:
+		return { "ok": false, "error": "Sanctum '%s', combat '%s', wanted '%s'" % [sanctum_status, combat_status, want] }
+	var ctx := FlowContext.new()
+	ctx.config_service = null
+	var ectx := EncounterContext.new()
+	ectx.encounter_id  = "test_enc_one_status"
+	ectx.combat_result = { "victory": true, "reason": "all_enemies_defeated", "round_ended": 2 }
+	ectx.combat_state  = { "combat_over": true, "objective": EncounterResolutionModes.COMBAT, "round_counter": 2 }
+	ectx.actors = [actor]
+	ectx.pre_encounter_morale["echo_01"] = 72
+	ctx.encounter_ctx = ectx
+	var rows: Array = FlowEncounterState.build_final_snapshot(ctx, 1).get("data", {}).get("emotion_summary", [])
+	if rows.size() != 1 or str((rows[0] as Dictionary).get("direction", "")) != "steady":
+		return { "ok": false, "error": "An unchanged Echo must read 'steady' on the resolve screen, got %s" % str(rows) }
 	return { "ok": true }
 
 

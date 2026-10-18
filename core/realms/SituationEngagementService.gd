@@ -279,10 +279,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 			continue
 		var _in_pre_emo_v: Variant = _in_pre_e.get("emotion", {})
 		var _in_pre_emo: Dictionary = _in_pre_emo_v if _in_pre_emo_v is Dictionary else {}
-		_in_pre_status[_in_pre_id] = EmotionService.get_emotional_status(
-			int(_in_pre_emo.get("morale_current", 50)),
-			int(_in_pre_emo.get("fear_current",   0))
-		)
+		_in_pre_status[_in_pre_id] = EmotionStatusLean.status_of_emotion(_in_pre_emo)
 
 	var _in_bands := ConfigService.get_maturity_expression_band_by_standing(config_service)
 	for _in_echo_v in _in_roster:
@@ -354,10 +351,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 			"echo_id":               _in_post_id,
 			"name":                  str(_in_post_e.get("name", "")),
 			"pre_emotional_status":  _in_pre_status[_in_post_id],
-			"post_emotional_status": EmotionService.get_emotional_status(
-				int(_in_post_emo.get("morale_current", 50)),
-				int(_in_post_emo.get("fear_current",   0))
-			),
+			"post_emotional_status": EmotionStatusLean.status_of_emotion(_in_post_emo),
 			"direction": _in_direction,
 			"tag":       "",
 		})
@@ -468,10 +462,7 @@ func resolve_situation_choice(sit_id: String, choice_id: String, t: int) -> Dict
 			continue
 		var _rc_pre_emo_v: Variant = _rc_pre_e.get("emotion", {})
 		var _rc_pre_emo: Dictionary = _rc_pre_emo_v if _rc_pre_emo_v is Dictionary else {}
-		_rc_pre_status[_rc_pre_id] = EmotionService.get_emotional_status(
-			int(_rc_pre_emo.get("morale_current", 50)),
-			int(_rc_pre_emo.get("fear_current",   0))
-		)
+		_rc_pre_status[_rc_pre_id] = EmotionStatusLean.status_of_emotion(_rc_pre_emo)
 
 	# Apply emotion effects to active party.
 	var _rc_bands := ConfigService.get_maturity_expression_band_by_standing(config_service)
@@ -532,10 +523,7 @@ func resolve_situation_choice(sit_id: String, choice_id: String, t: int) -> Dict
 			"echo_id":               _rc_post_id,
 			"name":                  str(_rc_post_e.get("name", "")),
 			"pre_emotional_status":  _rc_pre_status[_rc_post_id],
-			"post_emotional_status": EmotionService.get_emotional_status(
-				int(_rc_post_emo.get("morale_current", 50)),
-				int(_rc_post_emo.get("fear_current",   0))
-			),
+			"post_emotional_status": EmotionStatusLean.status_of_emotion(_rc_post_emo),
 			"direction": _rc_direction,
 			"tag":       "",
 		})

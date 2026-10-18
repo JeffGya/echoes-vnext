@@ -305,9 +305,7 @@ static func get_ground_data(save_data: Dictionary, inst_cfg: Dictionary, roster:
 			var emo_status := ""
 			if not echo.is_empty():
 				var emo: Dictionary = echo.get("emotion", {}) as Dictionary
-				var morale := int(emo.get("morale_current", 50))
-				var fear   := int(emo.get("fear_current", 0))
-				emo_status = EmotionServiceScript.get_emotional_status(morale, fear)
+				emo_status = EmotionStatusLean.status_of_emotion(emo)
 			echo_slots.append({
 				"echo_id":          str(eid),
 				"zone":             str(zone_id),

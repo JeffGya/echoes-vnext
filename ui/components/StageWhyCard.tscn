@@ -31,6 +31,7 @@ size_flags_vertical = 4
 mouse_filter = 2
 expand_mode = 1
 stretch_mode = 5
+texture_filter = 4
 
 [node name="TitleLabel" type="Label" parent="Margin/Column/Header"]
 unique_name_in_owner = true

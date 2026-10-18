@@ -38,6 +38,7 @@
 		"fear": "I am too afraid to go this far.",
 		"morale": "My heart is not fully in it.",
 		"calling_weight": "That is how I am.",
-		"values": "That is how I am."
+		"values": "That is how I am.",
+		"directive_order": "I follow what I was told."
 	}
 }
