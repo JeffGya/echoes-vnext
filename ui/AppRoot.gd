@@ -747,7 +747,10 @@ func _run_tests(parts: Array) -> void:
 			_debug_print("❌ %s — %d passed, %d failed" % [suite, n_pass, n_fail])
 			for fail_line in (s.get("failures", []) as Array):
 				_debug_print(str(fail_line))
-			
+
+	for timing_line in CoreTestRunner.format_timing_report(results, 20):
+		_debug_print(str(timing_line))
+
 	_flush_logs_to_console()
 
 func _run_echo_command(parts: Array) -> void:

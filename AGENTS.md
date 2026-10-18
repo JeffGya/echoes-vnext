@@ -183,6 +183,13 @@ suites.
 /usr/bin/perl -e 'alarm shift; exec @ARGV' 200 /opt/homebrew/bin/godot --headless --quit --path "$(git rev-parse --show-toplevel)" -- tests prog
 ```
 
+**Timing output (2026-10-18).** Every run ends with a timing report after the suite lines: one
+`TIMING_SUITE ms=<n> tests=<n> suite=<name>` line per suite (slowest first), then the 20 slowest tests as
+`TIMING_TEST ms=<n> name=<name>`. `CoreTestRunner` measures each test with `Time.get_ticks_msec`.
+The `Tests:` line is unchanged. The sharded script merges the shard reports into one table of the
+20 slowest tests and the 15 slowest suites, and writes `timing-suites.txt` and `timing-tests.txt` to its log directory.
+The times are wall-clock inside one process. They grow when processes compete for cores.
+
 **Who may run the FULL suite:** only the orchestrator and the QA/verification role. Every other
 agent runs the compile check plus a FILTERED run at most, and asks for a full run rather than
 starting one. A full run takes minutes and blocks the machine.
@@ -197,6 +204,11 @@ out above for the full serial suite.
 ```bash
 scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"
 ```
+
+Two environment variables configure the script. `GODOT_BIN` is the Godot binary (default
+`/opt/homebrew/bin/godot`). `ALARM_SCALE` is an integer that multiplies every shard alarm (default 1).
+Use `ALARM_SCALE` on a machine with fewer cores than shards: the shards then run slower than the
+alarms assume. Never set it below 1.
 
 **Coverage gap — `movement_fallback` is NOT validated by a sharded run.** See "Always run the FULL
 suite before committing" below: that rule exists in part because this guard only sees its own
