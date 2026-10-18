@@ -32,8 +32,10 @@ static func apply_cell_search(context: Dictionary, logger: StructuredLogger, t: 
 	var entries: Dictionary = context.get("movement_stop_prefixes", {}) as Dictionary
 	if entries.is_empty():
 		return
-	var cfg: Dictionary = ((((context.get("cfg", {}) as Dictionary).get("data", {}) as Dictionary)
-		.get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary)
+	var data: Dictionary = (context.get("cfg", {}) as Dictionary).get("data", {}) as Dictionary
+	var cfg: Dictionary = with_judgment_scale(
+		(data.get("actor", {}) as Dictionary).get("stop_short", {}) as Dictionary,
+		(data.get("combat", {}) as Dictionary).get("movement", {}) as Dictionary)
 	var actor: Dictionary = context["actor"] as Dictionary
 	var movement_context: Dictionary = context["movement_context"] as Dictionary
 	var relationships: Dictionary = movement_context.get("relationships", {}) as Dictionary
@@ -186,6 +188,15 @@ static func screen(
 	candidates.clear()
 	candidates.append_array(kept)
 	return vetoes
+
+
+## The stop-short block plus the shared blocks of the movement config: `directive_judgment` and the
+## emotional status table `band_lean`.
+static func with_judgment_scale(stop_short_cfg: Dictionary, movement_cfg: Dictionary) -> Dictionary:
+	var out: Dictionary = stop_short_cfg.duplicate()
+	out["directive_judgment"] = movement_cfg.get("directive_judgment", {})
+	out["band_lean"] = EmotionStatusLean.table_of(movement_cfg)
+	return out
 
 
 ## `actor_cfg` with `stop_short.enabled` forced by a dev override ("on"/"off"); other values return it as is.
@@ -353,7 +364,7 @@ static func _build_ctx(
 		})
 		if ReachAuthority.in_reach(stop_cell, pos, "melee_attack"):
 			in_reach = true
-	return {
+	var ctx: Dictionary = {
 		"actor_type": str(actor.get("actor_type", "")),
 		"purpose": str(goal.get("purpose", "")),
 		"urgency": float(goal.get("urgency", 0.0)),
@@ -373,6 +384,10 @@ static func _build_ctx(
 		"cohesion_full": _cohesion_full(str(candidate.get("_movement_goal_id", "")), options, context),
 		"hostiles": hostiles,
 	}
+	var directive: Dictionary = context.get("directive", {}) as Dictionary
+	if directive.has("exposure_tolerance"):
+		ctx["directive_tolerance"] = float(directive["exposure_tolerance"])
+	return ctx
 
 
 ## True when a hostile controller touches the final edge of the route, by the executor's own rule.

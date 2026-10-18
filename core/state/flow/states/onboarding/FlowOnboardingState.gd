@@ -114,8 +114,5 @@ static func _echo_summary(echo: Dictionary) -> Dictionary:
 		"calling_origin": str(echo.get("calling_origin", "")),
 		"traits": traits.duplicate(true),
 		"stats": stats.duplicate(true),
-		"emotional_status": EmotionService.get_emotional_status(
-			int(emo.get("morale_current", 50)),
-			int(emo.get("fear_current", 0))
-		),
+		"emotional_status": EmotionStatusLean.status_of_emotion(emo),
 	}

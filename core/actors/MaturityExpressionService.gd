@@ -109,6 +109,8 @@ static func get_expression_band_for_echo(echo: Dictionary, band_by_standing: Dic
 #                                        exists yet. Defaults to 0.0 if absent.
 #     "level_thresholds": Array,      — data.progression.level_thresholds, for
 #                                        storyweight_maturity normalisation
+#     "band_lean":        Dictionary, — OPTIONAL. data.combat.movement.felt_state.band_lean; without
+#                                        it fear does not lower Judgment.
 #     "fear_base_max":    float,      — OPTIONAL. Canonical source is
 #                                        data.emotion.drift.fear_base_max (what actually
 #                                        enforces the fear_base cap). If absent, falls
@@ -183,7 +185,7 @@ static func derive_expression(actor: Dictionary, ctx_inputs: Dictionary, expr_cf
 	# fall back to the autonomy_outputs copy (kept for callers that don't thread it) so the two
 	# can't silently desync if the canonical value is retuned.
 	var fear_base_max: float = maxf(1.0, float(ctx_inputs.get("fear_base_max", autonomy_cfg.get("fear_base_max", 40))))
-	var fear_pressure: float      = clampf(maxf(fear_current, fear_base) / 100.0, 0.0, 1.0)
+	var fear_pressure: float      = _fear_pressure(actor, ctx_inputs)
 	var structural_dread: float   = clampf(fear_base / fear_base_max, 0.0, 1.0)
 	var situational_spike: float  = clampf(maxf(0.0, fear_current - fear_base) / 100.0, 0.0, 1.0)
 
@@ -285,7 +287,17 @@ static func build_ctx_inputs(actor: Dictionary, bonds: Array, living_party_ids: 
 		"instability":      instability,
 		"level_thresholds": _as_dict(cfg_data.get("progression", {})).get("level_thresholds", []),
 		"fear_base_max":    float(drift_cfg.get("fear_base_max", 40.0)),
+		"band_lean":        EmotionStatusLean.table_of(_as_dict(_as_dict(cfg_data.get("combat", {})).get("movement", {}))),
 	}
+
+
+# Fear pressing on Judgment: the afraid part of the emotional status (the one fear and morale
+# reading). 0.0 when ctx_inputs carries no band_lean table.
+static func _fear_pressure(actor: Dictionary, ctx_inputs: Dictionary) -> float:
+	var table: Dictionary = _as_dict(ctx_inputs.get("band_lean", {}))
+	if table.is_empty():
+		return 0.0
+	return EmotionStatusLean.afraid(EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table))
 
 
 # Defensive coercion for values read out of caller-supplied actor/ctx_inputs dicts.

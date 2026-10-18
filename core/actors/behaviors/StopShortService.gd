@@ -22,6 +22,7 @@ const VETO_NO_BENEFIT: String = "no_benefit"
 const CAUSE_ROWS: Array = [
 	{ "id": "fear", "enabled": true },
 	{ "id": "identity", "enabled": true },
+	{ "id": "directive", "enabled": true },
 ]
 
 const _ACTION_BY_BENEFIT: Dictionary = {
@@ -34,7 +35,7 @@ const _ACTION_BY_BENEFIT: Dictionary = {
 ## `ctx` fields (all read with safe defaults):
 ##   actor_type String, purpose String, urgency float,
 ##   fear, fear_base, morale int; calling_family String; dominant_vector String;
-##   judgment float 0..1; capacity int; def int; guard_state bool;
+##   judgment float 0..1; directive_tolerance float (absent: no Directive cause); capacity int; def int; guard_state bool;
 ##   stop_in_hostile_reach bool; previous_stop_short bool;
 ##   stop_cell_hostile_control bool (hostile control edge on the last step);
 ##   cohesion_stop, cohesion_full float;
@@ -119,23 +120,18 @@ static func cause_strength(cause_id: String, benefit_id: String, ctx: Dictionary
 			return _fear_cause(benefit_id, ctx, cfg)
 		"identity":
 			return _identity_cause(benefit_id, ctx, cfg)
+		"directive":
+			return _directive_cause(benefit_id, ctx, cfg)
 	return { "cause_id": cause_id, "strength": 0.0, "source": "", "code": "" }
 
 
+## Afraid part of the emotional status (fear and morale together) of the ctx values. 0.0 without
+## `cfg.band_lean`.
 static func fear_strength(ctx: Dictionary, cfg: Dictionary) -> float:
-	var fear_cfg: Dictionary = cfg.get("fear", {}) as Dictionary
-	var lo: float = float(fear_cfg.get("floor", 20))
-	var hi: float = float(fear_cfg.get("full", 45))
-	var level: float = maxf(float(ctx.get("fear", 0)), float(ctx.get("fear_base", 0)))
-	if hi <= lo:
-		return 1.0 if level >= hi else 0.0
-	return clampf((level - lo) / (hi - lo), 0.0, 1.0)
-
-
-static func morale_strength(ctx: Dictionary, cfg: Dictionary) -> float:
-	var tier: String = EmotionService.get_morale_tier(int(ctx.get("morale", 50)))
-	var row: Dictionary = cfg.get("morale_strength", {}) as Dictionary
-	return clampf(float(row.get(tier, 0.0)), 0.0, 1.0)
+	var table: Dictionary = cfg.get("band_lean", {}) as Dictionary
+	if table.is_empty():
+		return 0.0
+	return EmotionStatusLean.afraid(EmotionStatusLean.lean(EmotionStatusLean.status_of(ctx), table))
 
 
 static func benefit_plan(benefit_id: String, ctx: Dictionary, cfg: Dictionary) -> Dictionary:
@@ -165,15 +161,12 @@ static func _veto(reason: String) -> Dictionary:
 
 
 static func _fear_cause(benefit_id: String, ctx: Dictionary, cfg: Dictionary) -> Dictionary:
-	var fear_s: float = fear_strength(ctx, cfg)
-	var morale_s: float = morale_strength(ctx, cfg)
 	var affinity: Dictionary = (cfg.get("fear", {}) as Dictionary).get("affinity", {}) as Dictionary
-	var combined: float = maxf(fear_s, morale_s) * clampf(float(affinity.get(benefit_id, 0.0)), 0.0, 1.0)
 	return {
 		"cause_id": "fear",
-		"strength": combined,
+		"strength": fear_strength(ctx, cfg) * clampf(float(affinity.get(benefit_id, 0.0)), 0.0, 1.0),
 		"source": "emotion",
-		"code": "fear" if fear_s >= morale_s else "morale",
+		"code": "fear",
 	}
 
 
@@ -194,6 +187,22 @@ static func _identity_cause(benefit_id: String, ctx: Dictionary, cfg: Dictionary
 		"source": "calling" if from_family else "vector",
 		"code": "calling_weight" if from_family else "values",
 	}
+
+
+## (1 - tolerance) x affinity x the shared DirectiveJudgmentScale. Strength 0 when ctx has no
+## `directive_tolerance`, cfg has no `directive` block, or the shared floor in `cfg.directive_judgment`
+## is out of range.
+static func _directive_cause(benefit_id: String, ctx: Dictionary, cfg: Dictionary) -> Dictionary:
+	var out: Dictionary = { "cause_id": "directive", "strength": 0.0, "source": "directive", "code": "directive_order" }
+	var d_cfg: Dictionary = cfg.get("directive", {}) as Dictionary
+	var judgment_cfg: Dictionary = cfg.get("directive_judgment", {}) as Dictionary
+	if d_cfg.is_empty() or not ctx.has("directive_tolerance") or not DirectiveJudgmentScale.is_valid(judgment_cfg):
+		return out
+	var scale: float = DirectiveJudgmentScale.scale(float(ctx.get("judgment", 0.0)), judgment_cfg)
+	var affinity: float = clampf(float((d_cfg.get("affinity", {}) as Dictionary).get(benefit_id, 0.0)), 0.0, 1.0)
+	var base: float = 1.0 - clampf(float(ctx["directive_tolerance"]), 0.0, 1.0)
+	out["strength"] = clampf(base * affinity * scale, 0.0, 1.0)
+	return out
 
 
 static func _guard_ok(ctx: Dictionary, cfg: Dictionary) -> bool:

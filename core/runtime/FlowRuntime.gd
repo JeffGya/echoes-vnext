@@ -25,6 +25,8 @@ var flow_machine: FlowStateMachine
 var econ: EconomyService
 var directive_service: DirectiveService  # DIRECTIVE-001
 var save_path: String
+## Probe seam: when valid, builds the behaviour module of each activation. Unset in play.
+var behavior_module_factory: Callable = Callable()
 
 func _init(
 	_logger: StructuredLogger,
@@ -1448,6 +1450,8 @@ func _resolve_next_actor(t: int) -> void:
 	var behavior_module: BehaviorModule = null
 	if ectx.resolution_mode == EncounterResolutionModes.PURSUE and bool(actor.get("is_quarry", false)):
 		behavior_module = FleeBehaviorModule.new(movement_board_cfg)
+	if behavior_module == null and behavior_module_factory.is_valid():
+		behavior_module = behavior_module_factory.call(actor_cfg, movement_cfg_for_asm)
 	var asm := ActorStateMachine.new(actor, behavior_module, actor_cfg, movement_cfg_for_asm)
 	var intent: Dictionary = asm.advance_turn(ctx, logger, t)
 	var _movement_result: Dictionary = _live_movement.apply_live_activation(actor, intent, movement_prepared, asm, ctx, t)

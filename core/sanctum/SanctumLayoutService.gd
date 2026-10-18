@@ -203,9 +203,7 @@ static func ensure_starter_occupant(save_data: Dictionary, roster: Array = [], a
 		var emotion_v: Variant = echo.get("emotion", {})
 		if emotion_v is Dictionary:
 			var emotion: Dictionary = emotion_v
-			var morale_current := int(emotion.get("morale_current", 50))
-			var fear_current := int(emotion.get("fear_current", 0))
-			emotional_status = EmotionService.get_emotional_status(morale_current, fear_current)
+			emotional_status = EmotionStatusLean.status_of_emotion(emotion)
 
 		occupants.append({
 			"id":          echo_id,

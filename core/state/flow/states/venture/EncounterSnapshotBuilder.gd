@@ -80,7 +80,6 @@ static func _derive_status(actor: Dictionary) -> String:
 static func _project_actor(actor: Dictionary, contribution_ledger: Variant = null) -> Dictionary:
 	var stats: Dictionary = actor.get("stats", {})
 	var max_hp: int = int(stats.get("max_hp", 1))
-	var fear: int = int(actor.get("fear", 0))
 	var actor_id: String = str(actor.get("id", ""))
 	# V2-VOICE-002 / V2-INFRA-003 Phase 3 Slice C: read-only. Neither this helper nor its two
 	# callers (build_round_snapshot()/build_final_snapshot() below) ever clear _bark_line
@@ -109,7 +108,7 @@ static func _project_actor(actor: Dictionary, contribution_ledger: Variant = nul
 		# UI-004: added for party strip and pre-battle overlay.
 		"calling_origin":    str(actor.get("calling_origin", "")),
 		# V2-EMOTION-002: the only player-facing feeling field.
-		"emotional_status":  EmotionService.get_emotional_status(int(actor.get("morale", 50)), fear),
+		"emotional_status":  EmotionStatusLean.status_of(actor),
 		# PROG-008: active skill slots forwarded for pre-battle and resolve screens.
 		"skill_slots": (actor.get("skill_slots", [""]) as Array).duplicate(),
 		# V2-VOICE-001: bark fields — written by ActorStateMachine, read by CombatBoardScreen.
@@ -660,8 +659,8 @@ static func _build_keeper_intro_emotion_summary(ectx: EncounterContext) -> Array
 		var pre_morale := int(pre_morale_map.get(eid, 50))
 		var post_morale := int(actor.get("morale", 50))
 		var post_fear := int(actor.get("fear", 0))
-		var pre_status := EmotionService.get_emotional_status(pre_morale, 0)
-		var post_status := EmotionService.get_emotional_status(post_morale, post_fear)
+		var pre_status := EmotionStatusLean.status_from(pre_morale, 0, int(actor.get("fear_base", 0)))
+		var post_status := EmotionStatusLean.status_of(actor)
 		var pre_rank := _emotional_status_rank(pre_status)
 		var post_rank := _emotional_status_rank(post_status)
 		var direction: String
@@ -691,19 +690,7 @@ static func _build_keeper_intro_emotion_summary(ectx: EncounterContext) -> Array
 	return summary
 
 
-# P1 CLOSE: maps emotional status string to a rank index (higher = better).
-# Used to compute direction in emotion_summary entries.
-# radiant > whole > grounded > uncertain > hesitant > burdened > pressed > strained > fraying > hollow
+# Rank index of an emotional status (higher is better); unknown statuses rank as hesitant.
 static func _emotional_status_rank(status: String) -> int:
-	match status:
-		"radiant":   return 9
-		"whole":     return 8
-		"grounded":  return 7
-		"uncertain": return 6
-		"hesitant":  return 5
-		"burdened":  return 4
-		"pressed":   return 3
-		"strained":  return 2
-		"fraying":   return 1
-		"hollow":    return 0
-	return 5  # default: hesitant (middle)
+	var rank: int = EmotionService.STATUS_LADDER.find(status)
+	return rank if rank >= 0 else EmotionService.STATUS_LADDER.find("hesitant")

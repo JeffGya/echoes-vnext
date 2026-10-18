@@ -2547,8 +2547,14 @@ static func _cf_party(runtime: FlowRuntime, exclude: String = "") -> Array:
 
 static func _cf_neutral(runtime: FlowRuntime, id: String, field: String, value: Variant) -> Array:
 	var party := _cf_party(runtime)
-	for e: Dictionary in party:
-		if str(e["id"]) == id:
+	var data: Dictionary = runtime.config_service.get_balance()["data"]
+	for i in party.size():
+		var e: Dictionary = party[i]
+		if str(e["id"]) != id:
+			continue
+		if field == "fear":
+			party[i] = StagePartyStanceScript.restate(e, int(e["morale"]), int(value), 0, data)
+		else:
 			e[field] = value
 	return party
 
@@ -2609,10 +2615,10 @@ static func _t_cf_n3_directive() -> Dictionary:
 	return { "ok": true }
 
 
-# Tie case: two equally frightened Echoes each decide (the party mean falls from shaken to uneasy
+# Tie case: two equally frightened Echoes each decide (the party mean falls from burdened to grounded
 # without either); the calm one does not. Lowest id wins the tie (D-47 J3).
 static func _cf_tie_members() -> Array:
-	return [["e_z", "okofor", 3, 0, 50, 2], ["e_y", "aduro", 3, 90, 50, 1], ["e_x", "aduro", 3, 90, 50, 1]]
+	return [["e_z", "okofor", 3, 0, 50, 2], ["e_y", "aduro", 3, 70, 50, 1], ["e_x", "aduro", 3, 70, 50, 1]]
 
 
 static func _t_cf_n4_party_order_shuffle() -> Dictionary:
@@ -2685,8 +2691,8 @@ static func _t_cf_tie_pin_lowest_id() -> Dictionary:
 
 # Five candidates plus four reason classes with a dry run; "steadied" needs none.
 static func _t_cf_cap_respected() -> Dictionary:
-	var members := [["e_1", "okofor", 3, 70, 50, 0], ["e_2", "aduro", 3, 70, 50, 1], ["e_3", "okomfo", 3, 70, 50, 2],
-		["e_4", "okofor", 3, 70, 50, 3], ["e_5", "aduro", 3, 0, 50, 4]]
+	var members := [["e_1", "okofor", 3, 58, 50, 0], ["e_2", "aduro", 3, 58, 50, 1], ["e_3", "okomfo", 3, 58, 50, 2],
+		["e_4", "okofor", 3, 58, 50, 3], ["e_5", "aduro", 3, 0, 50, 4]]
 	var runtime := _cf_runtime(CF_SCOUT, members, _full_rect_terrain(30, 11), [])
 	var cf: Dictionary = ConfigService.get_party_stance_cfg(runtime.config_service)["counterfactual"]
 	var cap: int = members.size() + int(cf["extra_replans_per_reason_class"]) * (cf["reason_classes"] as Array).size()
