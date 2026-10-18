@@ -19,6 +19,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("morale/bold_status_raises_melee",                    Callable(MoraleInfluenceTests, "_t_bold_status_raises_melee"))
 	runner.register_test("morale/afraid_curve_values",                         Callable(MoraleInfluenceTests, "_t_afraid_curve_values"))
 	runner.register_test("morale/bark_triggers_follow_the_status",             Callable(MoraleInfluenceTests, "_t_bark_triggers_follow_the_status"))
+	runner.register_test("morale/banter_bark_follows_calm_statuses",           Callable(MoraleInfluenceTests, "_t_banter_bark_follows_calm_statuses"))
 	runner.register_test("morale/state_config_valid",                          Callable(MoraleInfluenceTests, "_t_state_config_valid"))
 	runner.register_test("morale/state_config_rejects_bad_values",             Callable(MoraleInfluenceTests, "_t_state_config_rejects_bad_values"))
 
@@ -265,8 +266,24 @@ static func _t_afraid_curve_values() -> Dictionary:
 static func _bark_context(start_status: String, end_status: String, action_type: String) -> String:
 	var asm := ActorStateMachine.new({"id": "echo.bark", "fear": 0, "morale": 50}, null, {})
 	asm._expression_band = "whole"
-	asm._select_bark("proud", "", action_type, 0, 0, start_status, end_status, false, false, "", 0, 0)
+	asm._select_bark("proud", "", action_type, 0, 0, start_status, end_status, false, false, "", 0, 0,
+		false, 0, "", "", "", 0, calm_statuses())
 	return asm._bark_context
+
+
+static func calm_statuses() -> Array:
+	return (_data()["maturity_expression"] as Dictionary)["combat_banter"]["calm_statuses"] as Array
+
+
+## Banter follows the status after the turn, not raw fear or the morale tier.
+static func _t_banter_bark_follows_calm_statuses() -> Dictionary:
+	for status: String in EmotionService.STATUS_LADDER:
+		var banters: bool = _bark_context(status, status, "actor.guard") == "combat_banter"
+		if banters != (status in calm_statuses()):
+			return _fail("status %s: banter %s, calm statuses are %s" % [status, banters, calm_statuses()])
+	if calm_statuses().is_empty():
+		return _fail("fixture: the calm status list is empty")
+	return _pass()
 
 
 ## "morale falling" fires when the status gets worse, for any cause; "inspired" fires at radiant.

@@ -1332,6 +1332,10 @@
 				"_comment_bark_cooldown_ticks": "V2-COMBAT-003.5 Phase 5 decision #47: PROPOSED DEFAULT - awaiting playtest ratification. qa-verifier's combined review found combat_resilient (priority 2, Tier 1) had no cooldown at all, so a Standing 3+ resist_fear echo taking regular hits could bark it on nearly every one of its own turns once Phase 5's resist_fear combat wiring (decision #46) made _resilience_fired true far more often than before, crowding out fear/morale/guidance/divergence barks. Fix: moved out of _HIGH_PRIORITY_BARK (unconditional) into its own dedicated cooldown, same mechanism as combat_divergence's bark_cooldown_ticks above (_resilient_bark_next_t on the combat actor dict, transient, no new save field). bark_cooldown_ticks=10 reuses divergence's exact reasoning: the codebase's routine cooldowns (_compute_bark_cooldown: 14/21/28/35 ticks) approximate 7 ticks/round for a typical multi-actor roster, so 10 sits just past one round - the same resisting echo's very next turn stays inside the window (never twice in a row) while a later, separately-earned resilience moment in a longer fight is not swallowed by a cooldown sized for consecutive-turn suppression. No dedicated measurement run for this value (no test can observe bark cadence over a real multi-round fight - see decision #47); judge the exact number against combat_divergence's live-playtest precedent in the Phase 8 manual playtest.",
 				"bark_cooldown_ticks": 10
 			},
+			"combat_banter": {
+				"_comment_calm_statuses": "An Echo whose emotional status after its turn is in this list may voice combat_banter. Names come from EmotionService.STATUS_LADDER.",
+				"calm_statuses": ["grounded", "whole", "radiant"]
+			},
 			"rank_benefits_config": {
 				"_comment": "V2-PROG-010: Earned benefit definitions shown as persistent glyphs on Echo detail card. Unlocked at min_rank. Label and description are prose only — no numbers.",
 				"fear_recovery": {
