@@ -1697,6 +1697,7 @@ static func _t_build_ctx_inputs_matches_old_inline_reader() -> Dictionary:
 		var context: Dictionary = { "bonds": bonds, "all_actors": all_actors, "bond_thresholds": thresholds,
 			"active_vow": { "vow_id": "vow.test" }, "instability": 0.0 }
 		var old_in: Dictionary = _old_inline_ctx(actor, context, cfg_data)
+		old_in["band_lean"] = ((cfg_data["combat"] as Dictionary)["movement"] as Dictionary)["felt_state"]["band_lean"]
 		var living_ids: Dictionary = { "ally_live": true }
 		var new_in: Dictionary = MaturityExpressionService.build_ctx_inputs(
 			actor, bonds, living_ids, cfg_data, thresholds, { "vow_id": "vow.test" }, 0.0)

@@ -191,9 +191,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 				be_calling = str(be.get("calling_origin", ""))
 			var emo_v2: Variant = be.get("emotion", {})
 			var emo2: Dictionary = emo_v2 if emo_v2 is Dictionary else {}
-			var fear2   := int(emo2.get("fear_current",   0))
-			var morale2 := int(emo2.get("morale_current", 50))
-			var emotional_status2 := EmotionServiceScript.get_emotional_status(morale2, fear2)
+			var emotional_status2 := EmotionStatusLean.status_of_emotion(emo2)
 			var bid_type := str(bid_by_id.get(str(be.get("id", "")), ""))
 			# dominant_vector is the unique differentiator — two echoes with the same calling
 			# but different vectors lean in meaningfully different directions.
@@ -264,9 +262,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 				# (see contact_echo_bids above) -- defaults to "grounded" defensively.
 				var pp_emo_v: Variant = echo.get("emotion", {})
 				var pp_emo: Dictionary = pp_emo_v if pp_emo_v is Dictionary else {}
-				var pp_fear   := int(pp_emo.get("fear_current",   0))
-				var pp_morale := int(pp_emo.get("morale_current", 50))
-				var pp_emotional_status := EmotionServiceScript.get_emotional_status(pp_morale, pp_fear)
+				var pp_emotional_status := EmotionStatusLean.status_of_emotion(pp_emo)
 				party_preview.append({
 					"id":               echo_id,
 					"name":             str(echo.get("name", "")),

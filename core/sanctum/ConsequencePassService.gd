@@ -131,9 +131,7 @@ static func _build_emotion_group(save_data: Dictionary) -> Dictionary:
 
 			var emo_v: Variant = echo.get("emotion", {})
 			var emo: Dictionary = emo_v if emo_v is Dictionary else {}
-			var morale  := int(emo.get("morale_current", 50))
-			var fear    := int(emo.get("fear_current",   0))
-			var status  := EmotionService.get_emotional_status(morale, fear)
+			var status  := EmotionStatusLean.status_of_emotion(emo)
 			var name    := str(echo.get("name", "Echo"))
 
 			# Build signal from emotional status
