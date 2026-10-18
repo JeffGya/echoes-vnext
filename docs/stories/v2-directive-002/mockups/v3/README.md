@@ -45,10 +45,10 @@ The page plays one Advance on load. One small strip above the frame holds all co
 | 0.00 to 0.50 s | Walk, equal segments, linear. A footprint drops and a step spends per tile. Fog lifts. The bubble starts. | Shipped (`StageExploreScreen.gd`). Linear easing is assumed. |
 | 0.00 s | Snippet starts: fade in 0.4, hold 2.1, fade out 0.5. | Shipped. |
 | 0.50 s | Old mockup: marker and pulse appear at once. | Old mockup (no motion was defined). |
-| 0.60 to 0.85 s | New mockup: the mark settles (0.95, 1.1, 1.0). Lost steps cross out within 0.2 s. | feel-notes.md PROPOSAL |
+| 0.60 to 0.85 s | New mockup: the mark settles (0.95, 1.1, 1.0). Lost steps cross out within 0.2 s. | PROPOSAL (approved as starting values in D-57; values in `data.stages.presentation`) |
 | 0.60 to 0.82 s | New mockup, Shaken run: token and step bar shake once. | PROPOSAL (this round) |
-| 0.90 s | New mockup: pulse on the named Echo (0.5 s), then a faint ring stays (not in style 3). Snippet starts. | feel-notes.md PROPOSAL |
-| 1.40 s | Calm. Advance works again. | feel-notes.md PROPOSAL |
+| 0.90 s | New mockup: pulse on the named Echo (0.5 s), then a faint ring stays (not in style 3). Snippet starts. | PROPOSAL (approved as starting values in D-57; values in `data.stages.presentation`) |
+| 1.40 s | Calm. Advance works again. | PROPOSAL (approved as starting values in D-57; values in `data.stages.presentation`) |
 
 ## Round 4: the quiet mark (4 styles)
 
@@ -87,14 +87,14 @@ Jeff removed improvement 5 (step bar) and improvement 10 (wide Advance bar, Retu
 | # | Change | Reason |
 |---|---|---|
 | 1 | Top bar is the parchment card of the live game. | The dark box is not in the game. Parchment cards sit on the clay board. |
-| 2 | No always-on journey box. The entry is in the why card. | D-32: the why shows on demand only. A standing text block adds noise (uiux-notes.md, feel-notes.md). |
+| 2 | No always-on journey box. The entry is in the why card. | D-32: the why shows on demand only. A standing text block adds noise (review notes, removed in D-92). |
 | 3 | A quiet mark replaces the old marker. No pole, no ring, one gold edge, clear of other marks. Four styles. | Jeff, round 4. Shape carries the kind, not colour. |
-| 4 | The mark settles once in 0.25 s. | Gives "it happened" without a loop (feel-notes.md). |
+| 4 | The mark settles once in 0.25 s. | Gives "it happened" without a loop (review notes, removed in D-92). |
 | 5 | Removed by Jeff. | Old step diamonds stay. |
-| 6 | Lost steps scratch in with the mark. In the New mockup the old red-cross diamonds fade in at 0.6 s. | The shaken beat and the step icons say the same fact. One beat, not two (feel-notes.md). |
-| 7 | Directive badge is a plain dark pill. | The blue-outlined box is a second accent. The badge stays as shipped (uiux-notes.md). |
-| 8 | Why card: parchment, four rows, one column. | Same look as the HUD. Fewer rows and icons (uiux-notes.md). |
-| 9 | Snippet and pulse start at 0.9 s. | Marker first, then text. One new thing at a time (feel-notes.md). |
+| 6 | Lost steps scratch in with the mark. In the New mockup the old red-cross diamonds fade in at 0.6 s. | The shaken beat and the step icons say the same fact. One beat, not two (review notes, removed in D-92). |
+| 7 | Directive badge is a plain dark pill. | The blue-outlined box is a second accent. The badge stays as shipped (review notes, removed in D-92). |
+| 8 | Why card: parchment, four rows, one column. | Same look as the HUD. Fewer rows and icons (review notes, removed in D-92). |
+| 9 | Snippet and pulse start at 0.9 s. | Marker first, then text. One new thing at a time (review notes, removed in D-92). |
 | 10 | Removed by Jeff. | Old Advance button and old Echo band stay. |
 | 11 | Shaken beat: a short small shake. PROPOSAL. | New in round 4. See below. |
 
