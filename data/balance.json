@@ -354,7 +354,10 @@
 				"guard": { "hostile_reach_extra": 1, "min_def": 1 },
 				"observe": { "marked_strength": 5, "mark_rounds": 1 },
 				"hold": { "min_cohesion": 0.5 },
-				"cell_search": { "enabled": true, "cost_margin": 1, "max_candidates": 4 }
+				"cell_search": { "enabled": true, "cost_margin": 1, "max_candidates": 4 },
+				"_comment_probe": "Measurement thresholds for tools/SpatialTermProbe.gd only. No game code reads them. Decisions.md #108: the per-Echo stop rate ceiling holds on fights with at least probe_min_eligible_turns eligible turns.",
+				"probe_stop_rate_ceiling": 0.25,
+				"probe_min_eligible_turns": 8
 			},
 			"enemy_types": {
 				"_comment": "Per-type trait values — fed to DerivedStatService using the same birth_stats formula as echoes. Add new types here; no GDScript changes needed.",
