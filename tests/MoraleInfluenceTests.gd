@@ -22,6 +22,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("morale/banter_bark_follows_calm_statuses",           Callable(MoraleInfluenceTests, "_t_banter_bark_follows_calm_statuses"))
 	runner.register_test("morale/state_config_valid",                          Callable(MoraleInfluenceTests, "_t_state_config_valid"))
 	runner.register_test("morale/state_config_rejects_bad_values",             Callable(MoraleInfluenceTests, "_t_state_config_rejects_bad_values"))
+	runner.register_test("morale/arbiter_rejects_bad_afraid_curve_exponent",   Callable(MoraleInfluenceTests, "_t_arbiter_rejects_bad_afraid_curve_exponent"))
 
 
 static func _data() -> Dictionary:
@@ -342,6 +343,22 @@ static func _t_state_config_rejects_bad_values() -> Dictionary:
 		var errors: Array[String] = BehaviorArbiter.state_config_errors(data)
 		if not errors.has(str(case[0])):
 			return _fail("expected %s in %s" % [case[0], str(errors)])
+	return _pass()
+
+
+static func _t_arbiter_rejects_bad_afraid_curve_exponent() -> Dictionary:
+	var data: Dictionary = _data()
+	var movement: Dictionary = (data["combat"] as Dictionary)["movement"] as Dictionary
+	if not bool(BehaviorArbiter.new(_actor_cfg(data), movement)._validate_spatial_config()["valid"]):
+		return _fail("the shipped exponent was rejected")
+	if not bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
+		return _fail("the default exponent was rejected")
+	for bad: Variant in [0.5, 4.5, "x", INF, NAN]:
+		var cfg: Dictionary = _actor_cfg(data).duplicate(true)
+		cfg["afraid_curve_exponent"] = bad
+		var verdict: Dictionary = BehaviorArbiter.new(cfg, movement)._validate_spatial_config()
+		if bool(verdict["valid"]) or str(verdict["reason"]) != "invalid_afraid_curve_exponent":
+			return _fail("%s must fail with invalid_afraid_curve_exponent: %s" % [str(bad), str(verdict)])
 	return _pass()
 
 
