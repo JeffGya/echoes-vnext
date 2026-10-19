@@ -87,16 +87,13 @@ static func _capture_save() -> Dictionary:
 static func _restore_save(snapshot: Dictionary) -> void:
 	var path: String = TEST_SAVE_PATH
 	if snapshot.get("existed", false):
+		TestSaveHarness.remove_save_artifacts(path)
 		var f := FileAccess.open(path, FileAccess.WRITE)
 		if f:
 			f.store_buffer(snapshot["bytes"])
 			f.close()
 	else:
-		if FileAccess.file_exists(path):
-			var global_path := ProjectSettings.globalize_path(path)
-			var dir := DirAccess.open(global_path.get_base_dir())
-			if dir:
-				dir.remove(global_path.get_file())
+		TestSaveHarness.remove_save_artifacts(path)
 
 
 static func _make_logger() -> StructuredLogger:
