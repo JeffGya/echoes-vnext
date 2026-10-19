@@ -379,8 +379,8 @@ static func _t_picker_description() -> Dictionary:
 	return { "ok": true }
 
 
-# Directive ids are data. Only DirectiveService (registry and constants) may hold them. Floor is
-# well under the real count (177 .gd files in core/) so a broken walk cannot pass silently.
+# Directive ids are data. Only DirectiveService (registry and constants) may hold them. The floor is
+# well under the real file count in core/, so a broken walk cannot pass silently.
 const _LITERAL_ALLOW := ["res://core/directives/DirectiveService.gd"]
 const _MIN_FILES_SCANNED := 100
 const _ID_PATTERN := "directive\\.(scout_carefully|seek_signs)|[\"'](scout_carefully|seek_signs)[\"']|Seek Signs|Scout Carefully"
