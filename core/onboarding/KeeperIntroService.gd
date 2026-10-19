@@ -309,6 +309,8 @@ static func setup_trial_encounter(flow_ctx: FlowContext, cfg: Dictionary, t: int
 	flow_ctx.encounter_ctx.resolution_mode = EncounterResolutionModes.COMBAT
 	flow_ctx.encounter_ctx.actors = [echo_actor, wound]
 	flow_ctx.encounter_ctx.placement_seed = 0
+	flow_ctx.encounter_ctx.pre_encounter_morale[str(echo_actor["id"])] = int(echo_actor["morale"])
+	flow_ctx.encounter_ctx.pre_encounter_fear[str(echo_actor["id"])] = int(echo_actor["fear"])
 	flow_ctx.encounter_machine = EncounterStateMachine.new()
 	flow_ctx.encounter_machine.register_default_states()
 	var combat_cfg: Dictionary = bd.get("combat", {})
