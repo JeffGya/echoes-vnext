@@ -924,6 +924,7 @@ static func _t_fear_wins_over_shipped_scout_directive() -> Dictionary:
 static func _t_text_bank_clauses_match_producer_codes() -> Dictionary:
 	var errs: Array = []
 	var codes: Array = ["fear", "calling_weight", "values", "directive_order"]
+	_eq(errs, "bank loads", StopShortText.has_key(["cause_clause", "fear"]), true)
 	var keys: Array = (StopShortText._data["cause_clause"] as Dictionary).keys().filter(func(k: Variant) -> bool: return not str(k).begins_with("_"))
 	keys.sort()
 	var sorted_codes: Array = codes.duplicate()
