@@ -260,7 +260,7 @@ and prints the timing tables. Wall-clock time is set by the longest shard, not b
 | Serial full suite (reported, Oct 2026) | about 53 min |
 | Sharded, 9 shards of the Sept 2026 map, all at once | 22m33s |
 | Sharded, 12 shards from measured times, 4 at a time (130 suites) | **17m40s** |
-| Sharded, 13 shards, 132 suites plus the merge suite | not measured yet; `fingerprint_seek` (344 s) adds about 350 s of test time |
+| Sharded, 13 shards, 132 suites plus the merge suite | 23m40s: the longest shard is shard 1 at 1420 s (the merge step is not timed). Measured on a GitHub-hosted runner (`ubuntu-latest`) |
 
 All test time added up was 3637 s (60.6 min) for the first 130 suites, and is 3987 s with `felt_state` (7 s) and `fingerprint_seek` (344 s). The longest suite is `reward` at 1054 s, and one test in it,
 `reward/pace_guide_spirit_runtime_escort_vs_protect`, takes 991 s. A suite is never split, so about 1058 s
