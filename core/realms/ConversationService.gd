@@ -586,13 +586,22 @@ static func _resolve_calling_register(calling: String) -> String:
 	return calling  # already S3 or "uncalled"
 
 
-# Map canonical 10-tier emotional_status to 3 scoring bands for resonance computation.
-# Text selection uses the full 10 tiers. Resonance scoring uses these 3 bands.
+# Lowest EmotionService.STATUS_LADDER index of the strained band and of the grounded band.
+# Below the strained index, and any unknown status, is broken.
+const _FIT_STRAINED_FROM: int = 2
+const _FIT_GROUNDED_FROM: int = 6
+
+
+# Resonance scoring uses 3 bands; text selection uses the full ladder.
 static func _emotional_fit_band(status: String) -> String:
-	match status:
-		"radiant", "whole", "grounded", "uncertain": return "grounded"
-		"hesitant", "burdened", "pressed", "strained": return "strained"
-	return "broken"  # fraying, hollow
+	var rank: int = EmotionService.STATUS_LADDER.find(status)
+	if rank < 0:
+		return "broken"
+	if rank >= _FIT_GROUNDED_FROM:
+		return "grounded"
+	if rank >= _FIT_STRAINED_FROM:
+		return "strained"
+	return "broken"
 
 
 static func _is_calling_aligned(calling: String, contact_role: String) -> bool:
