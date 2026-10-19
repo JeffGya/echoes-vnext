@@ -1,10 +1,10 @@
 {
 	"_status": "Wording reviewed and edited by Jeff on 2026-10-09; kept until a tone-of-voice document exists. The bubble reads the plain line, a space, then the cause clause. Keys starting with an underscore are notes, not text. Voice rule V26: a line an Echo says about itself is first person. A line about ANOTHER Echo must sit under a node with _about_other true and use the project pronoun lookup; no such line exists now.",
 	"row_word": {
-		"_status": "PROPOSAL (placeholder). return_route is built in PR2.",
-		"guard": "Braces",
-		"observe": "Watches",
-		"hold": "Holds",
+		"_status": "FINAL (Jeff, 2026-10-19) for guard, observe and hold. return_route stays PROPOSAL until it is built in PR2.",
+		"guard": "Digs in",
+		"observe": "Looks first",
+		"hold": "Sticks close",
 		"return_route": "Stays back"
 	},
 	"reason_line": {

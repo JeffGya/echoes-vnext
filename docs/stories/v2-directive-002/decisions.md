@@ -611,3 +611,7 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 - Plain lines: guard "I stop and brace." (unchanged); observe "I would rather watch first." (changed); hold "I will stay close to the others." (unchanged).
 - Still PROPOSAL, out of scope: `row_word` and `reason_line.return_route`.
 - The bubble (`CombatBoardScreen.stop_short_reason`) is the only place a stop reason shows today.
+
+### D-107. stop-short-chip-words
+**Q:** What are the final chip words (`row_word`) for the three stop benefits that are built?
+**A:** (Jeff, 2026-10-19, from designer options in his voice) guard "Digs in", observe "Looks first", hold "Sticks close". The chip is a third-person present-tense verb phrase, like the initiative row neighbours. Nine characters are safe and twelve is the ceiling (no max width in code; to check in game at the smallest zoom, 0.8). `return_route` "Stays back" stays PROPOSAL until that benefit is built. `docs/visual-plans/combat-visual-inventory.md` still names the old words "Braces" and "Watches" as a reference; it was not changed.
