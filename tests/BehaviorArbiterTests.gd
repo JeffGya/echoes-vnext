@@ -94,7 +94,7 @@ static func register(runner: CoreTestRunner) -> void:
 ## Default actor config plus the production status lean table and state points.
 static func _leaning() -> BehaviorArbiter:
 	var data: Dictionary = MoraleInfluenceTests._data()
-	return BehaviorArbiter.new({"state_action_points": data["actor"]["state_action_points"]}, data["combat"]["movement"] as Dictionary)
+	return BehaviorArbiter.new({"state_action_points": data["actor"]["state_action_points"], "afraid_curve_exponent": data["actor"]["afraid_curve_exponent"]}, data["combat"]["movement"] as Dictionary)
 
 
 static func _t_guardian_origin_prefers_protect_ally() -> Dictionary:

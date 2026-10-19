@@ -535,7 +535,7 @@ static func _t_identity_one_factor() -> Dictionary:
 		return _fail("Archetype factor missing")
 	# The status factors need the lean table and the state points; a calm actor scores as `base`.
 	var data: Dictionary = MoraleInfluenceTests._data()
-	var leaning := BehaviorArbiter.new({"state_action_points": data["actor"]["state_action_points"]}, data["combat"]["movement"] as Dictionary)
+	var leaning := BehaviorArbiter.new({"state_action_points": data["actor"]["state_action_points"], "afraid_curve_exponent": data["actor"]["afraid_curve_exponent"]}, data["combat"]["movement"] as Dictionary)
 	actor = _actor(); actor["fear"] = 100
 	if leaning._score("actor.move", actor, {}, {}, "nascent", {}, candidate, 0.1, 0.0) >= base:
 		return _fail("Fear factor missing")
@@ -2027,7 +2027,8 @@ static func _t_judgment_reaches_arbiter_through_turn_context() -> Dictionary:
 	return _pass()
 
 
-## Combat code may read only the two shared ramp keys of the stage block.
+## Combat code must not read the stage party-stance keys (directive_profile, lean_strength, leans, party_stance).
+## They belong to data.stages.party_stance. Combat reads data.combat.movement.
 static func _t_stage_bound_not_read_in_combat() -> Dictionary:
 	var hits: Array = []
 	var scanned := {"files": 0}
