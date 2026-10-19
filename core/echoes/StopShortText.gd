@@ -14,12 +14,12 @@ static func row_word(benefit: String) -> String:
 	return _text_or_error(["row_word", benefit])
 
 
-## Reason line for a benefit. A `code` with no own line gives the plain line.
+## Plain line, a space, then the clause for `code`. An empty or unknown code gives the plain line only.
 static func reason_line(benefit: String, code: String = "") -> String:
-	var path: Array = ["reason_line", benefit, "plain"]
-	if not code.is_empty() and has_key(["reason_line", benefit, "with_cause", code]):
-		path = ["reason_line", benefit, "with_cause", code]
-	return _text_or_error(path)
+	var plain: String = _text_or_error(["reason_line", benefit, "plain"])
+	if code.is_empty() or not has_key(["cause_clause", code]):
+		return plain
+	return plain + " " + cause_clause(code)
 
 
 static func cause_clause(code: String) -> String:
