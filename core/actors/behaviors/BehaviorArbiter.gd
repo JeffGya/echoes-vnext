@@ -35,6 +35,7 @@ extends BehaviorModule
 
 var _cfg: Dictionary
 var _movement_cfg: Dictionary
+var _afraid_exponent_reported: bool = false
 
 const MovementContextContract = preload("res://core/movement/contracts/MovementContext.gd")
 const MovementProfileContract = preload("res://core/movement/contracts/MovementProfile.gd")
@@ -1953,6 +1954,11 @@ func _state_points(action_type: String, ends: Array, calling_behavior: Dictionar
 func _state_ends(actor: Dictionary, composure: float) -> Array:
 	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
 	if table.is_empty():
+		return [0.0, 0.0]
+	if not is_valid_afraid_curve_exponent(_cfg_get("afraid_curve_exponent")):
+		if not _afraid_exponent_reported:
+			_afraid_exponent_reported = true
+			push_error("BehaviorArbiter: actor.afraid_curve_exponent is invalid; the status adds no points")
 		return [0.0, 0.0]
 	var lean: float = EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table)
 	var dampen: float = composure_dampen(_cfg)
