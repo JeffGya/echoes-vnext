@@ -24,6 +24,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("directive_char/third_directive_drives_bids_and_approach", Callable(DirectiveCharacterizationTests, "_t_third_drives_bids_and_approach"))
 	runner.register_test("directive_char/accessor_reads_canonical_key_only", Callable(DirectiveCharacterizationTests, "_t_accessor"))
 	runner.register_test("directive_char/entry_schema_guard", Callable(DirectiveCharacterizationTests, "_t_entry_schema_guard"))
+	runner.register_test("directive_char/comment_prefix_needs_the_underscore", Callable(DirectiveCharacterizationTests, "_t_comment_prefix_needs_the_underscore"))
 	runner.register_test("directive_char/degenerate_weights_warn_only", Callable(DirectiveCharacterizationTests, "_t_degenerate_weights_warn_only"))
 	runner.register_test("directive_char/picker_description_matches_config", Callable(DirectiveCharacterizationTests, "_t_picker_description"))
 	runner.register_test("directive_char/synthetic_directive_reaches_acceptance", Callable(DirectiveCharacterizationTests, "_t_synthetic_directive_reaches_acceptance"))
@@ -335,6 +336,40 @@ static func _t_entry_schema_guard() -> Dictionary:
 		if DirectiveService.validate_entry_schema({ THIRD: e }, null, 0):
 			return { "ok": false, "error": "guard accepted contact_effects with: %s" % name }
 	return { "ok": true }
+
+
+static func _t_comment_prefix_needs_the_underscore() -> Dictionary:
+	var cs := ConfigService.new()
+	if not cs.load_balance():
+		return { "ok": false, "error": "could not load balance.json" }
+	var cfg: Dictionary = ConfigService.get_directives_cfg(cs)
+	var block := { "_commentary_x": "text", THIRD: _third_entry(cfg) }
+	if DirectiveService.validate_entry_schema(block, null, 0):
+		return { "ok": false, "error": "a _commentary_ block key was skipped as a comment" }
+	var entry := _third_entry(cfg)
+	entry["_commentary_x"] = "text"
+	if DirectiveService.validate_entry_schema({ THIRD: entry }, null, 0):
+		return { "ok": false, "error": "a _commentary_ entry key was skipped as a comment" }
+	var fx_entry := _third_entry(cfg)
+	(fx_entry["contact_effects"] as Dictionary)["_commentary_x"] = "text"
+	if DirectiveService.validate_entry_schema({ THIRD: fx_entry }, null, 0):
+		return { "ok": false, "error": "a _commentary_ contact_effects key was skipped as a comment" }
+	var wrong_kind := _third_entry(cfg)
+	wrong_kind["step_budget"] = "3"
+	var lines: Array = []
+	var logger := _CaptureLogger.new(lines)
+	DirectiveService.validate_entry_schema({ THIRD: wrong_kind }, logger, 0)
+	if lines.size() != 1 or not "is not of kind" in str(lines[0]) or "is not a " in str(lines[0]):
+		return { "ok": false, "error": "wrong-kind text is not 'is not of kind': %s" % str(lines) }
+	return { "ok": true }
+
+
+class _CaptureLogger:
+	var lines: Array
+	func _init(sink: Array) -> void:
+		lines = sink
+	func info(_t: int, _type: String, msg: String, _data: Dictionary = {}) -> void:
+		lines.append(msg)
 
 
 static func _t_degenerate_weights_warn_only() -> Dictionary:

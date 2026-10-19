@@ -35,6 +35,7 @@ extends BehaviorModule
 
 var _cfg: Dictionary
 var _movement_cfg: Dictionary
+var _afraid_exponent_reported: bool = false
 
 const MovementContextContract = preload("res://core/movement/contracts/MovementContext.gd")
 const MovementProfileContract = preload("res://core/movement/contracts/MovementProfile.gd")
@@ -1374,6 +1375,8 @@ func _validate_spatial_config() -> Dictionary:
 		var felt_failure: Dictionary = _validate_felt_sections(felt as Dictionary)
 		if not bool(felt_failure.get("valid", true)):
 			return felt_failure
+	if not is_valid_afraid_curve_exponent(_cfg_get("afraid_curve_exponent")):
+		return _movement_failure("invalid_afraid_curve_exponent", "actor_cfg.afraid_curve_exponent")
 	var judgment_cfg: Variant = _movement_cfg.get("directive_judgment", {})
 	if not judgment_cfg is Dictionary:
 		return _movement_failure("invalid_directive_judgment_config", "movement_cfg.directive_judgment")
@@ -1952,6 +1955,11 @@ func _state_ends(actor: Dictionary, composure: float) -> Array:
 	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
 	if table.is_empty():
 		return [0.0, 0.0]
+	if not is_valid_afraid_curve_exponent(_cfg_get("afraid_curve_exponent")):
+		if not _afraid_exponent_reported:
+			_afraid_exponent_reported = true
+			push_error("BehaviorArbiter: actor.afraid_curve_exponent is invalid; the status adds no points")
+		return [0.0, 0.0]
 	var lean: float = EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table)
 	var dampen: float = composure_dampen(_cfg)
 	return [
@@ -2086,8 +2094,7 @@ static func state_config_errors(balance_data: Dictionary) -> Array[String]:
 		for action: Variant in (row as Dictionary if row is Dictionary else {}):
 			if not actions.has(action):
 				actions.append(action)
-	var exponent: Variant = actor_cfg.get("afraid_curve_exponent", null)
-	if not _is_finite_number(exponent) or float(exponent) < 1.0 or float(exponent) > 4.0:
+	if not is_valid_afraid_curve_exponent(actor_cfg.get("afraid_curve_exponent", null)):
 		errors.append("actor.afraid_curve_exponent")
 	var points: Variant = actor_cfg.get("state_action_points", {})
 	var max_abs: float = -1.0
@@ -2125,6 +2132,16 @@ static func state_config_errors(balance_data: Dictionary) -> Array[String]:
 		if not _is_finite_number(initiative.get(key, null)):
 			errors.append("combat.initiative_modifiers.%s" % key)
 	return errors
+
+
+## One range for the afraid curve exponent, used by the run-time check and by state_config_errors.
+const AFRAID_CURVE_EXPONENT_MIN: float = 1.0
+const AFRAID_CURVE_EXPONENT_MAX: float = 4.0
+
+
+static func is_valid_afraid_curve_exponent(value: Variant) -> bool:
+	return _is_finite_number(value) and float(value) >= AFRAID_CURVE_EXPONENT_MIN \
+			and float(value) <= AFRAID_CURVE_EXPONENT_MAX
 
 
 static func _is_finite_number(value: Variant) -> bool:

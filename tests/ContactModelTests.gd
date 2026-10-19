@@ -73,6 +73,18 @@ static func _t_uncertain_hesitant_band_mapping() -> Dictionary:
 		return { "ok": false, "error": "uncertain must remain in grounded conversation scoring band" }
 	if ConversationService._emotional_fit_band("hesitant") != "strained":
 		return { "ok": false, "error": "hesitant must enter strained conversation scoring band" }
+	var expected: Dictionary = {
+		"hollow": "broken", "fraying": "broken", "strained": "strained", "pressed": "strained",
+		"burdened": "strained", "hesitant": "strained", "uncertain": "grounded",
+		"grounded": "grounded", "whole": "grounded", "radiant": "grounded",
+	}
+	if expected.size() != EmotionService.STATUS_LADDER.size():
+		return { "ok": false, "error": "the fit-band table must cover every ladder status" }
+	for status: String in expected:
+		if ConversationService._emotional_fit_band(status) != expected[status]:
+			return { "ok": false, "error": "%s must map to %s" % [status, expected[status]] }
+	if ConversationService._emotional_fit_band("nonsense") != "broken":
+		return { "ok": false, "error": "an unknown status must map to broken" }
 	return { "ok": true }
 
 

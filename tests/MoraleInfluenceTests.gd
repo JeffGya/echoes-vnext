@@ -22,6 +22,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("morale/banter_bark_follows_calm_statuses",           Callable(MoraleInfluenceTests, "_t_banter_bark_follows_calm_statuses"))
 	runner.register_test("morale/state_config_valid",                          Callable(MoraleInfluenceTests, "_t_state_config_valid"))
 	runner.register_test("morale/state_config_rejects_bad_values",             Callable(MoraleInfluenceTests, "_t_state_config_rejects_bad_values"))
+	runner.register_test("morale/bad_afraid_curve_exponent_scores_as_no_state_effect", Callable(MoraleInfluenceTests, "_t_bad_exponent_scores_as_no_state_effect"))
+	runner.register_test("morale/arbiter_rejects_bad_afraid_curve_exponent",   Callable(MoraleInfluenceTests, "_t_arbiter_rejects_bad_afraid_curve_exponent"))
 
 
 static func _data() -> Dictionary:
@@ -342,6 +344,50 @@ static func _t_state_config_rejects_bad_values() -> Dictionary:
 		var errors: Array[String] = BehaviorArbiter.state_config_errors(data)
 		if not errors.has(str(case[0])):
 			return _fail("expected %s in %s" % [case[0], str(errors)])
+	return _pass()
+
+
+static func _t_bad_exponent_scores_as_no_state_effect() -> Dictionary:
+	var data: Dictionary = _data()
+	var movement: Dictionary = ((data["combat"] as Dictionary)["movement"] as Dictionary).duplicate(true)
+	var no_table: Dictionary = movement.duplicate(true)
+	no_table.erase("felt_state")
+	var cfg: Dictionary = _actor_cfg(data)
+	var actor: Dictionary = _echo("echo_exp", "onyamesu", 10, 0)
+	var ctx: Dictionary = {"actor": actor, "all_actors": [_enemy("enemy_exp")], "t": 1}
+	var neutral: BehaviorArbiter = BehaviorArbiter.new(cfg, no_table)
+	var shipped: BehaviorArbiter = BehaviorArbiter.new(cfg, movement)
+	for bad: Variant in [0.5, 4.5, INF, NAN]:
+		var bad_cfg: Dictionary = cfg.duplicate(true)
+		bad_cfg["afraid_curve_exponent"] = bad
+		var arbiter: BehaviorArbiter = BehaviorArbiter.new(bad_cfg, movement)
+		for action_type: String in ["melee_attack", "protect_ally", "actor.guard", "actor.idle", "actor.move"]:
+			var got: float = arbiter._score(action_type, actor, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.3, 0.3)
+			var want: float = neutral._score(action_type, actor, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.3, 0.3)
+			if not is_finite(got) or got != want:
+				return _fail("%s with exponent %s scored %s, no-state score is %s" % [action_type, str(bad), str(got), str(want)])
+		var intent: Dictionary = arbiter.select_intent(ctx)
+		if not is_finite(float(intent.get("priority", 0.0))) or float(intent.get("state_points", 0.0)) != 0.0:
+			return _fail("exponent %s leaked into the intent: %s" % [str(bad), str(intent)])
+	var moved: float = shipped._score("actor.guard", actor, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.3, 0.3)
+	if moved == neutral._score("actor.guard", actor, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.3, 0.3):
+		return _fail("the shipped exponent must still change the score of an afraid actor")
+	return _pass()
+
+
+static func _t_arbiter_rejects_bad_afraid_curve_exponent() -> Dictionary:
+	var data: Dictionary = _data()
+	var movement: Dictionary = (data["combat"] as Dictionary)["movement"] as Dictionary
+	if not bool(BehaviorArbiter.new(_actor_cfg(data), movement)._validate_spatial_config()["valid"]):
+		return _fail("the shipped exponent was rejected")
+	if not bool(BehaviorArbiter.new({}, movement)._validate_spatial_config()["valid"]):
+		return _fail("the default exponent was rejected")
+	for bad: Variant in [0.5, 4.5, "x", INF, NAN]:
+		var cfg: Dictionary = _actor_cfg(data).duplicate(true)
+		cfg["afraid_curve_exponent"] = bad
+		var verdict: Dictionary = BehaviorArbiter.new(cfg, movement)._validate_spatial_config()
+		if bool(verdict["valid"]) or str(verdict["reason"]) != "invalid_afraid_curve_exponent":
+			return _fail("%s must fail with invalid_afraid_curve_exponent: %s" % [str(bad), str(verdict)])
 	return _pass()
 
 

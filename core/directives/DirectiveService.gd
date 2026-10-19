@@ -323,7 +323,7 @@ static func validate_entry_schema(directives_cfg: Dictionary, logger, t: int) ->
 	var all_valid := true
 	for did_v in directives_cfg:
 		var did: String = str(did_v)
-		if did.begins_with("_comment"):
+		if _is_comment_key(did):
 			continue
 		var problems: Array = []
 		var entry_v: Variant = directives_cfg[did_v]
@@ -336,23 +336,23 @@ static func validate_entry_schema(directives_cfg: Dictionary, logger, t: int) ->
 					if key not in OPTIONAL_KEYS:
 						problems.append("missing key '%s'" % key)
 				elif not _kind_matches(entry[key], str(ENTRY_SCHEMA[key])):
-					problems.append("key '%s' is not a %s" % [key, ENTRY_SCHEMA[key]])
+					problems.append("key '%s' is not of kind %s" % [key, ENTRY_SCHEMA[key]])
 			# The picker has two fixed slots per list and reads indices 0 and 1 (bounds-checked, blank when absent).
 			for key in ["pros", "cons"]:
 				if entry.get(key) is Array and not _is_picker_list(entry[key]):
 					problems.append("key '%s' must hold 2 or more non-empty strings" % key)
 			for key in entry:
-				if not ENTRY_SCHEMA.has(key) and not str(key).begins_with("_comment"):
+				if not ENTRY_SCHEMA.has(key) and not _is_comment_key(str(key)):
 					problems.append("unknown key '%s'" % key)
 			if entry.get("contact_effects") is Dictionary:
 				var fx: Dictionary = entry["contact_effects"]
 				for key in fx:
-					if str(key).begins_with("_comment"):
+					if _is_comment_key(str(key)):
 						continue
 					if not CONTACT_EFFECT_KEYS.has(key):
 						problems.append("unknown contact_effects key '%s'" % key)
 					elif not _kind_matches(fx[key], str(CONTACT_EFFECT_KEYS[key])):
-						problems.append("contact_effects key '%s' is not a %s" % [key, CONTACT_EFFECT_KEYS[key]])
+						problems.append("contact_effects key '%s' is not of kind %s" % [key, CONTACT_EFFECT_KEYS[key]])
 			if str(entry.get("id", "")) != did:
 				problems.append("id '%s' does not match registry key" % str(entry.get("id", "")))
 			if str(entry.get("unlock_condition", "")) not in KNOWN_UNLOCK_CONDITIONS:
@@ -363,6 +363,11 @@ static func validate_entry_schema(directives_cfg: Dictionary, logger, t: int) ->
 				logger.info(t, "directive.config.warn", "Directive '%s' is malformed: %s" % [did, "; ".join(problems)],
 					{"directive_id": did, "problems": problems})
 	return all_valid
+
+
+## True for "_comment" and for "_comment_<anything>". A key such as "_commentary" is data.
+static func _is_comment_key(key: String) -> bool:
+	return key == "_comment" or key.begins_with("_comment_")
 
 
 static func _is_picker_list(list: Array) -> bool:

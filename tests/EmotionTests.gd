@@ -36,6 +36,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("emotion/project_actor_emotional_status",   Callable(EmotionTests, "_t_project_actor_emotional_status"))
 	runner.register_test("emotion/resolve_emotion_summary_unified",  Callable(EmotionTests, "_t_resolve_emotion_summary_unified"))
 	runner.register_test("emotion/resolve_pre_status_keeps_pre_fight_fear", Callable(EmotionTests, "_t_resolve_pre_status_keeps_pre_fight_fear"))
+	runner.register_test("emotion/keeper_intro_pre_status_reads_starter_emotion", Callable(EmotionTests, "_t_keeper_intro_pre_status_reads_starter_emotion"))
 	# V2-EMOTION-003 tests
 	runner.register_test("emotion/fear_base_birth_from_traits",      Callable(EmotionTests, "_t_fear_base_birth_from_traits"))
 	runner.register_test("emotion/fear_base_clamp",                  Callable(EmotionTests, "_t_fear_base_clamp"))
@@ -561,6 +562,32 @@ static func _t_resolve_pre_status_keeps_pre_fight_fear() -> Dictionary:
 	rows = FlowEncounterState.build_final_snapshot(ctx, 1).get("data", {}).get("emotion_summary", [])
 	if str((rows[0] as Dictionary).get("pre_emotional_status", "")) != "whole":
 		return { "ok": false, "error": "a missing pre-fight fear entry must read as 0" }
+	return { "ok": true }
+
+
+## The Keeper-intro trial records the starter Echo's morale and fear, so the resolve screen
+## compares the end status with the real start status and not with a default one.
+static func _t_keeper_intro_pre_status_reads_starter_emotion() -> Dictionary:
+	var runtime := OnboardingTests._prepare_named_runtime()
+	var starter: Dictionary = OnboardingService.get_starter_echo(runtime.flow_ctx.save_data)
+	(starter["emotion"] as Dictionary)["morale_current"] = 35
+	(starter["emotion"] as Dictionary)["fear_current"] = 45
+	runtime.dispatch({ "type": "keeper_intro.call.answer" })
+	var ectx: EncounterContext = runtime.flow_ctx.encounter_ctx
+	var id: String = str(starter["id"])
+	if int(ectx.pre_encounter_morale.get(id, -1)) != 35 or int(ectx.pre_encounter_fear.get(id, -1)) != 45:
+		return { "ok": false, "error": "pre-fight maps must hold morale 35 and fear 45: %s %s" % [str(ectx.pre_encounter_morale), str(ectx.pre_encounter_fear)] }
+	var rows: Array = EncounterSnapshotBuilder._build_keeper_intro_emotion_summary(ectx)
+	var echo_actor: Dictionary = {}
+	for a_v in ectx.actors:
+		if (a_v as Dictionary).get("faction", "") == "echo":
+			echo_actor = a_v
+	var want: String = EmotionStatusLean.status_from(35, 45, int(echo_actor.get("fear_base", 0)))
+	var default_status: String = EmotionStatusLean.status_from(50, 0, int(echo_actor.get("fear_base", 0)))
+	if want == default_status:
+		return { "ok": false, "error": "test setup must differ from the default start status" }
+	if rows.size() != 1 or str((rows[0] as Dictionary).get("pre_emotional_status", "")) != want:
+		return { "ok": false, "error": "pre status must be %s, got %s" % [want, str(rows)] }
 	return { "ok": true }
 
 
