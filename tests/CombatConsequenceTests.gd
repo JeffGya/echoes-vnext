@@ -555,7 +555,7 @@ static func _t_combat_resilient_cooldown_yields_to_fear_rising() -> Dictionary:
 
 	# Turn 1 (t=2): resilience fires and wins the slot, setting the cooldown
 	# (_resilient_bark_next_t = t + resilient_cooldown_ticks, default 10 → 12).
-	asm._select_bark("stoic", "", "melee_attack", 0, 0, "steady", "steady", false, true, "", 0, 2)
+	asm._select_bark("stoic", "", "melee_attack", 0, 0, "steady", "steady", false, true, "", 0, 2, false, 10, "", "", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context != "combat_resilient":
 		return { "ok": false, "error": "expected combat_resilient to win turn 1, got '%s'" % asm._bark_context }
 
@@ -564,7 +564,7 @@ static func _t_combat_resilient_cooldown_yields_to_fear_rising() -> Dictionary:
 	# The crowd-out fix requires combat_fear_rising to win this slot, not silence.
 	asm._bark_line = ""
 	asm._bark_context = ""
-	asm._select_bark("stoic", "", "melee_attack", 39, 65, "steady", "steady", false, true, "", 1, 3)
+	asm._select_bark("stoic", "", "melee_attack", 39, 65, "steady", "steady", false, true, "", 1, 3, false, 10, "", "", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context == "combat_resilient":
 		return { "ok": false, "error": "combat_resilient crowded out combat_fear_rising during its own cooldown" }
 	if asm._bark_context != "combat_fear_rising":

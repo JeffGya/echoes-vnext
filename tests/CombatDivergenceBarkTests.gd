@@ -26,6 +26,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("divergence_bark/routine_cooldown_follows_status_config", Callable(CombatDivergenceBarkTests, "_t_routine_cooldown_follows_status_config"))
 
 
+## The routine_bark block of the real balance data, for fixtures that call _select_bark.
+static func routine_bark_cfg() -> Dictionary:
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/balance.json"))
+	return (data as Dictionary)["data"]["maturity_expression"]["routine_bark"] as Dictionary
+
+
 static func _pass() -> Dictionary: return {"ok": true}
 static func _fail(message: String) -> Dictionary: return {"ok": false, "error": message}
 
@@ -97,7 +103,7 @@ static func _t_cooldown_gated_not_high_priority() -> Dictionary:
 	asm._expression_band = "whole"
 
 	# Turn 1 (t=0): divergence wins the priority chain and fires.
-	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 0, true)
+	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 0, true, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm._bark_context != "combat_divergence":
 		return _fail("expected combat_divergence to win turn 1's priority chain, got '%s'" % asm._bark_context)
 	if asm._bark_line.is_empty():
@@ -116,7 +122,7 @@ static func _t_cooldown_gated_not_high_priority() -> Dictionary:
 	# see data.maturity_expression.divergence.bark_cooldown_ticks).
 	asm._bark_line = ""
 	asm._bark_context = ""
-	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 1, 1, true)
+	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 1, 1, true, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm._bark_context == "combat_divergence" or not asm._bark_line.is_empty():
 		return _fail(
 			"combat_divergence fired on turn 2 despite _divergence_bark_next_t=%d and diverged=true (bark_context='%s', bark_line='%s') — the divergence-specific cooldown gate is not being applied" %
@@ -127,12 +133,12 @@ static func _t_cooldown_gated_not_high_priority() -> Dictionary:
 	var actor2: Dictionary = {"id": "echo.bark.control", "fear": 0, "morale": 50, "_bark_next_t": 0}
 	var asm2 := ActorStateMachine.new(actor2, null, {})
 	asm2._expression_band = "whole"
-	asm2._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", true, false, "", 0, 0, false)
+	asm2._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", true, false, "", 0, 0, false, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm2._bark_context != "combat_last_stand":
 		return _fail("control fixture broken: expected combat_last_stand on turn 1, got '%s'" % asm2._bark_context)
 	asm2._bark_line = ""
 	asm2._bark_context = ""
-	asm2._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", true, false, "", 1, 1, false)
+	asm2._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", true, false, "", 1, 1, false, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm2._bark_context != "combat_last_stand":
 		return _fail("control fixture broken: expected combat_last_stand to bypass the cooldown gate on turn 2 (it IS in _HIGH_PRIORITY_BARK), got '%s'" % asm2._bark_context)
 
@@ -154,7 +160,7 @@ static func _t_not_suppressed_by_routine_cooldown() -> Dictionary:
 	var actor: Dictionary = {"id": "echo.bark.routine", "fear": 0, "morale": 50, "_bark_next_t": 100}
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
-	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 5, true)
+	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 5, true, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm._bark_context != "combat_divergence":
 		return _fail("expected combat_divergence to fire despite _bark_next_t=100 (t=5 is well inside that window), got '%s'" % asm._bark_context)
 	if asm._bark_line.is_empty():
@@ -176,13 +182,13 @@ static func _t_no_two_in_a_row() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 
-	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 0, true)
+	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 0, true, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm._bark_context != "combat_divergence" or asm._bark_line.is_empty():
 		return _fail("expected turn 1 (t=0) to fire a combat_divergence bark, got context='%s' line='%s'" % [asm._bark_context, asm._bark_line])
 
 	asm._bark_line = ""
 	asm._bark_context = ""
-	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 1, 7, true)
+	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 1, 7, true, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm._bark_context == "combat_divergence" or not asm._bark_line.is_empty():
 		return _fail("expected turn 2 (t=7, one round later) to stay silent — same Echo voiced divergence twice in a row (bark_context='%s', bark_line='%s')" % [asm._bark_context, asm._bark_line])
 	return _pass()
@@ -203,13 +209,13 @@ static func _t_later_divergence_still_lands() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 
-	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 0, true)
+	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 0, 0, true, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm._bark_context != "combat_divergence" or asm._bark_line.is_empty():
 		return _fail("expected turn 1 (t=0) to fire a combat_divergence bark, got context='%s' line='%s'" % [asm._bark_context, asm._bark_line])
 
 	asm._bark_line = ""
 	asm._bark_context = ""
-	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 1, 14, true)
+	asm._select_bark("proud", "", "melee_attack", 0, 0, "steady", "steady", false, false, "", 1, 14, true, 10, "", "", "", 10, [], routine_bark_cfg())
 	if asm._bark_context != "combat_divergence" or asm._bark_line.is_empty():
 		return _fail("expected a later divergence at t=14 (past the 10-tick cooldown set by turn 1) to fire again — got context='%s' line='%s'" % [asm._bark_context, asm._bark_line])
 	return _pass()
@@ -225,12 +231,12 @@ static func _t_determinism() -> Dictionary:
 	var actor_a: Dictionary = {"id": "echo.det.1", "fear": 0, "morale": 50}
 	var asm_a := ActorStateMachine.new(actor_a, null, {})
 	asm_a._expression_band = "grounded"
-	asm_a._select_bark("empathic", "okofor", "melee_attack", 0, 0, "steady", "steady", false, false, "", 17, 5, true)
+	asm_a._select_bark("empathic", "okofor", "melee_attack", 0, 0, "steady", "steady", false, false, "", 17, 5, true, 10, "", "", "", 10, [], routine_bark_cfg())
 
 	var actor_b: Dictionary = {"id": "echo.det.1", "fear": 0, "morale": 50}
 	var asm_b := ActorStateMachine.new(actor_b, null, {})
 	asm_b._expression_band = "grounded"
-	asm_b._select_bark("empathic", "okofor", "melee_attack", 0, 0, "steady", "steady", false, false, "", 17, 5, true)
+	asm_b._select_bark("empathic", "okofor", "melee_attack", 0, 0, "steady", "steady", false, false, "", 17, 5, true, 10, "", "", "", 10, [], routine_bark_cfg())
 
 	if asm_a._bark_context != "combat_divergence" or asm_b._bark_context != "combat_divergence":
 		return _fail("expected bark_context='combat_divergence' on both runs, got '%s' and '%s'" % [asm_a._bark_context, asm_b._bark_context])

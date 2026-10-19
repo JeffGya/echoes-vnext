@@ -54,7 +54,7 @@ static func _t_object_selects_context() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
-		0, 0, false, 10, "object", "it is not in her nature")
+		0, 0, false, 10, "object", "it is not in her nature", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context != "combat_guidance_object":
 		return _fail("expected combat_guidance_object, got '%s'" % asm._bark_context)
 	if asm._bark_line != "it is not in her nature":
@@ -70,7 +70,7 @@ static func _t_refuse_selects_context() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", "actor.idle", 0, 0, "steady", "steady", false, false, "",
-		0, 0, false, 10, "refuse", "she is too afraid of that ground")
+		0, 0, false, 10, "refuse", "she is too afraid of that ground", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context != "combat_guidance_refuse":
 		return _fail("expected combat_guidance_refuse, got '%s'" % asm._bark_context)
 	if asm._bark_context == "combat_guidance_object":
@@ -87,7 +87,7 @@ static func _t_align_and_hesitate_silent() -> Dictionary:
 		var asm := ActorStateMachine.new(actor, null, {})
 		asm._expression_band = "whole"
 		asm._select_bark("proud", "", "actor.idle", 0, 0, "steady", "steady", false, false, "",
-			0, 0, false, 10, consent, "she reads it the way you do")
+			0, 0, false, 10, consent, "she reads it the way you do", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 		if asm._bark_context.begins_with("combat_guidance_"):
 			return _fail("consent '%s' incorrectly selected a guidance bark context '%s'" % [consent, asm._bark_context])
 	return _pass()
@@ -102,7 +102,7 @@ static func _t_align_interpreted_selects_context() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
-		0, 0, false, 10, "align", "she is already moving where it matters", "interpreted")
+		0, 0, false, 10, "align", "she is already moving where it matters", "interpreted", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context != "combat_guidance_interpret":
 		return _fail("expected combat_guidance_interpret, got '%s'" % asm._bark_context)
 	if asm._bark_line != "she is already moving where it matters":
@@ -119,7 +119,7 @@ static func _t_align_literal_silent() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
-		0, 0, false, 10, "align", "", "literal")
+		0, 0, false, 10, "align", "", "literal", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context.begins_with("combat_guidance_"):
 		return _fail("align+literal incorrectly selected a guidance bark context '%s'" % asm._bark_context)
 	return _pass()
@@ -135,7 +135,7 @@ static func _t_line_is_reason_text_verbatim() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "nascent"
 	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
-		0, 0, false, 10, "object", expected)
+		0, 0, false, 10, "object", expected, "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_line != expected:
 		return _fail("expected the exact GuidanceContribution reason_text '%s', got '%s'" % [expected, asm._bark_line])
 	return _pass()
@@ -150,7 +150,7 @@ static func _t_exempt_from_routine_cooldown() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
-		0, 5, false, 10, "object", "her temperament pulls another way")
+		0, 5, false, 10, "object", "her temperament pulls another way", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context != "combat_guidance_object":
 		return _fail("expected combat_guidance_object to fire despite _bark_next_t=100 (t=5), got '%s'" % asm._bark_context)
 	if asm._bark_line.is_empty():
@@ -170,7 +170,7 @@ static func _t_not_overwritten_by_reaction() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", "actor.idle", 0, 0, "steady", "steady", false, false, "",
-		0, 0, false, 10, "refuse", "she is too afraid of that ground")
+		0, 0, false, 10, "refuse", "she is too afraid of that ground", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if asm._bark_context != "combat_guidance_refuse":
 		return _fail("fixture broken: expected combat_guidance_refuse before the reaction check, got '%s'" % asm._bark_context)
 
@@ -251,7 +251,7 @@ static func _t_empty_reason_text_no_bark() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", "actor.guard", 0, 0, "steady", "steady", false, false, "",
-		0, 0, false, 10, "object", "")
+		0, 0, false, 10, "object", "", "", 10, [], CombatDivergenceBarkTests.routine_bark_cfg())
 	if not asm._bark_line.is_empty():
 		return _fail("expected no bark line for an empty reason_text, got '%s'" % asm._bark_line)
 	if int(actor.get("_bark_next_t", 0)) != 0:

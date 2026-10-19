@@ -221,7 +221,7 @@ static func _test_legacy_fallback_tolerates_array_traits() -> Dictionary:
 	var asm := ActorStateMachine.new(actor, null, _make_actor_cfg())
 	asm._expression_band = "nascent"
 	asm._select_bark("missing_archetype", "", "actor.guard", 10, 10,
-		"grounded", "grounded", false, false, "", 0, 0, false, 0, "", "", "", 0, MoraleInfluenceTests.calm_statuses())
+		"grounded", "grounded", false, false, "", 0, 0, false, 0, "", "", "", 0, MoraleInfluenceTests.calm_statuses(), CombatDivergenceBarkTests.routine_bark_cfg())
 
 	if asm._bark_context != "combat_banter":
 		return { "ok": false, "error": "Expected combat_banter context, got '%s'" % asm._bark_context }
