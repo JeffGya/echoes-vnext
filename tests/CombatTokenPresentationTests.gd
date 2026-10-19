@@ -396,11 +396,11 @@ static func _t_reason_and_row_text_come_from_bank() -> Dictionary:
 		if plain != StopShortText.reason_line(benefit) or plain.is_empty():
 			return { "ok": false, "error": "Plain reason for %s must come from the bank" % benefit }
 	var fear: String = BoardScreenScript.stop_short_reason({ "benefit": "guard", "trace": { "message_args": { "code": "fear" } } })
-	if fear != StopShortText.reason_line("guard", "fear") or fear == StopShortText.reason_line("guard"):
-		return { "ok": false, "error": "A fear code must pick the fear line" }
-	var unknown: String = BoardScreenScript.stop_short_reason({ "benefit": "guard", "trace": { "message_args": { "code": "values" } } })
-	if unknown != StopShortText.reason_line("guard"):
-		return { "ok": false, "error": "A code with no own line must fall back to the plain line" }
+	if fear != StopShortText.reason_line("guard") + " " + StopShortText.cause_clause("fear"):
+		return { "ok": false, "error": "A fear code must add the fear clause to the plain line" }
+	var vague: String = BoardScreenScript.stop_short_reason({ "benefit": "guard", "trace": { "message_args": {} } })
+	if vague != StopShortText.reason_line("guard"):
+		return { "ok": false, "error": "A vague stop (no code) must show the plain line only" }
 	return { "ok": true }
 
 

@@ -54,6 +54,7 @@ const _TESTS: Array = [
 	"directive_swing_within_declared_budget",
 	"fear_wins_over_shipped_scout_directive",
 	"text_bank_directive_clause",
+	"text_bank_clauses_match_producer_codes",
 ]
 
 
@@ -356,7 +357,7 @@ static func _t_cause_registry_rows() -> Dictionary:
 		var got: Dictionary = StopShortService.cause_strength(reserved, "guard", _ctx({ "fear": 90 }), _cfg())
 		_near(errs, "reserved has no logic: " + reserved, float(got["strength"]), 0.0)
 	_eq(errs, "bias key", StopShortService.bias_key("fear"), "stop_short.fear")
-	for code_source: Array in [["emotion", "fear"], ["emotion", "morale"], ["calling", "calling_weight"], ["vector", "values"], ["directive", "directive_order"]]:
+	for code_source: Array in [["emotion", "fear"], ["calling", "calling_weight"], ["vector", "values"], ["directive", "directive_order"]]:
 		_eq(errs, "trace source known: " + str(code_source[0]), DecisionTrace.SOURCES.has(str(code_source[0])), true)
 		_eq(errs, "text clause exists: " + str(code_source[1]), StopShortText.has_key(["cause_clause", str(code_source[1])]), true)
 	return _res(errs)
@@ -525,14 +526,12 @@ static func _t_text_bank_every_key_resolves() -> Dictionary:
 		_eq(errs, "plain " + benefit, StopShortText.has_key(["reason_line", benefit, "plain"]), true)
 		_eq(errs, "row_word text " + benefit, StopShortText.row_word(benefit).is_empty(), false)
 		_eq(errs, "reason text " + benefit, StopShortText.reason_line(benefit).is_empty(), false)
-	for code: String in ["fear", "morale", "calling_weight", "values", "directive_order"]:
+	for code: String in ["fear", "calling_weight", "values", "directive_order"]:
 		_eq(errs, "clause " + code, StopShortText.has_key(["cause_clause", code]), true)
 		_eq(errs, "clause text " + code, StopShortText.cause_clause(code).is_empty(), false)
 	_eq(errs, "first person", StopShortText.reason_line("guard").begins_with("I "), true)
-	_eq(errs, "morale clause is not the fear clause", StopShortText.cause_clause("morale") != StopShortText.cause_clause("fear"), true)
-	_eq(errs, "morale line does not blame the ground", StopShortText.reason_line("guard", "morale").to_lower().contains("ground"), false)
-	_eq(errs, "guard with fear uses its own line", StopShortText.reason_line("guard", "fear").length() > StopShortText.reason_line("guard").length(), true)
-	_eq(errs, "code without own line uses plain", StopShortText.reason_line("hold", "fear"), StopShortText.reason_line("hold"))
+	_eq(errs, "guard with fear is plain, a space, the clause", StopShortText.reason_line("guard", "fear"), StopShortText.reason_line("guard") + " " + StopShortText.cause_clause("fear"))
+	_eq(errs, "unknown code gives plain", StopShortText.reason_line("hold", "no_such_code"), StopShortText.reason_line("hold"))
 	var line_count: int = StopShortText.all_lines().size()
 	_eq(errs, "lines found", line_count > 0, true)
 	return _res(errs)
@@ -922,6 +921,21 @@ static func _t_fear_wins_over_shipped_scout_directive() -> Dictionary:
 	return _res(errs)
 
 
+static func _t_text_bank_clauses_match_producer_codes() -> Dictionary:
+	var errs: Array = []
+	var codes: Array = ["fear", "calling_weight", "values", "directive_order"]
+	var keys: Array = (StopShortText._data["cause_clause"] as Dictionary).keys().filter(func(k: Variant) -> bool: return not str(k).begins_with("_"))
+	keys.sort()
+	var sorted_codes: Array = codes.duplicate()
+	sorted_codes.sort()
+	_eq(errs, "clause keys equal producer codes", keys, sorted_codes)
+	for benefit: String in ["guard", "observe", "hold"]:
+		for code: String in codes:
+			_eq(errs, "joined " + benefit + " " + code, StopShortText.reason_line(benefit, code), StopShortText.reason_line(benefit) + " " + StopShortText.cause_clause(code))
+		_eq(errs, "empty code is plain " + benefit, StopShortText.reason_line(benefit, ""), StopShortText.reason_line(benefit))
+	return _res(errs)
+
+
 static func _t_text_bank_directive_clause() -> Dictionary:
 	var errs: Array = []
 	var line: String = StopShortText.cause_clause("directive_order")
@@ -930,5 +944,5 @@ static func _t_text_bank_directive_clause() -> Dictionary:
 	_eq(errs, "first person", line.begins_with("I "), true)
 	for word: String in ["directive", "stance", "keeper_", "order_"]:
 		_eq(errs, "no game word " + word, line.to_lower().contains(word), false)
-	_eq(errs, "a Directive stop shows the plain reason line", StopShortText.reason_line("guard", "directive_order"), StopShortText.reason_line("guard"))
+	_eq(errs, "a Directive stop shows plain line and clause", StopShortText.reason_line("guard", "directive_order"), StopShortText.reason_line("guard") + " " + line)
 	return _res(errs)
