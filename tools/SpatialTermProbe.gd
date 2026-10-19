@@ -87,7 +87,7 @@ static func run() -> Dictionary:
 	var parts_on: bool = arm.split(",", false).has("parts")
 	_parts_sum = {"echo_passes": 0, "purifier_skipped": 0, "with_routes": 0, "two_plus": 0, "mixed": 0,
 		"mixed_xmargin_lt10": 0, "mixed_margin_lt10": 0, "mixed_flips": 0, "mixed_chosen_exposed": 0}
-	_stop_tot = {"echoes": 0, "turns": 0, "stops": 0, "causes": {}}
+	_stop_tot = {"echoes": 0, "turns": 0, "stops": 0, "causes": {}, "rows": [], "ceiling": null, "min_turns": null}
 	for entry_v: Variant in MODES:
 		var entry: Array = entry_v
 		if parts_on:
@@ -99,6 +99,7 @@ static func run() -> Dictionary:
 		for key: Variant in _parts_sum:
 			pieces.append("%s=%d" % [str(key), int(_parts_sum[key])])
 		_say("SUMMARY arm=%s %s" % [arm, " ".join(pieces)])
+		_say_stop_summary(arm)
 	var keys: Array = _turns_by_action.keys()
 	keys.sort()
 	for key: Variant in keys:
@@ -157,6 +158,9 @@ static func _run_parts_mode(mode: String, tag: String, guide_mode: String, guide
 	var ectx: EncounterContext = env["ectx"]
 	_apply_arm(runtime, arm, ectx)
 	_parts_mode = mode
+	var stop_cfg: Dictionary = runtime.config_service._balance.get("data", {}).get("actor", {}).get("stop_short", {})
+	_stop_tot["ceiling"] = stop_cfg.get("probe_stop_rate_ceiling", null)
+	_stop_tot["min_turns"] = stop_cfg.get("probe_min_eligible_turns", null)
 	runtime.behavior_module_factory = func(actor_cfg: Dictionary, movement_cfg: Dictionary) -> BehaviorModule:
 		var arbiter := ExposureCaptureArbiter.new(actor_cfg, movement_cfg)
 		arbiter.on_done = Callable(SpatialTermProbe, "_on_capture").bind(ectx)
@@ -167,7 +171,7 @@ static func _run_parts_mode(mode: String, tag: String, guide_mode: String, guide
 	_say_stop_rows(mode, arm)
 
 
-## One line per Echo. The stop-rate ceiling is not in config, so only the rate is printed.
+## One line per Echo.
 static func _say_stop_rows(mode: String, arm: String) -> void:
 	var ids: Array = _stop_rows.keys()
 	ids.sort()
@@ -180,6 +184,7 @@ static func _say_stop_rows(mode: String, arm: String) -> void:
 		_stop_tot["echoes"] += 1
 		_stop_tot["turns"] += turns
 		_stop_tot["stops"] += stops
+		(_stop_tot["rows"] as Array).append([turns, stops])
 		var causes: Dictionary = _stop_tot["causes"]
 		for cause: Variant in row["causes"]:
 			causes[cause] = int(causes.get(cause, 0)) + int(row["causes"][cause])
@@ -189,8 +194,17 @@ static func _say_stop_summary(arm: String) -> void:
 	var turns: int = int(_stop_tot["turns"])
 	var stops: int = int(_stop_tot["stops"])
 	var causes: Dictionary = _stop_tot["causes"]
-	_say("STOPRATE_SUMMARY %s echoes=%d turns=%d stops=%d rate=%.3f echoes_above_ceiling=n/a (no ceiling key in config)" % [
-		arm, int(_stop_tot["echoes"]), turns, stops, float(stops) / float(maxi(turns, 1))])
+	var above: String = "n/a"
+	if _stop_tot["ceiling"] != null and _stop_tot["min_turns"] != null:
+		var count: int = 0
+		for row_v: Variant in _stop_tot["rows"] as Array:
+			var row: Array = row_v
+			if int(row[0]) >= int(_stop_tot["min_turns"]) \
+					and float(row[1]) / float(maxi(int(row[0]), 1)) > float(_stop_tot["ceiling"]):
+				count += 1
+		above = str(count)
+	_say("STOPRATE_SUMMARY %s echoes=%d turns=%d stops=%d rate=%.3f echoes_above_ceiling=%s" % [
+		arm, int(_stop_tot["echoes"]), turns, stops, float(stops) / float(maxi(turns, 1)), above])
 	_say("STOPCAUSE %s directive=%d fear=%d identity=%d" % [arm,
 		int(causes.get("directive", 0)), int(causes.get("fear", 0)), int(causes.get("identity", 0))])
 
