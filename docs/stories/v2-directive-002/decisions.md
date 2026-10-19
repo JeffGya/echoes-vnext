@@ -603,3 +603,15 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 **Q:** Which QA findings on the combined tree (2026-10-19) are fixed in PR 118?
 **A:** (Jeff, 2026-10-19) Fixed in this PR: (1) divergence at the spatial cap: the Echo's own score is `value - clamp(raw - route_part, -cap, cap)` so a clamped value stays correct, with a test where the cap bites; (3) stale docs (`CONVENTIONS.md` lines about `by_morale_tier` and `get_morale_tier`, `group-a-design.md` superseded numbers, `design.md` `morale_bias`); (6) `composure` becomes a required argument of `prepare_live_movement_context`, all callers updated; banter bark trigger moves to the status (calm statuses: grounded, whole, radiant), bark text unchanged.
 **Not fixed here (cleanup batch or notes):** (4) runtime validator for the new config (a CI test covers the shipped file); (5) `_compute_bark_cooldown` compares an int morale to tier names (broken before this story; to be fixed together with the cooldown rules in the cleanup PR); (7) the guidance reason text "morale" now also covers fear and bold causes (wording is Jeff's, with `mid-game-designer`); (8) `action_weight_modifier` is 0 on the movement path; (9) some arbiter tests run with the code-default exponent 1.0; (10) the keeper intro never fills `pre_encounter_fear` or `pre_encounter_morale`.
+
+### D-106. stop-short-cause-clause
+**Q:** What does the combat bubble show for a stop-short reason, and what is the final wording?
+**A:** (Jeff, 2026-10-19) The reason line is the plain line, one space, then the cause clause for the cause code (two short sentences). A vague Echo (no cause code in the snapshot) shows the plain line only; no core change. The `morale` clause and all `with_cause` lines are deleted (`StopShortText.reason_line` no longer reads `with_cause`).
+- Clauses: fear "My nerves are shot, I am not going closer."; calling_weight "I was trained to wait for the right moment."; values "Charging in goes against what I know."; directive_order "I follow what I was told." (unchanged).
+- Plain lines: guard "I stop and brace." (unchanged); observe "I would rather watch first." (changed); hold "I will stay close to the others." (unchanged).
+- Still PROPOSAL, out of scope: `row_word` and `reason_line.return_route`.
+- The bubble (`CombatBoardScreen.stop_short_reason`) is the only place a stop reason shows today.
+
+### D-107. stop-short-chip-words
+**Q:** What are the final chip words (`row_word`) for the three stop benefits that are built?
+**A:** (Jeff, 2026-10-19, from designer options in his voice) guard "Digs in", observe "Looks first", hold "Sticks close". The chip is a third-person present-tense verb phrase, like the initiative row neighbours. Nine characters are safe and twelve is the ceiling (no max width in code; to check in game at the smallest zoom, 0.8). `return_route` "Stays back" stays PROPOSAL until that benefit is built. `docs/visual-plans/combat-visual-inventory.md` still names the old words "Braces" and "Watches" as a reference; it was not changed.
