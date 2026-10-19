@@ -556,3 +556,50 @@ Jeff answered the design questions one at a time on 2026-10-11 (Q6 was D-24). Re
 ### D-94. cleanup-done
 **Q:** What did the story folder cleanup (D-92) leave?
 **A:** The removed files are gone, the kept files are patched, and the glyph path is now `.png`. See D-92 and D-93.
+
+### D-95. group-a-scope
+**Q:** Which follow-ups from "Found in phase D final QA and docs pass" does Jeff fix now, and in which story?
+**A:** (Jeff, 2026-10-18) Group A, inside V2-DIRECTIVE-002 (new branch `claude/v2-directive-002-group-a`, own PR). Items:
+1. Divergence check: remove the four other `directive_*` spatial parts from the Echo's own judgment. Mode mandates (PROTECT, PURSUE, PURIFY_SHRINE, GUIDE_SPIRIT, RECOVER) count as Directive voice. Checked first: only Scout sets `avoid_overcommit`; the other three come from encounter modes only. The removal acts per term, so a future Directive is covered.
+2. One Echo gate: `EmotionStatusLean.is_echo` for slices 2, 5, 6 and 7. A temporary ally gets no lean, steps or growth.
+3. C6 and C7: style alignment and the action layer move to the status (D-96 to D-100).
+4. Resolve screen pre-fight fear: the fear before the surprise bump. Held in `EncounterContext` beside `pre_encounter_morale`. No save change.
+5. Composure for slice 6 is computed before the profile, in the right order. Remove `composure_default` (D-88: no dead config), with its range and test lines.
+6. `felt_state.ranges` accepted. Tighten `steps.bonus_at` max to 0.7 and `steps.penalty_at` max to 0.8 so the validator rejects a value that does nothing.
+**Not in this story (Jeff):** the known red test `movement_arbiter/avoid_overcommit_stays_proportionate` stays as is (known and intended). The stale suite-count comments are fixed by other PRs; the item is dropped.
+
+### D-96. status-two-channels
+**Q:** The GDD gives fear (threat response) and morale (follow-through, recovery) different roles. The status does not tell the cause. How do C6 and C7 read it?
+**A:** (Jeff, 2026-10-18) Two channels, one status. Per activation compute `L_eff = soften(band_lean[status], composure)` once; `A = afraid(L_eff)`, `B = bold(L_eff)`. Threat channel (`A`): lowers active actions, pulls from exposure. Follow-through channel (`A` and `B`): low state raises guard and idle; high state raises melee and move. The four morale tiers become two ends (afraid, bold). Composure enters once (no second composure term in `eff_dampen`). Softening is symmetric (Q7): composure softens the bold side too, as in slices 5 and 6.
+
+### D-97. enemies-read-status
+**A:** (Jeff, 2026-10-18) Enemies read the same status in the action layer and in style. They already have real fear and morale (`ActorStateMachine.gd` ~291-298). Slices 5 to 7 stay Echo-only.
+
+### D-98. aduro-and-signatures
+**A:** (Jeff, 2026-10-18) Aduro: the override replaces his afraid end, scaled by `A`; the fear multiplier still dampens his melee. Calling signatures (Kra Soro, Okomfo, Onyamesu, Okofor) read `A` and their numbers move to config (`calling_behavior.<calling>.afraid_signature`). Delete the dead `data.actor.broken_morale_overrides`. Kra Soro `fear_move_bonus` scales by `A` (its comment and code disagreed).
+
+### D-99. initiative-and-barks
+**A:** (Jeff, 2026-10-18) Initiative at combat start reads the unsoftened status lean (no composure exists yet): afraid and bold points in config (PROPOSED DEFAULT -6 and +5). Bark triggers keep their context keys and change only the trigger: "morale falling" fires when the status gets worse; "inspired" fires at radiant. Open: the bark wording for a fear-caused fall needs a content check (Jeff and `mid-game-designer`).
+
+### D-100. lean-table-and-runs
+**A:** (Jeff, 2026-10-18) `felt_state.band_lean` stays where it is. Items 5, C6, C7 and the two small readers are one change with one record run, then one re-record (D-86), in separate commits. Numbers for `state_action_points`, `follow_through_bias`, initiative points and the signature table are PROPOSED DEFAULT; `mid-game-designer` authors them with an offline re-score. Targets: hollow stack near the old worst case; burdened-by-fear within 25 percent of the old fear 45 effect; radiant near the old inspired.
+
+### D-101. afraid-curve
+**Q:** The numbers check (hand arithmetic, `mid-game-designer`) showed that linear `A` cannot meet both D-100 targets: Burdened by fear 45 would lose about 65 percent more attack than before.
+**A:** (Jeff, 2026-10-18) Convex curve. `A = afraid(L)^k x composure softening`, where the curve acts on the unsoftened lean and composure scales the result once. New function in `EmotionStatusLean`; `afraid(L_eff)` stays as it is, so slices 5 and 6 are not touched. Config `data.actor.afraid_curve_exponent` (PROPOSED DEFAULT 2.5; validator: finite, 1.0 to 4.0). `fear_active_dampen` 0.45 becomes 0.55 (PROPOSED DEFAULT; change the code default with it). Afraid points return to the full old `broken` values; bold points come from the old `inspired` shift at composure 0.5 divided by B 0.56. `state_action_points` (PROPOSED DEFAULT): melee -20/+13, protect -8/+8, guard +25/-9, idle +19/-9, move -20/+11. Validator limit on absolute value: raise to 30 so guard 25 has margin. Source: numbers note of agent N, 2026-10-18.
+
+### D-102. style-and-signatures
+**A:** (Jeff, 2026-10-18)
+- Style (C6) reads the same curved `A` as the action layer (D-96: compute once). The afraid style bias rises to the old `broken` values: careful +10, restrained +10, forceful -6, overcommitted -6 (PROPOSED DEFAULT). Bold bias stays forceful +11, direct +11.
+- Calling signatures: all numbers, including Kra Soro `fear_move_bonus`, move into `calling_behavior.<calling>.afraid_signature` (points at `A` = 1, equal to the old values at fear 100). The key `fear_move_bonus` is removed (game is not live). Readers to update: `BehaviorArbiter.gd` ~1923, `tests/MovementArbitrationTests.gd` ~576, `tests/PassiveIdentityTests.gd` ~25-230, `balance.json` ~1146 and ~1192. Kra Soro move: +12 and idle -8 at `A` = 1; Okomfo idle +15; Onyamesu move -15; Okofor protect_ally +10.
+
+### D-103. accepted-losses
+**A:** (Jeff, 2026-10-18) Accepted: (1) fear below 45 with morale 40 or more has no fear effect; (2) Burdened because of morale 21 to 24 acts like Burdened by fear, so most of the old `broken` penalty is gone for that case; (3) initiative points may be fractions.
+
+### D-104. stop-short-fixture
+**A:** (Jeff, 2026-10-18) `StopShortSearchTests._env` switches `felt_state.steps.enabled` off. Reason: those tests check the stop-short window at a fixed capacity; composure on the first activation is now real, not the old default.
+
+### D-105. qa-fixes-group-a
+**Q:** Which QA findings on the combined tree (2026-10-19) are fixed in PR 118?
+**A:** (Jeff, 2026-10-19) Fixed in this PR: (1) divergence at the spatial cap: the Echo's own score is `value - clamp(raw - route_part, -cap, cap)` so a clamped value stays correct, with a test where the cap bites; (3) stale docs (`CONVENTIONS.md` lines about `by_morale_tier` and `get_morale_tier`, `group-a-design.md` superseded numbers, `design.md` `morale_bias`); (6) `composure` becomes a required argument of `prepare_live_movement_context`, all callers updated; banter bark trigger moves to the status (calm statuses: grounded, whole, radiant), bark text unchanged.
+**Not fixed here (cleanup batch or notes):** (4) runtime validator for the new config (a CI test covers the shipped file); (5) `_compute_bark_cooldown` compares an int morale to tier names (broken before this story; to be fixed together with the cooldown rules in the cleanup PR); (7) the guidance reason text "morale" now also covers fear and bold causes (wording is Jeff's, with `mid-game-designer`); (8) `action_weight_modifier` is 0 on the movement path; (9) some arbiter tests run with the code-default exponent 1.0; (10) the keeper intro never fills `pre_encounter_fear` or `pre_encounter_morale`.

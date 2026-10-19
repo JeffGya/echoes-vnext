@@ -24,7 +24,7 @@ var actors: Array = []
 var placement_seed: int = 0
 # COMBAT-001: combat state dict — set by EncounterRoundsState.enter() via combat.init.
 var combat_state: Dictionary = {}
-# COMBAT-002: initiative config — set by EncounterSetupService.setup() from balance.json data.combat.initiative_modifiers.
+# COMBAT-002: initiative config — set by EncounterSetupService.setup() from CombatState.initiative_cfg(data.combat).
 var initiative_cfg: Dictionary = {}
 # V2-COMBAT-003: stalemate config — set by EncounterSetupService.setup() from balance.json
 # data.combat.stalemate. Read once by EncounterRoundsState.enter() to seed CombatState's
@@ -77,6 +77,9 @@ var echo_action_logs: Dictionary = {}
 # V2-EMOTION-001: echo_id → morale_current at encounter entry. Populated by
 # EncounterSetupService.setup(). Used by build_final_snapshot() for delta computation.
 var pre_encounter_morale: Dictionary = {}
+
+# echo_id -> fear_current at encounter entry, before the surprise fear bump. Never persisted.
+var pre_encounter_fear: Dictionary = {}
 
 # V2-VOICE-001: round bark events — accumulated per round for reactive bark system.
 # Shape: Array[{ "actor_id": String, "bark_context": String, "bark_tier": int, "grid_pos": Vector2i }]

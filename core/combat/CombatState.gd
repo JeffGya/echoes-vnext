@@ -6,7 +6,7 @@
 # Readiness formula (per actor):
 #   score = (speed * 3 + agi * 2)
 #           + archetype_mod + calling_mod + trait_mod + vector_mod
-#           + morale_mod    (by_morale_tier — inspired +4, steady 0, shaken -3, broken -6)
+#           + state_mod     (afraid x afraid_points + bold x bold_points, from the status lean)
 #           + seed_nudge
 #
 # Calculated ONCE at combat start. Mid-combat morale recovery does not re-sort.
@@ -34,7 +34,7 @@ const REQUIRED_FIELDS := [
 ## Returns a new CombatState dictionary.
 ## actors is deep-copied so mutations to the source do not propagate.
 ## initiative_seed: derived from ectx.placement_seed (pass 0 in tests for seed-agnostic checks).
-## init_cfg: data.combat.initiative_modifiers from balance.json (pass {} for modifier-free checks).
+## init_cfg: initiative_cfg(data.combat) from balance.json (pass {} for modifier-free checks).
 ## stalemate_cfg: data.combat.stalemate from balance.json (pass {} to disable the no-progress
 ## forced retreat — no_progress_round_limit defaults to 0, which check_end_condition() reads
 ## as "off").
@@ -115,9 +115,9 @@ static func validate(state: Dictionary) -> bool:
 ## Formula (per actor):
 ##   score = (speed * 3 + agi * 2)
 ##           + archetype_mod + calling_mod + trait_mod + vector_mod
-##           + morale_mod + seed_nudge
+##           + state_mod + seed_nudge
 ##
-## morale_mod = by_morale_tier[_morale_tier_from_score(actor.morale)] (default 0)
+## state_mod = afraid x afraid_points + bold x bold_points of the status lean (may be a fraction)
 ## seed_nudge = CampaignSeed.derive_from(seed, actor_id) % 10
 ## Calculated once at combat start — mid-combat morale recovery does not re-sort.
 ##
@@ -130,7 +130,9 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 	var call_table: Dictionary   = cfg.get("by_calling_origin",  {})
 	var trait_table: Dictionary  = cfg.get("by_dominant_trait",  {})
 	var vec_table: Dictionary    = cfg.get("by_dominant_vector", {})
-	var morale_table: Dictionary = cfg.get("by_morale_tier",     {})
+	var lean_table: Dictionary   = cfg.get("band_lean",          {})
+	var afraid_points: float     = float(cfg.get("afraid_points", 0.0))
+	var bold_points: float       = float(cfg.get("bold_points",   0.0))
 
 	# Build scored list with original index for stable tiebreak.
 	var scored: Array = []
@@ -172,15 +174,16 @@ static func _calc_initiative(actors: Array, seed: int, cfg: Dictionary) -> Array
 		var dom_vec: String = GridService.dominant_key(vectors, ["vanguard", "seeker", "protector", "pillar", "strategist", "skeptic", "devoted", "opportunist", "mediator", "nurturer"])
 		var vec_mod: int = int(vec_table.get(dom_vec, 0))
 
-		# Morale-tier readiness modifier — emotional state at combat start.
-		var morale_val: int = int(actor.get("morale", 50))
-		var morale_mod: int = int(morale_table.get(_morale_tier_from_score(morale_val), 0))
+		# Status at combat start. No composure exists yet, so the lean is unsoftened; the afraid
+		# end stays linear here (no afraid_curve_exponent): the numbers check fitted it better.
+		var lean: float = EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), lean_table)
+		var state_mod: float = EmotionStatusLean.afraid(lean) * afraid_points + EmotionStatusLean.bold(lean) * bold_points
 
 		# Deterministic seed nudge (0-9) for remaining ties.
 		var actor_id: String = str(actor.get("id", ""))
 		var nudge: int = int(CampaignSeed.derive_from(seed, actor_id) % 10)
 
-		var score: int = base + arch_mod + call_mod + trait_mod + vec_mod + morale_mod + nudge
+		var score: float = base + arch_mod + call_mod + trait_mod + vec_mod + state_mod + nudge
 
 		scored.append({
 			"id":    actor_id,
@@ -457,14 +460,11 @@ static func _find_shrine(actors: Array) -> Dictionary:
 	return {}
 
 
-## Maps a raw morale value to a tier string.
-## Mirrors EmotionService.get_morale_tier() thresholds — kept inline to avoid
-## coupling CombatState (pure static RefCounted) to a service dependency.
-static func _morale_tier_from_score(morale: int) -> String:
-	if morale >= 75: return "inspired"
-	if morale >= 50: return "steady"
-	if morale >= 25: return "shaken"
-	return "broken"
+## The init_cfg for create(): data.combat.initiative_modifiers plus the status lean table.
+static func initiative_cfg(combat_cfg: Dictionary) -> Dictionary:
+	var cfg: Dictionary = (combat_cfg.get("initiative_modifiers", {}) as Dictionary).duplicate()
+	cfg["band_lean"] = EmotionStatusLean.table_of(combat_cfg.get("movement", {}) as Dictionary)
+	return cfg
 
 
 ## Returns the id of the first actor with is_quarry == true, or "" if none found.

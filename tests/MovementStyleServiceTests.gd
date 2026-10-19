@@ -73,11 +73,11 @@ static func _t_alignment_deterministic_and_weighted() -> Dictionary:
 	var cfg: Dictionary = _cfg()
 	var first: float = MovementStyleService.style_alignment_score(
 		"forceful", "advance", {"vanguard": 40.0, "skeptic": 10.0}, "edge",
-		{"courage": 30.0}, 20.0, "steady", 0.5, -0.3, cfg
+		{"courage": 30.0}, 0.2, 0.0, 0.5, -0.3, cfg
 	)
 	var second: float = MovementStyleService.style_alignment_score(
 		"forceful", "advance", {"vanguard": 40.0, "skeptic": 10.0}, "edge",
-		{"courage": 30.0}, 20.0, "steady", 0.5, -0.3, cfg
+		{"courage": 30.0}, 0.2, 0.0, 0.5, -0.3, cfg
 	)
 	if first != second:
 		return _fail("Same inputs produced different scores: %f vs %f" % [first, second])
@@ -88,7 +88,7 @@ static func _t_alignment_deterministic_and_weighted() -> Dictionary:
 	halved_cfg["alignment_weight"] = 0.5
 	var halved: float = MovementStyleService.style_alignment_score(
 		"forceful", "advance", {"vanguard": 40.0, "skeptic": 10.0}, "edge",
-		{"courage": 30.0}, 20.0, "steady", 0.5, -0.3, halved_cfg
+		{"courage": 30.0}, 0.2, 0.0, 0.5, -0.3, halved_cfg
 	)
 	if not is_equal_approx(halved, first * 0.5):
 		return _fail("alignment_weight did not scale the term: %f vs %f" % [halved, first * 0.5])
@@ -108,15 +108,15 @@ static func _t_vector_bias_scores_its_own_style() -> Dictionary:
 	for case_v: Variant in cases:
 		var case: Array = case_v as Array
 		var strong: float = MovementStyleService.style_alignment_score(
-			str(case[1]), "advance", {str(case[0]): 100.0}, "", {}, 0.0, "steady", 0.0, 0.0, cfg
+			str(case[1]), "advance", {str(case[0]): 100.0}, "", {}, 0.0, 0.0, 0.0, 0.0, cfg
 		)
 		var other: float = MovementStyleService.style_alignment_score(
-			str(case[2]), "advance", {str(case[0]): 100.0}, "", {}, 0.0, "steady", 0.0, 0.0, cfg
+			str(case[2]), "advance", {str(case[0]): 100.0}, "", {}, 0.0, 0.0, 0.0, 0.0, cfg
 		)
 		if strong <= other:
 			return _fail("%s did not favour route-shape %s (%f vs %f)" % [case[0], case[1], strong, other])
 	var screen: float = MovementStyleService.style_alignment_score(
-		"screen", "protect", {"vanguard": 100.0}, "edge", {}, 100.0, "inspired", 1.0, 1.0, cfg
+		"screen", "protect", {"vanguard": 100.0}, "edge", {}, 1.0, 1.0, 1.0, 1.0, cfg
 	)
 	if screen != 0.0:
 		return _fail("route-shape screen must stay neutral, scored %f" % screen)
@@ -125,26 +125,26 @@ static func _t_vector_bias_scores_its_own_style() -> Dictionary:
 
 ## INELIGIBLE_ALIGNMENT is now 0.0 (decision #21, neutral not a veto — F1 fix), so a
 ## bare "score == INELIGIBLE_ALIGNMENT" check can no longer tell "gated" apart from
-## "no identity signal". These fixtures use max fear, which `_cfg()`'s fear_weight
+## "no identity signal". These fixtures are fully afraid, which `_cfg()`'s fear_weight
 ## gives a real nonzero pull for `overcommitted`/`retreating` — proving the gate
 ## still zeroes an ineligible style's score even though the signal that would have
 ## produced a nonzero score is present.
 static func _t_ineligible_style_is_penalised() -> Dictionary:
 	var cfg: Dictionary = _cfg()
 	var banned: float = MovementStyleService.style_alignment_score(
-		"overcommitted", "advance", {}, "", {}, 100.0, "steady", 0.0, 0.0, cfg
+		"overcommitted", "advance", {}, "", {}, 1.0, 0.0, 0.0, 0.0, cfg
 	)
 	if banned != 0.0:
 		return _fail("overcommitted on advance was not neutralised: %f" % banned)
 	if not is_finite(banned):
 		return _fail("The penalty must stay finite — BehaviorArbiter rejects a non-finite score")
 	var allowed: float = MovementStyleService.style_alignment_score(
-		"overcommitted", "engage", {}, "", {}, 100.0, "steady", 0.0, 0.0, cfg
+		"overcommitted", "engage", {}, "", {}, 1.0, 0.0, 0.0, 0.0, cfg
 	)
 	if allowed == 0.0:
 		return _fail("overcommitted on engage lost its fear signal — the eligibility gate is over-firing")
 	var retreating: float = MovementStyleService.style_alignment_score(
-		"retreating", "engage", {}, "", {}, 100.0, "steady", 0.0, 0.0, cfg
+		"retreating", "engage", {}, "", {}, 1.0, 0.0, 0.0, 0.0, cfg
 	)
 	if retreating != 0.0:
 		return _fail("retreating leaked into engage at maximum fear: %f" % retreating)
@@ -220,7 +220,7 @@ static func _t_arbiter_style_wins_by_score() -> Dictionary:
 
 
 ## An actor with NO identity signal — no vector_scores, no calling family, no traits,
-## zero fear, steady morale, no bonds, no vow — must get exactly 0.0 on every
+## not afraid, not bold, no bonds, no vow — must get exactly 0.0 on every
 ## candidate, so the ordinary tie-break decides and no route-shape is systematically
 ## preferred. This is the enemy case: enemies carry no vector_scores at all.
 static func _t_arbiter_no_identity_signal_no_preference() -> Dictionary:
@@ -268,10 +268,10 @@ static func _t_calling_family_reaches_live_path() -> Dictionary:
 
 	var cfg: Dictionary = _cfg()
 	var with_family: float = MovementStyleService.style_alignment_score(
-		"cohesive", "advance", {}, seen_family, {}, 0.0, "steady", 0.0, 0.0, cfg
+		"cohesive", "advance", {}, seen_family, {}, 0.0, 0.0, 0.0, 0.0, cfg
 	)
 	var without_family: float = MovementStyleService.style_alignment_score(
-		"cohesive", "advance", {}, "", {}, 0.0, "steady", 0.0, 0.0, cfg
+		"cohesive", "advance", {}, "", {}, 0.0, 0.0, 0.0, 0.0, cfg
 	)
 	if with_family == without_family:
 		return _fail("calling_family made no difference to the alignment score: %f" % with_family)
@@ -547,11 +547,9 @@ static func _cfg() -> Dictionary:
 			"low_exposure": 0.2, "lateral": 0.1, "intercepting": -0.1, "retreating": 5.0,
 			"overcommitted": -0.2,
 		},
-		"morale_bias": {
-			"broken": {"careful": 1.0, "restrained": 1.0},
-			"shaken": {"careful": 0.5, "restrained": 0.5},
-			"steady": {},
-			"inspired": {"forceful": 1.0, "direct": 1.0},
+		"follow_through_bias": {
+			"afraid": {"careful": 1.0, "restrained": 1.0},
+			"bold": {"forceful": 1.0, "direct": 1.0},
 		},
 		"bond_weight": {"intercepting": 1.0, "cohesive": 1.0},
 		"vow_ward_weight": {"cohesive": 1.0, "low_exposure": 1.0},

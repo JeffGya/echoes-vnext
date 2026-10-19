@@ -1,7 +1,7 @@
 # res://tests/CombatInitiativeTests.gd
-# V2-COMBAT-001: Tests for readiness score initiative order (morale-tier modifier).
-#   1. combat_initiative/inspired_scores_higher_than_broken  — morale tier changes order.
-#   2. combat_initiative/steady_has_zero_morale_modifier     — steady tier adds no bias.
+# V2-COMBAT-001: Tests for readiness score initiative order (status modifier).
+#   1. combat_initiative/inspired_scores_higher_than_broken  — a bold status leads an afraid one.
+#   2. combat_initiative/steady_has_zero_morale_modifier     — a calm status adds no bias.
 #   3. combat_initiative/directives_do_not_affect_order      — directive field is ignored.
 #   4. combat_initiative/same_inputs_same_order              — deterministic output.
 #
@@ -26,15 +26,11 @@ static func register(runner: CoreTestRunner) -> void:
 		Callable(CombatInitiativeTests, "_t_v2_calling_receives_initiative_modifier"))
 
 
+## The shipped initiative config with the status lean table, as production builds it.
 static func _morale_cfg() -> Dictionary:
-	return {
-		"by_morale_tier": {
-			"inspired":  4,
-			"steady":    0,
-			"shaken":   -3,
-			"broken":   -6,
-		}
-	}
+	var cs := ConfigService.new()
+	cs.load_balance()
+	return CombatState.initiative_cfg((cs.get_balance()["data"] as Dictionary)["combat"] as Dictionary)
 
 
 # Test 1: inspired Echo acts before broken Echo when all other stats are equal.
@@ -44,32 +40,32 @@ static func _t_inspired_scores_higher_than_broken() -> Dictionary:
 		"name":  "Inspired",
 		"speed": 5,
 		"stats": { "agi": 5 },
-		"morale": 80,  # inspired tier (>=75)
+		"morale": 80,  # radiant
 	}
 	var actor_b := {
 		"id":    "echo_broken",
 		"name":  "Broken",
 		"speed": 5,
 		"stats": { "agi": 5 },
-		"morale": 10,  # broken tier (<25)
+		"morale": 10,  # fraying
 	}
 	var state: Dictionary = CombatState.create([actor_a, actor_b], EncounterResolutionModes.COMBAT, 0, _morale_cfg())
 	var order: Array = state.get("initiative_order", [])
 	if order.size() < 2:
 		return { "ok": false, "error": "initiative_order too short (got %d)" % order.size() }
 	if str(order[0].get("id", "")) != "echo_inspired":
-		return { "ok": false, "error": "Expected inspired Echo first (morale +4 vs -6), got: %s" % str(order[0].get("id", "")) }
+		return { "ok": false, "error": "Expected the radiant Echo first (bold_points vs afraid_points), got: %s" % str(order[0].get("id", "")) }
 	return { "ok": true }
 
 
-# Test 2: steady morale tier adds no modifier — score is identical with or without morale cfg.
+# Test 2: a calm status (whole) adds no modifier — order is identical with or without the cfg.
 static func _t_steady_has_zero_morale_modifier() -> Dictionary:
 	var actor := {
 		"id":    "echo_steady",
 		"name":  "Steady",
 		"speed": 5,
 		"stats": { "agi": 3 },
-		"morale": 60,  # steady tier (>=50 <75)
+		"morale": 60,  # whole
 	}
 	var state_with_cfg: Dictionary = CombatState.create([actor], EncounterResolutionModes.COMBAT, 0, _morale_cfg())
 	var state_no_cfg: Dictionary   = CombatState.create([actor], EncounterResolutionModes.COMBAT, 0, {})
@@ -78,7 +74,7 @@ static func _t_steady_has_zero_morale_modifier() -> Dictionary:
 	if order_cfg.is_empty() or order_no.is_empty():
 		return { "ok": false, "error": "initiative_order empty" }
 	if str(order_cfg[0].get("id", "")) != str(order_no[0].get("id", "")):
-		return { "ok": false, "error": "Steady tier must not change order (modifier=0)" }
+		return { "ok": false, "error": "A calm status must not change order (modifier=0)" }
 	return { "ok": true }
 
 

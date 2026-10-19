@@ -61,7 +61,7 @@ static func _make_enemy(col: int) -> Dictionary:
 static func _t_onyamesu_prefers_guard() -> Dictionary:
 	var actor := _make_actor("onyamesu")
 	var enemy := _make_enemy(2)
-	var arbiter := BehaviorArbiter.new({"guard_range": 2})
+	var arbiter := BehaviorArbiter.new({"guard_range": 2}, MoraleInfluenceTests._data()["combat"]["movement"] as Dictionary)
 	var intent: Dictionary = arbiter.select_intent({ "actor": actor, "all_actors": [enemy], "t": 1 })
 
 	if str(intent.get("action_type", "")) != "actor.guard":
@@ -129,7 +129,7 @@ static func _t_all_six_callings_present() -> Dictionary:
 	# guard_range=2 so actor.guard is a candidate at dist=2; echo_in_melee does not fire (dist>1).
 	var onyamesu := _make_actor("onyamesu")
 	var enemy_dist2 := _make_enemy(2)
-	var arbiter := BehaviorArbiter.new({"guard_range": 2})
+	var arbiter := BehaviorArbiter.new({"guard_range": 2}, MoraleInfluenceTests._data()["combat"]["movement"] as Dictionary)
 	var intent_onyamesu: Dictionary = arbiter.select_intent({
 		"actor": onyamesu, "all_actors": [enemy_dist2], "t": 1
 	})
@@ -139,7 +139,7 @@ static func _t_all_six_callings_present() -> Dictionary:
 			"error": "onyamesu entry missing from DEFAULTS (fell back to uncalled, got: %s)" % str(intent_onyamesu.get("action_type"))
 		}
 
-	# At fear=50, fear_factor=0.775 dampens active intents. okomfo guard=30 (passive) > move=35×0.775=27.1.
+	# Fear 50 reads burdened; its afraid end dampens active intents (fear_factor about 0.79). okomfo guard=30 (passive) > move=35×0.79.
 	# Uncalled move=44×0.775=34.1 > guard=25 — different winners confirm okomfo has its own entry.
 	# BALANCE-002: idle reduced 40→12. We detect okomfo via guard-at-mid-fear instead of idle.
 	var okomfo := _make_actor("okomfo")

@@ -385,7 +385,7 @@ Emotion block stored at `echo["emotion"]`:
 - `init_echo(echo, logger, t)` — idempotent. `morale_base` = 25–74 from `traits.courage` + archetype modifier
 - `apply_morale_delta(echo, delta, cause, logger, t)` — only valid drift entry
 - `apply_fear_delta(echo, delta, cause, fear_threshold, logger, t)` — only valid drift entry
-- `get_morale_tier(morale_current)` → `"inspired"` / `"steady"` / `"shaken"` / `"broken"` — **internal sim use only** (BehaviorArbiter, ActorStateMachine). Do NOT use for player-facing display.
+- `get_morale_tier(morale_current)` → `"inspired"` / `"steady"` / `"shaken"` / `"broken"` — **internal sim use only** (`EmotionService` snapshot and the debug `emotion` command; the combat layer and the bark triggers read the emotional status instead). Do NOT use for player-facing display.
 - `get_emotional_status(morale, fear)` → unified player-facing tier (V2-EMOTION-002) — **the only emotion display field**. It is also the one fear-and-morale reading for the simulation. Every caller passes the larger of `fear` and `fear_base`; use `EmotionStatusLean.status_from/status_of/status_of_emotion` (`core/emotion/EmotionStatusLean.gd`) and never call it with raw `fear`. `EmotionService.STATUS_LADDER` holds the ten statuses worst to best.
 
 **Emotional status tiers (10, best → worst):** derived from both `morale_current` and `fear_current`. The derivation evaluates the five severe conditions first, then the positive conditions, with `hesitant` as fallback. This ordering means severe fear or low morale always overrides a positive threshold. The fear input is the larger of `fear_current` and `fear_base`. `EmotionService.STATUS_LADDER` is the order of the ten statuses, worst to best (the table above lists them best to worst).
@@ -748,16 +748,16 @@ End condition priority:
 
 **Readiness score** (V2-COMBAT-001): determines turn order — asks "how ready is this Echo *right now*?"
 
-Formula: `score = (speed × 3 + agi × 2) + archetype_mod + calling_mod + trait_mod + vector_mod + morale_mod + seed_nudge`
+Formula: `score = (speed × 3 + agi × 2) + archetype_mod + calling_mod + trait_mod + vector_mod + state_mod + seed_nudge`
 
-- `morale_mod` — from `balance.json → data.combat.initiative_modifiers.by_morale_tier`: inspired +4, steady 0, shaken −3, broken −6. Morale reflects openness-of-spirit at encounter start; a high-morale Echo reacts faster.
+- `state_mod` — `afraid × afraid_points + bold × bold_points`, from `data.combat.initiative_modifiers` (`afraid_points` −6.0, `bold_points` +5.0, PROPOSED DEFAULT). `afraid` and `bold` (0 to 1) come from the unsoftened emotional-status lean (`data.combat.movement.felt_state.band_lean`) at combat start, linear, no composure. The result may be a fraction. Code: `CombatState.initiative_cfg`, `CombatState.gd:180`.
 - `seed_nudge` — `CampaignSeed.derive_from(seed, actor_id) % 10` (deterministic tiebreak, 0–9)
 - **Calculated once at combat start — mid-combat morale recovery does NOT re-sort.**
 
 Sort: descending by score. Tiebreak: input list position (stable — party echoes act before enemies on a tie).
 
 **Morale vs fear — design split:**
-- `morale_mod` in readiness uses **morale** (openness-of-spirit, a pre-encounter measure). A high-morale Echo is more ready to act.
+- `state_mod` in readiness uses the **emotional status** (fear and morale together, read once at combat start). A bold Echo is more ready to act; an afraid Echo is less ready.
 - Hesitation status uses **fear** (immediate threat response during the encounter). Fear accumulates in combat and degrades intent.
 - **Do not conflate these axes.** A broken Echo can have low fear at combat start; a high-morale Echo can accumulate fear mid-fight.
 

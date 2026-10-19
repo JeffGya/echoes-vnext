@@ -64,8 +64,8 @@ var _last_decision_trace: Dictionary = {}
 var _last_guidance_response: Dictionary = {}
 var _last_action: Dictionary = {}
 var _movement_skipped: bool = false  # ACTOR-006: true when actor is_structure; no movement phase
-var _last_morale_tier: String = "steady"  # ACTOR-007: morale tier of the winning intent
-var _last_morale_modifier: int = 0        # ACTOR-007: flat score modifier applied by morale tier
+var _last_emotional_status: String = ""  # emotional status the winning intent was scored at
+var _last_state_points: int = 0          # rounded points the status added to the winning action
 
 # V2-PROG-006: per-turn computed state (reset each advance_turn)
 var _expression_band: String = "nascent"
@@ -152,21 +152,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var cfg_data: Dictionary = context.get("cfg", {}).get("data", {})
 	var expr_cfg: Dictionary = cfg_data.get("maturity_expression", {})
 
-	# Runs for EVERY actor (echo, enemy, structure): the shared reader coerces defensively.
-	var living_party_ids: Dictionary = {}
-	for a_v in MaturityExpressionService._as_array(context.get("all_actors", [])):
-		if a_v is Dictionary:
-			var a: Dictionary = a_v
-			if str(a.get("faction", "")) == "echo" and not bool(a.get("is_dead", false)):
-				living_party_ids[str(a.get("id", ""))] = true
-	var ctx_inputs: Dictionary = MaturityExpressionService.build_ctx_inputs(
-		_actor,
-		MaturityExpressionService._as_array(context.get("bonds", [])),
-		living_party_ids,
-		cfg_data,
-		MaturityExpressionService._as_dict(context.get("bond_thresholds", {})),
-		MaturityExpressionService._as_dict(context.get("active_vow", {})),
-		float(context.get("instability", 0.0)))
+	var ctx_inputs: Dictionary = MaturityExpressionService.ctx_inputs_of(_actor, context, cfg_data)
 
 	var expr_result: Dictionary = MaturityExpressionService.derive_expression(_actor, ctx_inputs, expr_cfg)
 	_expression_band = str(expr_result.get("expression_band", "nascent"))
@@ -211,8 +197,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 	# PROG-010: capture emotional state at turn start (for event detection)
 	var start_fear: int = int(_actor.get("fear", 0))
-	var start_morale: int = int(_actor.get("morale", 50))
-	var start_morale_tier: String = EmotionService.get_morale_tier(start_morale)
+	var start_status: String = EmotionStatusLean.status_of(_actor)
 
 	# PROG-010: check last_echo_standing
 	var last_echo_standing := _is_last_echo_standing(context)
@@ -424,9 +409,9 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	# would otherwise reset to {} on every turn — meaning situational conditions that depend
 	# on the previous action (repeated_move_penalty, repeated_guard_penalty) never fire.
 	_actor["last_intent"] = { "action_type": str(intent.get("action_type", "")) }
-	# ACTOR-007: read morale metadata annotated by BehaviorArbiter onto the winner.
-	_last_morale_tier     = str(intent.get("morale_tier",     "steady"))
-	_last_morale_modifier = int(intent.get("morale_modifier", 0))
+	# Status metadata annotated by BehaviorArbiter onto the winner.
+	_last_emotional_status = str(intent.get("emotional_status", EmotionStatusLean.status_of(_actor)))
+	_last_state_points     = roundi(float(intent.get("state_points", 0.0)))
 	logger.debug(t, "actor.intent", "Intent selected", {
 		"module_id": _behavior_module.get_module_id(),
 		"action_type": intent.get("action_type", ""),
@@ -447,8 +432,8 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 		"target_id":              _last_action["target_id"],
 		"target_distance":        _last_action["target_distance"],  # GRID-004
 		"damage":                 0,  # placeholder — real damage in COMBAT-001+
-		"morale_tier":            _last_morale_tier,                     # ACTOR-007
-		"action_weight_modifier": _last_morale_modifier,                 # ACTOR-007
+		"emotional_status":       _last_emotional_status,
+		"action_weight_modifier": _last_state_points,
 		"archetype_birth":        str(intent.get("archetype_birth", "")),
 		"archetype_modifier":     int(intent.get("archetype_modifier", 0)),
 	})
@@ -618,8 +603,7 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 
 	# PROG-010 / V2-VOICE-001: emotional event detection + bark selection
 	var end_fear: int = int(_actor.get("fear", 0))
-	var end_morale: int = int(_actor.get("morale", 50))
-	var end_morale_tier: String = EmotionService.get_morale_tier(end_morale)
+	var end_status: String = EmotionStatusLean.status_of(_actor)
 	var resilience_fired: bool = resist_fear_since_last_turn \
 		or bool((_actor.get("emotion", {}) as Dictionary).get("_resilience_fired", false))
 	var action_type: String = str(intent.get("action_type", ""))
@@ -638,10 +622,10 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	var guidance_consent: String = str(guidance_response.get("consent", ""))
 	var guidance_reading: String = str(guidance_response.get("reading", ""))
 	var guidance_reason_text: String = str(guidance_response.get("reason_text", ""))
-	_select_bark(arch, calling, action_type, start_fear, end_fear, start_morale_tier, end_morale_tier,
+	_select_bark(arch, calling, action_type, start_fear, end_fear, start_status, end_status,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
 		divergence_bark_cooldown, guidance_consent, guidance_reason_text, guidance_reading,
-		resilient_bark_cooldown)
+		resilient_bark_cooldown, expr_cfg.get("combat_banter", {}).get("calm_statuses", []) as Array)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -704,9 +688,9 @@ func get_snapshot() -> Dictionary:
 		# ACTOR-006: structure identity fields
 		"is_structure":     _actor.get("is_structure", false),
 		"movement_skipped": _movement_skipped,
-		# ACTOR-007: morale influence fields
-		"morale_tier":           _last_morale_tier,
-		"action_weight_modifier": _last_morale_modifier,
+		# Status influence fields
+		"emotional_status":       _last_emotional_status,
+		"action_weight_modifier": _last_state_points,
 		# ACTOR-008: death state fields
 		"status":      "dead" if _actor.get("is_dead", false) else "alive",
 		"death_round": int(_actor.get("death_round", 0)),
@@ -781,8 +765,8 @@ func _select_bark(
 	action_type: String,
 	start_fear: int,
 	end_fear: int,
-	start_morale_tier: String,
-	end_morale_tier: String,
+	start_status: String,
+	end_status: String,
 	last_echo_standing: bool,
 	resilience_fired: bool,
 	target_id: Variant,
@@ -793,7 +777,8 @@ func _select_bark(
 	guidance_consent: String = "",
 	guidance_reason_text: String = "",
 	guidance_reading: String = "",
-	resilient_cooldown_ticks: int = 10
+	resilient_cooldown_ticks: int = 10,
+	banter_statuses: Array = []
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -815,8 +800,8 @@ func _select_bark(
 	# Priority 4: combat_fear_rising (fear crossed 60 or 40)
 	elif (end_fear >= 60 and start_fear < 60) or (end_fear >= 40 and start_fear < 40):
 		context_key = "combat_fear_rising"
-	# Priority 5: combat_morale_falling (morale dropped a tier)
-	elif start_morale_tier != end_morale_tier and _morale_tier_rank(end_morale_tier) < _morale_tier_rank(start_morale_tier):
+	# Priority 5: combat_morale_falling (the emotional status got worse this turn)
+	elif EmotionService.STATUS_LADDER.find(end_status) < EmotionService.STATUS_LADDER.find(start_status):
 		context_key = "combat_morale_falling"
 	# Priority 5.4: combat_guidance_object / _refuse / _interpret — V2-COMBAT-003
 	# phase 9-10 TEMPORARY visual (V2-COMBAT-004 removes this bark surface and
@@ -857,13 +842,12 @@ func _select_bark(
 	elif action_type == "actor.taunt":
 		context_key = "combat_taunt"
 		_bark_target_id = target
-	# Priority 7: combat_inspired — morale inspired + aggressive action
-	elif end_morale_tier == "inspired" and action_type == "melee_attack":
+	# Priority 7: combat_inspired — radiant status + aggressive action
+	elif end_status == "radiant" and action_type == "melee_attack":
 		context_key = "combat_inspired"
 		_bark_target_id = target
-	# Priority 8: combat_banter — low fear + steady/inspired morale
-	elif int(_actor.get("fear", 0)) < 30 \
-			and (end_morale_tier == "steady" or end_morale_tier == "inspired"):
+	# Priority 8: combat_banter — a calm status after the turn
+	elif end_status in banter_statuses:
 		context_key = "combat_banter"
 	# Priority 8.5: combat_calling_skill — actor used a calling-specific skill action
 	elif action_type in ["actor.interpose", "actor.hold_ground", "actor.steady_call",
@@ -955,15 +939,6 @@ func _select_bark(
 		# (see the Priority 2 comment above).
 		if context_key == "combat_divergence":
 			_actor["_divergence_bark_next_t"] = t + divergence_cooldown_ticks
-
-
-# Returns an ordinal rank for morale tiers (higher = better).
-static func _morale_tier_rank(tier: String) -> int:
-	match tier:
-		"inspired": return 3
-		"steady":   return 2
-		"shaken":   return 1
-	return 0  # broken
 
 
 # V2-VOICE-002: Tick gap before next routine bark (~3–6 rounds at 7 ticks/round).

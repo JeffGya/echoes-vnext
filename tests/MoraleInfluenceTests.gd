@@ -1,234 +1,353 @@
 # res://tests/MoraleInfluenceTests.gd
-# Tests for the ACTOR-007 Morale Influence layer:
-#   1. broken_morale_idles_despite_adjacent_enemy
-#      morale=10 → broken tier → morale_bonus: idle +15, melee −20.
-#      Uncalled echo (melee base=40): idle(35) > melee(20) → idles.
-#   2. morale_modifier_carried_in_intent
-#      Warrior echo + broken morale + adjacent enemy → melee wins (45 > 25).
-#      Intent dict carries morale_tier="broken" and morale_modifier=−20 (melee penalty at broken).
-#   3. advance_turn_action_log_has_morale_fields
-#      actor.action log entry includes "morale_tier" and "action_weight_modifier" with correct values.
-#   4. snapshot_has_morale_tier_and_modifier
-#      get_snapshot() after advance_turn() returns morale_tier and action_weight_modifier fields.
-#
-# All tests use BehaviorArbiter.new({}) (hardcoded defaults) — no file I/O.
-# Tests use raw actor dicts — no full EchoActor schema needed for the arbiter.
-# Morale defaults: actor.get("morale", 50) = 50 → "steady" → bonus = 0 for all other test suites.
-# Run via Debug Panel: tests
+# The action layer reads the emotional status: one lean, softened by composure once, split into
+# an afraid end and a bold end (BehaviorArbiter._score, _state_points). Every number comes from
+# data/balance.json, so these tests hold when the PROPOSED DEFAULT values are tuned.
 
 extends RefCounted
 class_name MoraleInfluenceTests
 
 static func register(runner: CoreTestRunner) -> void:
-	runner.register_test("morale/broken_morale_idles_despite_adjacent_enemy",  Callable(MoraleInfluenceTests, "_t_broken_morale_idles_despite_adjacent_enemy"))
-	runner.register_test("morale/morale_modifier_carried_in_intent",            Callable(MoraleInfluenceTests, "_t_morale_modifier_carried_in_intent"))
-	runner.register_test("morale/advance_turn_action_log_has_morale_fields",    Callable(MoraleInfluenceTests, "_t_advance_turn_action_log_has_morale_fields"))
-	runner.register_test("morale/snapshot_has_morale_tier_and_modifier",        Callable(MoraleInfluenceTests, "_t_snapshot_has_morale_tier_and_modifier"))
+	runner.register_test("morale/afraid_status_guards_despite_adjacent_enemy", Callable(MoraleInfluenceTests, "_t_afraid_status_guards_despite_adjacent_enemy"))
+	runner.register_test("morale/status_metadata_carried_in_intent",           Callable(MoraleInfluenceTests, "_t_status_metadata_carried_in_intent"))
+	runner.register_test("morale/advance_turn_action_log_has_status_fields",   Callable(MoraleInfluenceTests, "_t_advance_turn_action_log_has_status_fields"))
+	runner.register_test("morale/snapshot_has_status_and_modifier",            Callable(MoraleInfluenceTests, "_t_snapshot_has_status_and_modifier"))
+	runner.register_test("morale/composure_counted_once",                      Callable(MoraleInfluenceTests, "_t_composure_counted_once"))
+	runner.register_test("morale/score_reads_only_the_status_lean",            Callable(MoraleInfluenceTests, "_t_score_reads_only_the_status_lean"))
+	runner.register_test("morale/aduro_charges_when_afraid",                   Callable(MoraleInfluenceTests, "_t_aduro_charges_when_afraid"))
+	runner.register_test("morale/enemy_reads_the_status",                      Callable(MoraleInfluenceTests, "_t_enemy_reads_the_status"))
+	runner.register_test("morale/calling_signature_scales_by_afraid",          Callable(MoraleInfluenceTests, "_t_calling_signature_scales_by_afraid"))
+	runner.register_test("morale/bold_status_raises_melee",                    Callable(MoraleInfluenceTests, "_t_bold_status_raises_melee"))
+	runner.register_test("morale/afraid_curve_values",                         Callable(MoraleInfluenceTests, "_t_afraid_curve_values"))
+	runner.register_test("morale/bark_triggers_follow_the_status",             Callable(MoraleInfluenceTests, "_t_bark_triggers_follow_the_status"))
+	runner.register_test("morale/banter_bark_follows_calm_statuses",           Callable(MoraleInfluenceTests, "_t_banter_bark_follows_calm_statuses"))
+	runner.register_test("morale/state_config_valid",                          Callable(MoraleInfluenceTests, "_t_state_config_valid"))
+	runner.register_test("morale/state_config_rejects_bad_values",             Callable(MoraleInfluenceTests, "_t_state_config_rejects_bad_values"))
+
+
+static func _data() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	return cs.get_balance()["data"] as Dictionary
+
+
+static func _actor_cfg(data: Dictionary) -> Dictionary:
+	return ConfigService.merge_actor_cfg(data["actor"] as Dictionary, data["maturity_expression"] as Dictionary)
+
+
+static func _arbiter(data: Dictionary) -> BehaviorArbiter:
+	return BehaviorArbiter.new(_actor_cfg(data), (data["combat"] as Dictionary)["movement"] as Dictionary)
+
+
+## The afraid and bold ends the arbiter should see for this actor and composure.
+static func _ends(data: Dictionary, actor: Dictionary, composure: float) -> Array:
+	var table: Dictionary = EmotionStatusLean.table_of((data["combat"] as Dictionary)["movement"] as Dictionary)
+	var lean: float = float(table[EmotionStatusLean.status_of(actor)])
+	var keep: float = 1.0 - BehaviorArbiter.composure_dampen(_actor_cfg(data)) * composure
+	var exponent: float = float((data["actor"] as Dictionary)["afraid_curve_exponent"])
+	return [pow(maxf(0.0, -lean), exponent) * keep, maxf(0.0, lean) * keep]
+
+
+static func _points(data: Dictionary, action_type: String, ends: Array) -> float:
+	var row: Dictionary = ((data["actor"] as Dictionary)["state_action_points"] as Dictionary)[action_type] as Dictionary
+	return float(ends[0]) * float(row["afraid"]) + float(ends[1]) * float(row["bold"])
+
+
+static func _echo(id: String, calling: String, morale: int, fear: int) -> Dictionary:
+	return {
+		"id": id, "faction": "echo", "actor_type": "echo", "calling_origin": calling,
+		"traits": {"courage": 0, "wisdom": 0, "faith": 0}, "vector_scores": {},
+		"fear": fear, "morale": morale, "grid_pos": {"col": 0, "row": 0},
+	}
+
+
+static func _enemy(id: String) -> Dictionary:
+	return {"id": id, "faction": "enemy", "grid_pos": {"col": 1, "row": 0}}
+
+
+static func _components(arbiter: BehaviorArbiter, action_type: String, actor: Dictionary, composure: float,
+		calling_behavior: Dictionary = {}) -> Dictionary:
+	var out: Dictionary = {}
+	arbiter._score(action_type, actor, {}, {}, "nascent", calling_behavior, {}, 0.1, 0.0, composure, 0.3, out)
+	return out
 
 
 # -------------------------
 # Tests
 # -------------------------
 
-# Test 1: broken_morale_guards_despite_adjacent_enemy
-# Setup: uncalled echo, morale=10 (broken), fear=0, adjacent enemy at dist=1.
-# Score check (hardcoded defaults, zeroed traits):
-#   melee_attack: (base=40 + morale_bonus(−20)) × 1.0 = 20.0
-#   actor.idle:   (base=20 + morale_bonus(+15)) × 1.0 = 35.0
-#   actor.guard:  (base=25 + morale_bonus(+20)) × 1.0 = 45.0   ← wins (COMBAT-003)
-# Expected: actor.guard wins — broken morale heavily favours a defensive stance.
-# Demonstrates: morale_bonus is inside the pre-fear bracket and affects candidate ranking.
-static func _t_broken_morale_idles_despite_adjacent_enemy() -> Dictionary:
-	# onyamesu calling has guard base=55 — at broken morale (guard+20, melee-20) + echo_in_melee
-	# guard: (55+20)×1.0 − 5 = 70; melee: (35−20)×1.0 + 18 = 33 → guard wins.
-	var actor := {
-		"id":             "echo_morale_001",
-		"faction":        "echo",
-		"calling_origin": "onyamesu",
-		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
-		"vector_scores":  {},
-		"fear":           0,
-		"morale":         10,  # broken tier (0–24)
-		"grid_pos":       { "col": 0, "row": 0 },
-	}
-	var enemy := {
-		"id":       "enemy_morale_001",
-		"faction":  "enemy",
-		"grid_pos": { "col": 1, "row": 0 },
-	}
-
-	var arbiter := BehaviorArbiter.new({})
-	var context := { "actor": actor, "all_actors": [enemy], "t": 1 }
-	var intent: Dictionary = arbiter.select_intent(context)
-
-	# onyamesu guard (70) > melee (33) > idle at broken morale + echo_in_melee.
+## A strongly afraid onyamesu (guard base high) guards next to an enemy.
+static func _t_afraid_status_guards_despite_adjacent_enemy() -> Dictionary:
+	var data: Dictionary = _data()
+	var actor: Dictionary = _echo("echo_morale_001", "onyamesu", 10, 0)
+	var intent: Dictionary = _arbiter(data).select_intent({"actor": actor, "all_actors": [_enemy("enemy_morale_001")], "t": 1})
 	if str(intent.get("action_type", "")) != "actor.guard":
-		return {
-			"ok": false,
-			"error": "Expected actor.guard (broken morale: guard=45 > idle=35 > melee=20), got: %s" % str(intent.get("action_type")),
-		}
-
-	return { "ok": true }
+		return _fail("Expected actor.guard for an afraid onyamesu, got: %s" % str(intent.get("action_type")))
+	return _pass()
 
 
-# Test 2: morale_modifier_carried_in_intent
-# Setup: warrior echo, morale=10 (broken), fear=0, adjacent enemy at dist=1.
-# Score check (warrior calling, zeroed traits):
-#   melee_attack: (base=65 + 0 + 0 + morale_bonus(−20)) × 1.0 = 45.0
-#   actor.idle:   (base=10 + 0 + 0 + morale_bonus(+15)) × 1.0 = 25.0
-# Expected: melee_attack wins (warrior base strong enough to overcome broken penalty);
-#   intent dict carries morale_tier="broken" and morale_modifier=−20.
-# Demonstrates: morale metadata is attached to the winner regardless of which action wins.
-static func _t_morale_modifier_carried_in_intent() -> Dictionary:
-	var actor := {
-		"id":             "echo_morale_002",
-		"faction":        "echo",
-		"calling_origin": "blade",
-		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
-		"vector_scores":  {},
-		"fear":           0,
-		"morale":         10,  # broken tier (0–24)
-		"grid_pos":       { "col": 0, "row": 0 },
-	}
-	var enemy := {
-		"id":       "enemy_morale_002",
-		"faction":  "enemy",
-		"grid_pos": { "col": 1, "row": 0 },
-	}
-
-	var arbiter := BehaviorArbiter.new({})
-	var context := { "actor": actor, "all_actors": [enemy], "t": 2 }
-	var intent: Dictionary = arbiter.select_intent(context)
-
-	# Sanity-check: melee should win for the warrior even at broken morale.
-	if str(intent.get("action_type", "")) != "melee_attack":
-		return {
-			"ok": false,
-			"error": "Expected melee_attack (warrior base=65 − 20 = 45 > idle 10+15=25), got: %s" % str(intent.get("action_type")),
-		}
-
-	# Verify morale metadata on the winner.
-	if str(intent.get("morale_tier", "")) != "broken":
-		return {
-			"ok": false,
-			"error": "Expected intent.morale_tier='broken', got: %s" % str(intent.get("morale_tier")),
-		}
-	if int(intent.get("morale_modifier", 999)) != -20:
-		return {
-			"ok": false,
-			"error": "Expected intent.morale_modifier=−20 (melee penalty at broken), got: %s" % str(intent.get("morale_modifier")),
-		}
-
-	return { "ok": true }
+static func _t_status_metadata_carried_in_intent() -> Dictionary:
+	var data: Dictionary = _data()
+	var actor: Dictionary = _echo("echo_morale_002", "aduro", 10, 0)
+	var intent: Dictionary = _arbiter(data).select_intent({"actor": actor, "all_actors": [_enemy("enemy_morale_002")], "t": 2})
+	var status: String = EmotionStatusLean.status_of(actor)
+	if str(intent.get("emotional_status", "")) != status:
+		return _fail("intent.emotional_status expected '%s', got '%s'" % [status, str(intent.get("emotional_status"))])
+	var expected: float = _points(data, str(intent["action_type"]), _ends(data, actor, 0.4))
+	if not is_equal_approx(float(intent.get("state_points", INF)), expected):
+		return _fail("intent.state_points expected %f, got %s" % [expected, str(intent.get("state_points"))])
+	if intent.has("morale_tier") or intent.has("morale_modifier"):
+		return _fail("the old morale keys must be gone: %s" % str(intent))
+	return _pass()
 
 
-# Test 3: advance_turn_action_log_has_morale_fields
-# Setup: uncalled echo, morale=10 (broken), adjacent enemy → actor.guard wins (COMBAT-003).
-# Expected: actor.action log entry has morale_tier="broken" and action_weight_modifier=20.
-# Demonstrates: ActorStateMachine reads morale metadata from intent and writes it to the action log.
-static func _t_advance_turn_action_log_has_morale_fields() -> Dictionary:
-	# onyamesu calling: guard wins at broken morale (see test 1 score math).
-	var actor := {
-		"id":             "echo_morale_003",
-		"faction":        "echo",
-		"calling_origin": "onyamesu",
-		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
-		"vector_scores":  {},
-		"fear":           0,
-		"morale":         10,  # broken tier → guard morale_bonus = +20 → action_weight_modifier = 20
-		"grid_pos":       { "col": 0, "row": 0 },
-	}
-	var enemy := {
-		"id":       "enemy_morale_003",
-		"faction":  "enemy",
-		"grid_pos": { "col": 1, "row": 0 },
-	}
-
-	var sm := ActorStateMachine.new(actor, BehaviorArbiter.new({}))
+## ActorStateMachine logs the status and the rounded state points of the winner.
+static func _t_advance_turn_action_log_has_status_fields() -> Dictionary:
+	var data: Dictionary = _data()
+	var actor: Dictionary = _echo("echo_morale_003", "onyamesu", 10, 0)
+	var sm := ActorStateMachine.new(actor, _arbiter(data))
 	var logger := StructuredLogger.new()
 	logger.set_level("debug")
-
-	var context := { "actor": actor, "all_actors": [enemy], "t": 3 }
-	sm.advance_turn(context, logger, 3)
-
-	# Find the actor.action log entry.
-	var logs: Array = logger.get_logs()
-	var action_event: Dictionary = {}
-	for entry in logs:
-		if str(entry.get("type", "")) == "actor.action" and action_event.is_empty():
-			action_event = entry
-
-	if action_event.is_empty():
-		return { "ok": false, "error": "No actor.action log event found" }
-
-	var adata: Dictionary = action_event.get("data", {})
-
-	if not adata.has("morale_tier"):
-		return { "ok": false, "error": "actor.action data missing 'morale_tier' key" }
-	if str(adata.get("morale_tier", "")) != "broken":
-		return {
-			"ok": false,
-			"error": "actor.action morale_tier expected 'broken', got: %s" % str(adata.get("morale_tier")),
-		}
-
-	if not adata.has("action_weight_modifier"):
-		return { "ok": false, "error": "actor.action data missing 'action_weight_modifier' key" }
-	# COMBAT-003: guard wins at broken: actor.guard morale_bonus = +20, so action_weight_modifier = 20.
-	if int(adata.get("action_weight_modifier", -999)) != 20:
-		return {
-			"ok": false,
-			"error": "actor.action action_weight_modifier expected 20 (guard bonus at broken), got: %s" % str(adata.get("action_weight_modifier")),
-		}
-
-	return { "ok": true }
+	sm.advance_turn({"actor": actor, "all_actors": [_enemy("enemy_morale_003")], "t": 3}, logger, 3)
+	var adata: Dictionary = {}
+	for entry: Dictionary in logger.get_logs():
+		if str(entry.get("type", "")) == "actor.action" and adata.is_empty():
+			adata = entry.get("data", {}) as Dictionary
+	if adata.is_empty():
+		return _fail("No actor.action log event found")
+	var expected: int = roundi(_points(data, str(adata["action_type"]), _ends(data, actor, float(actor["_composure"]))))
+	if str(adata.get("emotional_status", "")) != EmotionStatusLean.status_of(actor):
+		return _fail("actor.action emotional_status: %s" % str(adata.get("emotional_status")))
+	if not adata.has("action_weight_modifier") or int(adata["action_weight_modifier"]) != expected or expected == 0:
+		return _fail("actor.action action_weight_modifier expected %d (non-zero), got %s" % [expected, str(adata.get("action_weight_modifier"))])
+	if adata.has("morale_tier"):
+		return _fail("actor.action still logs morale_tier")
+	return _pass()
 
 
-# Test 4: snapshot_has_morale_tier_and_modifier
-# Setup: uncalled echo, morale=10 (broken), adjacent enemy → actor.guard wins (COMBAT-003).
-# Expected: get_snapshot() after advance_turn() returns morale_tier="broken" and action_weight_modifier=20.
-# Demonstrates: ActorStateMachine exposes morale fields in the debug snapshot.
-static func _t_snapshot_has_morale_tier_and_modifier() -> Dictionary:
-	# onyamesu calling: guard wins at broken morale (see test 1 score math).
-	var actor := {
-		"id":             "echo_morale_004",
-		"faction":        "echo",
-		"calling_origin": "onyamesu",
-		"traits":         { "courage": 0, "wisdom": 0, "faith": 0 },
-		"vector_scores":  {},
-		"fear":           0,
-		"morale":         10,  # broken tier → guard wins → action_weight_modifier = 20
-		"grid_pos":       { "col": 0, "row": 0 },
-	}
-	var enemy := {
-		"id":       "enemy_morale_004",
-		"faction":  "enemy",
-		"grid_pos": { "col": 1, "row": 0 },
-	}
-
-	var sm := ActorStateMachine.new(actor, BehaviorArbiter.new({}))
+static func _t_snapshot_has_status_and_modifier() -> Dictionary:
+	var data: Dictionary = _data()
+	var actor: Dictionary = _echo("echo_morale_004", "onyamesu", 10, 0)
+	var sm := ActorStateMachine.new(actor, _arbiter(data))
 	var logger := StructuredLogger.new()
-	logger.set_level("debug")
-
-	var context := { "actor": actor, "all_actors": [enemy], "t": 4 }
-	sm.advance_turn(context, logger, 4)
-
+	sm.advance_turn({"actor": actor, "all_actors": [_enemy("enemy_morale_004")], "t": 4}, logger, 4)
 	var snapshot: Dictionary = sm.get_snapshot()
+	var action_type: String = str((snapshot["last_action"] as Dictionary)["action_type"])
+	var expected: int = roundi(_points(data, action_type, _ends(data, actor, float(actor["_composure"]))))
+	if str(snapshot.get("emotional_status", "")) != EmotionStatusLean.status_of(actor):
+		return _fail("snapshot.emotional_status: %s" % str(snapshot.get("emotional_status")))
+	if int(snapshot.get("action_weight_modifier", -999)) != expected or snapshot.has("morale_tier"):
+		return _fail("snapshot.action_weight_modifier expected %d without morale_tier: %s" % [expected, str(snapshot)])
+	return _pass()
 
-	if not snapshot.has("morale_tier"):
-		return { "ok": false, "error": "get_snapshot() missing 'morale_tier' key" }
-	if str(snapshot.get("morale_tier", "")) != "broken":
-		return {
-			"ok": false,
-			"error": "snapshot.morale_tier expected 'broken', got: %s" % str(snapshot.get("morale_tier")),
-		}
 
-	if not snapshot.has("action_weight_modifier"):
-		return { "ok": false, "error": "get_snapshot() missing 'action_weight_modifier' key" }
-	# COMBAT-003: guard wins at broken: actor.guard morale_bonus = +20, so action_weight_modifier = 20.
-	if int(snapshot.get("action_weight_modifier", -999)) != 20:
-		return {
-			"ok": false,
-			"error": "snapshot.action_weight_modifier expected 20 (guard bonus at broken), got: %s" % str(snapshot.get("action_weight_modifier")),
-		}
+## Composure softens the lean and nothing else: fear_factor = 1 - fear_active_dampen x afraid.
+static func _t_composure_counted_once() -> Dictionary:
+	var data: Dictionary = _data()
+	var actor: Dictionary = _echo("echo_once", "uncalled", 50, 60)
+	var ends: Array = _ends(data, actor, 0.5)
+	var expected: float = 1.0 - float((data["actor"] as Dictionary)["fear_active_dampen"]) * float(ends[0])
+	var got: float = float(_components(_arbiter(data), "melee_attack", actor, 0.5)["fear_factor"])
+	if float(ends[0]) <= 0.0:
+		return _fail("fixture must be afraid")
+	if not is_equal_approx(got, expected):
+		return _fail("fear_factor at composure 0.5 expected %f, got %f" % [expected, got])
+	return _pass()
 
-	return { "ok": true }
+
+## Two actors with other raw fear and morale but the same status score the same.
+static func _t_score_reads_only_the_status_lean() -> Dictionary:
+	var data: Dictionary = _data()
+	var arbiter: BehaviorArbiter = _arbiter(data)
+	var by_fear: Dictionary = _echo("echo_a", "uncalled", 50, 47)
+	var by_morale: Dictionary = _echo("echo_b", "uncalled", 22, 10)
+	by_morale["fear_base"] = 5
+	if EmotionStatusLean.status_of(by_fear) != EmotionStatusLean.status_of(by_morale):
+		return _fail("fixture statuses differ: %s vs %s" % [EmotionStatusLean.status_of(by_fear), EmotionStatusLean.status_of(by_morale)])
+	for action_type: String in ["melee_attack", "protect_ally", "actor.guard", "actor.idle", "actor.move"]:
+		var a: float = arbiter._score(action_type, by_fear, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.3, 0.3)
+		var b: float = arbiter._score(action_type, by_morale, {}, {}, "nascent", {}, {}, 0.1, 0.0, 0.3, 0.3)
+		if a != b:
+			return _fail("%s: same status scored %f and %f" % [action_type, a, b])
+	return _pass()
+
+
+## Aduro's afraid_points_override replaces the afraid end; the fear factor still dampens melee.
+static func _t_aduro_charges_when_afraid() -> Dictionary:
+	var data: Dictionary = _data()
+	var arbiter: BehaviorArbiter = _arbiter(data)
+	var actor: Dictionary = _echo("echo_aduro", "aduro", 10, 0)
+	var aduro: Dictionary = ((data["maturity_expression"] as Dictionary)["calling_behavior"] as Dictionary)["aduro"] as Dictionary
+	var override: Dictionary = aduro["afraid_points_override"] as Dictionary
+	var afraid: float = float(_ends(data, actor, 0.4)[0])
+	for action_type: String in override:
+		var got: float = float(_components(arbiter, action_type, actor, 0.4, aduro)["morale_bonus"])
+		if not is_equal_approx(got, afraid * float(override[action_type])):
+			return _fail("%s: expected %f, got %f" % [action_type, afraid * float(override[action_type]), got])
+	var melee: Dictionary = _components(arbiter, "melee_attack", actor, 0.4, aduro)
+	var plain: Dictionary = _components(arbiter, "melee_attack", actor, 0.4, {})
+	if float(melee["morale_bonus"]) <= 0.0 or float(plain["morale_bonus"]) >= 0.0:
+		return _fail("aduro must charge when afraid and a plain Echo must not: %f / %f" % [melee["morale_bonus"], plain["morale_bonus"]])
+	if float(melee["fear_factor"]) >= 1.0:
+		return _fail("the fear factor must still dampen aduro's melee")
+	return _pass()
+
+
+## Enemies read the same status as Echoes in the action layer.
+static func _t_enemy_reads_the_status() -> Dictionary:
+	var data: Dictionary = _data()
+	var arbiter: BehaviorArbiter = _arbiter(data)
+	var echo: Dictionary = _echo("echo_x", "enemy", 10, 70)
+	var enemy: Dictionary = echo.duplicate(true)
+	enemy["faction"] = "enemy"
+	enemy["actor_type"] = "enemy"
+	var e: Dictionary = _components(arbiter, "melee_attack", enemy, 0.4)
+	var a: Dictionary = _components(arbiter, "melee_attack", echo, 0.4)
+	if float(e["fear_factor"]) >= 1.0 or float(e["morale_bonus"]) == 0.0:
+		return _fail("an afraid enemy must read the status: %s" % str(e))
+	if e["fear_factor"] != a["fear_factor"] or e["morale_bonus"] != a["morale_bonus"]:
+		return _fail("enemy and Echo with one status differ: %s vs %s" % [str(e), str(a)])
+	return _pass()
+
+
+## A calling signature adds afraid x its configured points, and nothing when calm.
+static func _t_calling_signature_scales_by_afraid() -> Dictionary:
+	var data: Dictionary = _data()
+	var arbiter: BehaviorArbiter = _arbiter(data)
+	var callings: Dictionary = (data["maturity_expression"] as Dictionary)["calling_behavior"] as Dictionary
+	var checked: int = 0
+	for calling: String in callings:
+		var behavior: Variant = callings[calling]
+		if not behavior is Dictionary or not (behavior as Dictionary).has("afraid_signature"):
+			continue
+		var signature: Dictionary = (behavior as Dictionary)["afraid_signature"] as Dictionary
+		for action_type: String in signature:
+			for fixture: Array in [[10, 0], [50, 0]]:
+				var actor: Dictionary = _echo("echo_sig", calling, int(fixture[0]), int(fixture[1]))
+				var afraid: float = float(_ends(data, actor, 0.0)[0])
+				var with_sig: float = float(_components(arbiter, action_type, actor, 0.0, behavior)["base"])
+				var without: float = float(_components(arbiter, action_type, actor, 0.0, {})["base"])
+				if not is_equal_approx(with_sig - without, afraid * float(signature[action_type])):
+					return _fail("%s %s: signature added %f, expected %f" % [calling, action_type, with_sig - without, afraid * float(signature[action_type])])
+				checked += 1
+	if checked == 0:
+		return _fail("no afraid_signature in config")
+	return _pass()
+
+
+static func _t_bold_status_raises_melee() -> Dictionary:
+	var data: Dictionary = _data()
+	var actor: Dictionary = _echo("echo_bold", "uncalled", 80, 0)
+	var ends: Array = _ends(data, actor, 0.4)
+	var got: Dictionary = _components(_arbiter(data), "melee_attack", actor, 0.4)
+	if float(ends[1]) <= 0.0 or float(got["fear_factor"]) != 1.0:
+		return _fail("fixture must be bold and unafraid: %s" % str(ends))
+	if not is_equal_approx(float(got["morale_bonus"]), _points(data, "melee_attack", ends)) or float(got["morale_bonus"]) <= 0.0:
+		return _fail("bold melee points: %s" % str(got))
+	return _pass()
+
+
+## The curve acts on the unsoftened lean, then composure softens once; slices 5 and 6 stay linear.
+static func _t_afraid_curve_values() -> Dictionary:
+	var table: Dictionary = EmotionStatusLean.table_of(_data()["combat"]["movement"] as Dictionary)
+	for status: String in ["hollow", "burdened", "hesitant"]:
+		var lean: float = float(table[status])
+		var raw: float = -lean
+		if not is_equal_approx(EmotionStatusLean.curved_afraid(lean, 2.5, 0.0, 0.4), pow(raw, 2.5)):
+			return _fail("%s: curve at k 2.5 must be %f" % [status, pow(raw, 2.5)])
+		if not is_equal_approx(EmotionStatusLean.curved_afraid(lean, 2.5, 0.5, 0.4), pow(raw, 2.5) * 0.8):
+			return _fail("%s: composure must scale the curved value once" % status)
+		if not is_equal_approx(EmotionStatusLean.afraid(EmotionStatusLean.soften(lean, 0.5, 0.4)), raw * 0.8):
+			return _fail("%s: the linear afraid() of slices 5 and 6 changed" % status)
+	if EmotionStatusLean.curved_afraid(float(table["radiant"]), 2.5, 0.0, 0.4) != 0.0:
+		return _fail("a bold status must have no afraid value")
+	return _pass()
+
+
+static func _bark_context(start_status: String, end_status: String, action_type: String) -> String:
+	var asm := ActorStateMachine.new({"id": "echo.bark", "fear": 0, "morale": 50}, null, {})
+	asm._expression_band = "whole"
+	asm._select_bark("proud", "", action_type, 0, 0, start_status, end_status, false, false, "", 0, 0,
+		false, 0, "", "", "", 0, calm_statuses())
+	return asm._bark_context
+
+
+static func calm_statuses() -> Array:
+	return (_data()["maturity_expression"] as Dictionary)["combat_banter"]["calm_statuses"] as Array
+
+
+## Banter follows the status after the turn, not raw fear or the morale tier.
+static func _t_banter_bark_follows_calm_statuses() -> Dictionary:
+	for status: String in EmotionService.STATUS_LADDER:
+		var banters: bool = _bark_context(status, status, "actor.guard") == "combat_banter"
+		if banters != (status in calm_statuses()):
+			return _fail("status %s: banter %s, calm statuses are %s" % [status, banters, calm_statuses()])
+	if calm_statuses().is_empty():
+		return _fail("fixture: the calm status list is empty")
+	return _pass()
+
+
+## "morale falling" fires when the status gets worse, for any cause; "inspired" fires at radiant.
+static func _t_bark_triggers_follow_the_status() -> Dictionary:
+	if _bark_context("grounded", "burdened", "actor.guard") != "combat_morale_falling":
+		return _fail("a worse status must select combat_morale_falling")
+	if _bark_context("burdened", "grounded", "actor.guard") == "combat_morale_falling" \
+			or _bark_context("pressed", "pressed", "actor.guard") == "combat_morale_falling":
+		return _fail("a better or equal status must not select combat_morale_falling")
+	if _bark_context("radiant", "radiant", "melee_attack") != "combat_inspired":
+		return _fail("radiant + melee must select combat_inspired")
+	if _bark_context("whole", "whole", "melee_attack") == "combat_inspired":
+		return _fail("only radiant selects combat_inspired")
+	return _pass()
+
+
+static func _t_state_config_valid() -> Dictionary:
+	var errors: Array[String] = BehaviorArbiter.state_config_errors(_data())
+	if not errors.is_empty():
+		return _fail("balance.json status-point tables are invalid: %s" % str(errors))
+	return _pass()
+
+
+static func _t_state_config_rejects_bad_values() -> Dictionary:
+	var cases: Array = [
+		["actor.afraid_curve_exponent", func(d: Dictionary) -> void:
+			d["actor"]["afraid_curve_exponent"] = 4.5],
+		["actor.afraid_curve_exponent", func(d: Dictionary) -> void:
+			d["actor"]["afraid_curve_exponent"] = 0.5],
+		["combat.initiative_modifiers.bold_points", func(d: Dictionary) -> void:
+			d["combat"]["initiative_modifiers"]["bold_points"] = "high"],
+		["combat.initiative_modifiers.afraid_points", func(d: Dictionary) -> void:
+			(d["combat"]["initiative_modifiers"] as Dictionary).erase("afraid_points")],
+		["actor.state_action_points.melee_attack", func(d: Dictionary) -> void:
+			var limit: float = float(d["actor"]["state_action_points"]["max_abs"])
+			d["actor"]["state_action_points"]["melee_attack"]["bold"] = limit + 1.0],
+		["actor.state_action_points.actor.fly", func(d: Dictionary) -> void:
+			d["actor"]["state_action_points"]["actor.fly"] = {"afraid": 0.0, "bold": 0.0}],
+		["actor.state_action_points.actor.move", func(d: Dictionary) -> void:
+			(d["actor"]["state_action_points"]["actor.move"] as Dictionary).erase("bold")],
+		["actor.state_action_points.max_abs", func(d: Dictionary) -> void:
+			d["actor"]["state_action_points"]["max_abs"] = 0.0],
+		["actor.movement_style_weights.follow_through_bias.calm", func(d: Dictionary) -> void:
+			d["actor"]["movement_style_weights"]["follow_through_bias"]["calm"] = {}],
+		["actor.movement_style_weights.follow_through_bias.bold", func(d: Dictionary) -> void:
+			d["actor"]["movement_style_weights"]["follow_through_bias"]["bold"]["dancing"] = 1.0],
+		["maturity_expression.calling_behavior.okomfo.afraid_signature", func(d: Dictionary) -> void:
+			d["maturity_expression"]["calling_behavior"]["okomfo"]["afraid_signature"]["actor.fly"] = 1.0],
+		["maturity_expression.calling_behavior.aduro.afraid_points_override", func(d: Dictionary) -> void:
+			var limit: float = float(d["actor"]["state_action_points"]["max_abs"])
+			d["maturity_expression"]["calling_behavior"]["aduro"]["afraid_points_override"]["melee_attack"] = limit + 1.0],
+	]
+	for case: Array in cases:
+		var data: Dictionary = _data().duplicate(true)
+		(case[1] as Callable).call(data)
+		var errors: Array[String] = BehaviorArbiter.state_config_errors(data)
+		if not errors.has(str(case[0])):
+			return _fail("expected %s in %s" % [case[0], str(errors)])
+	return _pass()
+
+
+static func _pass() -> Dictionary:
+	return {"ok": true}
+
+
+static func _fail(msg: String) -> Dictionary:
+	return {"ok": false, "error": msg}

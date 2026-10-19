@@ -345,7 +345,7 @@ static func _felt_rows(config: ConfigService, balance: Dictionary, bdata: Dictio
 			mover["morale"] = int(state[2])
 			mover["_composure"] = float(expression["composure"])
 			var base: Dictionary = MovementProfileService.derive_profile(mover, capacity_cfg)
-			var profile: Dictionary = live._with_state_steps(base, mover, movement, bdata)
+			var profile: Dictionary = live._with_state_steps(base, mover, movement, bdata, float(mover["_composure"]))
 			var generated: Dictionary = MovementOptionService.generate_options(
 				f2_board["movement_context"] as Dictionary, profile, (f2_board["goals"] as Array)[0] as Dictionary)
 			SpatialTermProbe._say("FELT_F2 standing=%d state=%s base_capacity=%d capacity=%d options=%d" % [
@@ -358,9 +358,9 @@ static func _felt_rows(config: ConfigService, balance: Dictionary, bdata: Dictio
 		var judgment: float = float(expression["judgment"])
 		var growth: Dictionary = BehaviorArbiter.new({}, movement)._style_growth(judgment)
 		var plain: float = MovementStyleService.style_alignment_score("forceful", "advance", actor["vector_scores"] as Dictionary,
-			"", actor.get("traits", {}) as Dictionary, 0.0, "steady", 0.0, 0.0, style_cfg)
+			"", actor.get("traits", {}) as Dictionary, 0.0, 0.0, 0.0, 0.0, style_cfg)
 		var grown: float = MovementStyleService.style_alignment_score("forceful", "advance", actor["vector_scores"] as Dictionary,
-			"", actor.get("traits", {}) as Dictionary, 0.0, "steady", 0.0, 0.0, style_cfg, float(growth["vector_mul"]), float(growth["trait_mul"]))
+			"", actor.get("traits", {}) as Dictionary, 0.0, 0.0, 0.0, 0.0, style_cfg, float(growth["vector_mul"]), float(growth["trait_mul"]))
 		SpatialTermProbe._say("FELT_F3 standing=%d judgment=%.3f vector_mul=%.3f trait_mul=%.3f score=%.3f grown=%.3f" % [
 			standing, judgment, float(growth["vector_mul"]), float(growth["trait_mul"]), plain, grown])
 	SpatialTermProbe._say("### FELT F-4 afraid Echo, standing 3, pressed: cells of the chosen route with the switches off and on (stop-short is not modelled here)")
@@ -376,7 +376,7 @@ static func _felt_rows(config: ConfigService, balance: Dictionary, bdata: Dictio
 		mover["morale"] = int(pressed[2])
 		mover["_composure"] = float(expression["composure"])
 		var base: Dictionary = MovementProfileService.derive_profile(mover, capacity_cfg)
-		var profile: Dictionary = live._with_state_steps(base, mover, arm[1] as Dictionary, bdata)
+		var profile: Dictionary = live._with_state_steps(base, mover, arm[1] as Dictionary, bdata, float(mover["_composure"]))
 		var arm_def: Dictionary = def.duplicate(true)
 		arm_def["capacity"] = int(profile["capacity"])
 		var board: Dictionary = build(arm_def)

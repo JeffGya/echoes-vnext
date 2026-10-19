@@ -696,41 +696,19 @@
 					"fan_out_bias": 1.0
 				}
 			},
-			"morale_action_muls": {
-				"_comment": "Flat bonus added to the pre-fear score sum. Tiers: broken 0–24 / shaken 25–49 / steady 50–74 / inspired 75–100. steady=0 is the neutral baseline — existing scores are unchanged at default morale. PROG-010: shaken bonuses reduced to remove built-in passive bias (root cause 1 fix).",
-				"melee_attack": {
-					"broken": -20.0,
-					"shaken": -3.0,
-					"steady": 0.0,
-					"inspired": 12.0
-				},
-				"protect_ally": {
-					"broken": -8.0,
-					"shaken": -3.0,
-					"steady": 0.0,
-					"inspired": 6.0
-				},
-				"actor.guard": {
-					"broken": 20.0,
-					"shaken": 4.0,
-					"steady": 0.0,
-					"inspired": -5.0
-				},
-				"actor.idle": {
-					"broken": 15.0,
-					"shaken": 2.0,
-					"steady": 0.0,
-					"inspired": -5.0
-				},
-				"actor.move": {
-					"broken": -20.0,
-					"shaken": -3.0,
-					"steady": 0.0,
-					"inspired": 10.0
-				}
+			"state_action_points": {
+				"_comment": "PROPOSED DEFAULT. Points the emotional status adds to an action, inside the fear bracket: afraid x afraid + bold x bold, where afraid and bold are the two ends of the status lean (data.combat.movement.felt_state.band_lean) after composure; afraid is curved by afraid_curve_exponent. A calm status adds nothing. max_abs is the largest allowed size of one end.",
+				"max_abs": 30.0,
+				"melee_attack": { "afraid": -20.0, "bold": 13.0 },
+				"protect_ally": { "afraid": -8.0, "bold": 8.0 },
+				"actor.guard": { "afraid": 25.0, "bold": -9.0 },
+				"actor.idle": { "afraid": 19.0, "bold": -9.0 },
+				"actor.move": { "afraid": -20.0, "bold": 11.0 }
 			},
 			"directive_base_bonus": 20.0,
-			"fear_active_dampen": 0.45,
+			"fear_active_dampen": 0.55,
+			"_comment_afraid_curve_exponent": "PROPOSED DEFAULT. The action layer and style read afraid = afraid(lean)^exponent, then composure softens it once. 1.0 is linear. Allowed 1.0 to 4.0.",
+			"afraid_curve_exponent": 2.5,
 			"fear_passive_actions": [
 				"actor.idle",
 				"actor.guard"
@@ -936,7 +914,7 @@
 				}
 			},
 			"movement_style_weights": {
-				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/stories/v2-combat-003.5/decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + morale_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
+				"_comment": "PROPOSED DEFAULT — V2-COMBAT-003.5 Phase 3b. Deterministic movement_style alignment (docs/movement-model.md §9/§10.4, docs/stories/v2-combat-003.5/decisions.md #18). Every already-generated route candidate is scored for how well its OWN route-shape reads as this actor's identity: alignment = (vector_bias + calling_family_bias + fear_bias + follow_through_bias + bond_bias + vow_bias + trait_nudge) × alignment_weight. BehaviorArbiter adds that to the candidate's own score before the winner-sort, so style influences which option wins with no post-hoc re-pointing. See MovementStyleService.gd. Not yet playtest-ratified.",
 				"_comment_alignment_weight": "PROPOSED DEFAULT — alignment_weight converts identity units into arbiter score units. The raw terms below reach ~50 for a maxed dominant vector, which would outweigh _score() itself; 0.06 makes style a few points of nudge — the same order as a leadership bonus. Lowered from 0.1 by the V2-COMBAT-003.5 Phase 3c fix (decision #33), where style outranked the whole distance-closing decision in a chase.",
 				"alignment_weight": 0.06,
 				"_comment_urgency_style_damping": "PROPOSED DEFAULT — decision #33. The applied style term is scaled by (1 - urgency_style_damping x goal.urgency). Urgency damps how much style OUTRANKS the board, never what the style is: at urgency 0 she moves entirely as herself, at urgency 1 manners are worth a quarter of that and the board decides.",
@@ -961,7 +939,7 @@
 					"sight":  { "lateral": 6.0, "careful": 6.0 }
 				},
 				"fear_weight": {
-					"_comment": "× fear/100. High fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
+					"_comment": "× afraid (0-1, the curved afraid end of the status lean after composure). Fear pushes toward exposure avoidance and is what makes a retreating route read as hers at all; it pulls against forceful/overcommitted commitment.",
 					"direct": 0.0,
 					"restrained": 10.0,
 					"careful": 22.0,
@@ -973,12 +951,10 @@
 					"retreating": 30.0,
 					"overcommitted": -20.0
 				},
-				"morale_bias": {
-					"_comment": "Flat, by EmotionService.get_morale_tier(). Low morale reads as hesitation (careful/restrained); high morale as follow-through (forceful/direct). steady is the neutral baseline.",
-					"broken":   { "careful": 10.0, "restrained": 10.0, "forceful": -6.0, "overcommitted": -6.0 },
-					"shaken":   { "careful": 5.0, "restrained": 5.0 },
-					"steady":   {},
-					"inspired": { "forceful": 8.0, "direct": 8.0 }
+				"follow_through_bias": {
+					"_comment": "PROPOSED DEFAULT. Each end x its part of the status lean after composure (0-1). The afraid end reads as hesitation (careful/restrained); the bold end as follow-through (forceful/direct). A calm status adds nothing.",
+					"afraid": { "careful": 10.0, "restrained": 10.0, "forceful": -6.0, "overcommitted": -6.0 },
+					"bold":   { "forceful": 11.0, "direct": 11.0 }
 				},
 				"bond_weight": {
 					"_comment": "× bond_pressure (0-1, scoped to the scored candidate's own goal subject — see BehaviorArbiter._movement_style_bond_pressure). A bonded ally pulls toward closing the gap or covering it.",
@@ -1143,14 +1119,14 @@
 				"9": "whole"
 			},
 			"calling_behavior": {
-				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. fear_move_bonus: flat bonus to move score per 10 fear points (kra_soro). idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo). absolute_fear_offset (V2-PROG-012 Phase 7, PROPOSED DEFAULT — awaiting playtest ratification): delta applied to the band baseline in refusal_thresholds_by_band (threshold = clamp(band_base + offset, 0, 100)), replacing the old flat absolute_fear_threshold override so band and calling both matter — see ActorStateMachine.gd's Absolute Fear Rule comment. Each offset is the calling's pre-Phase-7 flat value expressed as a delta from the grounded baseline of 80, so grounded-band thresholds are unchanged by this migration (aduro 75, sum_okwanfo 70, okofor 80, onyamesu 85, okomfo 85, kra_soro 80 → offsets -5, -10, 0, +5, +5, 0); nascent/forming/whole now diverge by calling for the first time. The legacy flat absolute_fear_threshold key is REMOVED outright (not kept as a fallback) — see AGENTS.md's additive-schema exception and ActorStateMachine.gd's Absolute Fear Rule comment.",
+				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. afraid_signature (PROPOSED DEFAULT): points added to an action at full afraid, scaled by the afraid end of the status lean. afraid_points_override (aduro, PROPOSED DEFAULT): replaces the afraid end of state_action_points for the actions it names, scaled the same way. idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo). absolute_fear_offset (V2-PROG-012 Phase 7, PROPOSED DEFAULT — awaiting playtest ratification): delta applied to the band baseline in refusal_thresholds_by_band (threshold = clamp(band_base + offset, 0, 100)), replacing the old flat absolute_fear_threshold override so band and calling both matter — see ActorStateMachine.gd's Absolute Fear Rule comment. Each offset is the calling's pre-Phase-7 flat value expressed as a delta from the grounded baseline of 80, so grounded-band thresholds are unchanged by this migration (aduro 75, sum_okwanfo 70, okofor 80, onyamesu 85, okomfo 85, kra_soro 80 → offsets -5, -10, 0, +5, +5, 0); nascent/forming/whole now diverge by calling for the first time. The legacy flat absolute_fear_threshold key is REMOVED outright (not kept as a fallback) — see AGENTS.md's additive-schema exception and ActorStateMachine.gd's Absolute Fear Rule comment.",
 				"aduro": {
 					"retreat_threshold": 0.3,
 					"press_advantage": true,
 					"directive_mul": 1.0,
 					"leadership_radius": 3.0,
 					"absolute_fear_offset": -5,
-					"broken_morale_override": {
+					"afraid_points_override": {
 						"melee_attack": 8.0,
 						"actor.guard": -5.0
 					}
@@ -1167,14 +1143,16 @@
 					"press_advantage": false,
 					"directive_mul": 1.0,
 					"leadership_radius": 4.0,
-					"absolute_fear_offset": 0
+					"absolute_fear_offset": 0,
+					"afraid_signature": { "protect_ally": 10.0 }
 				},
 				"onyamesu": {
 					"retreat_threshold": 0.45,
 					"press_advantage": false,
 					"directive_mul": 1.2,
 					"leadership_radius": 4.0,
-					"absolute_fear_offset": 5
+					"absolute_fear_offset": 5,
+					"afraid_signature": { "actor.move": -15.0 }
 				},
 				"okomfo": {
 					"retreat_threshold": 0.4,
@@ -1182,15 +1160,16 @@
 					"directive_mul": 1.5,
 					"leadership_radius": 5.0,
 					"idle_fear_aura": 3.0,
-					"absolute_fear_offset": 5
+					"absolute_fear_offset": 5,
+					"afraid_signature": { "actor.idle": 15.0 }
 				},
 				"kra_soro": {
 					"retreat_threshold": 0.35,
 					"press_advantage": false,
 					"directive_mul": 1.3,
 					"leadership_radius": 4.0,
-					"fear_move_bonus": 12.0,
-					"absolute_fear_offset": 0
+					"absolute_fear_offset": 0,
+					"afraid_signature": { "actor.move": 12.0, "actor.idle": -8.0 }
 				},
 				"uncalled": {
 					"retreat_threshold": 0.3,
@@ -1352,6 +1331,10 @@
 			"combat_resilient": {
 				"_comment_bark_cooldown_ticks": "V2-COMBAT-003.5 Phase 5 decision #47: PROPOSED DEFAULT - awaiting playtest ratification. qa-verifier's combined review found combat_resilient (priority 2, Tier 1) had no cooldown at all, so a Standing 3+ resist_fear echo taking regular hits could bark it on nearly every one of its own turns once Phase 5's resist_fear combat wiring (decision #46) made _resilience_fired true far more often than before, crowding out fear/morale/guidance/divergence barks. Fix: moved out of _HIGH_PRIORITY_BARK (unconditional) into its own dedicated cooldown, same mechanism as combat_divergence's bark_cooldown_ticks above (_resilient_bark_next_t on the combat actor dict, transient, no new save field). bark_cooldown_ticks=10 reuses divergence's exact reasoning: the codebase's routine cooldowns (_compute_bark_cooldown: 14/21/28/35 ticks) approximate 7 ticks/round for a typical multi-actor roster, so 10 sits just past one round - the same resisting echo's very next turn stays inside the window (never twice in a row) while a later, separately-earned resilience moment in a longer fight is not swallowed by a cooldown sized for consecutive-turn suppression. No dedicated measurement run for this value (no test can observe bark cadence over a real multi-round fight - see decision #47); judge the exact number against combat_divergence's live-playtest precedent in the Phase 8 manual playtest.",
 				"bark_cooldown_ticks": 10
+			},
+			"combat_banter": {
+				"_comment_calm_statuses": "An Echo whose emotional status after its turn is in this list may voice combat_banter. Names come from EmotionService.STATUS_LADDER.",
+				"calm_statuses": ["grounded", "whole", "radiant"]
 			},
 			"rank_benefits_config": {
 				"_comment": "V2-PROG-010: Earned benefit definitions shown as persistent glyphs on Echo detail card. Unlocked at min_rank. Label and description are prose only — no numbers.",
@@ -1713,12 +1696,12 @@
 						"hesitant": -0.25, "uncertain": -0.1, "grounded": 0.0, "whole": 0.0, "radiant": 0.7
 					},
 					"lean": { "enabled": true, "progress_floor": 0.65, "progress_max": 1.25, "cohesion_max": 1.4, "cohesion_min": 0.85 },
-					"steps": { "enabled": true, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1, "composure_default": 0.4 },
+					"steps": { "enabled": true, "penalty_at": 0.5, "bonus_at": 0.45, "penalty_steps": 1, "bonus_steps": 1 },
 					"style_growth": { "enabled": true },
 					"ranges": {
-						"_comment": "PROPOSED DEFAULT. Limits [min, max] the validator accepts for each enabled lean and steps number, and the values allowed for penalty_steps and bonus_steps.",
+						"_comment": "Limits [min, max] the validator accepts for each enabled lean and steps number, and the values allowed for penalty_steps and bonus_steps. Jeff reviewed the limits on 2026-10-18. The steps limits reject a value that makes the effect do nothing.",
 						"lean": { "progress_floor": [0.5, 0.9], "progress_max": [1.0, 1.4], "cohesion_max": [1.0, 1.45], "cohesion_min": [0.7, 1.0] },
-						"steps": { "penalty_at": [0.3, 0.9], "bonus_at": [0.4, 1.0], "composure_default": [0.0, 1.0] },
+						"steps": { "penalty_at": [0.3, 0.8], "bonus_at": [0.4, 0.7] },
 						"step_counts": [0, 1]
 					}
 				},
@@ -1926,13 +1909,9 @@
 					"pillar": -2.0,
 					"nurturer": -2.0
 				},
-				"by_morale_tier": {
-					"_comment": "V2-COMBAT-001: Readiness modifier by morale tier at combat start. Mirrors EmotionService.get_morale_tier() thresholds (inspired>=75, steady>=50, shaken>=25, broken<25). Calculated once at combat start — mid-combat morale recovery does not re-sort.",
-					"inspired":  4,
-					"steady":    0,
-					"shaken":   -3,
-					"broken":   -6
-				}
+				"_comment_state_points": "PROPOSED DEFAULT. Readiness from the emotional status at combat start: afraid x afraid_points + bold x bold_points, from the unsoftened status lean (data.combat.movement.felt_state.band_lean), linear. Fractions are kept. Calculated once at combat start.",
+				"afraid_points": -6.0,
+				"bold_points": 5.0
 			},
 			"objective_modes": {
 				"_comment": "V2-STAGE-004 Phase 3: per-mode combat tuning. Read by FlowEncounterState at encounter start (data.combat.objective_modes[mode]); scaled by realm completion order; a populated ObjectiveModel.params overrides. recover=hold a relic; protect=keep entity alive N rounds; endure=survive N rounds of waves.",
@@ -2428,13 +2407,6 @@
 				"kra_soro":    ["sum_okwanfo", "okomfo"],
 				"okomfo":      ["kra_soro", "onyamesu"],
 				"onyamesu":    ["okomfo", "okofor"]
-			},
-			"broken_morale_overrides": {
-				"_comment": "Per-calling override of morale_action_muls at 'broken' tier. If a calling key is present, its values replace the standard broken-morale muls for that action. Aduro charges when broken; does not collapse into guard.",
-				"aduro": {
-					"melee_attack": 8.0,
-					"actor.guard": -5.0
-				}
 			}
 		},
 		"skills": {

@@ -147,7 +147,8 @@ static func _t_movement_option_starvation() -> Dictionary:
 
 	var live := LiveMovement.new(flow_ctx, logger)
 	var result: Dictionary = live.prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, movement_board_cfg, bdata, 0)
+		mover, ectx, ectx.combat_state, movement_board_cfg, bdata, 0,
+		MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 
 	if not bool(result.get("valid", false)):
 		return { "ok": false, "error": "expected a valid movement-context result, got invalid: %s" % str(result) }
@@ -309,7 +310,8 @@ static func _t_live_options_zero_spatial_terms() -> Dictionary:
 
 	var live := LiveMovement.new(flow_ctx, logger)
 	var result: Dictionary = live.prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, movement_board_cfg, bdata, 0)
+		mover, ectx, ectx.combat_state, movement_board_cfg, bdata, 0,
+		MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 
 	if not bool(result.get("valid", false)):
 		return { "ok": false, "error": "expected a valid movement-context result, got invalid: %s" % str(result) }

@@ -168,7 +168,8 @@ static func _dump_goals_for_round(
 		t += 1
 		var built: Dictionary = turn_ctx.build_turn_context(actor, ectx, balance, bdata, round_index, t)
 		var prepared: Dictionary = live.prepare_live_movement_context(
-			actor, ectx, ectx.combat_state, built["board_cfg"] as Dictionary, bdata, t)
+			actor, ectx, ectx.combat_state, built["board_cfg"] as Dictionary, bdata, t,
+			MaturityExpressionService.composure_of(actor, {"all_actors": ectx.actors}, bdata))
 		if not bool(prepared.get("valid", false)):
 			continue
 		var goals: Array = prepared.get("goals", []) as Array

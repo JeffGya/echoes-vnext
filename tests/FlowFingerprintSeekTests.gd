@@ -22,9 +22,10 @@ static func register(runner) -> void:
 
 # Recorded: Seek, with Directive exposure acceptance.
 # Re-recorded: emotional-state pull and state steps in route scoring. COMBAT_ROUNDS_HASH moved; COMBAT_FINAL_HASH and COMBAT_SAVE_HASH held.
-const COMBAT_ROUNDS_HASH := "f44b41fbb4c397144d197223f97721c5d123f05856732af598d1c7374094bbe9"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. COMBAT_ROUNDS_HASH and COMBAT_SAVE_HASH moved; COMBAT_FINAL_HASH held.
+const COMBAT_ROUNDS_HASH := "cafb7137ada94ac47eb8de3e024ac20a7178dbb3a3663aa319b789205e4c01f3"
 const COMBAT_FINAL_HASH  := "e0043b496aa493283d87769c19660e63bcb8d39422aae1000833a0402dd8c746"
-const COMBAT_SAVE_HASH   := "caca2686f263f70df3fb30a6a0638cadf1f10d749586cd8bc9cb4e36f9bd50ba"
+const COMBAT_SAVE_HASH   := "0458140c7144696073328049cafc901551ffda572649e45b0bd6f8ab5e82e352"
 
 static func test_combat() -> Dictionary:
 	var r: Dictionary = FlowFingerprintTests._run_mode_fingerprint(
@@ -34,7 +35,8 @@ static func test_combat() -> Dictionary:
 
 # Recorded: Seek, with Directive exposure acceptance.
 # Re-recorded: Directive stop cause. PURIFY_SHRINE_ROUNDS_HASH and PURIFY_SHRINE_FINAL_HASH moved; PURIFY_SHRINE_SAVE_HASH held.
-const PURIFY_SHRINE_ROUNDS_HASH := "bbb992758e667ad3868ddc87f1ad454918b55f5468277fa769f37e0d0cc1d409"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
+const PURIFY_SHRINE_ROUNDS_HASH := "3ba1596f66a5cd6412830cfbccead832e762e3f9288f2a34c9a4177928e0d807"
 const PURIFY_SHRINE_FINAL_HASH  := "5502ad6dbe2075fc59f8e9bbcd2fa01ba5a9bd9adba72cea93f5dd05edb65d10"
 const PURIFY_SHRINE_SAVE_HASH   := "324f6c16a1e785088ae34d7211b08dd91684c9228dfe215ee079ec4256f193fc"
 
@@ -82,9 +84,10 @@ static func test_endure() -> Dictionary:
 
 
 # Recorded: Seek, with Directive exposure acceptance.
-const PURSUE_ROUNDS_HASH := "73a589295f5e7187ee68ade67f9f805a83a61ed58add7bf480c04b32511a9380"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURSUE_ROUNDS_HASH and PURSUE_SAVE_HASH moved; PURSUE_FINAL_HASH held.
+const PURSUE_ROUNDS_HASH := "bfda3ed98f36daa39fe948633b44ad2dd47e8e9990fac1c66106531698030d41"
 const PURSUE_FINAL_HASH  := "9f9cd0632e4f01fbc25e25488d2ba969c222c49fe0bb15603affcf3d88ad1681"
-const PURSUE_SAVE_HASH   := "caca2686f263f70df3fb30a6a0638cadf1f10d749586cd8bc9cb4e36f9bd50ba"
+const PURSUE_SAVE_HASH   := "0458140c7144696073328049cafc901551ffda572649e45b0bd6f8ab5e82e352"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = FlowFingerprintTests._run_mode_fingerprint(
@@ -95,8 +98,9 @@ static func test_pursue() -> Dictionary:
 # Recorded: Seek, with Directive exposure acceptance.
 # Re-recorded: Directive stop cause. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
 # Re-recorded: emotional-state pull and state steps in route scoring. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
-const GUIDE_SPIRIT_ROUNDS_HASH := "2710f14913b3ec32c799dfed1a8b33b440a73b6d1f42e669597519b5de28767b"
-const GUIDE_SPIRIT_FINAL_HASH  := "af7bd3c7577970a1e7d9540a9c3f5a023de1c1ac8c7f9a6c7749c2e65aa03f78"
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
+const GUIDE_SPIRIT_ROUNDS_HASH := "a55d045558f22473ef775d555218458f4e817e69f56f93936eae0c2641c75d9b"
+const GUIDE_SPIRIT_FINAL_HASH  := "853b6a425e43de956056f3e199e7a988fc0c1d44901bc17584a0b4994aad7ee5"
 const GUIDE_SPIRIT_SAVE_HASH   := "f05e407a918d10027a255eddfc722fd893177dddfaf2148aae2de8fb17943e38"
 
 static func test_guide_spirit() -> Dictionary:

@@ -18,13 +18,14 @@
 #   config dict (ACTOR-006/ENEMY-001).
 #
 # Score formula (per candidate):
-#   score = (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor + directive_bonus
+#   score = (base + trait_bonus + vector_bonus + archetype_bonus + state_points) * fear_factor + directive_bonus
 #   - base: intent_weights_by_calling_origin[calling_origin][action_type]
 #   - trait_bonus: sum(trait_value × trait_action_muls[action_type][trait_key])
 #   - vector_bonus: sum(vector_score × vector_action_muls[action_type][vector_key])
 #   - archetype_bonus: flat constant from archetype_action_muls[action_type][archetype_birth]
-#   - morale_bonus: morale_action_muls[action_type][morale_tier] (ACTOR-007; steady tier = 0)
-#   - fear_factor: clamp(1.0 - fear/100 × fear_active_dampen, 0, 1) for active intents only
+#   - state_points: afraid × state_action_points[action_type].afraid + bold × [action_type].bold
+#   - fear_factor: clamp(1.0 - afraid × fear_active_dampen, 0, 1) for active intents only
+#   afraid (curved) and bold are the two ends of the status lean, softened by composure once (_state_ends).
 #   - directive_bonus: sum(dir_weight × directive_action_muls[action_type][key]) × directive_base_bonus
 #
 # Tiebreak: alphabetically smallest action_type string (deterministic).
@@ -143,15 +144,11 @@ const _DEFAULTS := {
 		"actor.idle":   { "survival_bias": 1.0, "prefer_disengage": 1.0, "resource_efficiency": 1.0, "exposure_acceptance": -0.2, "clue_seeking_priority": 0.5, "reporting_priority": 0.3 },
 		"actor.move":   { "objective_advance_priority": 1.0, "engage_only_blockers": 1.0, "clue_seeking_priority": 1.0, "reporting_priority": 1.0 },
 	},
-	"morale_action_muls": {
-		"melee_attack": { "broken": -20, "shaken": -3, "steady": 0, "inspired": 12 },
-		"protect_ally": { "broken": -8,  "shaken": -3, "steady": 0, "inspired": 6  },
-		"actor.guard":  { "broken": 20,  "shaken":  4, "steady": 0, "inspired": -5 },
-		"actor.idle":   { "broken": 15,  "shaken":  2, "steady": 0, "inspired": -5 },
-		"actor.move":   { "broken": -20, "shaken": -3, "steady": 0, "inspired": 10 },
-	},
+	# {} = the status adds no points. Real values live in data.actor.state_action_points.
+	"state_action_points": {},
 	"directive_base_bonus":  20.0,
-	"fear_active_dampen":    0.45,
+	"fear_active_dampen":    0.55,
+	"afraid_curve_exponent": 1.0,  # 1.0 = linear; the real value lives in data.actor
 	"fear_passive_actions":  ["actor.idle", "actor.guard"],
 	"threat_threshold":      0.50,  # 0.50 = ally must be below 50% HP to qualify as threatened
 	"guard_range":           1,     # enemy must be adjacent for guard to be a candidate (melee-only MVP)
@@ -509,12 +506,9 @@ func select_intent(context: Dictionary) -> Dictionary:
 	var winner: Dictionary = candidates[0].duplicate()
 	winner.erase("_score")
 
-	# ACTOR-007: attach morale metadata to winner for ActorStateMachine to log and snapshot.
-	var winner_tier: String  = EmotionService.get_morale_tier(int(actor.get("morale", 50)))
-	var m_tables: Dictionary = _cfg_get("morale_action_muls")
-	var w_row: Dictionary    = m_tables.get(str(winner.get("action_type", "")), {})
-	winner["morale_tier"]     = winner_tier
-	winner["morale_modifier"] = int(w_row.get(winner_tier, 0))
+	# Status metadata — for ActorStateMachine to log and snapshot.
+	winner["emotional_status"] = EmotionStatusLean.status_of(actor)
+	winner["state_points"]     = _state_points(str(winner.get("action_type", "")), _state_ends(actor, composure), calling_behavior)
 
 	# Archetype metadata — for ActorStateMachine logging.
 	var winner_arch: String       = str(actor.get("archetype_birth", ""))
@@ -765,8 +759,8 @@ func select_movement_intent(
 	# ASSUMED: only one vow (tikoro_nko_agyina) exists and it is protective/cohesion-
 	# themed, so "a vow is active" reads as fully Ward-leaning until a vow carries its
 	# own Ward/Break strain signal. See the story report's OPEN block.
-	var style_growth: Dictionary = _style_growth(interpretation_width) if is_echo_faction \
-		else {"vector_mul": 1.0, "trait_mul": 1.0}
+	var style_growth: Dictionary = _style_growth_of(actor, interpretation_width)
+	var state_ends: Array = _state_ends(actor, composure)
 	var style_inputs: Dictionary = {
 		"actor":            actor,
 		"bonds":            bonds_ctx if is_echo_faction else [],
@@ -774,8 +768,8 @@ func select_movement_intent(
 		"vector_scores":    actor.get("vector_scores", {}) as Dictionary,
 		"calling_family":   str(context.get("calling_family", "")),
 		"traits":           actor.get("traits", {}) as Dictionary,
-		"fear":             maxf(float(actor.get("fear", 0)), float(actor.get("fear_base", 0))),
-		"morale_tier":      EmotionService.get_morale_tier(int(actor.get("morale", 50))),
+		"afraid":           state_ends[0],
+		"bold":             state_ends[1],
 		"vector_mul":       style_growth["vector_mul"],
 		"trait_mul":        style_growth["trait_mul"],
 		"vow_lean":         0.0 if active_vow.is_empty() else -1.0,
@@ -1462,10 +1456,10 @@ func _exposure_acceptance_parts(directive: Dictionary, fear_lean: float, judgmen
 
 
 ## Fall in exposure acceptance from this actor's emotional state: `fear_lean_bound` x the afraid
-## part of the status lean, softened by composure. 0.0 when the bound or the table is absent.
+## part of the status lean, softened by composure. 0.0 for a non-Echo or when the bound or the table is absent.
 func _fear_lean(actor: Dictionary, composure: float) -> float:
 	var block: Variant = _movement_cfg.get("exposure_acceptance", {})
-	if not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
+	if not EmotionStatusLean.is_echo(actor) or not block is Dictionary or not (block as Dictionary).has("fear_lean_bound"):
 		return 0.0
 	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
 	var dampen: float = composure_dampen(_cfg)
@@ -1498,6 +1492,13 @@ static func felt_pull(lean_value: float, lean_cfg: Dictionary) -> Array:
 	if lean_value > 0.0:
 		return [1.0 + t * (float(lean_cfg["progress_max"]) - 1.0), 1.0 - t * (1.0 - float(lean_cfg["cohesion_min"]))]
 	return [1.0, 1.0]
+
+
+## `_style_growth` for a real Echo; a temporary ally keeps the neutral multipliers.
+func _style_growth_of(actor: Dictionary, judgment: float) -> Dictionary:
+	if not EmotionStatusLean.is_echo(actor):
+		return {"vector_mul": 1.0, "trait_mul": 1.0}
+	return _style_growth(judgment)
 
 
 ## Growth of the Echo's own style by Judgment, on the action layer's identity scale.
@@ -1605,7 +1606,13 @@ func _spatial_utility(
 	var cap: float = float(config["cap"])
 	var value: float = clampf(raw, -cap, cap)
 	out_parts["parts"] = parts
-	out_parts["directive_exposure_part"] = float(config["directive_exposure_acceptance_weight"]) * float(acceptance_parts["D_scaled"]) * exposure
+	var exposure_part: float = float(config["directive_exposure_acceptance_weight"]) * float(acceptance_parts["D_scaled"]) * exposure
+	out_parts["directive_exposure_part"] = exposure_part
+	var route_part: float = exposure_part + float(parts["directive_objective_advance"]) \
+		+ float(parts["directive_avoid_overcommit"]) + float(parts["directive_ally_protection"]) \
+		+ float(parts["directive_threat_interception"])
+	out_parts["directive_route_part"] = route_part
+	out_parts["own_spatial"] = clampf(raw - route_part, -cap, cap)
 	out_parts["acceptance_parts"] = acceptance_parts
 	out_parts["raw"]   = raw
 	out_parts["cap"]   = cap
@@ -1782,10 +1789,9 @@ func _score(
 		else str(actor.get("calling_origin", "uncalled"))
 	var traits: Dictionary     = actor.get("traits", {})
 	var vectors: Dictionary    = actor.get("vector_scores", {})
-	# EMOTION-003: floor blend — background dread can't be suppressed below fear_base even by a kill
-	var fear_current_val: float = float(actor.get("fear", 0))
-	var fear_base_val: float    = float(actor.get("fear_base", 0))
-	var fear: float             = maxf(fear_current_val, fear_base_val)
+	# The only emotional input: composure enters here and nowhere else in this function.
+	var ends: Array   = _state_ends(actor, composure)
+	var afraid: float = float(ends[0])
 
 	# 1. Base weight from calling_origin table.
 	# Skill-gated candidates carry skill_base_bonus (pre-resolved via intent_weight_tag + bonus);
@@ -1841,29 +1847,14 @@ func _score(
 	var archetype: String       = str(actor.get("archetype_birth", ""))
 	var archetype_bonus: float  = float(a_row.get(archetype, 0.0))
 
-	# 4. Fear factor: dampens active intents; passive intents (actor.idle) are unaffected.
-	# V2-PROG-012 Phase 2: composure — fear disrupts scoring less for more composed
-	# Echoes (lower effective dampen). Composure blends rank, vow state, trait balance,
-	# and both fear dimensions (GDD:1369) — it is the real driver, not raw rank alone.
+	# 4. Fear factor: dampens active intents; passive intents are unaffected.
 	var passive_actions: Array = _cfg_get("fear_passive_actions")
 	var fear_factor: float     = 1.0
 	if action_type not in passive_actions:
-		var dampen: float   = float(_cfg_get("fear_active_dampen"))
-		var d_scale: float  = composure_dampen(_cfg)
-		var eff_dampen: float = dampen * (1.0 - composure * d_scale)
-		fear_factor = clamp(1.0 - (fear / 100.0) * eff_dampen, 0.0, 1.0)
+		fear_factor = clampf(1.0 - float(_cfg_get("fear_active_dampen")) * afraid, 0.0, 1.0)
 
-	# 5. Morale bonus — flat integer modifier based on tier; steady tier = 0 (neutral baseline).
-	#    Lives inside the pre-fear bracket so fear can dampen morale-influenced scores too.
-	var morale_tables: Dictionary = _cfg_get("morale_action_muls")
-	var morale_tier: String       = EmotionService.get_morale_tier(int(actor.get("morale", 50)))
-	var ml_row: Dictionary        = morale_tables.get(action_type, {})
-	var morale_bonus: float       = float(ml_row.get(morale_tier, 0.0))
-	# PROG-009: Aduro passive — broken morale → aggression override (override the default penalty).
-	if morale_tier == "broken" and calling_origin == "aduro":
-		var bmo: Dictionary = calling_behavior.get("broken_morale_override", {})
-		if bmo.has(action_type):
-			morale_bonus = float(bmo[action_type])
+	# 5. State points live inside the bracket, so the fear factor dampens them too.
+	var state_points: float = _state_points(action_type, ends, calling_behavior)
 	# PROG-009: Okofor passive — anchor bonus on guard/protect_ally per stationary round.
 	if calling_origin == "okofor" and (action_type == "actor.guard" or action_type == "protect_ally"):
 		var anchor_rounds: int = int(actor.get("_anchor_rounds", 0))
@@ -1914,27 +1905,8 @@ func _score(
 		base += float(candidate.get("_mark_bonus",   0.0))
 		base += float(candidate.get("_reveal_bonus", 0.0))
 
-	# PROG-009: Calling emotional signatures — fear amplifies calling-specific tendencies.
-	if fear > 0.0:
-		match calling_origin:
-			"kra_soro":
-				# Fear → movement bonus (threat-sensitive repositioning); idle suppressed.
-				if action_type == "actor.move":
-					base += float(calling_behavior.get("fear_move_bonus", 0.0))
-				elif action_type == "actor.idle":
-					base -= 8.0
-			"okomfo":
-				# Fear → idle rises (Okomfo retreats into perception, not action).
-				if action_type == "actor.idle":
-					base += fear * 0.15
-			"onyamesu":
-				# Fear → move penalty (Onyamesu holds ground under pressure).
-				if action_type == "actor.move":
-					base -= fear * 0.15
-			"okofor":
-				# Fear → protect_ally bonus (defensive surge under pressure).
-				if action_type == "protect_ally":
-					base += fear * 0.1
+	# Calling emotional signature: points at full afraid, scaled by afraid.
+	base += afraid * float((calling_behavior.get("afraid_signature", {}) as Dictionary).get(action_type, 0.0))
 
 	# V2-INFRA-003 pass 8: Whole-band leadership score traits (aggression_field,
 	# mark_target, challenge_call, safe_path_read, hold_formation). Added to `base`
@@ -1956,13 +1928,36 @@ func _score(
 	out_components["trait_bonus"]       = trait_bonus
 	out_components["vector_bonus"]      = vector_bonus
 	out_components["archetype_bonus"]   = archetype_bonus
-	out_components["morale_bonus"]      = morale_bonus
+	out_components["morale_bonus"]      = state_points
 	out_components["fear_factor"]       = fear_factor
 	out_components["calling_mul"]       = calling_mul
 	out_components["directive_bonus"]   = directive_bonus
 	out_components["situational_bonus"] = situational_bonus
 
-	return (base + trait_bonus + vector_bonus + archetype_bonus + morale_bonus) * fear_factor * calling_mul + directive_bonus + situational_bonus
+	return (base + trait_bonus + vector_bonus + archetype_bonus + state_points) * fear_factor * calling_mul + directive_bonus + situational_bonus
+
+
+## Points the status adds to one action: afraid x its afraid end + bold x its bold end.
+## A calling's afraid_points_override replaces the afraid end for the actions it names.
+func _state_points(action_type: String, ends: Array, calling_behavior: Dictionary) -> float:
+	var row: Dictionary = (_cfg_get("state_action_points") as Dictionary).get(action_type, {}) as Dictionary
+	var override: Dictionary = calling_behavior.get("afraid_points_override", {}) as Dictionary
+	var afraid_points: float = float(override.get(action_type, row.get("afraid", 0.0)))
+	return float(ends[0]) * afraid_points + float(ends[1]) * float(row.get("bold", 0.0))
+
+
+## [afraid, bold] of the actor's status for the action layer and style, each softened once by
+## composure. Afraid is curved by afraid_curve_exponent; bold stays linear. [0, 0] without a table.
+func _state_ends(actor: Dictionary, composure: float) -> Array:
+	var table: Dictionary = EmotionStatusLean.table_of(_movement_cfg)
+	if table.is_empty():
+		return [0.0, 0.0]
+	var lean: float = EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table)
+	var dampen: float = composure_dampen(_cfg)
+	return [
+		EmotionStatusLean.curved_afraid(lean, float(_cfg_get("afraid_curve_exponent")), composure, dampen),
+		EmotionStatusLean.bold(EmotionStatusLean.soften(lean, composure, dampen)),
+	]
 
 
 ## Maps directive semantic intent_weights keys → action bonus.
@@ -2060,13 +2055,18 @@ func _rank_directive_candidates(
 	return ranked
 
 
-## The Directive's voice inside a route candidate's score beyond the per-type bonus: the Directive
-## share of the exposure term (the Echo's own fear lean stays out) and the Directive stop-short bias. Subtracted with the type bonus to get the
-## Echo's own score. 0.0 for a candidate that is not a route.
+## The Directive's voice inside a route candidate's score beyond the per-type bonus: the five Directive
+## spatial terms (the exposure term keeps the Echo's own fear lean out) and the Directive stop-short bias.
+## Subtracted with the type bonus to get the Echo's own score. 0.0 for a candidate that is not a route.
+## The spatial part is `value - own_spatial`, where `own_spatial` is the capped non-Directive part, so the
+## cap never changes the Echo's own score.
 static func _route_directive_part(candidate: Dictionary) -> float:
 	var spatial: Dictionary = candidate.get("_spatial_components", {}) as Dictionary
 	var bias: Dictionary = candidate.get("_score_bias", {}) as Dictionary
-	return float(spatial.get("directive_exposure_part", 0.0)) \
+	var spatial_part: float = 0.0
+	if spatial.has("own_spatial"):
+		spatial_part = float(spatial["value"]) - float(spatial["own_spatial"])
+	return spatial_part \
 		+ float(bias.get(StopShortService.bias_key("directive"), 0.0))
 
 
@@ -2074,6 +2074,75 @@ static func _route_directive_part(candidate: Dictionary) -> float:
 static func composure_dampen(actor_cfg: Dictionary) -> float:
 	var block: Dictionary = actor_cfg.get("composure_dampen_scale", _DEFAULTS["composure_dampen_scale"]) as Dictionary
 	return float(block["value"])
+
+
+## Config paths of the status-point tables that fail validation; [] when all are valid.
+## `balance_data` is the `data` block of balance.json.
+static func state_config_errors(balance_data: Dictionary) -> Array[String]:
+	var errors: Array[String] = []
+	var actor_cfg: Dictionary = balance_data.get("actor", {}) as Dictionary
+	var actions: Array = []
+	for row: Variant in (actor_cfg.get("intent_weights_by_calling_origin", _DEFAULTS["intent_weights_by_calling_origin"]) as Dictionary).values():
+		for action: Variant in (row as Dictionary if row is Dictionary else {}):
+			if not actions.has(action):
+				actions.append(action)
+	var exponent: Variant = actor_cfg.get("afraid_curve_exponent", null)
+	if not _is_finite_number(exponent) or float(exponent) < 1.0 or float(exponent) > 4.0:
+		errors.append("actor.afraid_curve_exponent")
+	var points: Variant = actor_cfg.get("state_action_points", {})
+	var max_abs: float = -1.0
+	if points is Dictionary and _is_finite_number((points as Dictionary).get("max_abs", null)):
+		max_abs = float((points as Dictionary)["max_abs"])
+	if max_abs <= 0.0:
+		errors.append("actor.state_action_points.max_abs")
+	elif points is Dictionary:
+		for key: String in points:
+			if key.begins_with("_") or key == "max_abs":
+				continue
+			var row: Variant = (points as Dictionary)[key]
+			if not actions.has(key) or not row is Dictionary or not (row as Dictionary).has("afraid") \
+					or not (row as Dictionary).has("bold") or not _numbers_within(row, ["afraid", "bold"], max_abs):
+				errors.append("actor.state_action_points.%s" % key)
+	var bias: Variant = (actor_cfg.get("movement_style_weights", {}) as Dictionary).get("follow_through_bias", {})
+	if not bias is Dictionary:
+		errors.append("actor.movement_style_weights.follow_through_bias")
+	else:
+		for end: String in bias:
+			if not end.begins_with("_") and (not ["afraid", "bold"].has(end) \
+					or not _numbers_within((bias as Dictionary)[end], MovementStyleServiceScript.STYLES, INF)):
+				errors.append("actor.movement_style_weights.follow_through_bias.%s" % end)
+	var callings: Dictionary = (balance_data.get("maturity_expression", {}) as Dictionary).get("calling_behavior", {}) as Dictionary
+	for calling: String in callings:
+		var entry: Variant = callings[calling]
+		if not entry is Dictionary:
+			continue
+		for key: String in ["afraid_signature", "afraid_points_override"]:
+			var limit: float = max_abs if key == "afraid_points_override" else INF
+			if (entry as Dictionary).has(key) and not _numbers_within((entry as Dictionary)[key], actions, limit):
+				errors.append("maturity_expression.calling_behavior.%s.%s" % [calling, key])
+	var initiative: Dictionary = (balance_data.get("combat", {}) as Dictionary).get("initiative_modifiers", {}) as Dictionary
+	for key: String in ["afraid_points", "bold_points"]:
+		if not _is_finite_number(initiative.get(key, null)):
+			errors.append("combat.initiative_modifiers.%s" % key)
+	return errors
+
+
+static func _is_finite_number(value: Variant) -> bool:
+	return (value is int or value is float) and is_finite(float(value))
+
+
+## True when `row` is a Dictionary whose keys (ignoring `_` keys) are all in `allowed` and whose
+## values are finite numbers no larger than `limit` in size.
+static func _numbers_within(row: Variant, allowed: Array, limit: float) -> bool:
+	if not row is Dictionary:
+		return false
+	for key: String in row:
+		if key.begins_with("_"):
+			continue
+		var value: Variant = (row as Dictionary)[key]
+		if not allowed.has(key) or not _is_finite_number(value) or absf(float(value)) > limit:
+			return false
+	return true
 
 
 ## Config accessor — falls back to _DEFAULTS when _cfg is empty or key is missing.
@@ -2212,8 +2281,8 @@ func _style_alignment(candidate: Dictionary, inputs: Dictionary) -> float:
 		inputs["vector_scores"] as Dictionary,
 		str(inputs["calling_family"]),
 		inputs["traits"] as Dictionary,
-		float(inputs["fear"]),
-		str(inputs["morale_tier"]),
+		float(inputs["afraid"]),
+		float(inputs["bold"]),
 		_movement_style_bond_pressure(
 			inputs["bonds"] as Array,
 			inputs["actor"] as Dictionary,

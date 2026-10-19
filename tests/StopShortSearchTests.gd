@@ -70,6 +70,8 @@ static func _env(standing: int, enemy_cols: Array, opts: Dictionary = {}) -> Dic
 	var logger := StructuredLogger.new()
 	logger.set_level("debug")
 	var bdata: Dictionary = BehaviorCharacterizationTests._real_bdata()
+	# These boards test the stop-short window at a fixed capacity, not the state steps.
+	((((bdata["combat"] as Dictionary)["movement"] as Dictionary)["felt_state"] as Dictionary)["steps"] as Dictionary)["enabled"] = false
 	var block: Dictionary = ((bdata["actor"] as Dictionary)["stop_short"]) as Dictionary
 	block["enabled"] = bool(opts.get("parent", true))
 	var search: Dictionary = block["cell_search"] as Dictionary
@@ -86,7 +88,8 @@ static func _env(standing: int, enemy_cols: Array, opts: Dictionary = {}) -> Dic
 		"walkable": BehaviorCharacterizationTests._full_walkable(10, 10),
 	}
 	var prepared: Dictionary = LiveMovement.new(flow_ctx, logger).prepare_live_movement_context(
-		mover, ectx, ectx.combat_state, board_cfg, bdata, 0)
+		mover, ectx, ectx.combat_state, board_cfg, bdata, 0,
+		MaturityExpressionService.composure_of(mover, {"all_actors": ectx.actors}, bdata))
 	var context: Dictionary = {
 		"actor": mover, "all_actors": actors, "board_cfg": board_cfg, "t": 0, "round": 0,
 		"cfg": { "data": bdata },

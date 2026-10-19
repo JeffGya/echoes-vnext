@@ -406,11 +406,12 @@ const ENDURE_EMOTION_HASHES: Array = [
 # Follow-up #14 re-record (decisions #96) - 5 -> 4 rounds. A stretched board of a scatter virtue now
 # takes plateau_count x long_multiplier. With every stretch_fill set to "none" the old 5 hashes return.
 # Matches the FlowFingerprintTests PURSUE round_ended move.
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURSUE_EMOTION_HASHES moved.
 const PURSUE_EMOTION_HASHES: Array = [
 	"c5c7a2eca8fe241a9f8d036a0782933c5b14688921e783f11812ffbfc18a5ef7",
-	"69173e8c3a3dd806734e17bc10b8c63aedfe08954b9d8c2f3a111a2300b6c305",
-	"b5edbec4ab14beb3846da3607e941a5dd38c23b9b6bc8e2fde79ce6ff51ad4f8",
-	"f4d5056b486598964ffa3c419e4626164b88251ca9b7d343367eb1d34e526178",
+	"20d5f3e6cd46ea9e6aa67d9bfc0cb76141e1df5280433553e9f00d9ea6bfb48b",
+	"d2b639c284da1e0ce4d72aba962e66374cc0b7d589322943d3882ccc991939e0",
+	"24af287c847bbc724e3130aa6d1c9c764077e94d7054f762cf220be9880230d1",
 ]
 # Phase 2d: 6 -> 5 rounds, indices 0-3 byte-identical (no damage lands in those rounds on either
 # map, and this hash reads emotion only), diverging at index 4. Board went 60x12 -> 90x18. Like
@@ -426,6 +427,7 @@ const PURSUE_EMOTION_HASHES: Array = [
 # last round is gone, because the fight now ends one round earlier.
 # Re-recorded: Directive stop cause. 24 -> 22 rounds; indices 0-21 byte-identical; the fight ends two rounds earlier.
 # Re-recorded: emotional-state pull and state steps in route scoring. GUIDE_SPIRIT_EMOTION_HASHES 22 -> 24 rounds; indices 0-21 byte-identical; 2 round(s) appended.
+# Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. GUIDE_SPIRIT_EMOTION_HASHES moved.
 const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"0981643bfb5b4b834e110bbb1e2e07e43cb67a737695df574f01d4ff0840b399",
 	"fb2362b73ab6e12b88f49fb418a372712b6dab222afb45cb8f176f91060b10e9",
@@ -451,6 +453,7 @@ const GUIDE_SPIRIT_EMOTION_HASHES: Array = [
 	"41add5672f9740f0d91f657b0c4a9df9981c5350d70b133a339b66fc0dfd5b36",
 	"d4ff8247e9ea553c2b4509630d541d7b445f6a60b55c9df7bd9a457427c53543",
 	"bd08e9846d06f6622627ff4f56fbb0cd8318b1d2f37ad979ce13b1c9ee621e6a",
+	"adaac75cf23e8fe7ee397ba3826005f33c95e28eac8604d44cb13a196c8bd12e",
 ]
 
 

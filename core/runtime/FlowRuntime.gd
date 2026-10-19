@@ -1436,7 +1436,8 @@ func _resolve_next_actor(t: int) -> void:
 	# preparation, the activation and the purify side effect all address the same object.
 	var _live_movement := _live_movement_context_service()
 	var movement_prepared: Dictionary = _live_movement.prepare_live_movement_context(
-		actor, ectx, combat_state, movement_board_cfg, bdata, t)
+		actor, ectx, combat_state, movement_board_cfg, bdata, t,
+		MaturityExpressionService.composure_of(actor, ctx, bdata))
 	if bool(movement_prepared.get("valid", false)) and bool(movement_prepared.get("selection_enabled", false)):
 		ctx["movement_context"] = movement_prepared["movement_context"]
 		ctx["movement_profile"] = movement_prepared["profile"]

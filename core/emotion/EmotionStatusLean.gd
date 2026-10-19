@@ -52,6 +52,12 @@ static func soften(lean_value: float, composure: float, dampen_scale: float) -> 
 	return lean_value * (1.0 - dampen_scale * clampf(composure, 0.0, 1.0))
 
 
+## Curved afraid value for the action layer and style: afraid(lean)^exponent, softened once by
+## composure. The curve acts on the unsoftened lean. Slices 5 and 6 keep the linear afraid().
+static func curved_afraid(lean_value: float, exponent: float, composure: float, dampen_scale: float) -> float:
+	return soften(pow(afraid(lean_value), exponent), composure, dampen_scale)
+
+
 ## Afraid part of an actor's status lean, softened by composure. 0.0 when `table` is empty.
 static func afraid_of(actor: Dictionary, table: Dictionary, composure: float, dampen_scale: float) -> float:
 	if table.is_empty():

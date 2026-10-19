@@ -74,7 +74,7 @@
 #
 #   READS  (balance.json)
 #     data.grid                                   board dims + placement_modifiers
-#     data.combat.initiative_modifiers            -> ectx.initiative_cfg
+#     data.combat.initiative_modifiers + band_lean -> ectx.initiative_cfg
 #     data.combat.enemy_spawn_config              counts, thresholds, group selection
 #     data.combat.board                           base/max cols+rows, growth, pursue_override,
 #                                                 guide_spirit_override
@@ -197,7 +197,7 @@ func setup(t: int) -> void:
 		grid_cfg = bdata.get("grid", {})
 		# COMBAT-002: store initiative modifiers so EncounterRoundsState.enter() can use them.
 		var combat_cfg: Dictionary = bdata.get("combat", {})
-		flow_ctx.encounter_ctx.initiative_cfg = combat_cfg.get("initiative_modifiers", {})
+		flow_ctx.encounter_ctx.initiative_cfg = CombatState.initiative_cfg(combat_cfg)
 		# V2-COMBAT-003: store the stalemate config the same way, for the same reader.
 		flow_ctx.encounter_ctx.stalemate_cfg = combat_cfg.get("stalemate", {})
 
@@ -219,6 +219,8 @@ func setup(t: int) -> void:
 					var _emo_e: Dictionary = echo_2.get("emotion", {})
 					flow_ctx.encounter_ctx.pre_encounter_morale[str(echo_2.get("id", ""))] = \
 						int(_emo_e.get("morale_current", 50))
+					flow_ctx.encounter_ctx.pre_encounter_fear[str(echo_2.get("id", ""))] = \
+						int(_emo_e.get("fear_current", 0))
 		echo_actors.sort_custom(func(a, b): return a["id"] < b["id"])
 
 		# V2-COMBAT-001: config-driven enemy spawn via actors.json spawn groups.

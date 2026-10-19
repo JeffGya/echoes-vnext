@@ -106,19 +106,30 @@ Owner: phase B+C, which edits the same guard.
 - The "Names that look right and are WRONG" paragraph in `AGENTS.md` lists fingerprint modes and does not mention `fingerprint_seek`.
 
 ## Found in phase D final QA and docs pass (2026-10-18), for Jeff
-Nothing here is fixed. Jeff decides scope.
+Status on 2026-10-19: items marked FIXED were done in the group A change (decisions D-95 to D-105). The other items are open. Jeff decides scope.
 
-- **Divergence check, four Directive parts.** The check removes the Directive acceptance part and the Directive stop bias from the Echo's own judgment. The four other `directive_*` spatial parts still count as the Echo's own judgment: `objective_advance`, `avoid_overcommit`, `ally_protection`, `threat_interception` (`spatial_utility.directive_*_weight`). Decide: remove them too, or keep.
-- **Resolve screen, pre-fight fear.** The real pre-fight fear is not saved. The resolve screen's `pre_status` uses the Echo's base fear (`status_from(pre_morale, 0, fear_base)` in `EncounterSnapshotBuilder`). The pre-fight chip can differ from the real state at fight start.
-- **Two Echo gates.** Slice 7 (style growth) uses the faction-only gate (`faction == "echo"`). Slices 5 and 6 use `EmotionStatusLean.is_echo` (faction and kind). A temporary ally gets style growth and no lean or steps. Decide: one gate (rule D-87).
+- **FIXED (D-95, D-105).** **Divergence check, four Directive parts.** The check removes the Directive acceptance part and the Directive stop bias from the Echo's own judgment. The four other `directive_*` spatial parts still count as the Echo's own judgment: `objective_advance`, `avoid_overcommit`, `ally_protection`, `threat_interception` (`spatial_utility.directive_*_weight`). Decide: remove them too, or keep.
+- **FIXED (D-95).** **Resolve screen, pre-fight fear.** The real pre-fight fear is not saved. The resolve screen's `pre_status` uses the Echo's base fear (`status_from(pre_morale, 0, fear_base)` in `EncounterSnapshotBuilder`). The pre-fight chip can differ from the real state at fight start.
+- **FIXED (D-95).** **Two Echo gates.** Slice 7 (style growth) uses the faction-only gate (`faction == "echo"`). Slices 5 and 6 use `EmotionStatusLean.is_echo` (faction and kind). A temporary ally gets style growth and no lean or steps. Decide: one gate (rule D-87).
 - **Probe output.** The `STOPRATE_SUMMARY` and `STOPCAUSE` lines of `tools/SpatialTermProbe.gd` did not appear in the output of the D-90 run (only the per-Echo lines). Who stops (Directive, fear or identity) is not measured.
 - **Stop-rate reference.** The 25 percent reference (stop-short decision #108) is not a config key. The probe prints rates and checks no ceiling (`echoes_above_ceiling=n/a`).
-- **Raw fear and morale readers left (options C6 and C7, deferred by Jeff, D-89 Q5).** Style alignment (`style_inputs`) and the action-layer fear factor (with `morale_action_muls`) still read raw fear and morale. They are a second reading of the same systems (D-87). They need their own story.
+- **FIXED (D-96 to D-102).** **Raw fear and morale readers left (options C6 and C7, deferred by Jeff, D-89 Q5).** Style alignment (`style_inputs`) and the action-layer fear factor (with `morale_action_muls`) still read raw fear and morale. They are a second reading of the same systems (D-87). They need their own story.
 - **Known red test** `movement_arbiter/avoid_overcommit_stays_proportionate` (`tests/MovementArbitrationTests.gd:41`, :835) has no owner. It was red before phase D.
-- **Stale comments in `scripts/run-tests-sharded.sh`** (see the slice 1 and 2 item above). The count of suites is now 133. The suites `felt_state` (shard 1) and `fingerprint_seek` (shard 8) are in the shard map since commit 32a55b0.
+- **FIXED by the test-suite-speed PRs (shard map and counts).** **Stale comments in `scripts/run-tests-sharded.sh`** (see the slice 1 and 2 item above). The count of suites is now 133. The suites `felt_state` (shard 1) and `fingerprint_seek` (shard 8) are in the shard map since commit 32a55b0.
 - **`ConversationService.gd:591-595`** keeps a status-to-band literal (`_emotional_fit_band`): a second table of the ten statuses beside `EmotionService.STATUS_LADDER`.
 - **Dead text.** `data/shouts/stop_short_text.json` keeps `cause_clause.morale`. No cause row uses it (`StopShortService.CAUSE_ROWS` has fear, identity, directive). Low morale now acts through the fear row (the afraid part of the status).
-- **Composure for slice 6 is one activation old.** The profile is built before the activation's composure exists; `LiveMovementContextService._with_state_steps` reads `actor["_composure"]` from the previous activation (default `felt_state.steps.composure_default`). A fresh Echo uses the default.
-- **`felt_state.ranges`.** The validator limits in `felt_state.ranges` (lean, steps, step counts) are PROPOSED DEFAULT and Jeff has not reviewed them. They decide which config values the validator accepts.
+- **FIXED (D-95).** **Composure for slice 6 is one activation old.** The profile is built before the activation's composure exists; `LiveMovementContextService._with_state_steps` reads `actor["_composure"]` from the previous activation (default `felt_state.steps.composure_default`). A fresh Echo uses the default.
+- **FIXED (D-95, reviewed by Jeff 2026-10-18).** **`felt_state.ranges`.** The validator limits in `felt_state.ranges` (lean, steps, step counts) are PROPOSED DEFAULT and Jeff has not reviewed them. They decide which config values the validator accepts.
 - **Stale test comment.** The doc comment above `_t_stage_bound_not_read_in_combat` (`tests/MovementArbitrationTests.gd:1933`) says "Combat code may read only the two shared ramp keys of the stage block". No ramp key exists any more. The test scans for `directive_profile`, `lean_strength` and `leans`. (Docs pass cannot edit tests.)
 - **Exposure choices are rare** (D-80: 1 to 2 percent of Echo decisions in the 7 fixed fights). Watch note on V2-STAGE-010 exists (D-85). Overlap with V2-COMBAT-004 slices 004B and 004D is for Jeff to settle.
+
+## Found in group A QA (2026-10-19), for Jeff
+Not fixed in PR 118 (D-105). Fixed there: the divergence cap edge, `composure` as a required argument, the banter bark on the status, and the stale docs.
+
+- **No runtime validator for the new config.** `BehaviorArbiter.state_config_errors` runs only in a test. A bad `afraid_curve_exponent` (0 or negative) is used silently at run time. A CI test protects the shipped file.
+- **`_compute_bark_cooldown`** (`ActorStateMachine.gd` ~946) compares an integer morale to tier names, so the morale branches never fire. It also reads raw fear. It was like this before the story. Fix it together with the cooldown rules.
+- **Guidance reason text "morale".** The `morale` reason now also covers a fear-caused or bold-caused pull (`GuidanceContribution._REASON_TEXT`). The wording is Jeff's, with `mid-game-designer`.
+- **`action_weight_modifier` is 0 on the movement path** (`select_movement_intent` sets no `state_points`). It was like this before the story. Only the log and snapshot read it.
+- **Some arbiter tests run with the code-default exponent** (`_leaning()` in `BehaviorArbiterTests`, three `MaturityExpressionTests`, two `MovementArbitrationTests`). They build the arbiter without `afraid_curve_exponent`, so they use 1.0 where production uses the config value.
+- **The keeper intro never fills `pre_encounter_fear` or `pre_encounter_morale`.** Its emotion summary uses the defaults. It was like this before the story.
+- **Probes not run after the change.** `tools/SpatialTermProbe.gd`, `PurifyOutcomeProbe.gd` and `PursueTimingProbe.gd` now pass the real composure. Their output was not compared.

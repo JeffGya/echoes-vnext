@@ -296,7 +296,7 @@ static func _t_no_score_change() -> Dictionary:
 	if str(actual.get("action_type", "")) != "actor.move" or str(actual.get("target_id", "")) != "enemy.a" \
 			or float(actual.get("priority", -1.0)) != 1.0:
 		return _fail("pre-Phase-4 decision shape changed: %s" % str(actual))
-	if str(actual.get("morale_tier", "")) != "steady" or int(actual.get("morale_modifier", -1)) != 0 \
+	if str(actual.get("emotional_status", "")) != "grounded" or float(actual.get("state_points", -1.0)) != 0.0 \
 			or str(actual.get("archetype_birth", "x")) != "" or int(actual.get("archetype_modifier", -1)) != 0:
 		return _fail("pre-Phase-4 metadata changed: %s" % str(actual))
 
