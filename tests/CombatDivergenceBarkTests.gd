@@ -23,6 +23,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("divergence_bark/not_suppressed_by_routine_cooldown", Callable(CombatDivergenceBarkTests, "_t_not_suppressed_by_routine_cooldown"))
 	runner.register_test("divergence_bark/no_two_in_a_row", Callable(CombatDivergenceBarkTests, "_t_no_two_in_a_row"))
 	runner.register_test("divergence_bark/later_divergence_still_lands", Callable(CombatDivergenceBarkTests, "_t_later_divergence_still_lands"))
+	runner.register_test("divergence_bark/routine_cooldown_follows_status_config", Callable(CombatDivergenceBarkTests, "_t_routine_cooldown_follows_status_config"))
 
 
 static func _pass() -> Dictionary: return {"ok": true}
@@ -254,4 +255,35 @@ static func _t_voice_distinctness() -> Dictionary:
 				if seen.has(line) and str(seen[line]) != arch:
 					return _fail("identical combat_divergence line shared by '%s' and '%s' at band '%s': '%s'" % [str(seen[line]), arch, band, line])
 				seen[line] = arch
+	return _pass()
+
+
+# One (morale, fear) pair per emotional status. The routine cooldown must be the
+# config value for that status, and the default when the table has no entry.
+static func _t_routine_cooldown_follows_status_config() -> Dictionary:
+	var text: String = FileAccess.get_file_as_string("res://data/balance.json")
+	var data: Variant = JSON.parse_string(text)
+	if not (data is Dictionary):
+		return _fail("balance.json did not parse")
+	var cfg: Dictionary = ((data as Dictionary).get("data", data) as Dictionary).get("maturity_expression", {}).get("routine_bark", {})
+	var table: Dictionary = cfg.get("cooldown_ticks_by_status", {})
+	var pairs: Dictionary = {
+		"hollow": [50, 90], "fraying": [50, 80], "strained": [50, 70], "pressed": [50, 60],
+		"burdened": [50, 50], "hesitant": [30, 10], "uncertain": [36, 42],
+		"grounded": [45, 35], "whole": [60, 20], "radiant": [80, 0],
+	}
+	for status in pairs.keys():
+		var mf: Array = pairs[status]
+		var actor: Dictionary = {"id": "echo.bark.cd", "morale": mf[0], "fear": mf[1]}
+		if EmotionStatusLean.status_of(actor) != status:
+			return _fail("fixture for '%s' reads as '%s'" % [status, EmotionStatusLean.status_of(actor)])
+		if not table.has(status):
+			return _fail("config table has no entry for '%s'" % status)
+		var got: int = ActorStateMachine.new(actor, null, {})._compute_bark_cooldown(cfg)
+		if got != int(table[status]):
+			return _fail("status '%s': expected %d, got %d" % [status, int(table[status]), got])
+	var asm := ActorStateMachine.new({"id": "echo.bark.cd", "morale": 80, "fear": 0}, null, {})
+	var trimmed: Dictionary = {"default_cooldown_ticks": 77, "cooldown_ticks_by_status": {}}
+	if asm._compute_bark_cooldown(trimmed) != 77:
+		return _fail("a status missing from the table must use default_cooldown_ticks")
 	return _pass()
