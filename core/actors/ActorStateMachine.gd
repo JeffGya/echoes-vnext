@@ -625,7 +625,8 @@ func advance_turn(context: Dictionary, logger: StructuredLogger, t: int) -> Dict
 	_select_bark(arch, calling, action_type, start_fear, end_fear, start_status, end_status,
 		last_echo_standing, resilience_fired, intent.get("target_id", ""), variation_key, t, diverged_this_turn,
 		divergence_bark_cooldown, guidance_consent, guidance_reason_text, guidance_reading,
-		resilient_bark_cooldown, expr_cfg.get("combat_banter", {}).get("calm_statuses", []) as Array)
+		resilient_bark_cooldown, expr_cfg.get("combat_banter", {}).get("calm_statuses", []) as Array,
+		expr_cfg.get("routine_bark", {}) as Dictionary)
 	# V2-VOICE-001: check if this actor should react to an ally's high-signal bark
 	_check_reactive_bark(augmented_context, variation_key)
 	# V2-VOICE-001: write bark fields to actor dict so round_bark_events pipeline can read them
@@ -778,7 +779,8 @@ func _select_bark(
 	guidance_reason_text: String = "",
 	guidance_reading: String = "",
 	resilient_cooldown_ticks: int = 10,
-	banter_statuses: Array = []
+	banter_statuses: Array = [],
+	routine_bark_cfg: Dictionary = {}
 ) -> void:
 	var context_key := ""
 	var target := str(target_id) if target_id != null else ""
@@ -912,7 +914,7 @@ func _select_bark(
 		# here — writing a second copy of that prose would let the two drift.
 		if not guidance_reason_text.is_empty():
 			_bark_line = guidance_reason_text
-			_actor["_bark_next_t"] = t + _compute_bark_cooldown()
+			_actor["_bark_next_t"] = t + _compute_bark_cooldown(routine_bark_cfg)
 		return
 
 	# Try expression-shout first (emotion × band × archetype × calling); V2-VOICE-001: variation_key
@@ -931,7 +933,7 @@ func _select_bark(
 			line = legacy
 	if not line.is_empty() and line != ShoutBank._FALLBACK:
 		_bark_line = line
-		_actor["_bark_next_t"] = t + _compute_bark_cooldown()
+		_actor["_bark_next_t"] = t + _compute_bark_cooldown(routine_bark_cfg)
 		# V2-PROG-012 Phase 11 playtest fix: divergence-specific cooldown —
 		# transient-only, same pattern as _bark_next_t (no new save field).
 		# combat_resilient's own cooldown is set earlier, at priority selection —
@@ -941,17 +943,16 @@ func _select_bark(
 			_actor["_divergence_bark_next_t"] = t + divergence_cooldown_ticks
 
 
-# V2-VOICE-002: Tick gap before next routine bark (~3–6 rounds at 7 ticks/round).
-func _compute_bark_cooldown() -> int:
-	var morale: String = str(_actor.get("morale", "steady"))
-	var fear: int = int(_actor.get("fear", 0))
-	if morale == "inspired" or fear >= 60:
-		return 14   # ~2 rounds
-	elif morale == "broken":
-		return 35   # ~5 rounds
-	elif morale == "shaken" or fear >= 40:
-		return 21   # ~3 rounds
-	return 28       # ~4 rounds (default steady)
+# The gap is config (maturity_expression.routine_bark); a shorter gap means more speech.
+func _compute_bark_cooldown(routine_bark_cfg: Dictionary) -> int:
+	var by_status: Variant = routine_bark_cfg.get("cooldown_ticks_by_status", {})
+	var status: String = EmotionStatusLean.status_of(_actor)
+	if by_status is Dictionary and (by_status as Dictionary).has(status):
+		return int((by_status as Dictionary)[status])
+	if routine_bark_cfg.has("default_cooldown_ticks"):
+		return int(routine_bark_cfg["default_cooldown_ticks"])
+	push_error("routine_bark config is missing: no bark cooldown for status \"%s\"" % status)
+	return 0
 
 
 ## V2-VOICE-001: Called by FlowRuntime after CombatService.resolve_action() resolves.

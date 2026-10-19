@@ -269,7 +269,7 @@ static func _bark_context(start_status: String, end_status: String, action_type:
 	var asm := ActorStateMachine.new({"id": "echo.bark", "fear": 0, "morale": 50}, null, {})
 	asm._expression_band = "whole"
 	asm._select_bark("proud", "", action_type, 0, 0, start_status, end_status, false, false, "", 0, 0,
-		false, 0, "", "", "", 0, calm_statuses())
+		false, 0, "", "", "", 0, calm_statuses(), CombatDivergenceBarkTests.routine_bark_cfg())
 	return asm._bark_context
 
 
