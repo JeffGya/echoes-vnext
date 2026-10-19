@@ -1336,6 +1336,22 @@
 				"_comment_calm_statuses": "An Echo whose emotional status after its turn is in this list may voice combat_banter. Names come from EmotionService.STATUS_LADDER.",
 				"calm_statuses": ["grounded", "whole", "radiant"]
 			},
+			"routine_bark": {
+				"_comment": "PROPOSED DEFAULT. Tick gap before an Echo's next routine bark, by emotional status (names from EmotionService.STATUS_LADDER). A shorter gap means the Echo speaks more often. About 7 ticks make one round. A status that is missing from the table uses default_cooldown_ticks.",
+				"default_cooldown_ticks": 28,
+				"cooldown_ticks_by_status": {
+					"hollow": 35,
+					"fraying": 28,
+					"strained": 21,
+					"pressed": 14,
+					"burdened": 14,
+					"hesitant": 21,
+					"uncertain": 28,
+					"grounded": 28,
+					"whole": 28,
+					"radiant": 21
+				}
+			},
 			"rank_benefits_config": {
 				"_comment": "V2-PROG-010: Earned benefit definitions shown as persistent glyphs on Echo detail card. Unlocked at min_rank. Label and description are prose only — no numbers.",
 				"fear_recovery": {
