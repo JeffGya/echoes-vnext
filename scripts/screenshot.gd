@@ -6,6 +6,7 @@
 #
 #   <fixture>  one key of FIXTURES; "all" renders every fixture; "list" prints the keys.
 #   [out_dir]  an absolute directory; default user://screenshots. Output: <out_dir>/<fixture>.png.
+#   [profile]  compact, standard or wide: forces that layout profile. Output: <fixture>_<profile>.png.
 #
 # On macOS, run it from a real window without xvfb:
 #   godot --path <checkout> --resolution 1920x1080 --script res://scripts/screenshot.gd -- <fixture> <out_dir>
@@ -33,6 +34,7 @@ func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	var which := str(args[0]) if args.size() > 0 else "list"
 	var out_dir := str(args[1]) if args.size() > 1 else "user://screenshots"
+	var profile := str(args[2]) if args.size() > 2 else ""
 	var fixtures := _fixtures()
 	if which == "list" or (which != "all" and not fixtures.has(which)):
 		print("Fixtures: all, ", ", ".join(PackedStringArray(fixtures.keys())))
@@ -41,12 +43,14 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var names: Array = fixtures.keys() if which == "all" else [which]
 	for fixture_name in names:
-		await _render_fixture(str(fixture_name), fixtures[fixture_name], out_dir)
+		await _render_fixture(str(fixture_name), fixtures[fixture_name], out_dir, profile)
 	quit(0)
 
 
-func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String) -> void:
+func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, profile: String = "") -> void:
 	var layout := ResponsiveLayoutController.calculate_layout(Vector2(root.size))
+	if not profile.is_empty():
+		layout["profile"] = StringName(profile)
 	ResponsiveLayoutController.apply_content_scale_size(root, layout)
 
 	var harness := HarnessScene.instantiate()
@@ -58,12 +62,16 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String) ->
 
 	shell.call("set_layout", layout)
 	for snap in snapshots:
-		shell.call("set_snapshot", snap)
+		if snap is String:
+			_run_step(harness, snap)
+		else:
+			shell.call("set_snapshot", snap)
 		await process_frame
 	for _i in range(SETTLE_FRAMES):
 		await process_frame
 
-	var path := out_dir.path_join(fixture_name + ".png")
+	var file_name := fixture_name if profile.is_empty() else "%s_%s" % [fixture_name, profile]
+	var path := out_dir.path_join(file_name + ".png")
 	var err := root.get_texture().get_image().save_png(path)
 	print("SHOT %s -> %s (err=%d)" % [fixture_name, ProjectSettings.globalize_path(path), err])
 	harness.queue_free()
@@ -93,6 +101,12 @@ func _fixtures() -> Dictionary:
 			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_bonus_awarded": 0, "pace_changed_rank": false })],
 		"resolve_no_pace_win": [_combat(8, endure), _resolve(true, "endured", 8, "B", {})],
 		"resolve_pace_defeat": [_combat(7, recover), _resolve(false, "all_echoes_dead", 7, "F", {})],
+		"resolve_ledger_closed": [_combat(6, recover), _payout_fight(true, true)],
+		"resolve_ledger_open_fight": [_combat(6, recover), _payout_fight(true, false)],
+		"resolve_stage_end": [_combat(6, recover), _payout_stage_end()],
+		"resolve_defeat_consolation": [_combat(7, recover), _payout_defeat()],
+		"resolve_retreat_zero": [_combat(7, recover), _payout_retreat_zero()],
+		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(), "focus_cause:3"],
 	}
 
 
@@ -191,3 +205,83 @@ func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pac
 	data.merge(pace)
 	var actions := { "cta.continue": { "type": "flow.go_state", "slot": "cta.continue", "label": "To Sanctum" } }
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
+
+
+## A fixture step that is a String acts on the live scene. "focus_cause:N" focuses the Nth (i) button.
+func _run_step(harness: Node, step: String) -> void:
+	var parts := step.split(":")
+	if parts[0] == "focus_cause":
+		var buttons := harness.find_children("CauseButton", "Button", true, false)
+		var visible_buttons := buttons.filter(func(b: Node) -> bool: return (b as Button).is_visible_in_tree())
+		var index := int(parts[1]) if parts.size() > 1 else 0
+		if index < visible_buttons.size():
+			(visible_buttons[index] as Button).grab_focus()
+
+
+func _row(label: String, delta: int, cause: String, params: Dictionary = {}) -> Dictionary:
+	return { "label": label, "delta": delta, "currency": "ase", "cause": cause, "params": params }
+
+
+## Fixture amounts are arbitrary. The real values come from EconomyService.
+func _payout_data(victory: bool, reason: String, rank: String, rows: Array, seen: bool) -> Dictionary:
+	var total := 0
+	for row in rows:
+		total += int(row["delta"])
+	return {
+		"victory": victory, "reason": reason, "rank": rank, "ase_awarded": total, "ekwan_awarded": 0,
+		"enemies_defeated": 3, "echoes_survived": 3 if victory else 0, "round_ended": 6,
+		"reward_breakdown": rows, "ledger_seen": seen, "actors": _actors(),
+		"emotion_summary": [
+			{ "echo_id": "e1", "name": "Ama", "pre_emotional_status": "grounded", "post_emotional_status": "radiant", "direction": "lift" },
+			{ "echo_id": "e2", "name": "Kofi", "pre_emotional_status": "grounded", "post_emotional_status": "uncertain", "direction": "fall" },
+			{ "echo_id": "e3", "name": "Esi", "pre_emotional_status": "grounded", "post_emotional_status": "grounded", "direction": "steady" },
+		],
+	}
+
+
+func _payout_snap(data: Dictionary) -> Dictionary:
+	var actions := { "cta.continue": { "type": "flow.go_state", "slot": "cta.continue", "label": "To Sanctum" } }
+	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
+
+
+func _payout_fight(pace_missed: bool, seen: bool) -> Dictionary:
+	var rows := [
+		_row("3 enemies defeated", 30, "enemies_defeated", { "count": 3 }),
+		_row("3 echoes survived", 24, "echoes_alive", { "count": 3 }),
+		_row("Pace bonus", 0, "bonus_missed") if pace_missed else _row("Pace bonus", 6, "bonus_earned"),
+		_row("Redo penalty", -5, "replay", { "factor": 0.9 }),
+	]
+	var data := _payout_data(true, "relic_secured", "A", rows, seen)
+	data["pace_state"] = "partial"
+	return _payout_snap(data)
+
+
+func _payout_stage_end() -> Dictionary:
+	var snap := _payout_fight(true, false)
+	var stage_rows := [
+		_row("Base objectives", 90, "objectives_overcome", { "overcome": 2, "total": 3 }),
+		_row("Redo penalty", -9, "replay", { "factor": 0.9 }),
+		_row("Realm virtue", 20, "realm_virtue"),
+	]
+	snap["data"]["stage_payout_rows"] = stage_rows
+	snap["data"]["stage_payout_ase"] = 101
+	snap["data"]["stage_payout_ekwan"] = 12
+	snap["actions"]["cta.next_stage"] = { "type": "flow.complete_stage", "slot": "cta.next_stage", "label": "Complete Stage" }
+	return snap
+
+
+func _payout_defeat() -> Dictionary:
+	var rows := [
+		_row("Base objectives", 40, "defeat_consolation", { "part": "base" }),
+		_row("Defeat penalty", -30, "defeat_consolation", { "part": "penalty" }),
+		_row("Redo penalty", -1, "replay", { "factor": 0.9 }),
+	]
+	return _payout_snap(_payout_data(false, "all_echoes_dead", "F", rows, false))
+
+
+func _payout_retreat_zero() -> Dictionary:
+	var data := _payout_data(false, "", "F", [_row("Nothing carried home", 0, "nothing_overcome_yet")], false)
+	data["run_type"] = "scout_return"
+	data["intel_count"] = 0
+	data["actors"] = _actors()
+	return _payout_snap(data)

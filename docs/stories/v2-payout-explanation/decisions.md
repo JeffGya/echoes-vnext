@@ -56,3 +56,11 @@ Proposed keys: `stage_payout_rows`, `stage_payout_ase` (present only on the stag
 | D-15 | Ekwan (backend D-28 to D-32, Jeff): fights earn none. Fight cards show Ase only, no Ekwan row or chip. The stage-ending card shows "Ekwan earned" with its amount (`stage_payout_ekwan`, name unconfirmed), no (i), outside the Ase total. No "Sanctum share" row exists. |
 
 Stage Replay tooltip (DECIDED, Jeff): "The party has been here before. The whole stage earns less Ase and Ekwan."
+
+## Build status (UI, 2026-10-21)
+
+- Built: PayoutCausePresentation, CauseTooltip, RewardEntryItem (i) button, Resolve card Option 1 (FightStrip, EarningsSummary, Ledger).
+- Tests: `payout_ui` suite (16 tests). Screenshots: `screenshots/<fixture>_<profile>.png`.
+- Rows come from snapshot data only. A cause with no row is an unused tooltip entry. An unknown cause shows no (i).
+- Row name for `repeat_defeat` is "Consolation" (assumption, Jeff to confirm).
+- The theme got additive Payout* variations (`assets/theme/LivingTreeSystem.tres`).

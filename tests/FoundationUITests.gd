@@ -854,6 +854,7 @@ static func _t_resolve_modal_geometry_compact_and_wide() -> Dictionary:
 				"echoes_survived": 4,
 				"round_ended": 8,
 				"reward_breakdown": breakdown,
+				"ledger_seen": false,
 				"emotion_summary": [],
 			},
 			"actions": {
