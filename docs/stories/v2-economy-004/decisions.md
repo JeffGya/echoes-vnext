@@ -345,3 +345,11 @@ save and stage group 239/239; `econ_char` 37/37 (agent run). `balance.json` unch
 Cause (D-28): fights pay no Ekwan. Proof: for all 28 payloads, the field diff against the previous run (Phase 3d logs) shows exactly ONE
 changed field: FINAL `ekwan_awarded` 6 or 7 -> 0; SAVE `economy.ekwan` 6 or 7 -> 0. The previous payload hashes to the old constant in 28 of 28.
 `stage_payout_ekwan` is not in the harness payloads (the harness fight leaves `objectives_remaining` at 1), as for `stage_payout_ase` (D-26).
+
+## D-35 — Backend committed; shared PR from the backend branch; UI go sent (2026-10-21)
+
+**Answer (Jeff):** The backend branch `claude/v2-economy-004-material-split-24c3be` is the shared PR branch.
+Backend committed as ONE commit `4712518` (not pushed): the phases overlap in the same files, so they cannot be split
+into clean per-phase commits after the fact; each moved value keeps one named cause in `phase2-attribution.md`,
+`phase3a-attribution.md` and D-21 to D-34. UI session `payout-explain-ui` got "GO: backend verified": it merges the backend branch
+into its own, builds, and reports its last commit; the backend session merges the UI branch back; Jeff opens one PR.
