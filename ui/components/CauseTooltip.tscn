@@ -1,0 +1,49 @@
+[gd_scene format=3 uid="uid://cause_tooltip_001"]
+
+[ext_resource type="Script" path="res://ui/components/CauseTooltip.gd" id="1_tooltip"]
+
+[node name="CauseTooltip" type="Control"]
+top_level = true
+z_index = 100
+visible = false
+layout_mode = 3
+anchors_preset = 0
+mouse_filter = 2
+script = ExtResource("1_tooltip")
+
+[node name="Arrow" type="Panel" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 0
+offset_right = 14.0
+offset_bottom = 14.0
+pivot_offset = Vector2(7, 7)
+rotation = 0.7853982
+mouse_filter = 2
+theme_type_variation = &"PayoutTooltipArrow"
+
+[node name="Panel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(272, 0)
+layout_mode = 0
+offset_right = 272.0
+mouse_filter = 2
+theme_type_variation = &"PayoutTooltip"
+
+[node name="Layout" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="TitleLabel" type="Label" parent="Panel/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"PayoutTooltipTitle"
+text = "Title"
+
+[node name="BodyLabel" type="Label" parent="Panel/Layout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(248, 0)
+layout_mode = 2
+theme_type_variation = &"PayoutTooltipBody"
+text = "Body"
+autowrap_mode = 3
