@@ -20,6 +20,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/cause_rows_have_48_button_others_none", Callable(ResolvePayoutUITests, "_t_buttons"))
 	runner.register_test("payout_ui/tooltip_text_matches_approved_wording", Callable(ResolvePayoutUITests, "_t_wording"))
 	runner.register_test("payout_ui/tooltip_opens_pins_and_closes", Callable(ResolvePayoutUITests, "_t_tooltip_rules"))
+	runner.register_test("payout_ui/tooltip_closes_on_tap_outside", Callable(ResolvePayoutUITests, "_t_tap_outside"))
+	runner.register_test("payout_ui/ledger_emit_per_result_not_per_render", Callable(ResolvePayoutUITests, "_t_two_results"))
 	runner.register_test("payout_ui/ledger_opens_once_when_unseen", Callable(ResolvePayoutUITests, "_t_first_time_open"))
 	runner.register_test("payout_ui/ledger_closed_when_seen_or_key_absent", Callable(ResolvePayoutUITests, "_t_seen_or_absent"))
 	runner.register_test("payout_ui/any_subset_of_rows_renders", Callable(ResolvePayoutUITests, "_t_any_subset"))
@@ -311,6 +313,52 @@ static func _t_tooltip_rules() -> Dictionary:
 	screen.set_snapshot(_snap([], { "ledger_seen": true }))
 	if tip.is_open():
 		return _fail(m, "a new snapshot left the tooltip open")
+	return _pass(m)
+
+
+## The screen lives in a SubViewport, so real root-window input cannot reach it (AGENTS.md rule 29
+## covers root-window input). The test calls the tooltip's input handler with a real mouse event.
+static func _t_tap_outside() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot(_snap([_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })], { "ledger_seen": true }))
+	var tip := screen.get_node("%CauseTooltip") as CauseTooltip
+	var button: Button = (_rows_in(screen, "%BreakdownSection")[0] as RewardEntryItem).cause_button
+	button.global_position = Vector2(600, 300)
+	button.size = Vector2(48, 48)
+	button.pressed.emit()
+	if not tip.is_open():
+		return _fail(m, "tooltip did not open")
+	var tap := InputEventMouseButton.new()
+	tap.button_index = MOUSE_BUTTON_LEFT
+	tap.pressed = true
+	tap.position = Vector2(5, 5)
+	tap.global_position = Vector2(5, 5)
+	tip._input(tap)
+	if tip.is_open():
+		return _fail(m, "a tap outside did not close the tooltip")
+	return _pass(m)
+
+
+## One mark_seen per new result; a re-render of the same result never emits again.
+static func _t_two_results() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var sent: Array = []
+	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
+	var first := [_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })]
+	var second := [_row("4 enemies defeated", 9, "enemies_defeated", { "count": 4 })]
+	screen.set_snapshot(_snap(first, { "ledger_seen": false }))
+	screen.set_snapshot(_snap(first, { "ledger_seen": true }))
+	if sent.size() != 1 or not screen.get_node("%Ledger").visible:
+		return _fail(m, "first result: %d emits, ledger open=%s" % [sent.size(), screen.get_node("%Ledger").visible])
+	(screen.get_node("%EarningsSummary") as Button).pressed.emit()
+	screen.set_snapshot(_snap(first, { "ledger_seen": true }))
+	if sent.size() != 1 or screen.get_node("%Ledger").visible:
+		return _fail(m, "same result re-render changed the ledger or emitted again")
+	screen.set_snapshot(_snap(second, { "ledger_seen": false }))
+	if sent != [MARK_SEEN, MARK_SEEN] or not screen.get_node("%Ledger").visible:
+		return _fail(m, "second result: %d emits, ledger open=%s" % [sent.size(), screen.get_node("%Ledger").visible])
 	return _pass(m)
 
 
