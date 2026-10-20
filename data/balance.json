@@ -1531,11 +1531,30 @@
 		},
 		"rewards": {
 			"_comment": "ECONOMY-004: Stage reward payout config. All values tunable without code changes.",
+			"_objective_weights_comment": "Ase per objective type (D-09). A type with no key logs an error and pays 0. boss stays 0 until a boss story exists (D-02).",
 			"objective_weights": {
-				"combat": 30,
-				"shrine": 40,
-				"boss": 60
+				"pursue": 8,
+				"combat": 10,
+				"recover": 12,
+				"protect": 12,
+				"endure": 14,
+				"shrine": 15,
+				"guide_spirit": 16,
+				"boss": 0
 			},
+			"_objective_ekwan_comment": "Ekwan per COMPLETED objective type (D-29, working set B). Fights pay none. A type with no key logs an error and pays 0. The stage sum is multiplied by the replay factor and rounded once.",
+			"objective_ekwan": {
+				"pursue": 2,
+				"combat": 2,
+				"protect": 3,
+				"guide_spirit": 3,
+				"endure": 4,
+				"recover": 5,
+				"shrine": 6,
+				"boss": 0
+			},
+			"_objective_count_excluded_comment": "Objective types left out of the 'overcome of total' count on the payout ledger. boss is a stub today; remove it from this list when the boss becomes a real objective. No payout effect.",
+			"objective_count_excluded_types": ["boss"],
 			"enemy_defeated_bonus": 5,
 			"echo_survived_bonus": 10,
 			"pace_full_ratio": 1.1,
@@ -1560,8 +1579,6 @@
 			"stage_index_bonus_per": 5,
 			"realm_order_multiplier_base": 1.0,
 			"realm_order_multiplier_step": 0.5,
-			"ekwan_base_factor": 0.12,
-			"ekwan_shrine_multiplier": 1.5,
 			"partial_intel_reward_factor": 0.12
 		},
 		"grid": {

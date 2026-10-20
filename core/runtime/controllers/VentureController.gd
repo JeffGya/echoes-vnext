@@ -370,13 +370,10 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 			# withdrawal multiplies the partial reward by its `intel_retention_bonus` (data-driven,
 			# default 1.0 = no change). Scout (retention true, bonus 1.5) keeps more of the value it
 			# gathered; Seek (false) does not. Magnitude is tunable in data.directives.
-			# Phase 8 (D39): get_stage_base_reward() now sums the stage's objective weights via
-			# RewardCalc.base_reward(), the same definition the stage payout uses. This partial
-			# payout therefore rises on every multi-objective stage.
 			var _retention_mul := 1.0
 			if bool(directive.get("intel_retention", false)):
 				_retention_mul = float(directive.get("intel_retention_bonus", 1.0))
-			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service)) * _pf * _retention_mul)
+			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * _pf * _retention_mul)
 			if _partial_ase > 0:
 				econ.add_ase(_partial_ase, "return_home_intel_partial", logger, t)
 		flow_ctx.pending_scout_return_ase         = _partial_ase
@@ -547,6 +544,23 @@ func handle_select_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	# not here — covers first entry and re-entry after defeat.
 	logger.info(t, "state.stage_select", "Stage selected", { "stage_id": stage_id })
 	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE, "ui.flow.select_stage")
+
+
+## resolve.ledger.mark_seen — the player has now seen a result ledger. Sets
+## `ui_flags.result_ledger_seen` once, patches the live Resolve snapshot so a re-render does not
+## reopen the ledger, and queues the save. No payout effect.
+func handle_ledger_mark_seen(t: int) -> FlowActionOutcome:
+	if SaveSchema.ledger_seen(flow_ctx.save_data):
+		return FlowActionOutcome.handled_outcome()
+	var flags_v: Variant = flow_ctx.save_data.get(SaveSchema.UI_FLAGS_KEY, {})
+	var flags: Dictionary = flags_v if flags_v is Dictionary else {}
+	flags[SaveSchema.LEDGER_SEEN_KEY] = true
+	flow_ctx.save_data[SaveSchema.UI_FLAGS_KEY] = flags
+	var snap_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	if snap_data_v is Dictionary and (snap_data_v as Dictionary).has("ledger_seen"):
+		(snap_data_v as Dictionary)["ledger_seen"] = true
+	logger.info(t, "ui.ledger.seen", "Result ledger marked as seen", {})
+	return FlowActionOutcome.handled_outcome().with_save_reason("ui.ledger.seen")
 
 
 ## flow.complete_stage — REALM-004: advance the stage index; on realm complete, clear context

@@ -55,12 +55,22 @@ extends RefCounted
 ## control every payout by what they leave in pending_scout_return_ase/_intel_count BEFORE
 ## calling this — this producer only reads and clears neither.
 ## Pure: two calls with the same arguments return byte-identical payloads.
-static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_type: String = "scout_return") -> Dictionary:
+static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_type: String = "scout_return",
+		partial_cause: String = "partial_return_home") -> Dictionary:
 	var _ase   := flow_ctx_arg.pending_scout_return_ase
 	var _intel := flow_ctx_arg.pending_scout_return_intel_count
 	var breakdown: Array = []
-	if _ase > 0:
-		breakdown.append({ "label": "Scout return", "delta": _ase, "currency": "ase" })
+	# A forced retreat pays nothing by design, so it gets no row. A paid or zero partial gets a
+	# cause; a zero partial with nothing overcome says why (`nothing_overcome_yet`).
+	if run_type != "forced_retreat":
+		var _counts := ActiveStageService.get_objective_counts(flow_ctx_arg, flow_ctx_arg.config_service)
+		if _ase > 0:
+			breakdown.append({ "label": "Scout return", "delta": _ase, "currency": "ase",
+				"cause": partial_cause, "params": _counts })
+		elif int(_counts.get("overcome", 0)) == 0:
+			breakdown.append({ "label": "Nothing overcome yet", "delta": 0, "currency": "ase",
+				"cause": "nothing_overcome_yet", "params": { "partial": partial_cause,
+				"overcome": 0, "total": int(_counts.get("total", 0)) } })
 
 	var actor_preview: Array = []
 	# V2-INFRA-003 Phase 5 Slice B: was SanctumService.new(flow_ctx.save_data).get_party_actors().
@@ -113,6 +123,7 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_t
 	var _data: Dictionary = _snap["data"]
 	ResolveSnapshotBuilder.add_ledger(_data, _ase, breakdown)
 	ResolveSnapshotBuilder.add_ekwan(_data, 0)
+	ResolveSnapshotBuilder.add_ledger_seen(_data, SaveSchema.ledger_seen(flow_ctx_arg.save_data))
 	ResolveSnapshotBuilder.add_scout_intel(_data, _intel)
 	ResolveSnapshotBuilder.add_actors(_data, actor_preview)
 	ResolveSnapshotBuilder.add_victory_flag(_data, false)

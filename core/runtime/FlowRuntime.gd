@@ -260,6 +260,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"flow.complete_stage":
 				_apply_action_outcome(_venture_controller().handle_complete_stage(action, t), t)
 	
+			"resolve.ledger.mark_seen":
+				_apply_action_outcome(_venture_controller().handle_ledger_mark_seen(t), t)
+
 			"flow.continue":
 				var is_first_boot: bool = bool(flow_ctx.save_data.get("first_boot", true))
 				if is_first_boot:
@@ -1199,7 +1202,7 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		var _partial_ase := 0
 		if _intel_count > 0:
 			var _pf := float(ConfigService.get_rewards_cfg(config_service).get("partial_intel_reward_factor", 0.12))
-			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service)) * _pf)
+			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * _pf)
 			if _partial_ase > 0:
 				econ.add_ase(_partial_ase, "retreat_intel_partial", logger, t)
 		flow_ctx.pending_scout_return_ase         = _partial_ase
@@ -1218,7 +1221,8 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		_vow_consequence_service().check_vow_release_condition(t)
 		# V2-INFRA-003 Phase 5 Slice D: producer C moved to ActiveStageService
 		# (two callers, two domains — see that file's header). Same pure function.
-		flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(flow_ctx, t)
+		flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
+			flow_ctx, t, "scout_return", "partial_retreat")
 		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.scout_return")
 	else:
 		logger.info(t, "encounter.retreat.failed", "Retreat failed — combat begins", {

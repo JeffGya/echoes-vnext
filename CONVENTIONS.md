@@ -921,9 +921,9 @@ Pure-static `RefCounted`. Single choke point for all Continuity mutations.
 - Offline accrual: 50% decay → 0 over 8hr cap. Applied once per session on Continue. **Gated by `sanctum.ase_flame.awakened`** — no Ase accrues while house is dormant (V2-ECONOMY-001).
 - UI may predict/animate balance; Core commits. Core is authoritative if they disagree.
 - Ase summon costs (grade-based): uncalled=60, called=150, chosen=400
-- **Ekwan** is awarded on stage completion only. Scales off final Ase awarded (post-redo, post-virtue) via `ekwan_base_factor` and `ekwan_shrine_multiplier` in `balance.json → data.rewards`.
+- **Ekwan** is awarded on stage completion only. It is the sum of `data.rewards.objective_ekwan` over the COMPLETED objectives, times the replay factor, rounded once (V2-ECONOMY-004 Phase 4). Fights pay none.
 - **Partial Ase** awarded on retreat/return_home when ≥1 situation revealed (intel-gated). Factor: `partial_intel_reward_factor` × stage base reward. No Ekwan on partial runs.
-- **reward_breakdown** entries now include `"currency": "ase" | "ekwan"` field. UI colors Ekwan entries in Amber `#E8A030`.
+- **reward_breakdown** entries carry `"currency": "ase"`. No row has `currency: "ekwan"` (V2-ECONOMY-004 D-32); the stage Ekwan is `stage_payout_ekwan` on the stage-ending victory card.
 
 ### DirectiveService (`core/directives/DirectiveService.gd`) — V2 (V2-DIRECTIVE-001)
 

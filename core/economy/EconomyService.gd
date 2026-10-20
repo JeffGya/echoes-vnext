@@ -114,19 +114,21 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 # now inside two `roundi()` calls instead of one, which is the sole arithmetic consequence of
 # splitting (a possible ±1 Ase against the old single rounding). The stage's base stays an
 # INPUT to the encounter cadence (the pace bonus is a share of it), not a PAYOUT of it. The
-# defeat consolation likewise still reads the stage base to take 25% of.
+# defeat consolation takes 25% of the weight of the fought objective (`consolation_base`), not
+# of the stage base.
 
 ## Encounter-cadence payout. Paid at every combat end, once per encounter.
 ##
 ## victory:   on a win pays `roundi((enemy + echo + pace) × redo)`; on a loss pays the
 ##            `roundi(base × 0.25 × redo)` consolation.
-## base_reward: the STAGE's base (sum of its objective weights). An INPUT only — never paid
+## base_reward: the weight of the fought objective (`RewardCalc.consolation_base`). Never paid
 ##            here on a victory. Used for the defeat consolation.
 ## consolation_eligible: false on a repeat defeat of a situation that has already paid its
 ##            consolation. Ignored on a victory. When false the defeat branch pays nothing and
-##            returns an empty breakdown — there is no second consolation to itemise.
+##            returns one delta-0 `repeat_defeat` row.
 ## pace_bonus: RewardCalc's pre-redo pace bonus. pace_mode: RewardCalc's `pace_mode`.
-## ekwan_factor: fraction of THIS payout to award as Ekwan (V2-ECONOMY-001). 0.0 for none.
+## Every row carries `cause` and `params` (see `_row`). A fight pays no Ekwan (D-28):
+## `ekwan_awarded` stays in the result as 0 so the Resolve snapshot keeps its shape.
 ## Returns reward_result dict with ase_awarded, ekwan_awarded, rank, victory, breakdown.
 func reward_encounter_complete(
 	victory: bool,
@@ -140,7 +142,6 @@ func reward_encounter_complete(
 	redo_multiplier: float,
 	rank: String,
 	consolation_eligible: bool,
-	ekwan_factor: float,
 	logger: StructuredLogger,
 	t: int
 ) -> Dictionary:
@@ -155,15 +156,15 @@ func reward_encounter_complete(
 		breakdown = []
 		if enemy_bonus > 0:
 			var e_label := "%d %s defeated" % [enemies_defeated, "enemy" if enemies_defeated == 1 else "enemies"]
-			breakdown.append({ "label": e_label, "delta": enemy_bonus, "currency": "ase" })
+			breakdown.append(_row(e_label, enemy_bonus, "enemies_defeated", { "count": enemies_defeated }))
 		if echo_bonus > 0:
 			var ec_label := "%d %s survived" % [echoes_survived, "echo" if echoes_survived == 1 else "echoes"]
-			breakdown.append({ "label": ec_label, "delta": echo_bonus, "currency": "ase" })
+			breakdown.append(_row(ec_label, echo_bonus, "echoes_alive", { "count": echoes_survived }))
 		# Pace modes show the row at every value, 0 included (decisions.md D-13); no-pace modes never.
 		if pace_mode:
-			breakdown.append({ "label": "Pace bonus", "delta": pace_bonus, "currency": "ase" })
+			breakdown.append(_row("Pace bonus", pace_bonus, "bonus_earned" if pace_bonus > 0 else "bonus_missed"))
 		if redo_penalty < 0:
-			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
+			breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
 	elif consolation_eligible:
 		total = roundi(float(base_reward) * 0.25 * redo_multiplier)
 		var base_consolation := roundi(float(base_reward) * 0.25)
@@ -171,29 +172,23 @@ func reward_encounter_complete(
 		var redo_penalty     := total - base_consolation        # negative or 0
 
 		breakdown = []
-		breakdown.append({ "label": "Base objectives", "delta": base_reward, "currency": "ase" })
-		breakdown.append({ "label": "Defeat penalty", "delta": defeat_penalty, "currency": "ase" })
+		breakdown.append(_row("Base objectives", base_reward, "defeat_consolation", { "part": "base" }))
+		breakdown.append(_row("Defeat penalty", defeat_penalty, "defeat_consolation", { "part": "penalty" }))
 		if redo_penalty < 0:
-			breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
+			breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
 	else:
 		# D77: this situation has already paid its one defeat consolation. Losing it again pays
 		# nothing. The situation still is NOT marked resolved by this path, so the fight stays
 		# retryable — it is just no longer payable.
 		total = 0
-		breakdown = []
+		breakdown = [_row("Repeat defeat", 0, "repeat_defeat")]
 
 	if total > 0:
 		add_ase(total, "encounter_reward", logger, t)
 
-	# V2-ECONOMY-001: Ekwan — scales off the Ase actually awarded here.
-	var ekwan_total := roundi(float(total) * maxf(ekwan_factor, 0.0))
-	if ekwan_total > 0:
-		add_ekwan(ekwan_total, "encounter_reward", logger, t)
-		breakdown.append({ "label": "Sanctum share", "delta": ekwan_total, "currency": "ekwan" })
-
 	return {
 		"ase_awarded":   total,
-		"ekwan_awarded": ekwan_total,
+		"ekwan_awarded": 0,
 		"rank":          rank,
 		"victory":       victory,
 		"breakdown":     breakdown,
@@ -205,6 +200,8 @@ func reward_encounter_complete(
 ## (`StageSettlementService`), not this function — this function only pays what it is told to.
 ##
 ## base_reward:  sum of the stage's objective weights (`RewardCalc.base_reward`).
+## objective_counts: `RewardCalc.objective_counts()`; feeds the `objectives_overcome` params only.
+## ekwan_base:   `RewardCalc.stage_ekwan()`, the Ekwan of the completed objectives before redo.
 ## redo_multiplier: same value the encounter payout used; scales the base exactly as the single
 ##               combined payer scaled it.
 ## virtue_bonus: REALM-005 realm-virtue + stage-index bonus. Never redo-scaled — it carries its
@@ -214,34 +211,51 @@ func settle_stage_complete(
 	base_reward: int,
 	redo_multiplier: float,
 	virtue_bonus: int,
-	ekwan_factor: float,
 	logger: StructuredLogger,
-	t: int
+	t: int,
+	objective_counts: Dictionary = {},
+	ekwan_base: int = 0
 ) -> Dictionary:
-	var base_after_redo := roundi(float(base_reward) * redo_multiplier)
-	var total := base_after_redo + virtue_bonus
-	var redo_penalty := base_after_redo - base_reward  # negative or 0
-
-	var breakdown: Array = []
-	breakdown.append({ "label": "Base objectives", "delta": base_reward, "currency": "ase" })
-	if redo_penalty < 0:
-		breakdown.append({ "label": "Redo penalty", "delta": redo_penalty, "currency": "ase" })
-	if virtue_bonus > 0:
-		breakdown.append({ "label": "Realm virtue", "delta": virtue_bonus, "currency": "ase" })
+	var rows := stage_payout_rows(base_reward, redo_multiplier, virtue_bonus, objective_counts, ekwan_base)
+	var total: int = rows["ase"]
+	var breakdown: Array = rows["breakdown"]
 
 	if total > 0:
 		add_ase(total, "stage_reward", logger, t)
 
-	var ekwan_total := roundi(float(total) * maxf(ekwan_factor, 0.0))
+	var ekwan_total: int = rows["ekwan"]
 	if ekwan_total > 0:
 		add_ekwan(ekwan_total, "stage_reward", logger, t)
-		breakdown.append({ "label": "Sanctum share", "delta": ekwan_total, "currency": "ekwan" })
 
 	return {
 		"ase_awarded":   total,
 		"ekwan_awarded": ekwan_total,
 		"breakdown":     breakdown,
 	}
+
+## The Ase rows of the stage payout, and the Ase and Ekwan totals. The ONE producer:
+## `settle_stage_complete` pays from it and `StageSettlementService.preview` shows it, so the two
+## cannot drift. Ekwan has no rows (D-32). Like the Ase base, it is rounded once on the stage sum.
+## Pure. Returns { breakdown: Array, ase: int, ekwan: int }.
+static func stage_payout_rows(base_reward: int, redo_multiplier: float, virtue_bonus: int,
+		objective_counts: Dictionary = {}, ekwan_base: int = 0) -> Dictionary:
+	var base_after_redo := roundi(float(base_reward) * redo_multiplier)
+	var redo_penalty := base_after_redo - base_reward  # negative or 0
+	var breakdown: Array = []
+	breakdown.append(_row("Base objectives", base_reward, "objectives_overcome", {
+		"overcome": int(objective_counts.get("overcome", 0)),
+		"total": int(objective_counts.get("total", 0)),
+	}))
+	if redo_penalty < 0:
+		breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
+	if virtue_bonus > 0:
+		breakdown.append(_row("Realm virtue", virtue_bonus, "realm_virtue"))
+	return {
+		"breakdown": breakdown,
+		"ase": base_after_redo + virtue_bonus,
+		"ekwan": roundi(float(ekwan_base) * redo_multiplier),
+	}
+
 
 # ---- Mutation API (Ekwan) ----
 func add_ekwan(amount: int, reason: String, logger: StructuredLogger, t: int) -> void:
@@ -295,6 +309,11 @@ func spend_ekwan(amount: int, reason: String, logger: StructuredLogger, t: int) 
 	return true
 
 # ---- Internal helpers ----
+## One Ase breakdown row. `cause` is a stable id and `params` holds the numbers its sentence
+## needs; both are additive, so `label`, `delta` and `currency` keep their old meaning.
+static func _row(label: String, delta: int, cause: String, params: Dictionary = {}) -> Dictionary:
+	return { "label": label, "delta": delta, "currency": "ase", "cause": cause, "params": params }
+
 func _ensure_economy_dict_exists() -> void:
 	# SaveService should already guarantee this after load,
 	# but EconomyService defends itself to remain safe in isolation.

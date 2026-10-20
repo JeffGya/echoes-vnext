@@ -201,17 +201,12 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		PaceService.rank_reached_count(combat_state),
 		int(combat_state.get("stage_base", 0)),
 		(combat_state.get("ally_killed_enemy_ids", []) as Array).size(),
-		str(combat_state.get("guide_mode", ""))
+		str(combat_state.get("guide_mode", "")),
+		flow_ctx.logger,
+		t,
+		flow_ctx.active_encounter_objective_index
 	)
 	var _pace_mode := bool(reward_data.get("pace_mode", false))
-
-	# V2-ECONOMY-001: pre-compute ekwan_factor from first stage objective type
-	var _obj_type := "combat"
-	if not stage_objectives.is_empty() and stage_objectives[0] is Dictionary:
-		_obj_type = str((stage_objectives[0] as Dictionary).get("obj_type", "combat"))
-	var _ekwan_factor := float(reward_cfg.get("ekwan_base_factor", 0.12))
-	if _obj_type == "shrine":
-		_ekwan_factor *= float(reward_cfg.get("ekwan_shrine_multiplier", 1.5))
 
 	# V2-INFRA-003 Phase 8 (D77): the 25% defeat consolation is intended design and STAYS, but
 	# it pays once per situation. The situation is deliberately still NOT marked resolved on a
@@ -224,7 +219,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var economy_svc := EconomyService.new(flow_ctx.save_data)
 	var reward_result: Dictionary = economy_svc.reward_encounter_complete(
 		victory,
-		int(reward_data.get("base_reward", 0)),
+		int(reward_data.get("consolation_base", 0)),
 		int(reward_data.get("enemy_bonus", 0)),
 		enemies_defeated,
 		int(reward_data.get("echo_bonus", 0)),
@@ -234,7 +229,6 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		float(reward_data.get("redo_multiplier", 1.0)),
 		str(reward_data.get("rank", "F")),
 		_consolation_eligible,
-		_ekwan_factor,
 		flow_ctx.logger,
 		t
 	)
@@ -343,6 +337,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var objectives_remaining := EncounterSnapshotBuilder._count_remaining_required_objectives(flow_ctx)
 
 	# P1 CLOSE: surface — use the first objective type when known, else "combat" or "shrine".
+	var _obj_type := "combat"
+	if not stage_objectives.is_empty() and stage_objectives[0] is Dictionary:
+		_obj_type = str((stage_objectives[0] as Dictionary).get("type", "combat"))
 	var _combat_surface := _obj_type if not _obj_type.is_empty() else "combat"
 
 	# P1 CLOSE: summary_line — synthesize from reason and victory.
@@ -410,6 +407,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	ResolveSnapshotBuilder.add_actors(_data, projected_actors)
 	ResolveSnapshotBuilder.add_victory_flag(_data, victory)
 	ResolveSnapshotBuilder.add_ledger(_data, int(reward_result.get("ase_awarded", 0)), _breakdown)
+	ResolveSnapshotBuilder.add_ledger_seen(_data, SaveSchema.ledger_seen(flow_ctx.save_data))
+	# Same condition as the `flow.complete_stage` action in _build_resolve_actions.
+	if victory and objectives_remaining == 0:
+		var _stage_preview := StageSettlementService.new(flow_ctx, flow_ctx.config_service, null, null).preview()
+		if not _stage_preview.is_empty():
+			ResolveSnapshotBuilder.add_stage_payout(
+				_data, _stage_preview["rows"], int(_stage_preview["ase"]), int(_stage_preview["ekwan"]))
 	ResolveSnapshotBuilder.add_ekwan(_data, int(reward_result.get("ekwan_awarded", 0)))
 	ResolveSnapshotBuilder.add_grade_rank(_data, str(reward_result.get("rank", "F")))
 	if _pace_mode and victory:

@@ -301,32 +301,32 @@ static func count_revealed_situations(flow_ctx_arg: FlowContext) -> int:
 	return count
 
 
-# V2-ECONOMY-001: Get the base reward of the current stage.
-#
-# V2-INFRA-003 Phase 8 — DEFECT D39 ANSWERED HERE, AND ANSWERED THE SAME WAY FOR BOTH READERS.
-# This used to read `_objs[0]` only, and read its type under the key `"obj_type"`, which
-# `ObjectiveModel.make()` never writes (it writes `"type"` — core/realms/ObjectiveModel.gd:63).
-# Both faults pushed the same way, so every stage fell through to the "combat" default and this
-# returned a flat 30, while `RewardCalc.compute()` — the stage-completion payer — SUMMED the
-# same stage's objective weights. Two "base reward of this stage" readers, one stage, two
-# answers, and the register warned that whatever answers D39 must answer it for both.
-#
-# It now delegates to `RewardCalc.base_reward()`, the single definition, so the two cannot
-# drift apart again. Consequence, deliberate: the partial-withdrawal payout rises on every
-# multi-objective stage (it is a fraction of this base), and shrine/boss objective weights
-# reach it for the first time.
-static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> int:
+# Base reward of the current stage, by `mode` (RewardCalc.MODE_*). The default pays completed
+# objectives only (retreat and return-home partials). The pace base passes
+# MODE_COMPLETED_PLUS_FOUGHT; the fought objective is `flow_ctx.active_encounter_objective_index`.
+static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService,
+		logger: StructuredLogger = null, t: int = 0, mode: String = RewardCalc.MODE_COMPLETED) -> int:
+	return RewardCalc.base_reward(_current_stage_objectives(flow_ctx_arg),
+		ConfigService.get_rewards_cfg(config_service_arg), logger, t,
+		mode, flow_ctx_arg.active_encounter_objective_index)
+
+
+# "Overcome of total" for the current stage; the boss stub is excluded by config. Read only.
+static func get_objective_counts(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> Dictionary:
+	return RewardCalc.objective_counts(_current_stage_objectives(flow_ctx_arg),
+		ConfigService.get_rewards_cfg(config_service_arg))
+
+
+static func _current_stage_objectives(flow_ctx_arg: FlowContext) -> Array:
 	var _stage_idx := int(flow_ctx_arg.stage_id.replace("stage.", ""))
 	var _realm_v: Variant = flow_ctx_arg.save_data.get("realms", {}).get(flow_ctx_arg.realm_id, {})
 	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
 	var _stages_v: Variant = _realm.get("stages", [])
 	var _stages: Array = _stages_v if _stages_v is Array else []
-	var _objs: Array = []
 	if _stage_idx >= 0 and _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
-		var _stage: Dictionary = _stages[_stage_idx]
-		var _objs_v: Variant = _stage.get("objectives", [])
-		_objs = _objs_v if _objs_v is Array else []
-	return RewardCalc.base_reward(_objs, ConfigService.get_rewards_cfg(config_service_arg))
+		var _objs_v: Variant = (_stages[_stage_idx] as Dictionary).get("objectives", [])
+		return _objs_v if _objs_v is Array else []
+	return []
 
 
 # V2-INFRA-003 Phase 8 (defect D77): claim the ONE defeat consolation of the situation that
@@ -502,7 +502,7 @@ func find_explore_target(
 # ────────────────────────────────────────────────────────────────────────────
 
 # V2-STAGE-002: Mark stage.objectives[objective_index].completed = true in save_data.
-# Used for stub-completed types (recover/protect/endure/pursue) and after combat victory.
+# Called after a good charge contact; combat victory marks it in resolve_combat_situation_and_objective.
 func mark_stage_objective_completed(objective_index: int, t: int) -> void:
 	if objective_index < 0:
 		return

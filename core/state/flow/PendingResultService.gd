@@ -461,6 +461,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			int(stored.get("ase_awarded", 0)),
 			_copy_array(stored.get("reward_breakdown", []))
 		)
+	if stored.has("ase_awarded"):
+		# Live value: the stored copy may predate the player's first look at a ledger.
+		ResolveSnapshotBuilder.add_ledger_seen(data, SaveSchema.ledger_seen(flow_ctx.save_data))
+	if stored.has("stage_payout_rows"):
+		ResolveSnapshotBuilder.add_stage_payout(
+			data, _copy_array(stored.get("stage_payout_rows", [])),
+			int(stored.get("stage_payout_ase", 0)), int(stored.get("stage_payout_ekwan", 0)))
 	if stored.has("ekwan_awarded"):
 		ResolveSnapshotBuilder.add_ekwan(data, int(stored.get("ekwan_awarded", 0)))
 	if stored.has("emotion_summary"):

@@ -736,7 +736,8 @@ func _setup_pace(t: int) -> void:
 		"pace_zero_ratio": float(reward_cfg.get("pace_zero_ratio", 1.6)),
 		"pace_bonus_pct":  float(reward_cfg.get("pace_bonus_pct", 0.05)),
 		# The live state needs the Ase a win would pay (design §7). Pure read, no RNG.
-		"stage_base":      ActiveStageService.get_stage_base_reward(flow_ctx, flow_ctx.config_service),
+		"stage_base":      ActiveStageService.get_stage_base_reward(
+			flow_ctx, flow_ctx.config_service, logger, t, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT),
 	}
 	if logger != null:
 		logger.info(t, "combat.pace.par", "Pace par set at fight start", {

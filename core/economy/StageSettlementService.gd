@@ -116,41 +116,17 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 			})
 		return {}
 
-	var reward_cfg := ConfigService.get_rewards_cfg(config_service)
-
 	# --- the stage-cadence Ase/Ekwan ---------------------------------------
-	var objectives_v: Variant = stage_ref.get("objectives", [])
-	var objectives: Array = objectives_v if objectives_v is Array else []
-	var base := RewardCalc.base_reward(objectives, reward_cfg)
-	var redo_mul := RewardCalc.redo_multiplier(int(realm_model.get("run_count", 0)), reward_cfg)
-
-	# REALM-005: virtue-based stage bonus. Same call, same inputs, same log line the encounter
-	# path made — it has only moved to the dispatch that actually completes the stage.
-	var realm_virtue := str(realm_model.get("virtue", ""))
-	var run_index    := int(realm_model.get("run_index", 0))
-	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
-		stage_index, realm_virtue, run_index, reward_cfg
-	)
-	var virtue_bonus := int(stage_reward_data.get("virtue_bonus", 0))
-	var formula_inputs: Dictionary = stage_reward_data.get("formula_inputs", {})
+	var plan := _plan(realm_model, stage_ref, stage_index, logger, t)
+	var base: int = plan["base"]
+	var virtue_bonus: int = plan["virtue_bonus"]
+	# REALM-005: same formula log line the encounter path made; it moved to the dispatch that
+	# completes the stage. The preview never logs it.
 	if logger != null:
-		logger.info(t, "economy.stage.reward", "Stage reward formula", formula_inputs)
-
-	# V2-ECONOMY-001: ekwan_factor from the first stage objective type.
-	# CARRIED VERBATIM, INCLUDING ITS BUG. The read is `objectives[0].obj_type`, and
-	# ObjectiveModel.make() writes `type`, never `obj_type` — so `_obj_type` is always the
-	# "combat" default and `ekwan_shrine_multiplier` has never applied. Register entry D83.
-	# Fixing it here would move Ekwan on shrine stages in the same re-record as the settlement
-	# split and make neither attributable. Recorded, not fixed.
-	var obj_type := "combat"
-	if not objectives.is_empty() and objectives[0] is Dictionary:
-		obj_type = str((objectives[0] as Dictionary).get("obj_type", "combat"))
-	var ekwan_factor := float(reward_cfg.get("ekwan_base_factor", 0.12))
-	if obj_type == "shrine":
-		ekwan_factor *= float(reward_cfg.get("ekwan_shrine_multiplier", 1.5))
+		logger.info(t, "economy.stage.reward", "Stage reward formula", plan["formula_inputs"])
 
 	var payout: Dictionary = econ.settle_stage_complete(
-		base, redo_mul, virtue_bonus, ekwan_factor, logger, t
+		base, plan["redo_mul"], virtue_bonus, logger, t, plan["counts"], plan["ekwan_base"]
 	)
 	flow_ctx.request_save("stage.reward")
 
@@ -181,6 +157,54 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 
 	payout["xp_events"] = xp_events
 	return payout
+
+
+# ---------------------------------------------------------------------------
+# Preview
+# ---------------------------------------------------------------------------
+
+## What `settle()` would pay for the current stage, without paying it. Pure and read-only: no
+## RNG, no save write, no log, no receipt. It reads the same `_plan()` and the same
+## `EconomyService.stage_payout_rows()` that `settle()` pays from, so the two cannot drift.
+## Returns { rows: Array, ase: int, ekwan: int } (rows are Ase only), or {} when the stage
+## cannot be located or is already settled.
+func preview() -> Dictionary:
+	if flow_ctx.realm_id.is_empty() or flow_ctx.stage_id.is_empty():
+		return {}
+	var realm_model: Dictionary = RealmService.get_active(flow_ctx)
+	if realm_model.is_empty():
+		return {}
+	var stage_index := _stage_index()
+	var stage_ref := _stage_ref(realm_model, stage_index)
+	if stage_ref.is_empty():
+		return {}
+	var receipt_v: Variant = stage_ref.get("settlement_receipt", {})
+	if receipt_v is Dictionary and bool((receipt_v as Dictionary).get("settled", false)):
+		return {}
+	var plan := _plan(realm_model, stage_ref, stage_index, null, 0)
+	var rows := EconomyService.stage_payout_rows(
+		plan["base"], plan["redo_mul"], plan["virtue_bonus"], plan["counts"], plan["ekwan_base"])
+	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
+
+
+## The inputs of the stage payout, shared by `settle()` and `preview()`. Pure apart from the
+## unknown-type log inside `RewardCalc.base_reward` (only when `log` is given).
+func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
+		log: StructuredLogger, t: int) -> Dictionary:
+	var reward_cfg := ConfigService.get_rewards_cfg(config_service)
+	var objectives_v: Variant = stage_ref.get("objectives", [])
+	var objectives: Array = objectives_v if objectives_v is Array else []
+	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
+		stage_index, str(realm_model.get("virtue", "")), int(realm_model.get("run_index", 0)), reward_cfg)
+
+	return {
+		"base":           RewardCalc.base_reward(objectives, reward_cfg, log, t),
+		"redo_mul":       RewardCalc.redo_multiplier(int(realm_model.get("run_count", 0)), reward_cfg),
+		"virtue_bonus":   int(stage_reward_data.get("virtue_bonus", 0)),
+		"formula_inputs": stage_reward_data.get("formula_inputs", {}),
+		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
+		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
+	}
 
 
 # ---------------------------------------------------------------------------

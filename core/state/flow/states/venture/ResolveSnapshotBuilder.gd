@@ -123,6 +123,22 @@ static func add_ledger(data: Dictionary, ase_awarded: int, reward_breakdown: Arr
 	data["reward_breakdown"] = reward_breakdown
 
 
+## 7b — Whether the player has already seen a result ledger (`SaveSchema.ledger_seen`), so the
+## UI opens the ledger only the first time. Read-only here; the dispatched action
+## `resolve.ledger.mark_seen` writes it. Producers that emit a ledger call this beside add_ledger.
+static func add_ledger_seen(data: Dictionary, seen: bool) -> void:
+	data["ledger_seen"] = seen
+
+
+## 7c — Preview of the stage payout the next `flow.complete_stage` will pay: Ase rows with
+## `cause`/`params`, and the Ase and Ekwan totals (Ekwan has no rows). Only the card that offers
+## that action carries it.
+static func add_stage_payout(data: Dictionary, rows: Array, ase: int, ekwan: int) -> void:
+	data["stage_payout_rows"]  = rows
+	data["stage_payout_ase"]   = ase
+	data["stage_payout_ekwan"] = ekwan
+
+
 ## 8 — %EkwanRow / %EkwanValue + Ekwan EffectChip, gated on `> 0` by the screen. Producers
 ## A, C, E. Its own block rather than a `ledger(include_ekwan)` flag because it is its own
 ## screen section AND because B omits it — see spec §2.3.

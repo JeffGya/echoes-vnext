@@ -149,18 +149,17 @@ static func _test_offline_gate_passes() -> Dictionary:
 	return { "ok": true }
 
 
-## (c) the encounter payout awards Ekwan on victory; a partial run awards only Ase (no Ekwan).
-## V2-INFRA-003 Phase 8: was reward_stage_complete(); that single payer is now two, and the
-## Ekwan rule this pins ("Ekwan scales off the Ase actually awarded") holds in both.
+## (c) the stage payout awards the Ekwan of its completed objectives; a partial run awards only
+## Ase (no Ekwan). The Ekwan comes from the objective types (D-05), not from the Ase paid.
 static func _test_ekwan_awarded() -> Dictionary:
 	var save := { "economy": { "ase": 0, "ekwan": 0 } }
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
 	var econ := EconomyService.new(save)
 
-	# base=30 is an INPUT to the encounter cadence, never its payout, so a victory with no
-	# per-fight bonuses now pays 0 here. The Ase this test needs comes from the stage cadence.
-	var result := econ.settle_stage_complete(30, 1.0, 0, 0.12, logger, 0)
+	# base=30 is an INPUT to the encounter cadence, never its payout, so the Ase this test
+	# needs comes from the stage cadence. ekwan_base 5 is one completed recover objective.
+	var result := econ.settle_stage_complete(30, 1.0, 0, logger, 0, {}, 5)
 
 	var ase_awarded    := int(result.get("ase_awarded", 0))
 	var ekwan_awarded  := int(result.get("ekwan_awarded", 0))
@@ -168,8 +167,8 @@ static func _test_ekwan_awarded() -> Dictionary:
 
 	if ase_awarded <= 0:
 		return { "ok": false, "error": "Expected ase_awarded > 0, got %d" % ase_awarded }
-	if ekwan_awarded <= 0:
-		return { "ok": false, "error": "Expected ekwan_awarded > 0, got %d" % ekwan_awarded }
+	if ekwan_awarded != 5:
+		return { "ok": false, "error": "Expected ekwan_awarded 5, got %d" % ekwan_awarded }
 	if ekwan_balance != ekwan_awarded:
 		return { "ok": false, "error": "Ekwan balance (%d) != ekwan_awarded (%d)" % [ekwan_balance, ekwan_awarded] }
 

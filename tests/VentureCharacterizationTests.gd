@@ -244,7 +244,7 @@ static func _rewards_cfg(runtime: FlowRuntime) -> Dictionary:
 ## The stage settlement now runs in this dispatch (StageSettlementService.settle(), called from
 ## VentureController.handle_complete_stage ahead of RealmService.advance_stage), and it does not
 ## care whether an encounter happened. So the three "untouched" assertions become "paid": the
-## stage's base objective weights + the realm-virtue bonus in Ase, the Ekwan share of that, and
+## stage's base objective weights + the realm-virtue bonus in Ase, the Ekwan of its completed objectives, and
 ## xp_stage_clear_base of Storyweight per party echo. The exact figures are not hard-coded — the
 ## test asserts each moved in the right direction, which is what the defect was about.
 static func _t_complete_stage_no_encounter() -> Dictionary:
@@ -260,6 +260,11 @@ static func _t_complete_stage_no_encounter() -> Dictionary:
 	if int(realm.get("stage_count", 0)) < 2:
 		realm["stage_count"] = 2
 	realm["current_stage_index"] = 0
+
+	# Ekwan pays per COMPLETED objective (D-16), so this stage needs one: a recover pays 5.
+	for stage_v in (realm.get("stages", []) as Array):
+		if stage_v is Dictionary and int((stage_v as Dictionary).get("index", -1)) == 0:
+			(stage_v as Dictionary)["objectives"] = [ObjectiveModel.make(0, ObjectiveModel.TYPE_RECOVER, 1, {}, true)]
 
 	var ase_before := int(_economy(save_data).get("ase", -1))
 	var ekwan_before := int(_economy(save_data).get("ekwan", -1))
@@ -291,8 +296,8 @@ static func _t_complete_stage_no_encounter() -> Dictionary:
 		mismatches.append("flow.stage_map action slots changed: expected %s, got %s" % [str(expected_keys), str(keys)])
 	if int(_economy(save_data).get("ase", -1)) <= ase_before:
 		mismatches.append("expected the stage settlement to PAY Ase on a no-encounter complete_stage: %d -> %d" % [ase_before, int(_economy(save_data).get("ase", -1))])
-	if int(_economy(save_data).get("ekwan", -1)) <= ekwan_before:
-		mismatches.append("expected the stage settlement to PAY Ekwan on a no-encounter complete_stage: %d -> %d" % [ekwan_before, int(_economy(save_data).get("ekwan", -1))])
+	if int(_economy(save_data).get("ekwan", -1)) != ekwan_before + 5:
+		mismatches.append("expected the stage settlement to PAY 5 Ekwan on a no-encounter complete_stage: %d -> %d" % [ekwan_before, int(_economy(save_data).get("ekwan", -1))])
 	if int(echo_after.get("storyweight", echo_after.get("xp_total", 0))) <= story_before:
 		mismatches.append("expected the stage settlement to award Storyweight (xp_stage_clear_base): %d -> %d" \
 			% [story_before, int(echo_after.get("storyweight", echo_after.get("xp_total", 0)))])
@@ -567,6 +572,8 @@ static func _setup_retreat_env(tag: String, starting_ase: int, revealed_count: i
 	var actually_revealed := 0
 	if stage_v is Dictionary:
 		var stage: Dictionary = stage_v
+		# D-14: a partial pays only for completed objectives, so complete the first one.
+		((stage["objectives"] as Array)[0] as Dictionary)["completed"] = true
 		var emap_v: Variant = stage.get("explore_map", {})
 		var emap: Dictionary = emap_v if emap_v is Dictionary else {}
 		var sits_v: Variant = emap.get("situations", [])
@@ -606,19 +613,13 @@ static func _expected_intel_partial(runtime: FlowRuntime, intel_count: int) -> i
 	var realm := _realm(runtime.get_save_data(), "realm.01")
 	var stages_v: Variant = realm.get("stages", [])
 	var stages: Array = stages_v if stages_v is Array else []
-	# V2-INFRA-003 Phase 8 (defect D39): the stage base is the SUM of the stage's objective
-	# weights, read under the key ObjectiveModel actually writes ("type", never "obj_type").
-	# This helper used to mirror get_stage_base_reward()'s two faults — first objective only,
-	# wrong key — and so expected the flat "combat" default (30) for every stage. It is
-	# recomputed here from the same rule the production single definition
-	# (RewardCalc.base_reward) uses, but independently, so this stays a characterization
-	# expectation rather than a restatement of the code under test.
+	# Independent of RewardCalc.base_reward: the partial base is the weights of COMPLETED objectives (D-14).
 	var base := 0
 	if stages.size() > 0 and stages[0] is Dictionary:
 		var objs_v: Variant = (stages[0] as Dictionary).get("objectives", [])
 		var objs: Array = objs_v if objs_v is Array else []
 		for obj_v in objs:
-			if obj_v is Dictionary:
+			if obj_v is Dictionary and bool((obj_v as Dictionary).get("completed", false)):
 				base += int(weights.get(str((obj_v as Dictionary).get("type", "")), 0))
 	return roundi(float(base) * factor)
 
@@ -695,8 +696,9 @@ static func _t_retreat_snapshot() -> Dictionary:
 		mismatches.append("expected type %s, got %s" % [FlowStateIds.RESOLVE, str(out.get("type", ""))])
 	var data_keys: Array = data.keys()
 	data_keys.sort()
+	# "ledger_seen" is new: Phase 3c adds the ledger-seen flag to every ledger card.
 	var expected_data_keys := [
-		"actors", "ase_awarded", "ekwan_awarded", "intel_count", "rank",
+		"actors", "ase_awarded", "ekwan_awarded", "intel_count", "ledger_seen", "rank",
 		"reward_breakdown", "run_type", "summary_line", "surface", "verdict", "victory",
 	]
 	if data_keys != expected_data_keys:

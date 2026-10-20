@@ -33,6 +33,8 @@ static func _default_cfg() -> Dictionary:
 			"combat": 30,
 			"shrine": 40,
 			"boss":   60,
+			# Types the tests do not assert on. A missing key would log the D-07 error.
+			"pursue": 8, "recover": 12, "protect": 12, "endure": 14, "guide_spirit": 16,
 		},
 		"enemy_defeated_bonus":  5,
 		"echo_survived_bonus":   10,
@@ -102,7 +104,7 @@ static func register(runner: CoreTestRunner) -> void:
 
 # ─── Test 1 — single combat objective → base = 30 ────────────────────────────
 static func _t_compute_base_only() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var result := RewardCalc.compute(true, objs, 0, 0, 0, 0, 10, 0, _default_cfg(), _COMBAT, 0.0, 0, 0)
 	if int(result.get("base_reward", -1)) != 30:
 		return { "ok": false, "error": "Expected base_reward=30, got %d" % result.get("base_reward", -1) }
@@ -112,9 +114,9 @@ static func _t_compute_base_only() -> Dictionary:
 # ─── Test 2 — combat + shrine + boss → base = 130 ────────────────────────────
 static func _t_compute_multi_objectives() -> Dictionary:
 	var objs: Array = [
-		ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1),
-		ObjectiveModel.make(1, ObjectiveModel.TYPE_SHRINE, 2),
-		ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS,   3),
+		ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true),
+		ObjectiveModel.make(1, ObjectiveModel.TYPE_SHRINE, 2, {}, true),
+		ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 3, {}, true),
 	]
 	var result := RewardCalc.compute(true, objs, 0, 0, 0, 0, 10, 0, _default_cfg(), _COMBAT, 0.0, 0, 0)
 	if int(result.get("base_reward", -1)) != 130:
@@ -124,7 +126,7 @@ static func _t_compute_multi_objectives() -> Dictionary:
 
 # ─── Test 3 — 3 enemies defeated → enemy_bonus = 15 ──────────────────────────
 static func _t_compute_enemy_bonus() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var result := RewardCalc.compute(true, objs, 3, 3, 0, 0, 10, 0, _default_cfg(), _COMBAT, 0.0, 0, 0)
 	if int(result.get("enemy_bonus", -1)) != 15:
 		return { "ok": false, "error": "Expected enemy_bonus=15 (3×5), got %d" % result.get("enemy_bonus", -1) }
@@ -133,7 +135,7 @@ static func _t_compute_enemy_bonus() -> Dictionary:
 
 # ─── Test 4 — 2 echoes survived → echo_bonus = 20 ────────────────────────────
 static func _t_compute_echo_bonus() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var result := RewardCalc.compute(true, objs, 0, 0, 2, 2, 10, 0, _default_cfg(), _COMBAT, 0.0, 0, 0)
 	if int(result.get("echo_bonus", -1)) != 20:
 		return { "ok": false, "error": "Expected echo_bonus=20 (2×10), got %d" % result.get("echo_bonus", -1) }
@@ -144,8 +146,8 @@ static func _t_compute_echo_bonus() -> Dictionary:
 # Limits 1.1 / 1.6 → full at round ≤ 11, zero at round ≥ 16, straight line between.
 static func _t_pace_bonus_curve() -> Dictionary:
 	var objs: Array = [
-		ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1),
-		ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1),
+		ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true),
+		ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1, {}, true),
 	]
 	# round → expected pace_bonus: 13 is ratio 1.3, fraction 0.6, 60 × 0.05 × 0.6 = 1.8 → 2.
 	var cases := { 5: 3, 11: 3, 12: 2, 13: 2, 15: 1, 16: 0, 20: 0 }
@@ -164,7 +166,7 @@ static func _t_pace_bonus_curve() -> Dictionary:
 
 # ─── Test 6 — no pace bonus for a no-pace mode, a par of 0, or a defeat ───────
 static func _t_pace_bonus_zero_no_pace_mode() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	for mode in [EncounterResolutionModes.PROTECT, EncounterResolutionModes.ENDURE, EncounterResolutionModes.GUIDE_SPIRIT]:
 		var r := RewardCalc.compute(true, objs, 0, 0, 0, 0, 1, 0, _default_cfg(), mode, 10.0, 0, 30)
 		if int(r.get("pace_bonus", -1)) != 0 or bool(r.get("pace_mode", true)) or str(r.get("pace_state", "x")) != "":
@@ -181,7 +183,7 @@ static func _t_pace_bonus_zero_no_pace_mode() -> Dictionary:
 
 # ─── Test 7 — run_count=8 → redo_mul clamped to floor 0.50 ──────────────────
 static func _t_redo_multiplier_floor() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var result := RewardCalc.compute(true, objs, 0, 0, 0, 0, 10, 8, _default_cfg(), _COMBAT, 0.0, 0, 0)
 	var redo := float(result.get("redo_multiplier", -1.0))
 	if abs(redo - 0.50) > 0.001:
@@ -191,7 +193,7 @@ static func _t_redo_multiplier_floor() -> Dictionary:
 
 # ─── Test 8 — run_count=3 → redo_mul = 1.0 - 0.3 = 0.70 ────────────────────
 static func _t_redo_multiplier_partial() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var result := RewardCalc.compute(true, objs, 0, 0, 0, 0, 10, 3, _default_cfg(), _COMBAT, 0.0, 0, 0)
 	var redo := float(result.get("redo_multiplier", -1.0))
 	if abs(redo - 0.70) > 0.001:
@@ -210,7 +212,7 @@ static func _t_defeat_payout() -> Dictionary:
 	# parameter left with the stage cadence and consolation_eligible (true here — a first defeat)
 	# took its place. The defeat branch itself is unchanged, so the expected payout is unchanged.
 	var result := svc.reward_encounter_complete(
-		false, 30, 0, 0, 0, 0, 0, false, 1.0, "F", true, 0.0, logger, 0
+		false, 30, 0, 0, 0, 0, 0, false, 1.0, "F", true, logger, 0
 	)
 	var expected := roundi(30.0 * 0.25 * 1.0)
 	if int(result.get("ase_awarded", -1)) != expected:
@@ -224,9 +226,9 @@ static func _t_rank_S_first_run() -> Dictionary:
 	# base=130 (combat+shrine+boss), max_possible = 130+(5×5)+(5×10)+round(130×0.05) = 130+25+50+7 = 212
 	# numerator = 130 + 25 + 50 + 7 = 212, perf_ratio = 212/212 = 1.0, rank_score = 1.0 → S
 	var objs: Array = [
-		ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1),
-		ObjectiveModel.make(1, ObjectiveModel.TYPE_SHRINE, 2),
-		ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS,   3),
+		ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true),
+		ObjectiveModel.make(1, ObjectiveModel.TYPE_SHRINE, 2, {}, true),
+		ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 3, {}, true),
 	]
 	var result := RewardCalc.compute(true, objs, 5, 5, 5, 5, 2, 0, _default_cfg(), _COMBAT, 10.0, 0, 130)
 	if str(result.get("rank", "")) != "S":
@@ -240,7 +242,7 @@ static func _t_rank_F_poor_performance() -> Dictionary:
 	# defeat_numerator = round(30×0.25) = 8
 	# max_possible = 30 + (1×5) + (1×10) + round(30×0.05) = 30+5+10+2 = 47
 	# rank_score = (8/47) × 0.50 = 0.085 → F
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var result := RewardCalc.compute(false, objs, 0, 1, 0, 1, 10, 5, _default_cfg(), _COMBAT, 10.0, 0, 30)
 	if str(result.get("rank", "")) != "F":
 		return { "ok": false, "error": "Expected rank=F (defeat+run_count=5), got '%s'" % result.get("rank", "") }
@@ -261,7 +263,7 @@ static func _t_economy_service_adds_ase() -> Dictionary:
 	logger.set_level("off")
 	# Encounter cadence: 2 enemy bonus=10, 1 echo bonus=10, no pace, redo=1.0 → 20
 	var enc := svc.reward_encounter_complete(
-		true, 30, 10, 2, 10, 1, 0, false, 1.0, "B", true, 0.0, logger, 0
+		true, 30, 10, 2, 10, 1, 0, false, 1.0, "B", true, logger, 0
 	)
 	if int(enc.get("ase_awarded", -1)) != 20:
 		return { "ok": false, "error": "Expected encounter ase_awarded=20, got %d" % enc.get("ase_awarded", -1) }
@@ -269,7 +271,7 @@ static func _t_economy_service_adds_ase() -> Dictionary:
 		return { "ok": false, "error": "Expected save.economy.ase=20 after the encounter payout, got %d" % int(save.get("economy", {}).get("ase", -1)) }
 
 	# Stage cadence: base=30, redo=1.0, no virtue bonus → 30
-	var stage := svc.settle_stage_complete(30, 1.0, 0, 0.0, logger, 0)
+	var stage := svc.settle_stage_complete(30, 1.0, 0, logger, 0)
 	if int(stage.get("ase_awarded", -1)) != 30:
 		return { "ok": false, "error": "Expected stage ase_awarded=30, got %d" % stage.get("ase_awarded", -1) }
 
@@ -365,7 +367,7 @@ static func _t_pace_par_pursue_hold_every_fight() -> Dictionary:
 	if not _near(par, 5.2):
 		return { "ok": false, "error": "Expected PURSUE par 5.2, got %f" % par }
 	# Round 5 of par 5.2 is ratio 0.96 → full bonus, whatever the win reason.
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var r := RewardCalc.compute(true, objs, 2, 2, 5, 5, 5, 0, _default_cfg(), EncounterResolutionModes.PURSUE, par, 2, 60)
 	if int(r.get("pace_bonus", -1)) != 3 or str(r.get("pace_state", "")) != PaceService.PACE_FULL:
 		return { "ok": false, "error": "Expected full pace (3, full) at round 5, got %s" % str(r) }
@@ -400,7 +402,7 @@ static func _t_pace_state_transitions() -> Dictionary:
 	if PaceService.pace_state(3, 0.0, 1.1, 1.6, 60, 0.05) != "":
 		return { "ok": false, "error": "par 0 must give an empty pace_state" }
 	# Result side: the same partial ratio that pays 0 Ase reports "none".
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var r := RewardCalc.compute(true, objs, 0, 0, 0, 0, 15, 0, _default_cfg(), _COMBAT, 10.0, 0, 30)
 	if int(r.get("pace_bonus", -1)) != 0 or str(r.get("pace_state", "")) != PaceService.PACE_NONE:
 		return { "ok": false, "error": "base 30 round 15: expected bonus 0 and state none, got %s" % str(r) }
@@ -436,7 +438,7 @@ static func _t_pace_reached_enemies_only_grow() -> Dictionary:
 # ─── Test 20 — rank ceiling: reached enemies for reach modes, pace only for pace modes ──
 # base 60, 0 kills, 5/5 echoes survive, 10 enemies on the board, 2 reached, round 1 of par 10.
 static func _t_pace_rank_ceiling() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var cfg := _default_cfg()
 	var cases := [
 		# ENDURE: 110 / (60 + 2×5 + 50) = 0.917 → S. No pace term on either side.
@@ -458,7 +460,7 @@ static func _t_pace_rank_ceiling() -> Dictionary:
 # ─── Test 21 — pace_changed_rank: true only when the pace bonus moves the rank ─
 # COMBAT, base 60, 1 of 3 killed, 5/5 survive: max 128, S needs 115.2. 115 alone is A; +3 is S.
 static func _t_pace_rank_changed_flag() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var fast := RewardCalc.compute(true, objs, 1, 3, 5, 5, 5, 0, _default_cfg(), _COMBAT, 10.0, 0, 60)
 	if str(fast.get("rank", "")) != "S" or not bool(fast.get("pace_changed_rank", false)):
 		return { "ok": false, "error": "Expected S with pace_changed_rank, got %s" % str(fast) }
@@ -477,7 +479,7 @@ static func _t_pace_breakdown_row() -> Dictionary:
 	for c in cases:
 		var svc := EconomyService.new(_make_save())
 		var res := svc.reward_encounter_complete(
-			c[0], 60, 5, 1, 50, 5, c[1], c[2], 1.0, "S", true, 0.0, logger, 0)
+			c[0], 60, 5, 1, 50, 5, c[1], c[2], 1.0, "S", true, logger, 0)
 		var rows: Array = []
 		for row in res.get("breakdown", []):
 			if str(row.get("label", "")) == "Pace bonus":
@@ -630,7 +632,7 @@ static func _t_pace_endure_drive_reached_and_no_pace() -> Dictionary:
 # Objectives sum to 60, captured base is 30: full pace pays roundi(30 × 0.05) = 2, not 3.
 # Rank keeps base 60: max = 60 + 50 + 2 = 112, numerator 112 → S.
 static func _t_pace_uses_captured_stage_base() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var r := RewardCalc.compute(true, objs, 0, 0, 5, 5, 1, 0, _default_cfg(), _COMBAT, 10.0, 0, 30)
 	if int(r.get("base_reward", -1)) != 60 or int(r.get("pace_bonus", -1)) != 2 or str(r.get("rank", "")) != "S":
 		return { "ok": false, "error": "Expected base 60, pace_bonus 2, rank S, got %s" % str(r) }
@@ -643,7 +645,7 @@ static func _t_pace_uses_captured_stage_base() -> Dictionary:
 
 # ─── Test 28 — pace_state follows the Ase paid (decisions.md D-22) ────────────
 static func _t_pace_state_from_ase_paid() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	# [round, par, stage base, expected bonus Ase, expected state]
 	var cases := [
 		# The merged PURSUE fixture: ratio 1.11, fraction 0.98, 2.93 rounds to the maximum 3.
@@ -705,7 +707,7 @@ static func _t_pace_dead_enemy_not_newly_reached() -> Dictionary:
 # ─── Test 31 — an ally or spirit kill pays the kill Ase but is out of both rank sides ──
 # base 30, 5 echoes, no pace term (par 0). The COMBAT half has 4 survivors, the ENDURE half 1.
 static func _t_pace_ally_kill_out_of_rank() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var cfg := _default_cfg()
 	# record_kill sorts the killers: ally and spirit go to the ally set in every mode.
 	var actors: Array = [
@@ -996,7 +998,7 @@ static func _t_pace_par_escort_joined_is_kill_par() -> Dictionary:
 static func _t_pace_escort_reward_protect_none() -> Dictionary:
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true), ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	var gs := EncounterResolutionModes.GUIDE_SPIRIT
 	# [victory, guide_mode, expected pace_mode, expected bonus, expected state, expected row]
 	var cases := [
@@ -1011,7 +1013,7 @@ static func _t_pace_escort_reward_protect_none() -> Dictionary:
 			return { "ok": false, "error": "case %s: got %s" % [str(c), str(r)] }
 		var res := EconomyService.new(_make_save()).reward_encounter_complete(c[0], 60,
 			int(r["enemy_bonus"]), 0, int(r["echo_bonus"]), 5, int(r["pace_bonus"]), bool(r["pace_mode"]),
-			1.0, str(r["rank"]), true, 0.0, logger, 0)
+			1.0, str(r["rank"]), true, logger, 0)
 		var rows: Array = (res.get("breakdown", []) as Array).filter(
 			func(row): return str(row.get("label", "")) == "Pace bonus")
 		if c[5] == null:
@@ -1024,7 +1026,7 @@ static func _t_pace_escort_reward_protect_none() -> Dictionary:
 
 # ─── Test 38 — setup, live snapshot and result agree on escort vs protect ─────
 static func _t_pace_guide_variant_agrees_setup_live_result() -> Dictionary:
-	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1)]
+	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
 	for guide_mode in ["escort", "protect"]:
 		var expected: bool = guide_mode == "escort"
 		var flow_ctx := FlowContext.new()

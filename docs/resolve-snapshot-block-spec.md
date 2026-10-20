@@ -126,6 +126,9 @@ it to `""`, so the sentinel is safe).
 | 6 | `actors` | `actors` | A, B, C | Echo stage / actor preview |
 | 7 | `ledger` | `ase_awarded`, `reward_breakdown` | A, B, C, E | Ase value + breakdown + Ase chip |
 | 8 | `ekwan` | `ekwan_awarded` | A, C, E | Ekwan row + Ekwan chip |
+
+> V2-ECONOMY-004 Phase 4: a fight pays no Ekwan, so `ekwan_awarded` is `0` on a fight card (the key stays). The stage Ekwan is `stage_payout_ekwan`, beside `stage_payout_ase`, on the stage-ending victory card only. No breakdown row has `currency: "ekwan"`.
+
 | 9 | `emotion` | `emotion_summary` | A, B, E | Echo stage rows |
 | 10 | `vows` | `vow_outcome`, `newly_unlocked_vows` | A | Vow outcome + Vow discovered + vow chip |
 | 11 | `effects` | `effects` | E | Effects rail extras |

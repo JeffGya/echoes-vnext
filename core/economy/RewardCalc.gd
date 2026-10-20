@@ -5,33 +5,75 @@
 
 class_name RewardCalc extends RefCounted
 
-## V2-INFRA-003 Phase 8 (defect D39): THE single definition of a stage's base reward.
-##
-## Before this, two functions computed "the base reward of this stage" from the same stage and
-## disagreed by construction:
-##   - the loop now inlined here, which SUMS every objective's weight and feeds the stage payout;
-##   - `ActiveStageService.get_stage_base_reward()`, which read `objectives[0]` only AND read its
-##     type under the key `"obj_type"`, which `ObjectiveModel.make()` never writes (it writes
-##     `"type"` — `core/realms/ObjectiveModel.gd:63-70`). Both faults pushed the same way, so it
-##     returned the flat `objective_weights.combat` default (30) for every stage, and fed the
-##     partial-withdrawal payout.
-## For a two-combat-objective stage that is 60 against 30, for one stage, on the same tick.
-##
-## D39 IS ANSWERED "SUM", FOR BOTH READERS (see the register). A stage's base reward is the sum
-## of its objectives' weights; the partial-withdrawal payout is a fraction of that same number.
-## `ActiveStageService.get_stage_base_reward()` now delegates here so the two cannot drift again.
-##
-## objectives: Array of ObjectiveModel dicts. The type key is `"type"`, never `"obj_type"`.
-## reward_cfg: balance.data.rewards dict.
-static func base_reward(objectives: Array, reward_cfg: Dictionary) -> int:
-	var weights_v: Variant = reward_cfg.get("objective_weights", {})
+## THE single definition of a stage's base reward, for every reader. It sums the weights of the
+## objectives selected by `mode`; no reader keeps its own copy.
+##   MODE_COMPLETED:             objectives with `completed` true (stage payer, partials).
+##   MODE_COMPLETED_PLUS_FOUGHT: those, plus the objective at `fought_index` (pace base, rank).
+##   MODE_FOUGHT:                only the objective at `fought_index` (defeat consolation).
+## Select first, then weigh: an objective that is not selected is never looked up, so it logs
+## nothing. A selected type with no key in `objective_weights` logs
+## `economy.reward.unknown_objective_type` through `logger` (when given) and counts 0.
+## A key with value 0 (the boss) is a weight and logs nothing.
+## The type key is `"type"`, never `"obj_type"`.
+const MODE_COMPLETED := "completed"
+const MODE_COMPLETED_PLUS_FOUGHT := "completed_plus_fought"
+const MODE_FOUGHT := "fought"
+
+
+static func base_reward(objectives: Array, reward_cfg: Dictionary,
+		logger: StructuredLogger = null, t: int = 0,
+		mode: String = MODE_COMPLETED, fought_index: int = -1) -> int:
+	return _sum_selected(objectives, reward_cfg, "objective_weights", logger, t, mode, fought_index)
+
+
+## The stage's Ekwan before the replay factor: the sum of `objective_ekwan` over the COMPLETED
+## objectives (same selection as the Ase base). The caller rounds ONCE on this sum.
+static func stage_ekwan(objectives: Array, reward_cfg: Dictionary,
+		logger: StructuredLogger = null, t: int = 0) -> int:
+	return _sum_selected(objectives, reward_cfg, "objective_ekwan", logger, t, MODE_COMPLETED, -1)
+
+
+## Shared selection and lookup behind `base_reward` and `stage_ekwan`, so the two tables cannot
+## drift in what they select or how a missing key behaves.
+static func _sum_selected(objectives: Array, reward_cfg: Dictionary, table_key: String,
+		logger: StructuredLogger, t: int, mode: String, fought_index: int) -> int:
+	var weights_v: Variant = reward_cfg.get(table_key, {})
 	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
 	var base := 0
-	for obj_v in objectives:
-		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
-		var w_v: Variant = weights.get(str(obj.get("type", "")), 0)
+	for i in objectives.size():
+		var obj: Dictionary = objectives[i] if objectives[i] is Dictionary else {}
+		var done := bool(obj.get("completed", false))
+		var fought := i == fought_index
+		var selected := (done and mode != MODE_FOUGHT) or (fought and mode != MODE_COMPLETED)
+		if not selected:
+			continue
+		var type := str(obj.get("type", ""))
+		if not weights.has(type):
+			if logger != null:
+				logger.warn(t, "economy.reward.unknown_objective_type",
+					"Objective type has no weight — counts 0", {
+						"type": type, "objective_index": i, "table": table_key })
+			continue
+		var w_v: Variant = weights[type]
 		base += int(w_v) if typeof(w_v) == TYPE_INT or typeof(w_v) == TYPE_FLOAT else 0
 	return base
+
+
+## Counts for the ledger row "overcome of total". Types in `reward_cfg.objective_count_excluded_types`
+## (the boss stub) are in neither number. Display only: it never changes a payout.
+static func objective_counts(objectives: Array, reward_cfg: Dictionary) -> Dictionary:
+	var excluded_v: Variant = reward_cfg.get("objective_count_excluded_types", [])
+	var excluded: Array = excluded_v if excluded_v is Array else []
+	var overcome := 0
+	var total := 0
+	for obj_v in objectives:
+		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
+		if excluded.has(str(obj.get("type", ""))):
+			continue
+		total += 1
+		if bool(obj.get("completed", false)):
+			overcome += 1
+	return { "overcome": overcome, "total": total }
 
 
 ## V2-INFRA-003 Phase 8: THE single definition of the redo multiplier, for the same reason
@@ -66,6 +108,10 @@ static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
 ## ally_kills:       combat_state["ally_killed_enemy_ids"].size(). These kills pay the kill Ase
 ##                   but leave both sides of the rank (decisions.md D-23).
 ## guide_mode:       combat_state["guide_mode"]; GUIDE_SPIRIT carries pace only for "escort".
+## logger, t:        receive the unknown-objective-type error from base_reward(); t is injected.
+## fought_index:     the objective of the situation being fought, -1 for none. Rank uses the
+##                   completed objectives plus this one, on both sides of the ratio; the defeat
+##                   consolation base (`consolation_base`) is this one alone.
 static func compute(
 	victory: bool,
 	objectives: Array,
@@ -81,10 +127,14 @@ static func compute(
 	reached_enemies: int,
 	pace_stage_base: int,
 	ally_kills: int = 0,
-	guide_mode: String = ""
+	guide_mode: String = "",
+	logger: StructuredLogger = null,
+	t: int = 0,
+	fought_index: int = -1
 ) -> Dictionary:
-	# Base = sum of objective type weights (single definition — see base_reward() above).
-	var base := base_reward(objectives, reward_cfg)
+	var base := base_reward(objectives, reward_cfg, logger, t, MODE_COMPLETED_PLUS_FOUGHT, fought_index)
+	# The fought objective is already inside `base`, so it logs there; no second log here.
+	var consolation_base := base_reward(objectives, reward_cfg, null, t, MODE_FOUGHT, fought_index)
 
 	# Per-unit bonuses (actual counts)
 	var enemy_bonus_per := int(reward_cfg.get("enemy_defeated_bonus", 5))
@@ -134,6 +184,7 @@ static func compute(
 
 	return {
 		"base_reward":       base,
+		"consolation_base":  consolation_base,
 		"enemy_bonus":       enemy_bonus,
 		"echo_bonus":        echo_bonus,
 		"pace_bonus":        pace_bonus,
