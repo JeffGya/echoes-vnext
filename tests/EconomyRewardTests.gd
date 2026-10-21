@@ -3,7 +3,7 @@
 # rules (PaceService, docs/stories/pace-reward/design.md). Speed pays no Ase (D-49): pace feeds
 # the HUD colour and the rank score only. The rank score table lives in econ_char.
 #
-# Tests 1-12: compute() base, echo bonus, pace fraction, redo multiplier, defeat, rank, payers.
+# Tests 1-12: compute() base, echo bonus, pace fraction, replay factor, defeat, rank, payers.
 # Tests 13-39: reward/pace_* — par per mode, pace_state, reached enemies, objective_state and
 # resolve data per mode, ally kills, GUIDE_SPIRIT escort pace (decisions.md D-31 to D-33).
 
@@ -22,15 +22,15 @@ static func _default_cfg() -> Dictionary:
 			"shrine": 40,
 			"boss":   60,
 			# Types the tests do not assert on. A missing key would log the D-07 error.
-			"pursue": 8, "recover": 12, "protect": 12, "endure": 14, "guide_spirit": 16,
+			"pursue": 16, "recover": 24, "protect": 24, "endure": 28, "guide_spirit": 32,
 		},
 		"echo_home_ase":         2,
 		"echo_home_cap":         10,
 		"echo_home_cap_replay":  5,
 		"pace_full_ratio":       1.1,
 		"pace_zero_ratio":       1.6,
-		"redo_penalty_per_run":  0.10,
-		"redo_penalty_floor":    0.50,
+		"realm_scale_step":      0.25,
+		"replay_factor":         0.35,
 		"defeat_factor":         0.25,
 		"rank_points": { "win": 0.4, "home": 0.4, "pace": 0.2 },
 		"rank_thresholds": {
@@ -56,8 +56,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("reward/compute_no_echo_bonus",    Callable(EconomyRewardTests, "_t_compute_no_echo_bonus"))
 	runner.register_test("reward/pace_fraction_curve",       Callable(EconomyRewardTests, "_t_pace_fraction_curve"))
 	runner.register_test("reward/pace_none_for_no_pace_mode", Callable(EconomyRewardTests, "_t_pace_none_for_no_pace_mode"))
-	runner.register_test("reward/redo_multiplier_floor",    Callable(EconomyRewardTests, "_t_redo_multiplier_floor"))
-	runner.register_test("reward/redo_multiplier_partial",  Callable(EconomyRewardTests, "_t_redo_multiplier_partial"))
+	runner.register_test("reward/replay_factor_flat",       Callable(EconomyRewardTests, "_t_replay_factor_flat"))
+	runner.register_test("reward/replay_factor_first_run",  Callable(EconomyRewardTests, "_t_replay_factor_first_run"))
 	runner.register_test("reward/defeat_payout",            Callable(EconomyRewardTests, "_t_defeat_payout"))
 	runner.register_test("reward/rank_S_first_run",         Callable(EconomyRewardTests, "_t_rank_S_first_run"))
 	runner.register_test("reward/rank_F_poor_performance",  Callable(EconomyRewardTests, "_t_rank_F_poor_performance"))
@@ -158,35 +158,35 @@ static func _t_pace_none_for_no_pace_mode() -> Dictionary:
 	return { "ok": true }
 
 
-# ─── Test 7 — run_count=8 → redo_mul clamped to floor 0.50 ──────────────────
-static func _t_redo_multiplier_floor() -> Dictionary:
+# ─── Test 7 — a replay (run_count 8) takes the flat factor 0.35, not a ladder ─
+static func _t_replay_factor_flat() -> Dictionary:
 	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
-	var result := RewardCalc.compute(true, objs, 0, 0, 10, 8, _default_cfg(), _COMBAT, 0.0)
-	var redo := float(result.get("redo_multiplier", -1.0))
-	if abs(redo - 0.50) > 0.001:
-		return { "ok": false, "error": "Expected redo_multiplier=0.50, got %f" % redo }
+	for run_count in [1, 3, 8]:
+		var result := RewardCalc.compute(true, objs, 0, 0, 10, run_count, _default_cfg(), _COMBAT, 0.0)
+		var factor := float(result.get("replay_factor", -1.0))
+		if abs(factor - 0.35) > 0.001:
+			return { "ok": false, "error": "run_count %d: expected replay_factor=0.35, got %f" % [run_count, factor] }
 	return { "ok": true }
 
 
-# ─── Test 8 — run_count=3 → redo_mul = 1.0 - 0.3 = 0.70 ────────────────────
-static func _t_redo_multiplier_partial() -> Dictionary:
+# ─── Test 8 — a first run (run_count 0) takes no factor ─────────────────────
+static func _t_replay_factor_first_run() -> Dictionary:
 	var objs: Array = [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {}, true)]
-	var result := RewardCalc.compute(true, objs, 0, 0, 10, 3, _default_cfg(), _COMBAT, 0.0)
-	var redo := float(result.get("redo_multiplier", -1.0))
-	if abs(redo - 0.70) > 0.001:
-		return { "ok": false, "error": "Expected redo_multiplier=0.70, got %f" % redo }
+	var result := RewardCalc.compute(true, objs, 0, 0, 10, 0, _default_cfg(), _COMBAT, 0.0)
+	if abs(float(result.get("replay_factor", -1.0)) - 1.0) > 0.001:
+		return { "ok": false, "error": "Expected replay_factor=1.0, got %s" % str(result.get("replay_factor")) }
 	return { "ok": true }
 
 
-# ─── Test 9 — defeat: total = round(base×0.25×redo_mul) ─────────────────────
+# ─── Test 9 — defeat: total = round(base×scale×0.25×replay) ─────────────────────
 static func _t_defeat_payout() -> Dictionary:
 	var save   := _make_save()
 	var svc    := EconomyService.new(save)
 	var logger := StructuredLogger.new()
 	logger.set_level("off")
-	# base = 30, redo_mul = 1.0 (run_count=0), defeat total = round(30×0.25×1.0) = 8.
+	# base = 30, scale 1.0, replay 1.0 (run_count=0), defeat total = round(30×0.25) = 8.
 	var result := svc.reward_encounter_complete(
-		false, 30, 1.0, "F", true, logger, 0
+		false, 30, 1.0, 1.0, "F", true, logger, 0
 	)
 	var expected := roundi(30.0 * 0.25 * 1.0)
 	if int(result.get("ase_awarded", -1)) != expected:
@@ -229,16 +229,16 @@ static func _t_economy_service_adds_ase() -> Dictionary:
 	logger.set_level("off")
 	# Encounter cadence: a won fight pays 0.
 	var enc := svc.reward_encounter_complete(
-		true, 30, 1.0, "B", true, logger, 0
+		true, 30, 1.0, 1.0, "B", true, logger, 0
 	)
 	if int(enc.get("ase_awarded", -1)) != 0:
 		return { "ok": false, "error": "Expected encounter ase_awarded=0, got %d" % enc.get("ase_awarded", -1) }
 	if int(save.get("economy", {}).get("ase", -1)) != 0:
 		return { "ok": false, "error": "Expected save.economy.ase=0 after the encounter payout, got %d" % int(save.get("economy", {}).get("ase", -1)) }
 
-	# Stage cadence: base=30, redo=1.0, 2 of 2 Echoes home at 2 Ase each → 34
+	# Stage cadence: base=30, scale 1.0, replay 1.0, 2 of 2 Echoes home at 2 Ase each → 34
 	var home := { "alive": 2, "started": 2, "lost": [], "rate": 2, "cap": 10, "replay": false }
-	var stage := svc.settle_stage_complete(30, 1.0, logger, 0, {}, 0, home)
+	var stage := svc.settle_stage_complete(30, 1.0, 1.0, logger, 0, {}, 0, home)
 	if int(stage.get("ase_awarded", -1)) != 34:
 		return { "ok": false, "error": "Expected stage ase_awarded=34, got %d" % stage.get("ase_awarded", -1) }
 
@@ -421,7 +421,7 @@ static func _t_pace_no_breakdown_row() -> Dictionary:
 	logger.set_level("off")
 	for victory in [true, false]:
 		var res := EconomyService.new(_make_save()).reward_encounter_complete(
-			victory, 60, 1.0, "S", true, logger, 0)
+			victory, 60, 1.0, 1.0, "S", true, logger, 0)
 		for row in res.get("breakdown", []):
 			if str(row.get("label", "")) == "Pace bonus" or str(row.get("cause", "")).begins_with("bonus_"):
 				return { "ok": false, "error": "victory=%s: pace row present: %s" % [victory, str(row)] }
@@ -867,7 +867,7 @@ static func _t_pace_escort_reward_protect_none() -> Dictionary:
 		if bool(r.get("pace_mode", false)) != c[2] or str(r.get("pace_state", "x")) != c[3]:
 			return { "ok": false, "error": "case %s: got %s" % [str(c), str(r)] }
 		var res := EconomyService.new(_make_save()).reward_encounter_complete(c[0], 60,
-			1.0, str(r["rank"]), true, logger, 0)
+			1.0, 1.0, str(r["rank"]), true, logger, 0)
 		for row in res.get("breakdown", []):
 			if str(row.get("label", "")) == "Pace bonus":
 				return { "ok": false, "error": "case %s: a Pace bonus row exists: %s" % [str(c), str(row)] }

@@ -482,7 +482,7 @@ static func _run_mode_fingerprint(
 #   ase_awarded / save.ase   −70 in EVERY mode (COMBAT 125→55, PURIFY_SHRINE 134→64,
 #                            RECOVER 129→59, PROTECT 129→59, ENDURE 125→55, PURSUE 125→55,
 #                            GUIDE_SPIRIT 120→50). 70 = the stage's base (two combat
-#                            objectives × objective_weights.combat 30 = 60, redo_multiplier 1.0
+#                            objectives × objective_weights.combat 30 = 60, the redo multiplier 1.0 (replaced since by the replay factor)
 #                            at run_count 0) + the realm.01 courage virtue bonus (10). Both are
 #                            STAGE cadence and are now paid by StageSettlementService in the
 #                            flow.complete_stage dispatch. This harness drives only

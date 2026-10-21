@@ -120,10 +120,12 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 	# The preview never logs this.
 	if logger != null:
 		logger.info(t, "economy.stage.reward", "Stage reward inputs", {
-			"stage_index": stage_index, "base": base, "redo_multiplier": plan["redo_mul"] })
+			"stage_index": stage_index, "base": base,
+			"realm_scale": plan["realm_scale"], "replay_factor": plan["replay_factor"] })
 
 	var payout: Dictionary = econ.settle_stage_complete(
-		base, plan["redo_mul"], logger, t, plan["counts"], plan["ekwan_base"], plan["echo_home"]
+		base, plan["realm_scale"], plan["replay_factor"], logger, t,
+		plan["counts"], plan["ekwan_base"], plan["echo_home"]
 	)
 	flow_ctx.request_save("stage.reward")
 
@@ -179,7 +181,8 @@ func preview() -> Dictionary:
 		return {}
 	var plan := _plan(realm_model, stage_ref, stage_index, null, 0)
 	var rows := EconomyService.stage_payout_rows(
-		plan["base"], plan["redo_mul"], plan["counts"], plan["ekwan_base"], plan["echo_home"])
+		plan["base"], plan["realm_scale"], plan["replay_factor"], plan["counts"],
+		plan["ekwan_base"], plan["echo_home"])
 	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
 
 
@@ -193,7 +196,9 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 
 	return {
 		"base":           RewardCalc.base_reward(objectives, reward_cfg, log, t),
-		"redo_mul":       RewardCalc.redo_multiplier(int(realm_model.get("run_count", 0)), reward_cfg),
+		"realm_scale":    RewardCalc.realm_scale(flow_ctx.realm_id,
+			ConfigService.get_realm_order(config_service), reward_cfg),
+		"replay_factor":  RewardCalc.replay_factor(int(realm_model.get("run_count", 0)), reward_cfg),
 		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
 		"echo_home":      _echo_home(realm_model, reward_cfg),

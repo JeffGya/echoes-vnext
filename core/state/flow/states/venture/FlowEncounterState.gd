@@ -171,6 +171,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# ECONOMY-004: Compute and pay reward
 	var run_count := int(realm_model.get("run_count", 0))
+	var payout_factors := ActiveStageService.get_payout_factors(flow_ctx, flow_ctx.config_service)
 	var reward_data: Dictionary = RewardCalc.compute(
 		victory,
 		stage_objectives,
@@ -184,7 +185,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		str(combat_state.get("guide_mode", "")),
 		flow_ctx.logger,
 		t,
-		flow_ctx.active_encounter_objective_index
+		flow_ctx.active_encounter_objective_index,
+		float(payout_factors["realm_scale"])
 	)
 	var _pace_mode := bool(reward_data.get("pace_mode", false))
 
@@ -200,7 +202,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var reward_result: Dictionary = economy_svc.reward_encounter_complete(
 		victory,
 		int(reward_data.get("consolation_base", 0)),
-		float(reward_data.get("redo_multiplier", 1.0)),
+		float(reward_data.get("realm_scale", 1.0)),
+		float(reward_data.get("replay_factor", 1.0)),
 		str(reward_data.get("rank", "F")),
 		_consolation_eligible,
 		flow_ctx.logger,

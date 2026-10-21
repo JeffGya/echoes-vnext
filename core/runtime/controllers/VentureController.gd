@@ -373,7 +373,8 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 			var _retention_mul := 1.0
 			if bool(directive.get("intel_retention", false)):
 				_retention_mul = float(directive.get("intel_retention_bonus", 1.0))
-			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * _pf * _retention_mul)
+			var _pfx := ActiveStageService.get_payout_factors(flow_ctx, config_service)
+			_partial_ase = RewardCalc.round_payout(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * float(_pfx["realm_scale"]) * float(_pfx["replay_factor"]) * _pf * _retention_mul)
 			if _partial_ase > 0:
 				econ.add_ase(_partial_ase, "return_home_intel_partial", logger, t)
 		flow_ctx.pending_scout_return_ase         = _partial_ase

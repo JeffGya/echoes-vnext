@@ -76,15 +76,25 @@ static func objective_counts(objectives: Array, reward_cfg: Dictionary) -> Dicti
 	return { "overcome": overcome, "total": total }
 
 
-## V2-INFRA-003 Phase 8: THE single definition of the redo multiplier, for the same reason
-## base_reward() above is one. The settlement split gave the stage cadence its own payer, and
-## that payer must scale the base by exactly the multiplier the combined payer used — a second
-## copy of `maxf(floor, 1.0 - run_count * per_run)` would be free to drift from this one.
-## Degrades per completed run of the realm, clamped at the authored floor.
-static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
-	var penalty_per_run := float(reward_cfg.get("redo_penalty_per_run", 0.10))
-	var penalty_floor   := float(reward_cfg.get("redo_penalty_floor", 0.50))
-	return maxf(penalty_floor, 1.0 - float(run_count) * penalty_per_run)
+## Realm scale on objective Ase and Ekwan (D-63): 1 + step x (position in `realm_order` - 1).
+## A realm outside `realm_order` (the prologue) uses 1.0. The Echoes stipend is never scaled.
+static func realm_scale(realm_id: String, realm_order: Array, reward_cfg: Dictionary) -> float:
+	var pos := realm_order.find(realm_id)
+	if pos < 0:
+		return 1.0
+	return 1.0 + float(reward_cfg.get("realm_scale_step", 0.25)) * float(pos)
+
+
+## Replay factor on objective Ase and Ekwan (D-54): flat, 1.0 on a first run (`run_count` 0).
+static func replay_factor(run_count: int, reward_cfg: Dictionary) -> float:
+	if run_count <= 0:
+		return 1.0
+	return float(reward_cfg.get("replay_factor", 0.35))
+
+
+## Rounds a payout amount. The epsilon keeps a true x.5 (30 x 0.35 = 10.5) from falling to x.4999.
+static func round_payout(amount: float) -> int:
+	return roundi(amount + 0.000000001)
 
 
 ## The party Echoes of a fight: `alive` (not dead), `started` (all of them) and `lost` (display
@@ -118,6 +128,7 @@ static func echo_tally(actors: Array) -> Dictionary:
 ## logger, t: receive the unknown-objective-type error from base_reward(); t is injected.
 ## fought_index: the objective of the situation being fought, -1 for none. `base_reward` is the
 ##   completed objectives plus this one; `consolation_base` (the defeat pay base) is this one alone.
+## realm_scale_in: the realm scale (`realm_scale`), handed through for the consolation payer.
 ## Speed pays no Ase (D-49). It enters only the rank score (`rank_score`).
 static func compute(
 	victory: bool,
@@ -132,7 +143,8 @@ static func compute(
 	guide_mode: String = "",
 	logger: StructuredLogger = null,
 	t: int = 0,
-	fought_index: int = -1
+	fought_index: int = -1,
+	realm_scale_in: float = 1.0
 ) -> Dictionary:
 	var base := base_reward(objectives, reward_cfg, logger, t, MODE_COMPLETED_PLUS_FOUGHT, fought_index)
 	# The fought objective is already inside `base`, so it logs there; no second log here.
@@ -143,7 +155,7 @@ static func compute(
 	var zero_ratio := float(reward_cfg.get("pace_zero_ratio", 1.6))
 	var fraction   := PaceService.bonus_fraction(round_ended, par_rounds, full_ratio, zero_ratio)
 
-	var redo_mul := redo_multiplier(run_count, reward_cfg)
+	var replay := replay_factor(run_count, reward_cfg)
 
 	# A no-pace mode has no speed to earn, so it takes the full pace points and is not capped.
 	# `rank_without_pace` is the grade with the pace points removed, for the rank-cause note.
@@ -167,7 +179,8 @@ static func compute(
 		"pace_state":        PaceService.pace_state(round_ended, par_rounds, full_ratio, zero_ratio) \
 			if is_pace and victory else "",
 		"pace_changed_rank": rank != rank_without_pace,
-		"redo_multiplier":   redo_mul,
+		"realm_scale":       realm_scale_in,
+		"replay_factor":     replay,
 		"rank":              rank,
 	}
 

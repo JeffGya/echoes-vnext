@@ -311,6 +311,18 @@ static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg:
 		mode, flow_ctx_arg.active_encounter_objective_index)
 
 
+# The realm scale and replay factor of the active realm (D-63, D-54), for the payers that do not
+# hold the realm model: the defeat consolation and the retreat and return-home partials.
+static func get_payout_factors(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> Dictionary:
+	var reward_cfg := ConfigService.get_rewards_cfg(config_service_arg)
+	var run_count := int(RealmService.get_active(flow_ctx_arg).get("run_count", 0))
+	return {
+		"realm_scale": RewardCalc.realm_scale(flow_ctx_arg.realm_id,
+			ConfigService.get_realm_order(config_service_arg), reward_cfg),
+		"replay_factor": RewardCalc.replay_factor(run_count, reward_cfg),
+	}
+
+
 # "Overcome of total" for the current stage; the boss stub is excluded by config. Read only.
 static func get_objective_counts(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> Dictionary:
 	return RewardCalc.objective_counts(_current_stage_objectives(flow_ctx_arg),

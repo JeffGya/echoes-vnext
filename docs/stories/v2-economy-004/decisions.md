@@ -716,3 +716,6 @@ Rank: any death caps at A (S needs everyone home); the replay factor no longer t
 
 ## D-89 — Phase 5.2 re-recorded: a won fight pays 0 Ase (2026-10-22)
 MEASURED long run: `combat_baseline` + `combat_roundtrip` passed (seek group 72 total: only the 7 seek drifts failed), `reward` 35/35, wider group 247/247, ROUNDS held, `balance.json` and `git status` unchanged. 28 constants moved (14 FINAL, 14 SAVE, in both suites, including protect and guide_spirit). Proof: for all 28 payloads exactly ONE field changed (FINAL `ase_awarded` 50 to 0, SAVE `economy.ase` 50 to 0) and the previous payload hashes to the old constant in 28 of 28. Cause: the Echoes stipend moved from the fight payout to the stage payout (D-43, D-44).
+
+## D-90 — Phase 5.3 verified: no recorded value moved (2026-10-22)
+Weights doubled, realm scale 1.00/1.25/+0.25, replay factor 0.35 flat (ladder and `redo_multiplier` removed with a full audit). MEASURED: fingerprints 6/6 and 1/1, `fingerprint_seek` + `combat_baseline` + `combat_roundtrip` + `maturity_baseline` 74/74, `reward` 35/35, wider group 251/251; `balance.json` and `git status` unchanged by the runs. Assumed by the build: the "Base objectives" row shows the amount after the realm scale (rows add up); consolation and the 12% partials take scale and replay now (the advance rule is step 5.8).

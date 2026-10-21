@@ -1202,7 +1202,8 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		var _partial_ase := 0
 		if _intel_count > 0:
 			var _pf := float(ConfigService.get_rewards_cfg(config_service).get("partial_intel_reward_factor", 0.12))
-			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * _pf)
+			var _pfx := ActiveStageService.get_payout_factors(flow_ctx, config_service)
+			_partial_ase = RewardCalc.round_payout(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * float(_pfx["realm_scale"]) * float(_pfx["replay_factor"]) * _pf)
 			if _partial_ase > 0:
 				econ.add_ase(_partial_ase, "retreat_intel_partial", logger, t)
 		flow_ctx.pending_scout_return_ase         = _partial_ase
