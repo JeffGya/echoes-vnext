@@ -1876,7 +1876,7 @@
 				"late_count_bonus": 1,
 				"max_count": 4
 			},
-			"retreat_ase_cost": 30.0,
+			"retreat_ase_cost": 10.0,
 			"retreat_agi_tiers": [
 				{
 					"min_delta": 10.0,

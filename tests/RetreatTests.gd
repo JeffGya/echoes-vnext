@@ -25,6 +25,13 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("retreat/roll_success_at_100pct",                  Callable(RetreatTests, "_t_roll_success_at_100"))
 	runner.register_test("retreat/roll_failure_at_0pct",                    Callable(RetreatTests, "_t_roll_failure_at_0"))
 	runner.register_test("retreat/excludes_dead_and_structures",            Callable(RetreatTests, "_t_excludes_dead_and_structures"))
+	runner.register_test("retreat/price_is_10_from_config",                 Callable(RetreatTests, "_t_price_from_config"))
+	runner.register_test("retreat/denied_below_price",                      Callable(RetreatTests, "_t_denied_below_price"))
+	runner.register_test("retreat/allowed_at_exact_price",                  Callable(RetreatTests, "_t_allowed_at_exact_price"))
+	runner.register_test("retreat/allowed_above_price",                     Callable(RetreatTests, "_t_allowed_above_price"))
+	runner.register_test("retreat/failed_retreat_still_spends",             Callable(RetreatTests, "_t_failed_retreat_spends"))
+	runner.register_test("retreat/snapshot_affordable_and_price",           Callable(RetreatTests, "_t_snapshot_affordable"))
+	runner.register_test("retreat/return_home_free_at_zero_ase",            Callable(RetreatTests, "_t_return_home_free"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -157,4 +164,102 @@ static func _t_excludes_dead_and_structures() -> Dictionary:
 	var actors: Array = [_echo(8, 10), dead_echo, _enemy(6, 10), shrine]
 	if not RetreatService.can_attempt(actors):
 		return { "ok": false, "error": "Expected can_attempt=true; dead/structure actors must be excluded from speed avg" }
+	return { "ok": true }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# V2-ECONOMY-004 step 5.4: price 10 and denial (D-46, D-79). These drive a real FlowRuntime.
+# ──────────────────────────────────────────────────────────────────────────────
+
+## Runs one retreat dispatch at a fixed balance. The action carries a fake price (999) on purpose:
+## the handler must ignore it and read the config.
+static func _retreat_at(tag: String, ase: int, success_pct: int) -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, tag)
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed for %s" % tag }
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	flow_ctx.save_data["economy"]["ase"] = ase
+	var snap: Dictionary = (env["runtime"] as FlowRuntime).dispatch(
+		{ "type": "encounter.retreat", "ase_cost": 999, "success_pct": success_pct })
+	return { "ok": true, "flow_ctx": flow_ctx, "snap": snap, "ase_after": int(flow_ctx.save_data["economy"]["ase"]) }
+
+
+static func _t_price_from_config() -> Dictionary:
+	var cost: int = RetreatService.get_ase_cost(ConfigService.new())
+	if cost != 10:
+		return { "ok": false, "error": "expected retreat price 10 from data.combat.retreat_ase_cost, got %d" % cost }
+	return { "ok": true }
+
+
+static func _t_denied_below_price() -> Dictionary:
+	var r: Dictionary = _retreat_at("rt_denied", 9, 100)
+	if not bool(r.get("ok", false)):
+		return r
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	if int(r["ase_after"]) != 9:
+		return { "ok": false, "error": "denied retreat changed the balance: 9 -> %d" % int(r["ase_after"]) }
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "denied retreat cleared the encounter" }
+	if flow_ctx.pending_scout_return_ase != 0:
+		return { "ok": false, "error": "denied retreat set a partial payout" }
+	var denial: Variant = (r["snap"] as Dictionary).get("data", {}).get("retreat_denied", null)
+	if not (denial is Dictionary) or str(denial.get("reason", "")) != "insufficient_ase" or int(denial.get("ase_cost", 0)) != 10:
+		return { "ok": false, "error": "no retreat_denied outcome in the returned snapshot: %s" % str(denial) }
+	return { "ok": true }
+
+
+static func _t_allowed_at_exact_price() -> Dictionary:
+	var r: Dictionary = _retreat_at("rt_exact", 10, 100)
+	if not bool(r.get("ok", false)):
+		return r
+	if int(r["ase_after"]) != 0:
+		return { "ok": false, "error": "expected balance 0 after a 10 Ase retreat from 10, got %d" % int(r["ase_after"]) }
+	if (r["flow_ctx"] as FlowContext).encounter_ctx != null:
+		return { "ok": false, "error": "paid retreat at 100%% did not leave the encounter" }
+	return { "ok": true }
+
+
+static func _t_allowed_above_price() -> Dictionary:
+	var r: Dictionary = _retreat_at("rt_above", 25, 100)
+	if not bool(r.get("ok", false)):
+		return r
+	if int(r["ase_after"]) != 15:
+		return { "ok": false, "error": "expected balance 15 after retreat from 25, got %d" % int(r["ase_after"]) }
+	return { "ok": true }
+
+
+static func _t_failed_retreat_spends() -> Dictionary:
+	var r: Dictionary = _retreat_at("rt_fail", 25, 0)
+	if not bool(r.get("ok", false)):
+		return r
+	if int(r["ase_after"]) != 15:
+		return { "ok": false, "error": "a failed retreat must still spend 10: expected 15, got %d" % int(r["ase_after"]) }
+	if (r["flow_ctx"] as FlowContext).encounter_ctx == null:
+		return { "ok": false, "error": "a failed retreat at 0%% must leave combat running" }
+	return { "ok": true }
+
+
+static func _t_snapshot_affordable() -> Dictionary:
+	for case in [[9, false], [10, true], [11, true]]:
+		var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "rt_snap_%d" % case[0])
+		if env.is_empty():
+			return { "ok": false, "error": "setup failed" }
+		var flow_ctx: FlowContext = env["flow_ctx"]
+		flow_ctx.save_data["economy"]["ase"] = case[0]
+		var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 1)
+		var data: Dictionary = snap.get("data", {})
+		if int(data.get("retreat_ase_cost", -1)) != 10 or bool(data.get("retreat_affordable", not case[1])) != case[1]:
+			return { "ok": false, "error": "balance %d: cost=%s affordable=%s" % [case[0], str(data.get("retreat_ase_cost")), str(data.get("retreat_affordable"))] }
+	return { "ok": true }
+
+
+static func _t_return_home_free() -> Dictionary:
+	var env: Dictionary = PendingResultTests._drive_withdrawal("rt_home", 0)
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	var awarded: int = int(PendingResultTests._data_of(env["card"]).get("ase_awarded", -1))
+	var ase: int = int(runtime.get_save_data()["economy"]["ase"])
+	if ase != awarded:
+		return { "ok": false, "error": "return home at 0 Ase: balance %d != partial %d, so something was spent" % [ase, awarded] }
 	return { "ok": true }

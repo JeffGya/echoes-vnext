@@ -1159,25 +1159,33 @@ func _apply_action_outcome(outcome: FlowActionOutcome, t: int) -> void:
 # Helpers
 ## UI-004: Player attempts retreat before round 1.
 ## Gate (speed) and tier (agi) were computed at snapshot time and baked into the action dict.
-## Ase is spent regardless of roll outcome.
+## Ase is spent regardless of roll outcome. A balance below the price refuses the action (D-79).
 ## Success → clear encounter, go to Sanctum. Failure → start combat immediately.
 func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		logger.debug(t, "encounter.retreat.no_op", "Retreat: no active encounter context", {})
 		return
 
-	var ase_cost:    int = int(action.get("ase_cost",    0))
+	# The price comes from config, never from the action dict: a UI-built action must not set its own price.
+	var ase_cost:    int = RetreatService.get_ase_cost(config_service)
 	var success_pct: int = int(action.get("success_pct", 0))
 	var encounter_id: String = flow_ctx.encounter_ctx.encounter_id
 
-	# Spend Ase (always, win or lose). Guard: only spend if player can afford.
-	if ase_cost > 0:
-		if econ.can_afford_ase(ase_cost):
-			econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
-		else:
-			logger.debug(t, "encounter.retreat.no_ase", "Retreat: insufficient Ase — no spend", {
-				"ase_cost": ase_cost, "ase_balance": econ.get_ase()
-			})
+	# D-79: a short balance refuses the retreat. Nothing changes; the fight stays at pre-combat.
+	if not econ.can_afford_ase(ase_cost):
+		var ase_balance: int = econ.get_ase()
+		logger.info(t, "encounter.retreat.denied", "Retreat denied: not enough Ase", {
+			"encounter_id": encounter_id, "ase_cost": ase_cost, "ase_balance": ase_balance
+		})
+		var snap_data: Variant = (flow_ctx.last_snapshot as Dictionary).get("data", null)
+		if snap_data is Dictionary:
+			(snap_data as Dictionary)["retreat_denied"] = {
+				"reason": "insufficient_ase", "ase_cost": ase_cost, "ase_balance": ase_balance
+			}
+		return
+
+	# Spend Ase (always, win or lose).
+	econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
 
 	# Seeded roll for determinism.
 	var rng := RandomNumberGenerator.new()

@@ -151,7 +151,7 @@ static func _t_classify_exclusions() -> Dictionary:
 ## (realm seed, stage id, turn_count); the helper derives the same stream and picks the first
 ## turn_count that rolls a success, so no production value is nudged — the same technique
 ## tests/VentureCharacterizationTests.gd::_t_return_home_scout_return uses.
-static func _drive_withdrawal(tag: String) -> Dictionary:
+static func _drive_withdrawal(tag: String, ase_before: int = -1) -> Dictionary:
 	var save_path := _fresh_save_path(tag)
 	var runtime := FlowRuntime.new(_logger(), ConfigService.new(), save_path)
 	runtime.boot()
@@ -212,6 +212,8 @@ static func _drive_withdrawal(tag: String) -> Dictionary:
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 
+	if ase_before >= 0:
+		runtime.get_save_data()["economy"]["ase"] = ase_before
 	var card: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
 	if str(card.get("type", "")) != FlowStateIds.RESOLVE:
 		return { "ok": false, "error": "return_home did not publish a resolve card, got '%s'" % str(card.get("type", "")) }

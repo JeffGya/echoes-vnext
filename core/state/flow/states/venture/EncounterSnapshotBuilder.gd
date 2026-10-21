@@ -405,6 +405,7 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# UI-004: Retreat eligibility — computed pre_combat only; inert in all other phases.
 	var retreat_eligible:    bool   = false
 	var retreat_ase_cost:    int    = 0
+	var retreat_affordable:  bool   = false
 	var retreat_tier_label:  String = ""
 	var retreat_success_pct: int    = 0
 
@@ -423,7 +424,8 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				var bal_r: Dictionary   = flow_ctx.config_service.get_balance()
 				var bdata_r: Dictionary = bal_r.get("data", {})
 				combat_cfg_r = bdata_r.get("combat", {})
-			retreat_ase_cost = int(combat_cfg_r.get("retreat_ase_cost", 30))
+			retreat_ase_cost = RetreatService.get_ase_cost(flow_ctx.config_service)
+			retreat_affordable = int(flow_ctx.save_data.get("economy", {}).get("ase", 0)) >= retreat_ase_cost
 			var tier_cfg_r: Array = combat_cfg_r.get("retreat_agi_tiers", [])
 			var tier_r: Dictionary = RetreatService.get_chance_tier(raw_actors_for_retreat, tier_cfg_r)
 			if not tier_r.is_empty():
@@ -469,6 +471,7 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# UI-004: always present; non-zero/non-empty only in pre_combat phase.
 			"retreat_eligible":        retreat_eligible,
 			"retreat_ase_cost":        retreat_ase_cost,
+			"retreat_affordable":      retreat_affordable,
 			"retreat_tier_label":      retreat_tier_label,
 			"retreat_success_pct":     retreat_success_pct,
 			# V2-STAGE-002: remaining required objectives (informational during combat).
