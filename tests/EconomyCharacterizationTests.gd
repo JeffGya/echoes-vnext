@@ -56,6 +56,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/redo_multiplier_by_run_count", Callable(EconomyCharacterizationTests, "_t_redo_multiplier"))
 	runner.register_test("econ_char/removed_bonus_keys_absent", Callable(EconomyCharacterizationTests, "_t_removed_keys_absent"))
 	runner.register_test("econ_char/rank_score_table", Callable(EconomyCharacterizationTests, "_t_rank_table"))
+	runner.register_test("econ_char/death_caps_rank_at_a", Callable(EconomyCharacterizationTests, "_t_death_cap"))
+	runner.register_test("econ_char/rank_ignores_replay_factor", Callable(EconomyCharacterizationTests, "_t_rank_ignores_replay"))
 	runner.register_test("econ_char/death_lowers_rank", Callable(EconomyCharacterizationTests, "_t_death_lowers_rank"))
 	runner.register_test("econ_char/speed_never_outranks_survival", Callable(EconomyCharacterizationTests, "_t_speed_vs_survival"))
 	runner.register_test("econ_char/no_pace_mode_not_capped", Callable(EconomyCharacterizationTests, "_t_no_pace_not_capped"))
@@ -1109,9 +1111,55 @@ static func _t_rank_table() -> Dictionary:
 		EncounterResolutionModes.COMBAT, _PAR, "", null, 0, 0)
 	if str(lost["rank"]) != "F":
 		m.append("a defeat ranked %s, expected F" % str(lost["rank"]))
-	# S only on run 0.
-	if _win_rank(3, 3, _FULL, EncounterResolutionModes.COMBAT, 1) == "S":
-		m.append("S on run_count 1")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-69: any death caps a win at A. The score alone gives S at 4 and 5 started (one lost, full pace
+## = 0.90), so those rows prove the cap. At 1 to 3 started the score is already below A or at A.
+## Grades for [slow, partial, full], one dead, 1 to 5 started; and all home for the same sizes.
+static func _t_death_cap() -> Dictionary:
+	var m: Array = []
+	var dead_table := {
+		1: ["C", "C", "B"], 2: ["B", "B", "A"], 3: ["B", "A", "A"], 4: ["B", "A", "A"], 5: ["B", "A", "A"],
+	}
+	var home_table := {
+		1: ["A", "S", "S"], 2: ["A", "S", "S"], 3: ["A", "S", "S"], 4: ["A", "S", "S"], 5: ["A", "S", "S"],
+	}
+	for started in [1, 2, 3, 4, 5]:
+		var paces := [_SLOW, _PARTIAL, _FULL]
+		for i in 3:
+			var dead := _win_rank(started - 1, started, paces[i])
+			var home := _win_rank(started, started, paces[i])
+			if dead != dead_table[started][i]:
+				m.append("%d started 1 dead pace %d: %s, expected %s" % [started, i, dead, dead_table[started][i]])
+			if home != home_table[started][i]:
+				m.append("%d started all home pace %d: %s, expected %s" % [started, i, home, home_table[started][i]])
+			if _GRADE_STEPS.find(dead) > _GRADE_STEPS.find("A"):
+				m.append("%d started 1 dead pace %d: %s is above A" % [started, i, dead])
+	# More than one death is capped too.
+	if _GRADE_STEPS.find(_win_rank(3, 5, _FULL)) > _GRADE_STEPS.find("A"):
+		m.append("5 started 2 dead full pace is above A")
+	# A death with full pace never outranks all home with no pace.
+	for started in [1, 2, 3, 4, 5]:
+		if _GRADE_STEPS.find(_win_rank(started - 1, started, _FULL)) > _GRADE_STEPS.find(_win_rank(started, started, _SLOW)):
+			m.append("%d started: dead + full pace outranks all home + slow" % started)
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-74, D-75: the replay factor does not touch the rank, and S is allowed on any run.
+static func _t_rank_ignores_replay() -> Dictionary:
+	var m: Array = []
+	for started in [1, 2, 3, 4, 5]:
+		for alive in range(0, started + 1):
+			for r in [_SLOW, _PARTIAL, _FULL]:
+				var base := _win_rank(alive, started, r, EncounterResolutionModes.COMBAT, 0)
+				for runs in [1, 3, 9]:
+					var got := _win_rank(alive, started, r, EncounterResolutionModes.COMBAT, runs)
+					if got != base:
+						m.append("%d/%d round %d run %d: %s, run 0 gave %s" % [alive, started, r, runs, got, base])
+	for runs in [1, 3]:
+		if _win_rank(3, 3, _FULL, EncounterResolutionModes.COMBAT, runs) != "S":
+			m.append("all home full pace run_count %d is not S" % runs)
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 

@@ -128,14 +128,15 @@ static func compute(
 	# `rank_without_pace` is the grade with the pace points removed, for the rank-cause note.
 	var rank := "F"
 	var rank_without_pace := "F"
+	var any_death := echoes_survived < total_echoes
 	if victory:
 		var thresholds_v: Variant = reward_cfg.get("rank_thresholds", {})
 		var thresholds: Dictionary = thresholds_v if thresholds_v is Dictionary else {}
 		var pace_credit := fraction if is_pace else 1.0
-		rank = _compute_rank(rank_score(echoes_survived, total_echoes, pace_credit, redo_mul, reward_cfg),
-			run_count, thresholds)
-		rank_without_pace = _compute_rank(rank_score(echoes_survived, total_echoes, 0.0, redo_mul, reward_cfg),
-			run_count, thresholds) if is_pace else rank
+		rank = _compute_rank(rank_score(echoes_survived, total_echoes, pace_credit, reward_cfg),
+			thresholds, any_death)
+		rank_without_pace = _compute_rank(rank_score(echoes_survived, total_echoes, 0.0, reward_cfg),
+			thresholds, any_death) if is_pace else rank
 
 	return {
 		"base_reward":       base,
@@ -151,19 +152,23 @@ static func compute(
 	}
 
 
-## The rank score of a win: win points + home points x (home / started) + pace points x pace_credit,
-## then the redo multiplier. Reads no Ase amount. pace_credit is the pace fraction (0 to 1).
-static func rank_score(echoes_survived: int, total_echoes: int, pace_credit: float, redo_mul: float,
+## The rank score of a win: win points + home points x (home / started) + pace points x pace_credit.
+## Reads no Ase amount and no replay factor (D-74). pace_credit is the pace fraction (0 to 1).
+static func rank_score(echoes_survived: int, total_echoes: int, pace_credit: float,
 		reward_cfg: Dictionary) -> float:
 	var pts_v: Variant = reward_cfg.get("rank_points", {})
 	var pts: Dictionary = pts_v if pts_v is Dictionary else {}
 	var home_share := float(echoes_survived) / float(total_echoes) if total_echoes > 0 else 1.0
 	var score := float(pts.get("win", 0.4)) + float(pts.get("home", 0.4)) * home_share \
 		+ float(pts.get("pace", 0.2)) * pace_credit
-	return score * redo_mul
+	return score
 
 
-static func _compute_rank(raw_score: float, run_count: int, thresholds: Dictionary) -> String:
+## Any death caps a win at this grade, whatever the pace credit (D-69).
+const DEATH_CAP_RANK := "A"
+
+
+static func _compute_rank(raw_score: float, thresholds: Dictionary, any_death: bool = false) -> String:
 	# A score on a threshold must not be lost to float error (0.4 + 0.4 + 0.2 x 0.5 sums to 0.8999...).
 	var rank_score := raw_score + 0.000000001
 	var s_thresh := float(thresholds.get("S", 0.90))
@@ -171,7 +176,7 @@ static func _compute_rank(raw_score: float, run_count: int, thresholds: Dictiona
 	var b_thresh := float(thresholds.get("B", 0.55))
 	var c_thresh := float(thresholds.get("C", 0.35))
 	var d_thresh := float(thresholds.get("D", 0.15))
-	if rank_score >= s_thresh and run_count == 0:
+	if rank_score >= s_thresh and not any_death:
 		return "S"
 	if rank_score >= a_thresh:
 		return "A"

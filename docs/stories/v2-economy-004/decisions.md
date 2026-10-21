@@ -710,3 +710,6 @@ Check in the build: whether the generator should read the config flag (the defec
 ## D-87 — Commit each verified step on the backend branch; never push (2026-10-22)
 
 **Answer (Jeff):** Yes. After a step's long run, attribution, re-record and confirmation run pass, the backend session commits it on `claude/v2-economy-004-material-split-24c3be` (local only, no push). The message names the step and its cause. Jeff opens the PR later.
+
+## D-88 — Phase 5.1b verified: no fingerprint moved (2026-10-22)
+Rank: any death caps at A (S needs everyone home); the replay factor no longer touches the rank; S is allowed on replays (D-69, D-74, D-75). MEASURED after the build: fingerprint suites 6/6 and 1/1, `fingerprint_seek` + `combat_baseline` + `combat_roundtrip` 72/72, `reward` 35/35, wider group 243/243. `balance.json` and `git status` unchanged by the runs. Grades with one dead at full pace: B at 1 Echo started, A at 2 to 5 (the cap changes a grade only from 4 started).
