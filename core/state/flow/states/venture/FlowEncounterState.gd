@@ -200,8 +200,6 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var reward_result: Dictionary = economy_svc.reward_encounter_complete(
 		victory,
 		int(reward_data.get("consolation_base", 0)),
-		int(reward_data.get("echo_bonus", 0)),
-		echoes_survived,
 		float(reward_data.get("redo_multiplier", 1.0)),
 		str(reward_data.get("rank", "F")),
 		_consolation_eligible,
@@ -351,8 +349,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	#
 	# WHAT REMAINS HERE, and why this producer still does not join the pure
 	# EncounterSnapshotBuilder beside producer B:
-	#   1. `reward_encounter_complete()` — the echoes-survived bonus
-	#      and the once-per-situation defeat consolation. Those measure THIS fight and belong to
+	#   1. `reward_encounter_complete()` — the once-per-situation defeat consolation. It measures THIS fight and belongs to
 	#      the dispatch that ends it, so `ase_awarded`/`ekwan_awarded` below are still real.
 	#   2. The ally-death morale/fear knock at the top of this function, whose writes three
 	#      later consumers read (_project_actor, the emotion summary, the roster sync).

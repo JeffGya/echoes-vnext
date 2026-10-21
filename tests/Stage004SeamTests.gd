@@ -1338,7 +1338,7 @@ static func _t_victory_return_clears_ally_fields_and_preserves_companion_invite(
 
 
 # BUG 2 regression: build_final_snapshot()'s echo tally (total_echoes / echoes_survived,
-# which feed RewardCalc's echo_bonus and rank denominator) must exclude combatants with
+# which feed the rank denominator and the chip count) must exclude combatants with
 # is_ally == true or is_spirit == true — they are temporary combat participants, not
 # roster echoes. Compares a snapshot with 3 roster echoes (2 alive, 1 dead) against an
 # otherwise-identical snapshot that ALSO has a living joined ally and a dead joined

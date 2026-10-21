@@ -47,9 +47,8 @@
 # adds `{}` where the key is absent (it never overwrites a populated one — pinned by
 # tests/SaveBridgeTests.gd:394-431), so a receipt written here survives it.
 #
-# WHAT IS NOT SETTLED HERE, deliberately: the echoes-survived bonus and per-kill Storyweight. Those measure one FIGHT and are paid at the fight,
-# by `EconomyService.reward_encounter_complete()` and by the mid-combat kill-XP path. See the
-# split writeup at the top of EconomyService.gd's Stage Reward API section.
+# NOT SETTLED HERE: the defeat consolation (paid at the fight by
+# `EconomyService.reward_encounter_complete()`) and per-kill Storyweight (mid-combat kill-XP path).
 
 class_name StageSettlementService
 extends RefCounted
@@ -124,7 +123,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 			"stage_index": stage_index, "base": base, "redo_multiplier": plan["redo_mul"] })
 
 	var payout: Dictionary = econ.settle_stage_complete(
-		base, plan["redo_mul"], logger, t, plan["counts"], plan["ekwan_base"]
+		base, plan["redo_mul"], logger, t, plan["counts"], plan["ekwan_base"], plan["echo_home"]
 	)
 	flow_ctx.request_save("stage.reward")
 
@@ -180,7 +179,7 @@ func preview() -> Dictionary:
 		return {}
 	var plan := _plan(realm_model, stage_ref, stage_index, null, 0)
 	var rows := EconomyService.stage_payout_rows(
-		plan["base"], plan["redo_mul"], plan["counts"], plan["ekwan_base"])
+		plan["base"], plan["redo_mul"], plan["counts"], plan["ekwan_base"], plan["echo_home"])
 	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
 
 
@@ -197,7 +196,33 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 		"redo_mul":       RewardCalc.redo_multiplier(int(realm_model.get("run_count", 0)), reward_cfg),
 		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
+		"echo_home":      _echo_home(realm_model, reward_cfg),
 	}
+
+
+## The Echoes stipend input (D-43 to D-45, D-53). With a fight context, the last fight's party
+## Echoes are home or lost. Without one nobody fought, so the whole active party is home.
+func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary) -> Dictionary:
+	var tally := { "alive": 0, "started": 0, "lost": [] }
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx != null:
+		tally = RewardCalc.echo_tally(ectx.actors)
+	else:
+		var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+		var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+		var ids_v: Variant = sanctum.get("active_party_ids", [])
+		var ids: Array = ids_v if ids_v is Array else []
+		var roster_v: Variant = sanctum.get("roster", [])
+		var roster: Array = roster_v if roster_v is Array else []
+		for e_v in roster:
+			if e_v is Dictionary and ids.has(str((e_v as Dictionary).get("id", ""))):
+				tally["started"] += 1
+				tally["alive"] += 1
+	var replay := int(realm_model.get("run_count", 0)) > 0
+	tally["rate"] = int(reward_cfg.get("echo_home_ase", 0))
+	tally["cap"] = int(reward_cfg.get("echo_home_cap_replay" if replay else "echo_home_cap", 0))
+	tally["replay"] = replay
+	return tally
 
 
 # ---------------------------------------------------------------------------

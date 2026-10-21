@@ -129,6 +129,8 @@ it to `""`, so the sentinel is safe).
 
 > V2-ECONOMY-004 Phase 4: a fight pays no Ekwan, so `ekwan_awarded` is `0` on a fight card (the key stays). The stage Ekwan is `stage_payout_ekwan`, beside `stage_payout_ase`, on the stage-ending victory card only. No breakdown row has `currency: "ekwan"`.
 
+> V2-ECONOMY-004 Phase 5.2: a won fight pays 0 Ase and carries no `echoes_alive` row (`echoes_survived` stays for the count chip). The Echoes stipend is the `echoes_alive` row of `stage_payout_rows` (params `alive`, `started`, `lost` names, `cap`, `replay`), on the stage-ending victory card only.
+
 | 9 | `emotion` | `emotion_summary` | A, B, E | Echo stage rows |
 | 10 | `vows` | `vow_outcome`, `newly_unlocked_vows` | A | Vow outcome + Vow discovered + vow chip |
 | 11 | `effects` | `effects` | E | Effects rail extras |

@@ -95,15 +95,16 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 #
 # Two payers, one per cadence:
 #   reward_encounter_complete()  — once per ENCOUNTER, at combat end.
-#       Victory: the echoes-survived bonus, redo-scaled.
+#       Victory: pays nothing (the Echoes stipend is a stage payout row).
 #       Defeat:  the 25% consolation, paid ONCE per situation (the caller's `consolation_eligible`).
 #   settle_stage_complete()      — once per STAGE, in `flow.complete_stage`, behind the stage's
-#       `settlement_receipt` stamp. Objective weights (and Ekwan), redo-scaled.
+#       `settlement_receipt` stamp. Objective weights (and Ekwan), redo-scaled, plus the Echoes
+#       stipend (D-43, D-44).
 # Speed, enemy kills and the realm virtue pay nothing (D-40, D-49).
 
 ## Encounter-cadence payout. Paid at every combat end, once per encounter.
 ##
-## victory:   on a win pays `roundi(echo_bonus × redo)`; on a loss pays the
+## victory:   a win pays 0 Ase and has no rows; a loss pays the
 ##            `roundi(base × 0.25 × redo)` consolation.
 ## base_reward: the weight of the fought objective (`RewardCalc.consolation_base`). Never paid
 ##            here on a victory. Used for the defeat consolation.
@@ -116,8 +117,6 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 func reward_encounter_complete(
 	victory: bool,
 	base_reward: int,
-	echo_bonus: int,
-	echoes_survived: int,
 	redo_multiplier: float,
 	rank: String,
 	consolation_eligible: bool,
@@ -128,16 +127,8 @@ func reward_encounter_complete(
 	var breakdown: Array  # Array of {label: String, delta: int, currency: String}
 
 	if victory:
-		var pre_redo := echo_bonus
-		total = roundi(float(pre_redo) * redo_multiplier)
-		var redo_penalty := total - pre_redo  # negative or 0
-
+		total = 0
 		breakdown = []
-		if echo_bonus > 0:
-			var ec_label := "%d %s survived" % [echoes_survived, "echo" if echoes_survived == 1 else "echoes"]
-			breakdown.append(_row(ec_label, echo_bonus, "echoes_alive", { "count": echoes_survived }))
-		if redo_penalty < 0:
-			breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
 	elif consolation_eligible:
 		total = roundi(float(base_reward) * 0.25 * redo_multiplier)
 		var base_consolation := roundi(float(base_reward) * 0.25)
@@ -175,6 +166,7 @@ func reward_encounter_complete(
 ## base_reward:  sum of the stage's objective weights (`RewardCalc.base_reward`).
 ## objective_counts: `RewardCalc.objective_counts()`; feeds the `objectives_overcome` params only.
 ## ekwan_base:   `RewardCalc.stage_ekwan()`, the Ekwan of the completed objectives before redo.
+## echo_home:    the Echoes stipend input, see `stage_payout_rows`. Empty means no stipend row.
 ## redo_multiplier: same value the encounter payout used; scales the base exactly as the single
 ##               combined payer scaled it.
 ## Returns { ase_awarded, ekwan_awarded, breakdown }.
@@ -184,9 +176,10 @@ func settle_stage_complete(
 	logger: StructuredLogger,
 	t: int,
 	objective_counts: Dictionary = {},
-	ekwan_base: int = 0
+	ekwan_base: int = 0,
+	echo_home: Dictionary = {}
 ) -> Dictionary:
-	var rows := stage_payout_rows(base_reward, redo_multiplier, objective_counts, ekwan_base)
+	var rows := stage_payout_rows(base_reward, redo_multiplier, objective_counts, ekwan_base, echo_home)
 	var total: int = rows["ase"]
 	var breakdown: Array = rows["breakdown"]
 
@@ -206,9 +199,13 @@ func settle_stage_complete(
 ## The Ase rows of the stage payout, and the Ase and Ekwan totals. The ONE producer:
 ## `settle_stage_complete` pays from it and `StageSettlementService.preview` shows it, so the two
 ## cannot drift. Ekwan has no rows (D-32). Like the Ase base, it is rounded once on the stage sum.
+## `echo_home` = { alive, started, lost: Array of names, rate, cap, replay }. The Echoes stipend is
+## `mini(alive * rate, cap)`, outside the redo multiplier (D-53). It adds an `echoes_alive` row
+## whenever `started` > 0, even at 0 Ase, so the card can show who was lost.
 ## Pure. Returns { breakdown: Array, ase: int, ekwan: int }.
 static func stage_payout_rows(base_reward: int, redo_multiplier: float,
-		objective_counts: Dictionary = {}, ekwan_base: int = 0) -> Dictionary:
+		objective_counts: Dictionary = {}, ekwan_base: int = 0,
+		echo_home: Dictionary = {}) -> Dictionary:
 	var base_after_redo := roundi(float(base_reward) * redo_multiplier)
 	var redo_penalty := base_after_redo - base_reward  # negative or 0
 	var breakdown: Array = []
@@ -218,9 +215,19 @@ static func stage_payout_rows(base_reward: int, redo_multiplier: float,
 	}))
 	if redo_penalty < 0:
 		breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
+	var stipend := 0
+	var started := int(echo_home.get("started", 0))
+	if started > 0:
+		var alive := int(echo_home.get("alive", 0))
+		var cap := int(echo_home.get("cap", 0))
+		stipend = mini(alive * int(echo_home.get("rate", 0)), cap)
+		breakdown.append(_row("Echoes home", stipend, "echoes_alive", {
+			"alive": alive, "started": started, "lost": (echo_home.get("lost", []) as Array).duplicate(),
+			"cap": cap, "replay": bool(echo_home.get("replay", false)),
+		}))
 	return {
 		"breakdown": breakdown,
-		"ase": base_after_redo,
+		"ase": base_after_redo + stipend,
 		"ekwan": roundi(float(ekwan_base) * redo_multiplier),
 	}
 

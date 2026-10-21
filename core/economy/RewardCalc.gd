@@ -87,6 +87,28 @@ static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
 	return maxf(penalty_floor, 1.0 - float(run_count) * penalty_per_run)
 
 
+## The party Echoes of a fight: `alive` (not dead), `started` (all of them) and `lost` (display
+## names of the dead ones). Temporary allies and the guide spirit are not roster Echoes (D-45).
+## Downed and withdrawn Echoes count as home: only `is_dead` removes one.
+static func echo_tally(actors: Array) -> Dictionary:
+	var alive := 0
+	var started := 0
+	var lost: Array = []
+	for a_v in actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) != "echo" or bool(a.get("is_ally", false)) \
+				or bool(a.get("is_spirit", false)):
+			continue
+		started += 1
+		if bool(a.get("is_dead", false)):
+			lost.append(str(a.get("name", "")))
+		else:
+			alive += 1
+	return { "alive": alive, "started": started, "lost": lost }
+
+
 ## Compute the fight's reward values from the encounter result.
 ## Returns a dict ready for EconomyService.reward_encounter_complete().
 ##
@@ -115,7 +137,6 @@ static func compute(
 	var base := base_reward(objectives, reward_cfg, logger, t, MODE_COMPLETED_PLUS_FOUGHT, fought_index)
 	# The fought objective is already inside `base`, so it logs there; no second log here.
 	var consolation_base := base_reward(objectives, reward_cfg, null, t, MODE_FOUGHT, fought_index)
-	var echo_bonus := echoes_survived * int(reward_cfg.get("echo_survived_bonus", 10))
 
 	var is_pace    := PaceService.is_pace_mode(resolution_mode, guide_mode) and par_rounds > 0.0
 	var full_ratio := float(reward_cfg.get("pace_full_ratio", 1.1))
@@ -141,7 +162,6 @@ static func compute(
 	return {
 		"base_reward":       base,
 		"consolation_base":  consolation_base,
-		"echo_bonus":        echo_bonus,
 		"pace_mode":         is_pace,
 		# A defeat carries no pace state (design §7).
 		"pace_state":        PaceService.pace_state(round_ended, par_rounds, full_ratio, zero_ratio) \

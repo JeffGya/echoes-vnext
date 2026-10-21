@@ -29,6 +29,9 @@ const _TYPE_EKWAN := {
 
 # Stage base (stage = [type, boss stub]; type boss = [boss] alone) -> run_count -> Ase.
 # Ase = roundi(base x redo). The stage index and the realm virtue add nothing (D-40).
+# The Echoes stipend is not in this table: `_settle_cell` settles with no fight, and the stage
+# environment has a party of one Echo, so the stipend is one Echo x 2 Ase on every cell.
+const _ONE_ECHO_STIPEND := 2
 const _STAGE_ASE := {
 	0:  { 0: 0, 1: 0 },
 	8:  { 0: 8, 1: 7 },
@@ -89,6 +92,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/cause_old_saved_row_replays", Callable(EconomyCharacterizationTests, "_t_cause_old_row_replays"))
 	runner.register_test("econ_char/stage_preview_equals_paid", Callable(EconomyCharacterizationTests, "_t_stage_preview"))
 	runner.register_test("econ_char/stage_payout_keys_on_real_victory_card", Callable(EconomyCharacterizationTests, "_t_stage_payout_card"))
+	runner.register_test("econ_char/stipend_per_echo_and_cap", Callable(EconomyCharacterizationTests, "_t_stipend_counts"))
+	runner.register_test("econ_char/stipend_replay_cap", Callable(EconomyCharacterizationTests, "_t_stipend_replay"))
+	runner.register_test("econ_char/stipend_dead_echo_and_no_encounter", Callable(EconomyCharacterizationTests, "_t_stipend_dead_and_none"))
+	runner.register_test("econ_char/stipend_dead_echo_on_real_card", Callable(EconomyCharacterizationTests, "_t_stipend_real_card"))
 	runner.register_test("econ_char/ledger_seen_default_false_and_action_sets_it", Callable(EconomyCharacterizationTests, "_t_ledger_seen"))
 
 
@@ -144,7 +151,7 @@ static func _encounter_pay(objectives: Array, victory: bool, run_count: int, fou
 	var econ := EconomyService.new(save)
 	var paid: Dictionary = econ.reward_encounter_complete(
 		victory,
-		int(rd.get("consolation_base", 0)), int(rd.get("echo_bonus", 0)), 2,
+		int(rd.get("consolation_base", 0)),
 		float(rd.get("redo_multiplier", 1.0)), str(rd.get("rank", "F")), true, _logger(), 1)
 	paid["base_reward"] = int(rd.get("base_reward", 0))
 	paid["balance_ase"] = int((save["economy"] as Dictionary)["ase"])
@@ -240,9 +247,9 @@ static func _t_multi_objective() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 	var out := _settle_cell(env, objs, 0, 0, 1)
-	if int(out.get("ase_awarded", -1)) != 25 or int(out.get("ekwan_awarded", -1)) != 8 \
+	if int(out.get("ase_awarded", -1)) != 25 + _ONE_ECHO_STIPEND or int(out.get("ekwan_awarded", -1)) != 8 \
 			or _breakdown_delta(out, "Base objectives") != 25:
-		mismatches.append("stage paid %s/%s base row %d, expected 25/8 base row 25" \
+		mismatches.append("stage paid %s/%s base row %d, expected 27/8 base row 25" \
 			% [str(out.get("ase_awarded")), str(out.get("ekwan_awarded")), _breakdown_delta(out, "Base objectives")])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
@@ -336,6 +343,7 @@ const _REMOVED_NAMES := [
 	"enemy_defeated_bonus", "virtue_bonuses", "stage_index_bonus_per", "realm_order_multiplier",
 	"calculate_stage_reward", "pace_bonus_pct", "max_bonus_ase", "bonus_ase", "pace_bonus",
 	"bonus_earned", "bonus_missed", "enemy_bonus", "pace_stage_base",
+	"echo_survived_bonus", "echo_bonus",
 ]
 
 static func _t_removed_keys_absent() -> Dictionary:
@@ -414,7 +422,7 @@ static func _t_stage_payer_matrix() -> Dictionary:
 			for i in range(_STAGE_COUNT):
 				n += 1
 				var out := _settle_cell(env, _objectives(type), i, run_count, n)
-				var want_ase: int = _STAGE_ASE[base][run_count]
+				var want_ase: int = _STAGE_ASE[base][run_count] + _ONE_ECHO_STIPEND
 				var want_ekwan: int = _TYPE_EKWAN[type] if run_count == 0 else _TYPE_EKWAN_RUN1[type]
 				var cell := "%s run %d stage %d" % [type, run_count, i]
 				if int(out.get("ase_awarded", -1)) != want_ase or int(out.get("balance_ase", -1)) != want_ase:
@@ -554,10 +562,10 @@ static func _t_ekwan_replay() -> Dictionary:
 # Encounter payer (EconomyService.reward_encounter_complete)
 # ---------------------------------------------------------------------------
 
-## Fight: 2 of 2 echoes, a no-pace mode. Victory pays 20 x redo.
-## The stage base, the stage index and the enemy count never enter a victory payout.
+## Fight: 2 of 2 echoes, a no-pace mode. A won fight pays 0 Ase and has no rows (D-43, D-44):
+## the Echoes stipend is a stage payout row.
 static func _t_encounter_victory() -> Dictionary:
-	var want := { 0: 20, 1: 18 }
+	var want := { 0: 0, 1: 0 }
 	var mismatches: Array = []
 	for type in ObjectiveModel.VALID_TYPES:
 		for run_count in [0, 1]:
@@ -568,6 +576,8 @@ static func _t_encounter_victory() -> Dictionary:
 				mismatches.append("%s run %d victory ekwan %d, expected 0 (D-28)" % [type, run_count, int(paid["ekwan_awarded"])])
 			if int(paid["base_reward"]) != _expected_base(type):
 				mismatches.append("%s base_reward %d" % [type, int(paid["base_reward"])])
+			if not (paid["breakdown"] as Array).is_empty():
+				mismatches.append("%s run %d victory has rows %s" % [type, run_count, JSON.stringify(paid["breakdown"])])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
@@ -775,12 +785,12 @@ static func _t_stage_payer_completed_only() -> Dictionary:
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var out := _settle_cell(env, [_obj(0, "combat", true), _obj(1, "shrine", false), boss], 0, 0, 1)
 	var mismatches: Array = []
-	if _breakdown_delta(out, "Base objectives") != 10 or int(out.get("ase_awarded", -1)) != 10:
-		mismatches.append("one of two objectives done: base row %d, ase %s, expected 10 / 10" \
+	if _breakdown_delta(out, "Base objectives") != 10 or int(out.get("ase_awarded", -1)) != 10 + _ONE_ECHO_STIPEND:
+		mismatches.append("one of two objectives done: base row %d, ase %s, expected 10 / 12" \
 			% [_breakdown_delta(out, "Base objectives"), str(out.get("ase_awarded"))])
 	out = _settle_cell(env, [_obj(0, "combat", false), boss.duplicate(true)], 0, 0, 2)
-	if _breakdown_delta(out, "Base objectives") != 0 or int(out.get("ase_awarded", -1)) != 0:
-		mismatches.append("nothing done: base row %d, ase %s, expected 0 / 0" \
+	if _breakdown_delta(out, "Base objectives") != 0 or int(out.get("ase_awarded", -1)) != _ONE_ECHO_STIPEND:
+		mismatches.append("nothing done: base row %d, ase %s, expected 0 / 2" \
 			% [_breakdown_delta(out, "Base objectives"), str(out.get("ase_awarded"))])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
@@ -890,23 +900,20 @@ static func _row_by_cause(breakdown: Array, cause: String) -> Dictionary:
 ## Pays one encounter straight through EconomyService with explicit inputs.
 static func _pay(victory: bool, redo: float, eligible: bool = true) -> Dictionary:
 	var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
-	return econ.reward_encounter_complete(victory, 10, 20, 2, redo, "B", eligible, _logger(), 1)
+	return econ.reward_encounter_complete(victory, 10, redo, "B", eligible, _logger(), 1)
 
 
 static func _t_cause_encounter_rows() -> Dictionary:
 	var m: Array = []
-	var bd: Array = _pay(true, 0.9)["breakdown"]
-	var echoes := _row_by_cause(bd, "echoes_alive")
-	if int((echoes.get("params", {}) as Dictionary).get("count", -1)) != 2 or int(echoes.get("delta", -1)) != 20:
-		m.append("echoes_alive row: %s" % JSON.stringify(echoes))
-	for removed in ["enemies_defeated", "bonus_earned", "bonus_missed"]:
-		if not _row_by_cause(bd, removed).is_empty():
-			m.append("a win shows the removed %s row" % removed)
+	for redo in [0.9, 1.0]:
+		var win := _pay(true, redo)
+		if int(win["ase_awarded"]) != 0 or not (win["breakdown"] as Array).is_empty():
+			m.append("a won fight at redo %s paid %s rows %s" % [str(redo), str(win["ase_awarded"]), JSON.stringify(win["breakdown"])])
+	var bd: Array = _pay(false, 0.9)["breakdown"]
 	var replay := _row_by_cause(bd, "replay")
 	if replay.is_empty() or not is_equal_approx(float((replay.get("params", {}) as Dictionary).get("factor", 0.0)), 0.9):
-		m.append("replay row or factor: %s" % JSON.stringify(replay))
-	var no_replay: Array = _pay(true, 1.0)["breakdown"]
-	if not _row_by_cause(no_replay, "replay").is_empty():
+		m.append("defeat replay row or factor: %s" % JSON.stringify(replay))
+	if not _row_by_cause(_pay(false, 1.0)["breakdown"], "replay").is_empty():
 		m.append("replay row present at redo 1.0 (run_count 0)")
 	var defeat: Array = _pay(false, 0.9)["breakdown"]
 	var parts: Array = []
@@ -1217,13 +1224,13 @@ static func _t_speed_pays_no_ase() -> Dictionary:
 		var rd := RewardCalc.compute(true, [_obj(0, "combat", true)], 2, 2, r, 0, cfg,
 			EncounterResolutionModes.COMBAT, _PAR, "", null, 0, 0)
 		var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
-		var res := econ.reward_encounter_complete(true, int(rd["consolation_base"]), int(rd["echo_bonus"]), 2,
+		var res := econ.reward_encounter_complete(true, int(rd["consolation_base"]),
 			float(rd["redo_multiplier"]), str(rd["rank"]), true, _logger(), 1)
 		paid.append(int(res["ase_awarded"]))
-		if (res["breakdown"] as Array).size() != 1:
-			m.append("round %d: expected one row, got %s" % [r, JSON.stringify(res["breakdown"])])
-	if paid != [20, 20, 20]:
-		m.append("full / partial / slow paid %s, expected 20 each" % str(paid))
+		if not (res["breakdown"] as Array).is_empty():
+			m.append("round %d: expected no rows, got %s" % [r, JSON.stringify(res["breakdown"])])
+	if paid != [0, 0, 0]:
+		m.append("full / partial / slow paid %s, expected 0 each" % str(paid))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
@@ -1281,7 +1288,7 @@ static func _t_stage_preview() -> Dictionary:
 ## FlowEncounterState.build_final_snapshot. The fight itself is not played: the combat result is
 ## set directly, which is all build_final_snapshot reads. Stage 0 holds `objectives`; objective 0
 ## is the fought one, linked to situation "sit.econ".
-static func _final_card(tag: String, objectives: Array, victory: bool) -> Dictionary:
+static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter("combat", tag)
 	if env.is_empty():
 		return {}
@@ -1297,6 +1304,12 @@ static func _final_card(tag: String, objectives: Array, victory: bool) -> Dictio
 	}
 	ectx.combat_result = { "victory": victory, "reason": "all_enemies_defeated", "round_ended": 4 }
 	ectx.combat_state["combat_over"] = true
+	if kill_first_echo:
+		for a_v in ectx.actors:
+			if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "echo":
+				(a_v as Dictionary)["is_dead"] = true
+				env["dead_name"] = str((a_v as Dictionary).get("name", ""))
+				break
 	if victory:
 		env["runtime"]._stage_explore_session_service().resolve_combat_situation_and_objective(
 			5, true, true, "stage.combat_resolved", "econ_char pre-snapshot", true)
@@ -1340,6 +1353,19 @@ static func _t_stage_payout_card() -> Dictionary:
 		if paid_ekwan != int(data["stage_payout_ekwan"]) or paid_ekwan != 8:
 			m.append("(a) flow.complete_stage paid ekwan %d, card previewed %s, expected 8" \
 				% [paid_ekwan, str(data["stage_payout_ekwan"])])
+		# D-43, D-44: the harness party is 5 Echoes, all home: the stage row pays 10, the fight pays 0.
+		var home := _row_by_cause(data["stage_payout_rows"], "echoes_alive")
+		var hp: Dictionary = home.get("params", {})
+		if int(home.get("delta", -1)) != 10 or int(hp.get("alive", -1)) != 5 or int(hp.get("started", -1)) != 5 \
+				or not (hp.get("lost", [1]) as Array).is_empty() or int(hp.get("cap", -1)) != 10 or bool(hp.get("replay", true)):
+			m.append("(a) echoes_alive stage row %s, expected 10 Ase, 5 of 5, no lost, cap 10, no replay" % JSON.stringify(home))
+		if int(data["stage_payout_ase"]) != 25 + 10:
+			m.append("(a) stage_payout_ase %s, expected 35" % str(data["stage_payout_ase"]))
+		if int(data.get("ase_awarded", -1)) != 0 or not _row_by_cause(data.get("reward_breakdown", []), "echoes_alive").is_empty():
+			m.append("(a) won fight card ase_awarded %s rows %s, expected 0 and no echoes_alive row" \
+				% [str(data.get("ase_awarded")), JSON.stringify(data.get("reward_breakdown"))])
+		if int(data.get("echoes_survived", -1)) != 5:
+			m.append("(a) echoes_survived %s, expected 5 (the chip still reads it)" % str(data.get("echoes_survived")))
 		# D-28: the fight itself paid no Ekwan, so the card's own figure is 0.
 		if int(data.get("ekwan_awarded", -1)) != 0:
 			m.append("(a) fight card ekwan_awarded %s, expected 0" % str(data.get("ekwan_awarded")))
@@ -1359,4 +1385,134 @@ static func _t_stage_payout_card() -> Dictionary:
 		m.append("(c) fixture: remaining %s victory %s" % [str(data.get("objectives_remaining")), str(data.get("victory"))])
 	if data.has("stage_payout_rows") or data.has("stage_payout_ase") or data.has("stage_payout_ekwan"):
 		m.append("(c) defeat card carries stage_payout keys")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+# ---------------------------------------------------------------------------
+# Echoes stipend (Phase 5.2: D-43 to D-46, D-53, D-81)
+# ---------------------------------------------------------------------------
+
+static func _echo_actor(id: String, dead: bool, extra: Dictionary = {}) -> Dictionary:
+	var a := { "id": id, "name": "Name " + id, "faction": "echo", "is_dead": dead }
+	a.merge(extra, true)
+	return a
+
+
+## The stage preview of a stage with one completed combat objective, on a bare context: no
+## booted runtime. `actors` null means no encounter context (nobody fought); `party` then sizes
+## the active party in the save.
+static func _stipend_preview(actors: Variant, party: int, run_count: int) -> Dictionary:
+	var objs: Array = [_obj(0, "combat", true)]
+	var ctx := _stage_ctx(_config(), objs)
+	var realm: Dictionary = (ctx.save_data["realms"] as Dictionary)["realm.01"]
+	realm["run_count"] = run_count
+	var roster: Array = []
+	var ids: Array = []
+	for i in party:
+		roster.append({ "id": "e%d" % i, "name": "Name e%d" % i })
+		ids.append("e%d" % i)
+	ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids }
+	if actors != null:
+		ctx.encounter_ctx = EncounterContext.new()
+		ctx.encounter_ctx.actors = actors
+	return StageSettlementService.new(ctx, ctx.config_service, null, null).preview()
+
+
+static func _stipend_row(preview: Dictionary) -> Dictionary:
+	return _row_by_cause(preview.get("rows", []), "echoes_alive")
+
+
+## D-43: 1 to 5 Echoes home pay 2, 4, 6, 8, 10. More than 5 stay at the cap of 10.
+static func _t_stipend_counts() -> Dictionary:
+	var m: Array = []
+	var want := { 1: 2, 2: 4, 3: 6, 4: 8, 5: 10, 6: 10, 7: 10 }
+	for n in want:
+		var actors: Array = []
+		for i in n:
+			actors.append(_echo_actor("e%d" % i, false))
+		var pv := _stipend_preview(actors, 0, 0)
+		var row := _stipend_row(pv)
+		var p: Dictionary = row.get("params", {})
+		if int(row.get("delta", -1)) != want[n] or int(p.get("alive", -1)) != n or int(p.get("started", -1)) != n \
+				or int(p.get("cap", -1)) != 10 or bool(p.get("replay", true)):
+			m.append("%d home: row %s, expected delta %d" % [n, JSON.stringify(row), want[n]])
+		if int(pv.get("ase", -1)) != 10 + int(want[n]):
+			m.append("%d home: stage ase %s, expected %d" % [n, str(pv.get("ase")), 10 + int(want[n])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-53: on a replay the rate stays 2 and the cap falls to 5. The stipend ignores the redo factor.
+static func _t_stipend_replay() -> Dictionary:
+	var m: Array = []
+	var want := { 1: 2, 2: 4, 3: 5, 5: 5 }
+	for n in want:
+		var actors: Array = []
+		for i in n:
+			actors.append(_echo_actor("e%d" % i, false))
+		var pv := _stipend_preview(actors, 0, 1)
+		var row := _stipend_row(pv)
+		var p: Dictionary = row.get("params", {})
+		if int(row.get("delta", -1)) != want[n] or int(p.get("cap", -1)) != 5 or not bool(p.get("replay", false)):
+			m.append("%d home on a replay: row %s, expected delta %d, cap 5" % [n, JSON.stringify(row), want[n]])
+		# base 10 x 0.9 = 9, plus the stipend untouched by the factor.
+		if int(pv.get("ase", -1)) != 9 + int(want[n]):
+			m.append("%d home on a replay: stage ase %s, expected %d" % [n, str(pv.get("ase")), 9 + int(want[n])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## One dead Echo: alive, started and the lost NAME. Allies and the spirit never count. The
+## no-encounter path counts the whole active party as home (ASSUMED in phase5-2-build.md).
+static func _t_stipend_dead_and_none() -> Dictionary:
+	var m: Array = []
+	var actors: Array = [
+		_echo_actor("a", false), _echo_actor("b", true), _echo_actor("c", false),
+		_echo_actor("ally", false, { "is_ally": true }), _echo_actor("sp", true, { "is_spirit": true }),
+		{ "id": "en", "name": "Enemy", "faction": "enemy", "is_dead": true },
+	]
+	var row := _stipend_row(_stipend_preview(actors, 0, 0))
+	var p: Dictionary = row.get("params", {})
+	if int(row.get("delta", -1)) != 4 or int(p.get("alive", -1)) != 2 or int(p.get("started", -1)) != 3 \
+			or str(p.get("lost", [])) != str(["Name b"]):
+		m.append("one dead of three: row %s, expected 4 Ase, 2 of 3, lost [Name b]" % JSON.stringify(row))
+	for key in (p.keys() if p is Dictionary else []):
+		if str(key).contains("id"):
+			m.append("params carry an id-like key: %s" % str(key))
+	var all_dead := _stipend_row(_stipend_preview([_echo_actor("a", true)], 0, 0))
+	if all_dead.is_empty() or int(all_dead.get("delta", -1)) != 0 \
+			or str((all_dead.get("params", {}) as Dictionary).get("lost", [])) != str(["Name a"]):
+		m.append("all dead: row %s, expected a delta-0 row naming the lost Echo" % JSON.stringify(all_dead))
+	var none := _stipend_row(_stipend_preview(null, 3, 0))
+	var np: Dictionary = none.get("params", {})
+	if int(none.get("delta", -1)) != 6 or int(np.get("alive", -1)) != 3 or int(np.get("started", -1)) != 3 \
+			or not (np.get("lost", [1]) as Array).is_empty():
+		m.append("no-encounter, party of 3: row %s, expected 6 Ase, 3 of 3" % JSON.stringify(none))
+	if not _stipend_row(_stipend_preview(null, 0, 0)).is_empty():
+		m.append("an empty party still gets a stipend row")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The real stage-ending victory card with one Echo dead: the row names it, the preview equals
+## what flow.complete_stage pays, and the fight itself pays nothing.
+static func _t_stipend_real_card() -> Dictionary:
+	var m: Array = []
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var env := _final_card("econ_char_card_dead", [_req(0, "combat", false), _req(1, "shrine", true), boss], true, true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var data: Dictionary = env["card"]["data"]
+	var row := _row_by_cause(data.get("stage_payout_rows", []), "echoes_alive")
+	var p: Dictionary = row.get("params", {})
+	if int(row.get("delta", -1)) != 8 or int(p.get("alive", -1)) != 4 or int(p.get("started", -1)) != 5 \
+			or str(p.get("lost", [])) != str([str(env.get("dead_name", "?"))]):
+		m.append("one dead of five: row %s, expected 8 Ase, 4 of 5, lost [%s]" % [JSON.stringify(row), str(env.get("dead_name"))])
+	if int(data.get("echoes_survived", -1)) != 4:
+		m.append("echoes_survived %s, expected 4" % str(data.get("echoes_survived")))
+	if int(data.get("ase_awarded", -1)) != 0:
+		m.append("the won fight paid %s Ase at fight level, expected 0" % str(data.get("ase_awarded")))
+	var runtime: FlowRuntime = env["runtime"]
+	var before := int(runtime.get_save_data()["economy"]["ase"])
+	runtime.dispatch({ "type": "flow.complete_stage" })
+	var paid := int(runtime.get_save_data()["economy"]["ase"]) - before
+	if paid != int(data.get("stage_payout_ase", -2)) or paid != 25 + 8:
+		m.append("flow.complete_stage paid %d, card previewed %s, expected 33" % [paid, str(data.get("stage_payout_ase"))])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
