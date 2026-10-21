@@ -353,3 +353,360 @@ Backend committed as ONE commit `4712518` (not pushed): the phases overlap in th
 into clean per-phase commits after the fact; each moved value keeps one named cause in `phase2-attribution.md`,
 `phase3a-attribution.md` and D-21 to D-34. UI session `payout-explain-ui` got "GO: backend verified": it merges the backend branch
 into its own, builds, and reports its last commit; the backend session merges the UI branch back; Jeff opens one PR.
+
+## D-36 — Phase 5 targets (2026-10-21)
+
+**Answer (Jeff):**
+1. The first summon takes about 1 to 3 stages. After that, about one summon per 2 stages.
+2. Targets are also wanted for a called summon and a skill unlock. A skill unlock may cost "even higher" than today.
+   Everything must make sense together with accrual (online and offline Ase) and rewards.
+3. Advice wanted on simplifying the virtue bonus, fight bonuses, pace bonus and replay. Jeff's intent: "an XCOM style reward system"
+   (the phrase is not defined; the advice agent states its reading and asks one confirming question).
+
+**Process:** design advice in two rounds (`sr-game-designer` with the game-mechanics-designer and game-design skills, then
+`game-feel-developer` reading round 1 and building on it). Then a tuning proposal; Jeff approves each number.
+Open: which summon grade "a summon" means (uncalled 60, called 150, chosen 400).
+
+## D-37 — "A summon" means the uncalled summon (2026-10-21)
+
+**Answer (Jeff):** The cadence target (first summon in about 1 to 3 stages, then one per 2 stages) is for the UNCALLED summon (60 Ase).
+Called (150) and chosen (400) are special cases. They must not be easily attainable. Their cadence is much larger.
+Their target numbers are not set. The design advice proposes a range; Jeff approves.
+
+## D-38 — Pre-entry reward: an estimate in the stage overview, not an exact promise (2026-10-21)
+
+**Answer (Jeff):** Today the player does not see the reward before entering a stage, and no exact promise is wanted now.
+Items and other rewards may be seen or estimated before entering later. An ESTIMATE of the Ase and Ekwan to earn, shown in the
+stage overview before entering, "would be nice".
+
+**Effect:** not built in Part A (one story, one subject). It needs its own design: what an estimate may say without breaking hidden
+objectives and scouting (GDD §20.7, §20.8), and a backend read of expected rewards. The feel review (round 2) advises on the honest
+form of an estimate. Open: owner story, UI design. No Notion write without Jeff's yes.
+
+## D-39 — "First summon" is the third Echo, from about 0 Ase (2026-10-21)
+
+**Answer (Jeff):** Confirmed (GDD §20.7, §22.4 step 4, §20.12 as read by the feel review): the opening Ase pays for the second Echo before
+stage 0. The player enters stage 0 with about 0 Ase. "First summon in 1 to 3 stages" means the third Echo. The round 1 cadence table
+(52 Ase in hand) is superseded by round 2.
+
+## D-40 — Remove the enemy bonus and the virtue bonus (2026-10-21)
+
+**Answer (Jeff):** Remove both (both advice agents recommend it).
+- Enemy bonus (5 Ase per enemy, `enemy_defeated_bonus`) and the `enemies_defeated` row leave the payout.
+- Virtue bonus (`virtue_bonuses`, `stage_index_bonus_per`, the realm-order multiplier inputs it used, `RealmService.calculate_stage_reward`) and the
+  `realm_virtue` row leave the payout.
+- This is a removal under the AGENTS.md exception: full-repo audit of `core/`, `ui/`, `tests/`, `docs/`, `scripts/`, `data/`; migrate every consumer in the
+  same change; no alias; say so in the story writeup. The rank ratio (uses `enemies x 5`) must be re-based (see next decisions).
+- The UI session is told: rows `enemies_defeated` and `realm_virtue` and their causes are removed.
+Open: what the realm scale becomes (the realm-order multiplier), the Echoes-alive amount, the bonus maximum, replay, retreat price.
+
+## D-41 — Echoes alive: a small capped stipend, shown as a count (2026-10-21)
+
+**Answer (Jeff):** Keep an Ase payment per surviving Echo, shown as a count ("2 of 2"). It is meant to be a stipend: with permadeath, the
+player should be rewarded and incentivized to keep Echoes alive. It must NOT be a game-changing amount, and it is CAPPED.
+- A full party pays about 10 Ase in total at most. For each member fewer, the total falls by a percentage. A party of 2 has a different
+  maximum, "let's say 4 maybe".
+- To be rechecked with the feel agent (numbers, curve, count display).
+- Facts: `data.sanctum.party_max_size` = 5 (the party cap in config). So "full party" = 5 Echoes unless Jeff says otherwise.
+Open: the exact curve for 1 to 5 Echoes; whether the percentage applies to Echoes alive at the end or to Echoes lost.
+
+## D-42 — Goal statement: keeping Echoes alive must be rewarded and feel rewarding (2026-10-21)
+
+**Statement (Jeff):** The goal of the game is to keep your Echoes alive and guide them to complete their stories and grow. Keeping them
+alive should be rewarded and should FEEL rewarding, as part of the game and the economy.
+
+**Effect:** This is a design pillar for the reward rows and the tuning. D-41 (a small, capped Ase stipend per surviving Echo) is one
+channel, not the only one. The advice agents propose how survival is rewarded and felt (feedback, readability, other canon channels such as
+growth), without inventing mechanics, as options for Jeff. Open: whether survival also pays in a non-Ase channel (growth), a Part A scope question.
+
+## D-43 — Echoes alive stipend: 2 Ase per Echo, cap 10 (2026-10-21)
+
+**Answer (Jeff):** 2 Ase per Echo alive at the end of a win, capped at 10 (1 to 5 Echoes pay 2, 4, 6, 8, 10). Count shown as "home N of M"
+(display and copy are the UI session's and Jeff's). Count Echoes alive at the end, shown against the Echoes started.
+Source: `phase5-echoes-alive-recheck.md`. Open sub-decisions: per fight or once per stage; downed or withdrawn counts as alive; no stipend on a retreat;
+stipend excluded from the replay factor and the realm scale; retreat price.
+
+## D-44 — Echoes stipend is paid once per stage (2026-10-21)
+
+**Answer (Jeff):** The stipend (D-43) is paid ONCE per stage, with the stage payout on the stage-ending card, up to 10 Ase.
+Mid-stage fights show the count only. Effect: the `echoes_alive` row moves from the fight rows to `stage_payout_rows` (stage payer and preview),
+and the preview must equal what `flow.complete_stage` pays. Assumed, to confirm with the Phase 5 build: the count is the Echoes alive at the
+stage-ending win, against the party that started that stage. UI session heads-up sent.
+
+## D-45 — "Home" means not dead (2026-10-21)
+
+**Answer (Jeff):** Only dead Echoes do not count. Downed or withdrawn Echoes count as home. A mechanics-developer confirms the death state
+in code (the exact field) before the build.
+
+## D-46 — Retreat price about 10 Ase; no stipend on a retreat (2026-10-21)
+
+**Answer (Jeff):** The retreat costs about 10 Ase (today 30, `data.combat.retreat_ase_cost`). A retreat pays no Echoes stipend (it is not a stage-ending win);
+the partial payout of D-14 stays. Exact value 10 unless Jeff says otherwise; the tuning proposal checks it against the cadence.
+Open: what the code does when the balance is below the retreat price (mechanics-developer reads it).
+
+## D-47 — Quick-win bonus: open; Jeff wants risk-taking encouraged, perhaps through the rank (2026-10-21)
+
+**Statement (Jeff):** Torn. He wants players to risk their Echoes and find the balance, and to not always take the safe route, accepting that
+choices sometimes bring loss. He agrees that handled wrong the bonus reads as a penalty. A speed bonus makes sense "sort of", but it should
+perhaps be part of the ranking system.
+
+**Tension with D-42** (keeping Echoes alive is the goal): the design must make risk a visible, fair CHOICE with stakes, not a trap, and must not
+pay more for losing Echoes. Not decided. Advice requested from the designer, then the feel agent (rank-based bonus, how rank is computed after
+the D-40 re-base, what speed and survival each contribute to rank, what the player sees before the fight).
+
+## D-48 — Design leads; scope is judged at build time (2026-10-21)
+
+**Statement (Jeff):** Do not worry about scope while designing. When the work reaches the build stage, then scope matters. The first priority is always a
+clear, engaging and fun game.
+**Effect:** Advice agents and questions must rank options by game quality (clarity, engagement, fun, the Echoes pillar), not by size of work. Scope and cost
+appear only in the build plan.
+
+## D-49 — Quick-win bonus: Part A pays nothing in Ase for speed (R0); the rank design stays open (2026-10-21)
+
+**Answer (Jeff):** R0. Part A pays no Ase for speed. Win rows: objectives, Echoes home (stipend), replay or consolation when they apply. The rank is re-based
+internally (win 0.40, home share 0.40, pace 0.20), no Ase attached; survival is the largest term.
+**Design reason (not a scope reason):** no player action is known that trades speed for safety, so a "Swift" reward would read as luck, not as a fair risk choice
+(feel review). The agents' option C (marks "All home" and "Swift", rank pay, Thread rule) stays the design target for the rank, pending a probe for a lever.
+**Note:** the question was framed partly by scope. Under D-48, Jeff confirms or corrects this decision on its design merits.
+
+## D-50 — A death always compromises the stage Thread (2026-10-21)
+
+**Answer (Jeff):** Any dead Echo in a stage makes that stage's Thread "compromised", whatever the speed (GDD §14.3; remedy routes in §15.6).
+Today one lost Echo can still give a clean Thread (rank A). This is a design target; the rank/Thread build is a later step. It must be readable to the player
+(the cause shown: which Echo, "home N of M"). Open: the build plan for it (rank story).
+
+## D-51 — Quick goal: show that it exists, not the target (2026-10-21)
+
+**Answer (Jeff):** Before a fight the player sees that a quick win is possible on this objective type (and what it is worth), but NOT the target round.
+This keeps pace-reward D-12 and D-20 (target hidden). Objective types with no pace (protect, endure, the protect variant of guide_spirit) show no quick goal.
+UI and wording are a later step; copy is Jeff's.
+
+## D-52 — Run the risk probe (2026-10-21)
+
+**Answer (Jeff):** Yes. A probe measures whether player choices (directive, formation, any guidance lever that exists) change the pace outcome
+(full, partial, none) and the Echo loss rate over fixed seeds. It decides whether a speed reward can be a fair risk choice (feel review, D-47/D-49).
+No game change. A mechanics-developer builds it; the main chat runs the long parts. Result goes to Jeff with the design options.
+
+## D-53 — What replay is for; replay reduces Ase strongly and halves the Echoes stipend (2026-10-21)
+
+**Answer (Jeff):** Replay is for mastery and story, not farming. It is also for collecting Threads, or trying for higher-quality Threads, which are tied to a virtue.
+A relatively strong reduction on the Ase is acceptable. The Echoes stipend is cut in half on a replay (cap 10 becomes 5).
+**Supersedes** the feel review proposal that the stipend skip the replay factor. D-30 stands (Ekwan follows the replay factor).
+Open: the replay factor value and shape (flat, or the existing ladder with a lower floor); the same factor for Ase and Ekwan; what counts as a replay
+(a completed realm run, `run_count`; a retry of an unresolved stage must not take the factor).
+
+## D-54 — Replay factor: flat 0.35 on Ase objectives and Ekwan (2026-10-21)
+
+**Answer (Jeff):** A flat factor of 0.35 on a replay, for the objective Ase and the Ekwan (one factor, rounded once on the stage sum). The Echoes stipend
+uses its own halving (D-53: cap 5 on a replay). It replaces the ladder (`redo_penalty_per_run`, `redo_penalty_floor`) after the audit.
+Open: what counts as a replay (completed realm run); the retry rule (an unresolved stage must not take the factor); the S-grade-only-on-first-run rule
+in the rank (unchanged, out of scope until the rank story).
+
+## D-55 — Later realms pay more; summon prices should rise with the number of Echoes (2026-10-21)
+
+**Answer (Jeff):** Later realms pay more (a fixed per-realm scale on objective Ase and Ekwan; value in the tuning proposal).
+Summon prices should also rise with the number of Echoes a player has, to keep the balance. Jeff also wants this economy lever to REGULATE POPULATION SIZE.
+He says it might not be part of this story. Under D-48, the design is made now; scope is judged at the build plan.
+Open: the price curve by roster size (and what population range the game wants; GDD roster/party/inventory limits); whether it applies to called and chosen grades;
+interaction with the cadence targets (D-36, D-37, D-39: early cadence stays 1 to 3 stages for the first summon, then about one per 2 stages).
+
+## D-56 — More Directives are wanted: a lever that trades speed for survival (2026-10-21)
+
+**Answer (Jeff):** Agreed with the feel review. The game needs Directives (player intent levers) that add a speed-versus-survival choice. More Directives will be added;
+noted for later work. Today only two exist (`Scout Carefully`, `Seek Signs`), both scouting styles. Not built in this story.
+Effect on this story: the rank/Swift design (D-47, D-49) waits for those Directives; R0 (no Ase for speed) holds until then.
+Recorded in `follow-ups.md`.
+
+## D-57 — Population: a Sanctum VILLAGE, regular size 7 to 12, ceiling about 14 (2026-10-21)
+
+**Answer (Jeff):** The game has a Sanctum village, not a house. The designer's recommendation (P-A: 7 to 10, soft ceiling near 12) is about right, with the ceiling around 14.
+Because of permadeath and rising difficulty, Jeff hopes the population is reduced regularly and stays about 7 to 12 in regular play.
+**Effect:** the summon price curve is built for a typical roster of 7 to 12, with a plateau at the ceiling (about 14). Wording: "village", not "house" (copy is Jeff's).
+The feel review's repairs stand: a plateau (not x1.2 forever), and a visible next price and plain reason. A death lowers the living count and so the next price
+(never shown as a discount). Open: plateau value, called/chosen premium, the opening's Echo 2 affordability.
+
+## D-58 — Opening Ase stays at 52 (2026-10-21)
+
+**Answer (Jeff):** No change. Keep the opening at 52 Ase.
+**Open fact check (mechanics-developer, read-only, before the build):** how the opening affords Echo 2 with 52 Ase when the uncalled price is 60
+(a scripted or free first summon, a different price, or a real shortfall). If a shortfall exists, report it to Jeff; do not change the opening.
+
+## D-59 — Price curve rises to Echo 14, then flat (2026-10-21)
+
+**Answer (Jeff):** The uncalled summon price keeps rising gently up to the ceiling at about Echo 14, then stays flat (about 360 to 430 at the ceiling; exact values in the
+tuning proposal). A large village stays possible (GDD §18.8). The next price and the plain reason are shown to the player.
+
+## D-60 — Called and chosen: a fixed extra over the uncalled price, reviewed after playtest (2026-10-21)
+
+**Answer (Jeff):** Called = uncalled price + a fixed extra; chosen = uncalled price + a larger fixed extra. Start values: called +90 (range to 180), chosen +340 (range to 800)
+as PROPOSAL; reviewed after playtest and raised if called or chosen become routine late. Config keys in `data.summoning`.
+
+## D-61 — Skill unlock 60 / 90 / 120 Ase by Standing, not rising with village size (2026-10-21)
+
+**Answer (Jeff):** Approved: 60 Ase at Standing 3, 90 at Standing 6, 120 at Standing 9 (today 40 for every skill). Does not rise with the number of Echoes.
+Mechanics-developer confirms `ase_cost` is per skill with no code change (`unlock_conditions.ase_cost`).
+
+## D-62 — Working Ase weights: set B doubled (2026-10-21)
+
+**Answer (Jeff):** Approved as the working set; the order is checked with the probe before the player sees it.
+
+| Type | Ase weight |
+|---|---|
+| pursue | 16 |
+| combat | 20 |
+| recover | 24 |
+| protect | 24 |
+| endure | 28 |
+| shrine | 30 |
+| guide_spirit | 32 |
+| boss | 0 |
+
+Ekwan set B (D-29) is unchanged. The probe reports rounds and loss rate per objective type so the order can be judged.
+
+## D-63 — Realm scale: 1.00 / 1.25, then +0.25 per realm (2026-10-21)
+
+**Answer (Jeff):** Approved. `realm.01` = 1.00, `realm.02` = 1.25, later realms add 0.25 (rule: 1 + 0.25 x (position in `realm_order` - 1)). The scale applies to
+objective Ase and Ekwan only, not to the stipend. Replaces the virtue-based realm-order multiplier (removed, D-40).
+
+## D-64 — Village dwellings paid with Ekwan: wanted, out of this story (2026-10-21)
+
+**Answer (Jeff):** Yes, a village capacity limit built with Ekwan (rooms or dwellings) is wanted, alongside the rising summon price. It is out of scope for this story.
+It goes to an open Sanctum story or a new story later. Recorded as follow-up 20. No Notion row without Jeff's yes.
+
+## D-65 — Objective Ase is paid at the stage end; a running tally is under design review (2026-10-21)
+
+**Answer (Jeff):** Pay at the stage end (as D-44). Reason raised by Jeff: Ase has little use inside a realm. READ-FROM-CODE (Phase 1 sink table): the only Ase spend
+during a realm run is the retreat (10 Ase); summons, skill unlocks and institution assign happen in the Sanctum; vow breaks may act at stage entry (unconfirmed).
+Jeff wants more design and feel work on a **running tally** (an estimate of the Ase and Ekwan earned during the stage run, or another mechanic that feels like that):
+does it fit the game concept in the GDD, and is it a good mechanic to begin with? The tally would reverse D-25 (no mid-stage preview) only if Jeff approves it after the review.
+Until then D-25 stands. Not decided: the tally.
+
+## D-66 — Permadeath is not built here; the reward system is built to connect to it (2026-10-22)
+
+**Finding (Phase 5.0, READ-FROM-CODE):** permadeath is not built. A dead Echo is rebuilt at full HP each fight (`EncounterSetupService.gd:210-214`) and nothing removes it from the roster;
+`roster.size()` equals Echoes ever owned; `echo_id` uses `roster.size() + 1`; no release action; recruits join free.
+**Answer (Jeff):** Skip building permadeath here. Build the reward system so it connects to it. A story on the backlog will build permadeath; a note there says the two must be connected.
+Candidate backlog story: V2-INFRA-005 (Ready, Order 262, Locked: "make death always carry a reliable baseline consequence package"); also V2-ITEM-006 (Draft, death relics).
+Jeff confirms which story gets the note. No Notion write until he says yes.
+**Connection points (the note, for the permadeath story):** (1) the stipend counts Echoes home at the stage end; needs a record of "Echoes that started the stage" and "an Echo died this stage"; (2) the Thread rule D-50 needs the "an Echo died this stage" flag, recorded when the death happens, because dead Echoes revive between fights today; (3) the summon price counts LIVING Echoes; needs dead Echoes removed from the roster, a unique id scheme (`roster.size() + 1` repeats), and a rule for recruits and any release action; (4) the rank home share (0.40) reads Echoes home / started.
+Until permadeath exists: use the last fight's survivors (non-ally, non-spirit, `is_dead == false`) as "home"; use active party size as "started"; the price counts the roster as it is.
+
+## D-67 — Permadeath note written on V2-INFRA-005 (2026-10-22)
+
+**Done (Jeff said yes):** a dated note "Impact from V2-ECONOMY-004" was appended to the Notion page V2-INFRA-005 (Ready, Order 262, Locked; "any permadeath removes the Echo from roster state").
+It lists the four connection points of D-66 (stage stipend, Thread rule, summon price, rank). No other Notion page was changed.
+
+## D-68 — Tally direction waits for a mockup in motion (2026-10-22)
+
+**Answer (Jeff):** Interesting suggestion. Before choosing, he wants a mockup he can see in motion: a sequence stage -> objective -> stage.
+**Action:** the UI session builds an interactive click-through mockup with switchable variants: (1) status quo, (2) direction E (people and stakes; "carried home" only at the return decision with a comparator),
+(3) E plus a wordless flame glow. Realm.02 example (recover 24 then combat 20, scale 1.25, party 4). A "lose an Echo" toggle shows the loss case. Wording is PROPOSAL.
+D-25 stands until Jeff chooses.
+
+## D-69 — Any death caps the rank at A (2026-10-22)
+
+**Finding (Phase 5.1):** with the rank score 0.40 win + 0.40 home share + 0.20 pace, a party of 4 or more that lost one Echo but went fast scores 0.90 = S, above a slow all-home win (0.80 = A).
+**Answer (Jeff):** Any death caps the rank at A. S needs everyone home. A death never ranks above a clean win, whatever the speed. Matches D-42 and D-50.
+**Build:** a separate step 5.1b after Phase 5.1 is verified and re-recorded, so each moved value keeps one cause. The cap is a rule in `RewardCalc.rank_score` (config-free: it is a rule, not a number).
+
+## D-70 — Pace HUD follows the pace fraction (2026-10-22)
+
+**Answer (Jeff):** OK. `pace_state` follows the pace fraction: full up to 1.1 times par (`pace_full_ratio`, fraction 1.0), none at 1.6 times par or worse (`pace_zero_ratio`, fraction 0.0), partial in between. The old rule (follow the Ase paid)
+could never show partial with the new weights. A visible HUD change; Jeff checks it in play.
+
+## D-71 — Direction E chosen, without the flame glow (2026-10-22)
+
+**Answer (Jeff, via the UI session, recorded as D-16 in `docs/stories/v2-payout-explanation/decisions.md`):** Direction E, WITHOUT the flame glow.
+No running Ase figure on the mid-stage card. "Carried home" appears only at the return or retreat confirmation, with a comparator beside it (people safe and their state, intel gained,
+whether the stage waits, the cost), and only when above 0. Mid-stage card content: the party and their state, what the fight changed, the objective mark, intel gained, "the Thread is whole so far".
+D-25 stands (no mid-stage Ase preview). The mockup: `docs/stories/v2-payout-explanation/mockups/stage-flow-motion.html` (UI worktree).
+Open rule questions before the build: (1) after a return home, does an overcome objective stay overcome, and is the 12% deducted from the later payout; (2) B5, the unstamped repeat return-home payout;
+(3) do the realm scale and the replay factor apply to the 12% partial.
+
+## D-72 — "Carried home" is an advance on the stage payout (2026-10-22)
+
+**Basis (GDD §20.8):** an unresolved stage keeps its locked instance; reruns preserve what the player learned. After a return home, overcome objectives stay overcome and the player can come back.
+**Answer (Jeff):** The 12% carried home on a return or retreat is an ADVANCE. When the stage is finished, the stage payout is paid in full MINUS what was already carried home. No double pay.
+**Rules that follow:**
+1. Overcome objectives stay overcome after a return home. The stage waits.
+2. The amount carried = 12% of the stage amount for the completed objectives, using the same formula as the final payout (realm scale and replay factor apply), minus what was already carried from this stage. A repeat return with no new objective carries 0 more. This closes B5 (the unstamped repeat return-home payout) by construction: the stage keeps a record of the Ase and Ekwan already carried.
+3. Ekwan follows the same rule.
+4. Leaving early costs time and the risk of the choice, not Ase. The "carried home" figure on the confirmation is what is banked now.
+**Build:** a new field on the stage record (additive): carried Ase and carried Ekwan. The stage payer subtracts it; the receipt stays exactly-once. Own step (5.8), own long run and attribution.
+
+## D-73 — Opening: keep as it is (2026-10-22)
+
+**Answer (Jeff):** Keep the opening as it is, knowing the facts (Phase 5.0, READ-FROM-CODE): the player holds 40 Ase after the first trial (52 at best after about 10 minutes of the awakening boost); Echo 2 costs a flat 60.
+The player waits a few minutes for the flame to gather charge. No change in Part A. D-58 stands. Risk noted by the feel review: a wall before stage 0. Revisit after a playtest (follow-up 22).
+
+## D-74 — Rank ignores the replay factor (2026-10-22)
+
+**Answer (Jeff):** The rank does not use the replay factor. Replays pay less Ase and Ekwan (D-54) but are judged on the fight: win, Echoes home, pace. A clean replay can give a clean Thread.
+Build: in step 5.1b (with the death cap, D-69), remove the replay factor from `rank_score`. Open: the "S only on the first run" rule.
+
+## D-75 — Rank S is allowed on replays (2026-10-22)
+
+**Answer (Jeff):** Remove the "S only on run 0" rule. S needs everyone home (D-69) and speed (the score), on any run. A replay can earn the best Thread quality. Build: step 5.1b with D-69 and D-74.
+
+## D-76 — All 14 skills cost 60 Ase now; Standing 6 and 9 skills come later (2026-10-22)
+
+**Answer (Jeff):** Set all 14 existing skills to 60 Ase now. Standing 6 and 9 skills will be added later, and the 90 and 120 prices (D-61) apply then. A note goes on the Notion story responsible for those skills.
+Facts (Phase 5.0, READ-FROM-CODE): `ase_cost` is read per skill at `ProgressionController.gd:433`; all 14 are `min_standing` 3; no code gates on Standing; no Standing 6 or 9 skill exists.
+Notion candidates found: V2-PROG-012 (Draft, Order 410, "Turn the mid-tier calling lattice from data support into real progression play"), V2-PROG-016 (Draft, Order 520, "Complete the calling lattice"); V2-PROG-005 (Done) says "future Standing 6/9 growth can attach". Jeff picks the story; no Notion write until then.
+
+## D-77 — Skill price notes written on V2-PROG-012 and V2-PROG-016 (2026-10-22)
+
+**Done (Jeff chose both stories):** a dated note "Impact from V2-ECONOMY-004" was appended to the Notion pages V2-PROG-012 (the Order 410 mid-game Calling story, which needs Standing-6 skills at 90 Ase)
+and V2-PROG-016 (Standing-9 skills at 120 Ase). Both notes say: all 14 current skills cost 60 now; the price is read per skill with no code change; the price does not rise with village size; the story must add the skill content.
+No other Notion page was changed. Note found: two Notion stories share the code V2-PROG-012 (Order 251 and Order 410); the note is on Order 410 (page id 339c3d1ede928122b934ec4443ac3104), the Standing-6 story.
+
+## Phase 5.1 long run result (MEASURED, 2026-10-22)
+fingerprint_combat, purify_shrine, recover, endure, pursue: 5 drifted (FINAL and SAVE; endure FINAL only per earlier prediction, see log). fingerprint_guide_spirit: 1/1 held. fingerprint_seek: 5 modes drifted, 2 held. combat_baseline + combat_roundtrip: passed.
+7 determinism suites 7/7. `reward` 35/35. Wider group 241/241. `balance.json` and `git status` unchanged by the runs. Attribution (opus) is running; no constant is edited until it is proved.
+
+## D-78 — Rank/replay/S decisions fold into step 5.1b (2026-10-22)
+Step 5.1b (after the 5.1 re-record): any death caps the rank at A (D-69); rank ignores the replay factor (D-74); S is allowed on replays (D-75). Own long run, attribution and re-record.
+
+## D-79 — The combat retreat is denied when the balance is short (2026-10-22)
+
+**Answer (Jeff):** Deny the retreat when the player has less Ase than the price (10). Today (Phase 5.0, READ-FROM-CODE, `FlowRuntime.gd:1175-1180`) a short balance proceeds free and the balance never goes negative.
+**Effects to build (step 5.4):** the retreat action is disabled with a readable reason when the balance is below the price; the UI reads the balance (today it checks only `retreat_eligible`); tests for denied, exact balance, and enough balance.
+**Noted risk (feel review, GDD §20.10):** a poor player in a losing fight cannot leave exactly when they are weakest. The map-level return home (`stage.return_home`) is a different action and stays free; this denial applies to the in-fight retreat only. Revisit after a playtest (follow-up 23).
+
+## D-80 — The summon screen is its own UI session, after the backend price curve (2026-10-22)
+
+**Answer (Jeff):** Yes, as its own session after the backend. It shows the living count, the next two prices and one plain reason; never a "cheaper now" line after a death. Starts after step 5.5 builds the price curve and the backend branch is merged.
+A session card (summon-price-ui) was proposed. No Notion row. Copy is Jeff's.
+
+## D-81 — The lost Echo's name comes from a `lost` list in the stage row params (2026-10-22)
+
+**Answer (Jeff):** The backend adds a `lost` list (the display names of the Echoes that died in the stage) to the params of the `echoes_alive` stage row, alongside `alive` and `started`. It reads from the stage record, which permadeath (D-66) will fill; until then it uses the last fight's dead Echoes.
+Names only, no ids shown to the player. Built in step 5.2.
+
+## D-82 — Optional objectives become truly skippable (2026-10-22)
+
+**Answer (Jeff):** Yes. A stage can finish with an optional objective left undone. It then pays nothing for it (completed-only, D-11), so skipping is a real choice between reward and risk.
+**Facts (READ-FROM-CODE, Phase 3b check, D94/D95):** the stage gate (`objectives_found >= obj_total`, D94) forces every objective situation to be reached, so `pursue` is mandatory in practice. The generator marks only `pursue` optional (`RealmGenerator.gd:145`) while config marks `guide_spirit` optional too (D95); the boss stub is always optional (D96, untouched).
+**Build (new step 5.9):** change the gate to "every REQUIRED objective is completed, and at least one objective was reached" (keeps the D94 guard: a stage with no required objective must not complete on entry). Needs: what the player sees about a skipped optional objective; what "reached" means. Open: D95 (is `guide_spirit` required or optional), below.
+
+## D-83 — guide_spirit is required; D95 is closed by changing the config flag (2026-10-22)
+
+**Answer (Jeff):** `guide_spirit` is required. The config flag `data.stages.objective_types.guide_spirit.required` changes from false to true, so the config matches how the generator plays. Only `pursue` stays optional. The generator is not changed, so generation-derived values do not move (it already treats `guide_spirit` as required). D95 is closed.
+Check in the build: whether the generator should read the config flag (the defect's fix) or keep its constant; the safest path keeps generation unchanged and fixes the dead flag.
+
+## D-84 — Copy: one ux-copy pass after the row set is final (2026-10-22)
+
+**Answer (Jeff):** A copy pass later with the ux-copy skill. After the row set is final, a ux-copy session proposes options for every player-facing string (tooltips, "home N of M", the carried-home line, the stage waits line, the summon-price reason, the mid-stage card lines, the rank marks), all marked PROPOSAL, in Jeff's vocabulary ("earns", "found and overcome", "village", "home"). Jeff approves each. Until then the builds use placeholder text.
+
+## D-85 — Called and Chosen stay locked on the summon screen; the screen asks the backend for the new price fields (2026-10-22)
+
+**Answer (Jeff):** Keep Called and Chosen locked for now. The summon screen shows the uncalled price card only. The price config for them is ready (D-60), so opening them later needs no price change.
+**Backend request accepted into step 5.5** (from the summon UI session): snapshot `data` gains `living_count`, `village_ceiling`, `price_flat`, per-grade next price and price after, `batch_prices`, `batch_totals`, and the largest affordable count; the summon handler spends the sum of the in-turn prices, never `count x one price`.
+**Copy:** per D-84 a ux-copy pass later; the session's picks (A1 "7 living in the village", B1 "Next Echo / The one after", C1 "The price of holding one more life in the village.", P1 plateau line, D1 "Need 40 more Ase") are placeholders only.
+
+## D-86 — Phase 5.1 re-recorded (2026-10-22)
+20 constants (FINAL and SAVE of combat, purify_shrine, recover, endure, pursue in each suite) re-recorded with the proof in `phase5-1-attribution.md` (hash restore 20 of 20, forward 20 of 20). ROUNDS held; protect and guide_spirit held. Correction: D-70 text now says full up to 1.1 times par.
+
+## D-87 — Commit each verified step on the backend branch; never push (2026-10-22)
+
+**Answer (Jeff):** Yes. After a step's long run, attribution, re-record and confirmation run pass, the backend session commits it on `claude/v2-economy-004-material-split-24c3be` (local only, no push). The message names the step and its cause. Jeff opens the PR later.

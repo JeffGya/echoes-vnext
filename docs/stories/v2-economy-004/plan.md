@@ -160,3 +160,22 @@ cause on the "Scout return" row. Phase 4 adds the Ekwan cause row. Then the UI s
 ## Status (2026-10-20)
 Done and verified (uncommitted): Phase 1, Phase 2, Phase 3a (re-recorded once, 18 constants), Phase 3b (no re-record; harness fix D-21).
 Next: Phase 3c (row contract, D-18 to D-20, D-23), then Phase 4 (Ekwan source), Phase 5 (tuning), Phase 6 (verify and close).
+
+## Phase 5 BUILD plan (DRAFT, 2026-10-21, awaiting Jeff's approval)
+
+Design is decided in D-36 to D-64 and the five phase5-*.md files. Per D-48 scope is judged here. One cause per commit-step so each moved value keeps one named cause.
+Each step: build (mechanics-developer, sonnet) -> short suites -> RUN REQUEST -> main chat runs the long suites -> attribution (opus, hash proof) -> re-record -> confirm run.
+Long runs and re-records are serial (shared recorded values). The risk probe (D-52) runs in parallel; it is read-only.
+
+| Step | Change | Moves | Decisions |
+|---|---|---|---|
+| 5.0 | Read-only confirmations (mechanics-developer): the death field for "home"; how the opening affords Echo 2; `ase_cost` per skill needs no code; retreat when funds are low; where `redo_penalty_*` and `virtue_*` are read (removal audit list) | nothing | D-45, D-58, D-61 |
+| 5.1 | Remove enemy bonus, virtue bonus, pace Ase bonus (R0) and the realm-order multiplier. Rank re-based internally (win 0.40, home share 0.40, pace 0.20), no Ase attached. Keys removed under the AGENTS.md removal exception (audit, no alias) | Ase and rank in fight payloads; FINAL + SAVE fingerprints | D-40, D-49 |
+| 5.2 | Echoes stipend: 2 Ase per Echo home, cap 10, once per stage, in `stage_payout_rows` (stage payer and preview); row params `alive`, `started`; mid-stage shows the count only; no stipend on retreat | stage payout; rows | D-41, D-43 to D-46 |
+| 5.3 | Weights doubled (16/20/24/24/28/30/32, boss 0); realm scale 1.00/1.25/+0.25; replay flat 0.35 on Ase and Ekwan, stipend half on replay (cap 5); ladder keys removed | stage Ase and Ekwan | D-53, D-54, D-62, D-63 |
+| 5.4 | Retreat price 10 | retreat tests | D-46 |
+| 5.5 | Summon price by living roster size (60, 70, 85, 100, 120, 145, 175, 210, 250, 300, rising to a flat ceiling near Echo 14); called/chosen fixed extras; skill unlock 60/90/120 | summon/skill tests; sanctum snapshots | D-55, D-57, D-59 to D-61 |
+| 5.6 | Row set FINAL: drop `enemies_defeated`, `realm_virtue`, `bonus_*`; keep/define `echoes_alive`, `replay`; message the UI session; merge the UI branch; combined-tree QA | UI contract | D-18 to D-56 |
+| 5.7 | Docs; `qa-verifier` on the combined tree; CI full suite on the PR; Jeff plays | none | Phase 6 |
+
+Probe result may change 5.1's rank design note, not its numbers. Not in this plan: follow-ups 1 to 22 (`follow-ups.md`).

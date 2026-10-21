@@ -102,7 +102,7 @@ var objective_params: Dictionary = {}
 var charge_pressure_applied: bool = false
 
 # Pace inputs, set once by EncounterSetupService from fight-start positions; transient.
-# { par_rounds, pace_full_ratio, pace_zero_ratio, pace_bonus_pct, stage_base } for a pace mode,
+# { par_rounds, pace_full_ratio, pace_zero_ratio } for a pace mode,
 # {} for a no-pace mode or the keeper-intro trial.
 # CombatState.create() copies it into combat_state.
 var pace_cfg: Dictionary = {}

@@ -136,7 +136,7 @@ it to `""`, so the sentinel is safe).
 | 13 | `combat_seams` | `objectives_remaining`, `guide_spirit_protected`, `combat_intro_line` | A | **none — routing / future seams** |
 | 14 | `scout_intel` | `intel_count` | C | Reason line ("N situations revealed") |
 | 15 | `contact_outcome` | `role`, `role_label`, `outcome`, `outcome_text` | D | Banner colour + reason text |
-| 16 | `pace` | `pace_bonus_awarded`, `pace_state`, `pace_changed_rank` | A (pace-mode win only), G | Round line colour + "Pace bonus" row + rank-cause note |
+| 16 | `pace` | `pace_state`, `pace_changed_rank` | A (pace-mode win only), G | Round line colour + rank-cause note (speed pays no Ase, D-49) |
 
 ### 2.3 Blocks that are partial or forced
 
@@ -286,7 +286,7 @@ Dictionaries are references). Every one returns `void`.
 | 13 | `static func add_combat_seams(data: Dictionary, objectives_remaining: int, guide_spirit_protected: bool, combat_intro_line: String) -> void` |
 | 14 | `static func add_scout_intel(data: Dictionary, intel_count: int) -> void` |
 | 15 | `static func add_contact_outcome(data: Dictionary, role: String, role_label: String, outcome: String, outcome_text: String) -> void` |
-| 16 | `static func add_pace(data: Dictionary, pace_bonus_awarded: int, pace_state: String, pace_changed_rank: bool) -> void` |
+| 16 | `static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bool) -> void` |
 
 ### 4.3 How a producer declares its blocks
 

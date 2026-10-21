@@ -665,11 +665,12 @@ static func _run_mode_fingerprint(
 # Reward-weights re-record: stage base 60 -> 16 cuts the pace maximum 3 -> 1 (ase 58 -> 56 in pace modes); endure rank S -> A. ROUNDS held.
 # Ledger-seen re-record: the final snapshot data gained the key `ledger_seen`; FINAL moves in every mode, ROUNDS and SAVE held.
 # Ekwan re-record: fights pay no Ekwan, so `ekwan_awarded` (FINAL) and `economy.ekwan` (SAVE) go from 6 or 7 to 0 in every mode; ROUNDS held.
+# Rank and bonus re-record: no enemy Ase and no pace Ase (ase falls by 5 per kill and 1 for pace); key `pace_bonus_awarded` removed in pace modes; endure rank A -> S; base purify_shrine pace_state full -> partial. ROUNDS held; protect and guide_spirit held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
 # Re-recorded: Directive stop cause. COMBAT_ROUNDS_HASH and COMBAT_SAVE_HASH moved; COMBAT_FINAL_HASH held.
 const COMBAT_ROUNDS_HASH := "15ad0156de8f96320453929010a15002fbf568b50e5006d5ea84c4d4073a66c3"
-const COMBAT_FINAL_HASH  := "0dc88742bd4c9853ee009b651b0a202587cc28318635ddfb9014a72e537b6059"
-const COMBAT_SAVE_HASH   := "6189dfedc768af2c9ed17b7a86c90fb822b2cfbf6c97f61a0467abb6c34c79bf"
+const COMBAT_FINAL_HASH  := "908c9e1569b238860c6827ce48d6ecf79e7a430212f6fa5e213a755d2b57426a"
+const COMBAT_SAVE_HASH   := "9352e6b49858eb2dc4ab6c73c0b3b7df19f5de2cb4e180f50079be1bb9bf3aca"
 
 
 ## Shared expected-vs-actual assertion for the three hashes of one mode.
@@ -750,8 +751,8 @@ static func test_combat() -> Dictionary:
 # Re-recorded: emotional-state pull and state steps in route scoring. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
 const PURIFY_SHRINE_ROUNDS_HASH := "9bdc7074ef56462b6e8f1c81ef41a57c1ecacef763654e7c9874f76db2a69bf9"
-const PURIFY_SHRINE_FINAL_HASH  := "2a9b902cb89875a5bc047112577fc946239f1ac2de4bdf8a32cbfb3344351514"
-const PURIFY_SHRINE_SAVE_HASH   := "e2e3de48f5e8cc42ae5bd1b634b52d78bf1b598dc47e683822733d353b6e5e34"
+const PURIFY_SHRINE_FINAL_HASH  := "4658f206fe8674f195281ebdbcc44e8c0497f9f0b609fc778b90676ea3606959"
+const PURIFY_SHRINE_SAVE_HASH   := "af54a21da43971bce4969473b253e14012b8e8ed582ad1985287f2536cb26439"
 
 static func test_purify_shrine() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURIFY_SHRINE, "fp_purify_shrine")
@@ -773,8 +774,8 @@ static func test_purify_shrine() -> Dictionary:
 # Re-recorded: emotional-state pull and state steps in route scoring. RECOVER_ROUNDS_HASH and RECOVER_FINAL_HASH moved; RECOVER_SAVE_HASH held.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. RECOVER_ROUNDS_HASH moved; RECOVER_FINAL_HASH and RECOVER_SAVE_HASH held.
 const RECOVER_ROUNDS_HASH := "3b2cc514b1eb2aac8f9a5925971a2e00a0ad4cc81a419d8a2f28ab0582bb3c40"
-const RECOVER_FINAL_HASH  := "d42db3d5368743db17c91df74346f2c46028b40c2fcf3fabbd73bce6fde17a21"
-const RECOVER_SAVE_HASH   := "8964489e8aab8b0b1b15815fac2fc1aaede15a3ad88fcc25e448f881198b20bc"
+const RECOVER_FINAL_HASH  := "31ec056cccc677314d33d2cdf24cd340b355cd0684dc02988583dbf6d5a068f4"
+const RECOVER_SAVE_HASH   := "f9796b7777958f03eb587c61802286240ea191e37f5cf34f077e40bacb866cf6"
 
 static func test_recover() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.RECOVER, "fp_recover")
@@ -823,8 +824,8 @@ static func test_protect() -> Dictionary:
 # Re-recorded: emotional-state pull and state steps in route scoring. ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH and ENDURE_SAVE_HASH moved; none held.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. ENDURE_ROUNDS_HASH moved; ENDURE_FINAL_HASH and ENDURE_SAVE_HASH held.
 const ENDURE_ROUNDS_HASH := "7eb074ef162ab29d4c7241fabeba3b8968b6bb6091a45b9c416d5a95add1ca1a"
-const ENDURE_FINAL_HASH  := "57509d53c98f6b2fbd1b11c8f39f9eb62c132fe8606829690e68b3834ef89748"
-const ENDURE_SAVE_HASH   := "98aacda1e5d7cdf7eed08a9c859a9f66be227eb2cb5bc87a12559e84bd2b967e"
+const ENDURE_FINAL_HASH  := "35fe03ffe9a8c91273ebf263c440b7282c1ba14afac944e22cae829a944ba5c9"
+const ENDURE_SAVE_HASH   := "af54a21da43971bce4969473b253e14012b8e8ed582ad1985287f2536cb26439"
 
 static func test_endure() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.ENDURE, "fp_endure")
@@ -858,8 +859,8 @@ static func test_endure() -> Dictionary:
 # one field pair only (diffed field by field): the 25 kill XP goes from echo_0004 to echo_0003.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURSUE_ROUNDS_HASH and PURSUE_SAVE_HASH moved; PURSUE_FINAL_HASH held.
 const PURSUE_ROUNDS_HASH := "2588337c3eea9e49db0b0988dfea40f634452ce5f9b1c38b9907b32cb27d8d49"
-const PURSUE_FINAL_HASH  := "c3101065cd2c8228ba4dfa72df7c8910b392ed69a313119f0d9eea47162a100d"
-const PURSUE_SAVE_HASH   := "6189dfedc768af2c9ed17b7a86c90fb822b2cfbf6c97f61a0467abb6c34c79bf"
+const PURSUE_FINAL_HASH  := "23d10f38d127333956eec3181ca978d44da19eeee8cc78e2140f0a45399669c7"
+const PURSUE_SAVE_HASH   := "9352e6b49858eb2dc4ab6c73c0b3b7df19f5de2cb4e180f50079be1bb9bf3aca"
 
 static func test_pursue() -> Dictionary:
 	var r: Dictionary = _run_mode_fingerprint(EncounterResolutionModes.PURSUE, "fp_pursue")

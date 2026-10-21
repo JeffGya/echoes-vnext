@@ -111,13 +111,11 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# UI-005: pre-compute summary counts so ResolveScreen reads clean fields.
 	var enemies_defeated: int = 0
 	var echoes_survived: int  = 0
-	var total_enemies: int    = 0
 	var total_echoes: int     = 0
 	for a in projected_actors:
 		var faction := str(a.get("faction", ""))
 		var status  := str(a.get("status", ""))
 		if faction == "enemy":
-			total_enemies += 1
 			if status == "dead":
 				enemies_defeated += 1
 		elif faction == "echo":
@@ -171,26 +169,11 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			stage_objectives = raw_objs if raw_objs is Array else []
 			break
 
-	# V2-INFRA-003 Phase 8: the REALM-005 virtue bonus is STAGE cadence and no longer computed
-	# or paid here — StageSettlementService.settle() makes the same
-	# RealmService.calculate_stage_reward() call, with the same inputs, in the
-	# flow.complete_stage dispatch, and emits the same "economy.stage.reward" formula log line.
-	# formula_inputs is still surfaced on this snapshot for the Resolve screen's progression
-	# block, so the player still sees the formula that will pay them; it is display only.
-	var realm_virtue  := str(realm_model.get("virtue", ""))
-	var run_index     := int(realm_model.get("run_index", 0))
-	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
-		stage_index, realm_virtue, run_index, reward_cfg
-	)
-	var formula_inputs: Dictionary = stage_reward_data.get("formula_inputs", {})
-
 	# ECONOMY-004: Compute and pay reward
 	var run_count := int(realm_model.get("run_count", 0))
 	var reward_data: Dictionary = RewardCalc.compute(
 		victory,
 		stage_objectives,
-		enemies_defeated,
-		total_enemies,
 		echoes_survived,
 		total_echoes,
 		round_ended,
@@ -198,9 +181,6 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		reward_cfg,
 		ectx.resolution_mode if ectx != null else "",
 		float(combat_state.get("par_rounds", 0.0)),
-		PaceService.rank_reached_count(combat_state),
-		int(combat_state.get("stage_base", 0)),
-		(combat_state.get("ally_killed_enemy_ids", []) as Array).size(),
 		str(combat_state.get("guide_mode", "")),
 		flow_ctx.logger,
 		t,
@@ -220,12 +200,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var reward_result: Dictionary = economy_svc.reward_encounter_complete(
 		victory,
 		int(reward_data.get("consolation_base", 0)),
-		int(reward_data.get("enemy_bonus", 0)),
-		enemies_defeated,
 		int(reward_data.get("echo_bonus", 0)),
 		echoes_survived,
-		int(reward_data.get("pace_bonus", 0)),
-		_pace_mode,
 		float(reward_data.get("redo_multiplier", 1.0)),
 		str(reward_data.get("rank", "F")),
 		_consolation_eligible,
@@ -369,14 +345,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# ui/screens/venture/ResolveScreen.gd is data.get(key, <default>).
 	#
 	# PHASE 8 UPDATE (V2-INFRA-003, defects D36/D77/D05): the STAGE-cadence half of the payment
-	# HAS now moved. `RealmService.calculate_stage_reward`'s virtue bonus,
-	# `award_post_combat_xp()` and the `request_save("stage.reward")` that covered them are in
+	# HAS now moved. `award_post_combat_xp()` and the `request_save("stage.reward")` that covered them are in
 	# `StageSettlementService.settle()`, called from `VentureController.handle_complete_stage`
 	# so payment and stage advance land in ONE dispatch.
 	#
 	# WHAT REMAINS HERE, and why this producer still does not join the pure
 	# EncounterSnapshotBuilder beside producer B:
-	#   1. `reward_encounter_complete()` — the enemies-defeated / echoes-survived / pace bonuses
+	#   1. `reward_encounter_complete()` — the echoes-survived bonus
 	#      and the once-per-situation defeat consolation. Those measure THIS fight and belong to
 	#      the dispatch that ends it, so `ase_awarded`/`ekwan_awarded` below are still real.
 	#   2. The ally-death morale/fear knock at the top of this function, whose writes three
@@ -417,10 +392,10 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	ResolveSnapshotBuilder.add_ekwan(_data, int(reward_result.get("ekwan_awarded", 0)))
 	ResolveSnapshotBuilder.add_grade_rank(_data, str(reward_result.get("rank", "F")))
 	if _pace_mode and victory:
-		ResolveSnapshotBuilder.add_pace(_data, int(reward_data.get("pace_bonus", 0)),
+		ResolveSnapshotBuilder.add_pace(_data,
 			str(reward_data.get("pace_state", "")), bool(reward_data.get("pace_changed_rank", false)))
 	# PROG-003: per-echo XP events for ResolveScreen and EchoParty display.
-	ResolveSnapshotBuilder.add_progression(_data, formula_inputs, [], xp_events)
+	ResolveSnapshotBuilder.add_progression(_data, {}, [], xp_events)
 	# V2-EMOTION-001: per-echo emotion delta for ResolveScreen.
 	ResolveSnapshotBuilder.add_emotion(_data, emotion_summary)
 	# VOW-001 / V2-VOW-002: vow break/benefit/compliance outcome + vows unlocked this stage.

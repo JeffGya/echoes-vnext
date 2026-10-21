@@ -310,43 +310,6 @@ static func contribute_segment(ctx: FlowContext, combat_grade: String, thread_cf
 	})
 
 
-## REALM-005: Pure static helper — computes virtue-based stage bonus from realm identity.
-## No side effects. Same inputs → identical output every time (deterministic).
-##
-## stage_index:  zero-based index of the current stage (0 = first stage)
-## realm_virtue: virtue string from realm config (e.g. "courage", "wisdom")
-## run_index:    how many realms the player has ever started before this one (0 = first realm)
-## reward_cfg:   balance.data.rewards dict
-static func calculate_stage_reward(
-	stage_index: int,
-	realm_virtue: String,
-	run_index: int,
-	reward_cfg: Dictionary
-) -> Dictionary:
-	var vb_v: Variant = reward_cfg.get("virtue_bonuses", {})
-	var virtue_bonuses: Dictionary = vb_v if vb_v is Dictionary else {}
-	var per_index := int(reward_cfg.get("stage_index_bonus_per", 0))
-
-	var order_base := float(reward_cfg.get("realm_order_multiplier_base", 1.0))
-	var order_step := float(reward_cfg.get("realm_order_multiplier_step", 0.5))
-	var order_mul  := order_base + float(run_index) * order_step
-
-	var virtue_base  := int(virtue_bonuses.get(realm_virtue, 0))
-	var stage_bonus  := stage_index * per_index
-	var virtue_bonus := roundi(float(virtue_base + stage_bonus) * order_mul)
-
-	return {
-		"virtue_bonus": virtue_bonus,
-		"formula_inputs": {
-			"stage_index":      stage_index,
-			"realm_virtue":     realm_virtue,
-			"run_index":        run_index,
-			"order_multiplier": order_mul,
-			"virtue_bonus":     virtue_bonus
-		}
-	}
-
-
 ## V2-INFRA-003 Phase 8 (defect D82): is this `save_data["realms"]` entry a REALM RUN?
 ##
 ## `save_data["realms"]` is not homogeneous. Alongside the RealmModel dicts written by
@@ -398,8 +361,7 @@ static func is_prologue_run(realm_id: String) -> bool:
 # D82 FIX (V2-INFRA-003 Phase 8): non-run entries are skipped. Before this, `prologue.first`
 # read `""` for its absent `status`, `"" != "not_started"` passed, and every player who
 # finished the keeper intro entered their FIRST real Realm with `run_index = 1` instead of 0 —
-# inflating the virtue bonus, the realm order multiplier (`calculate_stage_reward`) and the
-# realm XP multiplier (`ProgressionService.get_realm_xp_multiplier`).
+# inflating the realm XP multiplier (`ProgressionService.get_realm_xp_multiplier`).
 ## PHASE 8C: the prologue Realm is excluded too. It is a real run (so `is_realm_run()` passes it)
 ## but it is not one of the player's Realms, and counting it would put every player's FIRST real
 ## Realm on `run_index = 1` — reintroducing exactly the reward inflation D82 removed, by a

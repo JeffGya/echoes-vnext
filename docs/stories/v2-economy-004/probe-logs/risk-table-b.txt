@@ -1,0 +1,12 @@
+RISK_TABLE row | mode | fights | win_rate | mean_rounds | pace full/partial/none | mean_dead | mean_frac
+RISK_TABLE directive.scout_carefully | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE directive.seek_signs | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.hold | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.advance | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.protect | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.withdraw | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.engage | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE party.size_3 | pursue | 3 | 0.33 | 6.7 | 1/0/0 | 0.00 | 1.00
+RISK_TABLE party.standing_3 | pursue | 3 | 0.67 | 4.7 | 2/0/0 | 0.00 | 1.00
+RISK_PROBE total fights: 27
+"Tests: 3 total, 3 passed, 0 failed"

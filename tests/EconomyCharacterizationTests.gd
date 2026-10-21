@@ -27,16 +27,16 @@ const _TYPE_EKWAN := {
 	"endure": 4, "recover": 5, "shrine": 6, "boss": 0,
 }
 
-# Stage base (stage = [type, boss stub]; type boss = [boss] alone) -> run_count -> Ase per stage
-# index 0..3, realm.01 (courage), run_index 0. Ase = roundi(base x redo) + virtue.
+# Stage base (stage = [type, boss stub]; type boss = [boss] alone) -> run_count -> Ase.
+# Ase = roundi(base x redo). The stage index and the realm virtue add nothing (D-40).
 const _STAGE_ASE := {
-	0:  { 0: [10, 15, 20, 25], 1: [10, 15, 20, 25] },
-	8:  { 0: [18, 23, 28, 33], 1: [17, 22, 27, 32] },
-	10: { 0: [20, 25, 30, 35], 1: [19, 24, 29, 34] },
-	12: { 0: [22, 27, 32, 37], 1: [21, 26, 31, 36] },
-	14: { 0: [24, 29, 34, 39], 1: [23, 28, 33, 38] },
-	15: { 0: [25, 30, 35, 40], 1: [24, 29, 34, 39] },
-	16: { 0: [26, 31, 36, 41], 1: [24, 29, 34, 39] },
+	0:  { 0: 0, 1: 0 },
+	8:  { 0: 8, 1: 7 },
+	10: { 0: 10, 1: 9 },
+	12: { 0: 12, 1: 11 },
+	14: { 0: 14, 1: 13 },
+	15: { 0: 15, 1: 14 },
+	16: { 0: 16, 1: 14 },
 }
 # Stage Ekwan of a single completed type at run_count 1 (redo 0.9): roundi(amount x 0.9).
 const _TYPE_EKWAN_RUN1 := {
@@ -54,7 +54,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/partial_payout_uses_stage_base", Callable(EconomyCharacterizationTests, "_t_partial_payout"))
 	runner.register_test("econ_char/unknown_type_logs_and_pays_zero", Callable(EconomyCharacterizationTests, "_t_unknown_type"))
 	runner.register_test("econ_char/redo_multiplier_by_run_count", Callable(EconomyCharacterizationTests, "_t_redo_multiplier"))
-	runner.register_test("econ_char/virtue_bonus_by_stage_and_run_index", Callable(EconomyCharacterizationTests, "_t_virtue_bonus"))
+	runner.register_test("econ_char/removed_bonus_keys_absent", Callable(EconomyCharacterizationTests, "_t_removed_keys_absent"))
+	runner.register_test("econ_char/rank_score_table", Callable(EconomyCharacterizationTests, "_t_rank_table"))
+	runner.register_test("econ_char/death_lowers_rank", Callable(EconomyCharacterizationTests, "_t_death_lowers_rank"))
+	runner.register_test("econ_char/speed_never_outranks_survival", Callable(EconomyCharacterizationTests, "_t_speed_vs_survival"))
+	runner.register_test("econ_char/no_pace_mode_not_capped", Callable(EconomyCharacterizationTests, "_t_no_pace_not_capped"))
+	runner.register_test("econ_char/speed_pays_no_ase", Callable(EconomyCharacterizationTests, "_t_speed_pays_no_ase"))
 	runner.register_test("econ_char/stage_payer_matrix", Callable(EconomyCharacterizationTests, "_t_stage_payer_matrix"))
 	runner.register_test("econ_char/ekwan_per_type", Callable(EconomyCharacterizationTests, "_t_ekwan_per_type"))
 	runner.register_test("econ_char/ekwan_sums_completed_only", Callable(EconomyCharacterizationTests, "_t_ekwan_completed_only"))
@@ -131,16 +136,14 @@ static func _encounter_pay(objectives: Array, victory: bool, run_count: int, fou
 	if not victory and fought_index >= 0:
 		(objs[fought_index] as Dictionary)["completed"] = false
 	var rd: Dictionary = RewardCalc.compute(
-		victory, objs, 3, 3, 2, 2, 2, run_count, reward_cfg,
-		EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, fought_index)
+		victory, objs, 2, 2, 2, run_count, reward_cfg,
+		EncounterResolutionModes.COMBAT, 0.0, "", null, 0, fought_index)
 	var save := { "economy": { "ase": 0, "ekwan": 0 } }
 	var econ := EconomyService.new(save)
 	var paid: Dictionary = econ.reward_encounter_complete(
 		victory,
-		int(rd.get("consolation_base", 0)), int(rd.get("enemy_bonus", 0)), 3,
-		int(rd.get("echo_bonus", 0)), 2, int(rd.get("pace_bonus", 0)),
-		bool(rd.get("pace_mode", false)), float(rd.get("redo_multiplier", 1.0)),
-		str(rd.get("rank", "F")), true, _logger(), 1)
+		int(rd.get("consolation_base", 0)), int(rd.get("echo_bonus", 0)), 2,
+		float(rd.get("redo_multiplier", 1.0)), str(rd.get("rank", "F")), true, _logger(), 1)
 	paid["base_reward"] = int(rd.get("base_reward", 0))
 	paid["balance_ase"] = int((save["economy"] as Dictionary)["ase"])
 	paid["balance_ekwan"] = int((save["economy"] as Dictionary)["ekwan"])
@@ -209,8 +212,8 @@ static func _t_combat_and_shrine() -> Dictionary:
 	for c in [["combat", 10, 3], ["shrine", 15, 4]]:
 		for victory in [true, false]:
 			var rd: Dictionary = RewardCalc.compute(
-				victory, [_obj(0, c[0], victory)], 3, 3, 2, 2, 2, 0, cfg,
-				EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, 0)
+				victory, [_obj(0, c[0], victory)], 2, 2, 2, 0, cfg,
+				EncounterResolutionModes.COMBAT, 0.0, "", null, 0, 0)
 			if int(rd["base_reward"]) != int(c[1]):
 				mismatches.append("%s victory=%s base %d, expected %d" % [c[0], str(victory), int(rd["base_reward"]), int(c[1])])
 		var paid := _encounter_pay([_obj(0, c[0], true)], false, 0)
@@ -221,7 +224,7 @@ static func _t_combat_and_shrine() -> Dictionary:
 
 ## Three objectives (realm.02 shape plus the boss stub), both pre-boss objectives completed: the
 ## base is the sum; the boss adds 0.
-## Stage 0, run 0: Ase = 25 + 10 virtue = 35, Ekwan = combat 2 + shrine 6 = 8.
+## Stage 0, run 0: Ase = 25, Ekwan = combat 2 + shrine 6 = 8.
 static func _t_multi_objective() -> Dictionary:
 	var cfg := _rewards_cfg()
 	var objs: Array = [
@@ -235,9 +238,9 @@ static func _t_multi_objective() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 	var out := _settle_cell(env, objs, 0, 0, 1)
-	if int(out.get("ase_awarded", -1)) != 35 or int(out.get("ekwan_awarded", -1)) != 8 \
+	if int(out.get("ase_awarded", -1)) != 25 or int(out.get("ekwan_awarded", -1)) != 8 \
 			or _breakdown_delta(out, "Base objectives") != 25:
-		mismatches.append("stage paid %s/%s base row %d, expected 35/8 base row 25" \
+		mismatches.append("stage paid %s/%s base row %d, expected 25/8 base row 25" \
 			% [str(out.get("ase_awarded")), str(out.get("ekwan_awarded")), _breakdown_delta(out, "Base objectives")])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
@@ -326,22 +329,34 @@ static func _t_redo_multiplier() -> Dictionary:
 	return { "ok": ok, "error": "redo multiplier run 0 = %s, run 1 = %s" % [str(m0), str(m1)] }
 
 
-static func _t_virtue_bonus() -> Dictionary:
+## Names removed by D-40 and D-49. None may stay in data.rewards or in core/ (no alias).
+const _REMOVED_NAMES := [
+	"enemy_defeated_bonus", "virtue_bonuses", "stage_index_bonus_per", "realm_order_multiplier",
+	"calculate_stage_reward", "pace_bonus_pct", "max_bonus_ase", "bonus_ase", "pace_bonus",
+	"bonus_earned", "bonus_missed", "enemy_bonus", "pace_stage_base",
+]
+
+static func _t_removed_keys_absent() -> Dictionary:
+	var m: Array = []
 	var cfg := _rewards_cfg()
-	# virtue -> run_index -> bonus per stage index 0..3
-	var expected := {
-		"courage": { 0: [10, 15, 20, 25], 1: [15, 23, 30, 38] },
-		"wisdom":  { 0: [15, 20, 25, 30], 1: [23, 30, 38, 45] },
-	}
-	var mismatches: Array = []
-	for virtue in expected:
-		for run_index in expected[virtue]:
-			for i in range(_STAGE_COUNT):
-				var got := int(RealmService.calculate_stage_reward(i, virtue, run_index, cfg).get("virtue_bonus", -1))
-				var want := int(expected[virtue][run_index][i])
-				if got != want:
-					mismatches.append("%s run_index %d stage %d: %d, expected %d" % [virtue, run_index, i, got, want])
-	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
+	for name in _REMOVED_NAMES:
+		if cfg.has(name):
+			m.append("data.rewards still has %s" % name)
+	if not cfg.has("rank_points"):
+		m.append("data.rewards.rank_points missing")
+	var pending: Array = ["res://core"]
+	while not pending.is_empty():
+		var dir_path: String = pending.pop_back()
+		for sub in DirAccess.get_directories_at(dir_path):
+			pending.append(dir_path + "/" + sub)
+		for file_name in DirAccess.get_files_at(dir_path):
+			if not file_name.ends_with(".gd"):
+				continue
+			var text := FileAccess.get_file_as_string(dir_path + "/" + file_name)
+			for name in _REMOVED_NAMES:
+				if text.contains(name):
+					m.append("%s/%s still names %s" % [dir_path, file_name, name])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +412,7 @@ static func _t_stage_payer_matrix() -> Dictionary:
 			for i in range(_STAGE_COUNT):
 				n += 1
 				var out := _settle_cell(env, _objectives(type), i, run_count, n)
-				var want_ase: int = _STAGE_ASE[base][run_count][i]
+				var want_ase: int = _STAGE_ASE[base][run_count]
 				var want_ekwan: int = _TYPE_EKWAN[type] if run_count == 0 else _TYPE_EKWAN_RUN1[type]
 				var cell := "%s run %d stage %d" % [type, run_count, i]
 				if int(out.get("ase_awarded", -1)) != want_ase or int(out.get("balance_ase", -1)) != want_ase:
@@ -410,9 +425,8 @@ static func _t_stage_payer_matrix() -> Dictionary:
 				var base_row := _breakdown_delta(out, "Base objectives")
 				if base_row != base:
 					mismatches.append("%s base row %d, expected %d" % [cell, base_row, base])
-				var virtue_row := _breakdown_delta(out, "Realm virtue")
-				if virtue_row != 10 + 5 * i:
-					mismatches.append("%s virtue row %d, expected %d" % [cell, virtue_row, 10 + 5 * i])
+				if not _row_by_cause(out.get("breakdown", []), "realm_virtue").is_empty():
+					mismatches.append("%s has a realm_virtue row (D-40)" % cell)
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
@@ -538,10 +552,10 @@ static func _t_ekwan_replay() -> Dictionary:
 # Encounter payer (EconomyService.reward_encounter_complete)
 # ---------------------------------------------------------------------------
 
-## Fight: 3 of 3 enemies, 2 of 2 echoes, a no-pace mode. Victory pays (15 + 20) x redo.
-## The stage base and the stage index never enter a victory payout.
+## Fight: 2 of 2 echoes, a no-pace mode. Victory pays 20 x redo.
+## The stage base, the stage index and the enemy count never enter a victory payout.
 static func _t_encounter_victory() -> Dictionary:
-	var want := { 0: 35, 1: 32 }
+	var want := { 0: 20, 1: 18 }
 	var mismatches: Array = []
 	for type in ObjectiveModel.VALID_TYPES:
 		for run_count in [0, 1]:
@@ -583,14 +597,14 @@ static func _t_encounter_defeat() -> Dictionary:
 ## D-28, D-32: no fight result carries Ekwan, and no breakdown row has currency "ekwan".
 static func _t_fights_pay_no_ekwan() -> Dictionary:
 	var m: Array = []
-	for c in [[true, true, 2, 1.0], [true, false, 0, 0.9], [false, false, 0, 1.0], [false, false, 0, 0.7]]:
-		var paid := _pay(c[0], c[1], c[2], c[3])
+	for c in [[true, 1.0], [true, 0.9], [false, 1.0], [false, 0.7]]:
+		var paid := _pay(c[0], c[1])
 		if int(paid["ekwan_awarded"]) != 0:
 			m.append("%s paid ekwan %d" % [str(c), int(paid["ekwan_awarded"])])
 		for row_v in paid["breakdown"]:
 			if str((row_v as Dictionary).get("currency", "")) != "ase":
 				m.append("%s has a non-Ase row %s" % [str(c), JSON.stringify(row_v)])
-	var repeat := _pay(false, false, 0, 1.0, false)
+	var repeat := _pay(false, 1.0, false)
 	if int(repeat["ekwan_awarded"]) != 0:
 		m.append("a repeat defeat paid ekwan")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
@@ -751,7 +765,7 @@ static func _same(a: Variant, b: Variant) -> bool:
 # ---------------------------------------------------------------------------
 
 ## (a) The stage payer pays the weights of completed objectives. Stage 0, run 0: combat done
-## (10), shrine not done, boss stub: base row 10, Ase 10 + 10 virtue.
+## (10), shrine not done, boss stub: base row 10, Ase 10.
 static func _t_stage_payer_completed_only() -> Dictionary:
 	var env := VentureCharacterizationTests._setup_stage_env("econ_char_completed_only")
 	if not bool(env.get("ok", false)):
@@ -759,12 +773,12 @@ static func _t_stage_payer_completed_only() -> Dictionary:
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var out := _settle_cell(env, [_obj(0, "combat", true), _obj(1, "shrine", false), boss], 0, 0, 1)
 	var mismatches: Array = []
-	if _breakdown_delta(out, "Base objectives") != 10 or int(out.get("ase_awarded", -1)) != 20:
-		mismatches.append("one of two objectives done: base row %d, ase %s, expected 10 / 20" \
+	if _breakdown_delta(out, "Base objectives") != 10 or int(out.get("ase_awarded", -1)) != 10:
+		mismatches.append("one of two objectives done: base row %d, ase %s, expected 10 / 10" \
 			% [_breakdown_delta(out, "Base objectives"), str(out.get("ase_awarded"))])
 	out = _settle_cell(env, [_obj(0, "combat", false), boss.duplicate(true)], 0, 0, 2)
-	if _breakdown_delta(out, "Base objectives") != 0 or int(out.get("ase_awarded", -1)) != 10:
-		mismatches.append("nothing done: base row %d, ase %s, expected 0 / 10" \
+	if _breakdown_delta(out, "Base objectives") != 0 or int(out.get("ase_awarded", -1)) != 0:
+		mismatches.append("nothing done: base row %d, ase %s, expected 0 / 0" \
 			% [_breakdown_delta(out, "Base objectives"), str(out.get("ase_awarded"))])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
@@ -784,17 +798,16 @@ static func _t_uncompleted_adds_nothing() -> Dictionary:
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-## (c) The pace base is the completed objectives plus the fought one, so the first fight of a
-## stage has a base and a pace bonus is possible (completed-only would give 0).
+## (c) The completed-plus-fought base is the completed objectives plus the fought one, so the
+## first fight of a stage has a base (completed-only would give 0).
 static func _t_pace_base() -> Dictionary:
 	var cfg := _config()
-	var pct := float(ConfigService.get_rewards_cfg(cfg).get("pace_bonus_pct", 0.05))
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var mismatches: Array = []
 	var first := _stage_ctx(cfg, [_obj(0, "guide_spirit", false), _obj(1, "combat", false), boss], 0)
 	var plain := ActiveStageService.get_stage_base_reward(first, cfg)
 	var pace := ActiveStageService.get_stage_base_reward(first, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
-	if plain != 0 or pace != 16 or PaceService.max_bonus_ase(pace, pct) < 1:
+	if plain != 0 or pace != 16:
 		mismatches.append("first fight: completed-only %d (expected 0), pace base %d (expected 16)" % [plain, pace])
 	var second := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], 1)
 	pace = ActiveStageService.get_stage_base_reward(second, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
@@ -842,20 +855,19 @@ static func _t_partials_completed() -> Dictionary:
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-## (f) Rank has the same base on both sides: an objective the party never reached is in neither
-## the numerator nor the ceiling, so the rank equals the rank of a stage without it.
+## (f) Rank reads no objective weight: an objective the party never reached changes nothing.
 static func _t_rank_unreached() -> Dictionary:
 	var cfg := _rewards_cfg()
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var with_unreached: Array = [_obj(0, "combat", true), _obj(1, "shrine", false), boss]
 	var without: Array = [_obj(0, "combat", true), boss]
 	var mismatches: Array = []
-	for c in [[3, 3, 2, 2], [1, 3, 1, 2], [0, 3, 0, 2]]:
+	for c in [[2, 2], [1, 2], [0, 2]]:
 		for victory in [true, false]:
-			var a: Dictionary = RewardCalc.compute(victory, with_unreached, c[0], c[1], c[2], c[3], 2, 0, cfg,
-				EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, 0)
-			var b: Dictionary = RewardCalc.compute(victory, without, c[0], c[1], c[2], c[3], 2, 0, cfg,
-				EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, 0)
+			var a: Dictionary = RewardCalc.compute(victory, with_unreached, c[0], c[1], 2, 0, cfg,
+				EncounterResolutionModes.COMBAT, 0.0, "", null, 0, 0)
+			var b: Dictionary = RewardCalc.compute(victory, without, c[0], c[1], 2, 0, cfg,
+				EncounterResolutionModes.COMBAT, 0.0, "", null, 0, 0)
 			if str(a["rank"]) != str(b["rank"]) or int(a["base_reward"]) != int(b["base_reward"]):
 				mismatches.append("%s %s: rank %s/%s base %d/%d" % [str(c), str(victory),
 					str(a["rank"]), str(b["rank"]), int(a["base_reward"]), int(b["base_reward"])])
@@ -874,42 +886,34 @@ static func _row_by_cause(breakdown: Array, cause: String) -> Dictionary:
 
 
 ## Pays one encounter straight through EconomyService with explicit inputs.
-static func _pay(victory: bool, pace_mode: bool, pace_bonus: int, redo: float, eligible: bool = true) -> Dictionary:
+static func _pay(victory: bool, redo: float, eligible: bool = true) -> Dictionary:
 	var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
-	return econ.reward_encounter_complete(victory, 10, 15, 3, 20, 2, pace_bonus, pace_mode,
-		redo, "B", eligible, _logger(), 1)
+	return econ.reward_encounter_complete(victory, 10, 20, 2, redo, "B", eligible, _logger(), 1)
 
 
 static func _t_cause_encounter_rows() -> Dictionary:
 	var m: Array = []
-	var bd: Array = _pay(true, true, 2, 0.9)["breakdown"]
-	var enemies := _row_by_cause(bd, "enemies_defeated")
+	var bd: Array = _pay(true, 0.9)["breakdown"]
 	var echoes := _row_by_cause(bd, "echoes_alive")
-	if int((enemies.get("params", {}) as Dictionary).get("count", -1)) != 3 or int(enemies.get("delta", -1)) != 15:
-		m.append("enemies_defeated row: %s" % JSON.stringify(enemies))
 	if int((echoes.get("params", {}) as Dictionary).get("count", -1)) != 2 or int(echoes.get("delta", -1)) != 20:
 		m.append("echoes_alive row: %s" % JSON.stringify(echoes))
-	if _row_by_cause(bd, "bonus_earned").is_empty() or int(_row_by_cause(bd, "bonus_earned").get("delta", 0)) != 2:
-		m.append("bonus_earned missing for a positive pace bonus")
+	for removed in ["enemies_defeated", "bonus_earned", "bonus_missed"]:
+		if not _row_by_cause(bd, removed).is_empty():
+			m.append("a win shows the removed %s row" % removed)
 	var replay := _row_by_cause(bd, "replay")
 	if replay.is_empty() or not is_equal_approx(float((replay.get("params", {}) as Dictionary).get("factor", 0.0)), 0.9):
 		m.append("replay row or factor: %s" % JSON.stringify(replay))
-	if _row_by_cause(_pay(true, true, 0, 1.0)["breakdown"], "bonus_missed").is_empty():
-		m.append("bonus_missed missing for a zero pace bonus in a pace mode")
-	var no_replay: Array = _pay(true, true, 2, 1.0)["breakdown"]
+	var no_replay: Array = _pay(true, 1.0)["breakdown"]
 	if not _row_by_cause(no_replay, "replay").is_empty():
 		m.append("replay row present at redo 1.0 (run_count 0)")
-	var no_pace: Array = _pay(true, false, 0, 1.0)["breakdown"]
-	if not _row_by_cause(no_pace, "bonus_earned").is_empty() or not _row_by_cause(no_pace, "bonus_missed").is_empty():
-		m.append("a no-pace mode shows a bonus row")
-	var defeat: Array = _pay(false, false, 0, 0.9)["breakdown"]
+	var defeat: Array = _pay(false, 0.9)["breakdown"]
 	var parts: Array = []
 	for row_v in defeat:
 		if str((row_v as Dictionary).get("cause", "")) == "defeat_consolation":
 			parts.append(str(((row_v as Dictionary).get("params", {}) as Dictionary).get("part", "")))
 	if parts != ["base", "penalty"]:
 		m.append("defeat_consolation parts %s" % str(parts))
-	for row_v in _pay(true, true, 2, 0.9)["breakdown"]:
+	for row_v in bd:
 		var row: Dictionary = row_v
 		if not row.has("cause") or not (row.get("params") is Dictionary) or not row.has("label") or not row.has("currency"):
 			m.append("row missing a key: %s" % JSON.stringify(row))
@@ -918,7 +922,7 @@ static func _t_cause_encounter_rows() -> Dictionary:
 
 static func _t_cause_zero_rows() -> Dictionary:
 	var m: Array = []
-	var paid := _pay(false, false, 0, 1.0, false)
+	var paid := _pay(false, 1.0, false)
 	var bd: Array = paid["breakdown"]
 	if int(paid["ase_awarded"]) != 0 or bd.size() != 1 or str((bd[0] as Dictionary).get("cause", "")) != "repeat_defeat" \
 			or int((bd[0] as Dictionary).get("delta", -1)) != 0:
@@ -938,8 +942,8 @@ static func _t_cause_stage_rows() -> Dictionary:
 	var p: Dictionary = base.get("params", {})
 	if int(p.get("overcome", -1)) != 1 or int(p.get("total", -1)) != 2:
 		m.append("objectives_overcome params %s, expected overcome 1 of 2 (boss stub excluded)" % JSON.stringify(base))
-	if _row_by_cause(bd, "realm_virtue").is_empty():
-		m.append("realm_virtue row missing")
+	if not _row_by_cause(bd, "realm_virtue").is_empty():
+		m.append("realm_virtue row present (D-40)")
 	if _row_by_cause(bd, "replay").is_empty():
 		m.append("replay row missing at run_count 1")
 	for row_v in bd:
@@ -1009,7 +1013,7 @@ static func _t_cause_pending_copy() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
-	var row := { "label": "Pace bonus", "delta": 2, "currency": "ase", "cause": "bonus_earned", "params": { "x": 1 } }
+	var row := { "label": "Echoes home", "delta": 2, "currency": "ase", "cause": "echoes_alive", "params": { "x": 1 } }
 	var card := { "type": FlowStateIds.RESOLVE, "meta": { "t": 1 }, "actions": {}, "data": {
 		"encounter_id": "enc", "victory": true, "objectives_remaining": 0,
 		"ase_awarded": 2, "reward_breakdown": [row] } }
@@ -1021,14 +1025,14 @@ static func _t_cause_pending_copy() -> Dictionary:
 	var m: Array = []
 	for pair in [["durable copy", copied], ["replay", replayed]]:
 		var rows: Array = pair[1]
-		if rows.size() != 1 or str((rows[0] as Dictionary).get("cause", "")) != "bonus_earned" \
+		if rows.size() != 1 or str((rows[0] as Dictionary).get("cause", "")) != "echoes_alive" \
 				or int(((rows[0] as Dictionary).get("params", {}) as Dictionary).get("x", 0)) != 1:
 			m.append("%s lost cause or params: %s" % [pair[0], JSON.stringify(rows)])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
 static func _t_cause_old_row_replays() -> Dictionary:
-	var old_row := { "label": "Pace bonus", "delta": 2, "currency": "ase" }
+	var old_row := { "label": "Echoes home", "delta": 2, "currency": "ase" }
 	var ctx := FlowContext.new()
 	ctx.save_data = { "flow": { "pending_result": { "resolve_data": {
 		"encounter_id": "enc", "victory": true, "ase_awarded": 2, "reward_breakdown": [old_row] },
@@ -1068,6 +1072,110 @@ static func _t_ledger_seen() -> Dictionary:
 	runtime.dispatch({ "type": "resolve.ledger.mark_seen" })
 	if not SaveSchema.ledger_seen(runtime.get_save_data()):
 		m.append("a second dispatch cleared the flag")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+# ---------------------------------------------------------------------------
+# Phase 5.1: the rank score (D-49). 0.40 win + 0.40 x home share + 0.20 x pace fraction.
+# Pace fraction with par 20, full 1.1, zero 1.6: round 22 = 1.0, round 27 = 0.5, round 32 = 0.
+# ---------------------------------------------------------------------------
+
+const _PAR := 20.0
+const _SLOW := 32
+const _PARTIAL := 27
+const _FULL := 22
+const _GRADE_STEPS := ["F", "D", "C", "B", "A", "S"]
+
+static func _win_rank(alive: int, started: int, round_ended: int, mode: String = EncounterResolutionModes.COMBAT,
+		run_count: int = 0) -> String:
+	var par := _PAR if mode == EncounterResolutionModes.COMBAT else 0.0
+	return str(RewardCalc.compute(true, [_obj(0, "combat", true)], alive, started, round_ended, run_count,
+		_rewards_cfg(), mode, par).get("rank", ""))
+
+
+static func _t_rank_table() -> Dictionary:
+	# started, alive -> [slow, partial, full]  (phase5-risk-and-rank.md section 4.2)
+	var table := [
+		[1, 1, ["A", "S", "S"]], [2, 2, ["A", "S", "S"]], [2, 1, ["B", "B", "A"]],
+		[3, 3, ["A", "S", "S"]], [3, 2, ["B", "A", "A"]], [3, 1, ["C", "B", "B"]],
+	]
+	var m: Array = []
+	for row in table:
+		var got := [_win_rank(row[1], row[0], _SLOW), _win_rank(row[1], row[0], _PARTIAL), _win_rank(row[1], row[0], _FULL)]
+		if got != row[2]:
+			m.append("%d started %d home: %s, expected %s" % [row[0], row[1], str(got), str(row[2])])
+	# A defeat is F whatever the pace and the survivors.
+	var lost := RewardCalc.compute(false, [_obj(0, "combat", false)], 1, 3, _FULL, 0, _rewards_cfg(),
+		EncounterResolutionModes.COMBAT, _PAR, "", null, 0, 0)
+	if str(lost["rank"]) != "F":
+		m.append("a defeat ranked %s, expected F" % str(lost["rank"]))
+	# S only on run 0.
+	if _win_rank(3, 3, _FULL, EncounterResolutionModes.COMBAT, 1) == "S":
+		m.append("S on run_count 1")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A death lowers the grade at every pace (1 to 3 Echoes started).
+static func _t_death_lowers_rank() -> Dictionary:
+	var m: Array = []
+	for started in [2, 3]:
+		for r in [_SLOW, _PARTIAL, _FULL]:
+			var home := _GRADE_STEPS.find(_win_rank(started, started, r))
+			var one_dead := _GRADE_STEPS.find(_win_rank(started - 1, started, r))
+			if one_dead >= home:
+				m.append("%d started, round %d: all home %s, one dead %s" % [started, r,
+					_GRADE_STEPS[home], _GRADE_STEPS[one_dead]])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Relation: with 1 to 3 Echoes started, a FULL-pace win that lost an Echo never ranks above a
+## SLOW win that kept everyone home. Speed also never lowers a grade.
+## This does not hold from 4 Echoes started (one lost, full pace = 0.90 = S); see phase5-1-build.md.
+static func _t_speed_vs_survival() -> Dictionary:
+	var m: Array = []
+	for started in [1, 2, 3]:
+		var slow_home := _GRADE_STEPS.find(_win_rank(started, started, _SLOW))
+		for alive in range(0, started):
+			if _GRADE_STEPS.find(_win_rank(alive, started, _FULL)) > slow_home:
+				m.append("%d started %d home: a full-pace win outranks a slow all-home win" % [started, alive])
+		for alive in range(0, started + 1):
+			if _GRADE_STEPS.find(_win_rank(alive, started, _FULL)) < _GRADE_STEPS.find(_win_rank(alive, started, _SLOW)):
+				m.append("%d started %d home: speed lowered the grade" % [started, alive])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A no-pace mode takes the full pace points, so all home is S there, as a fast all-home win is.
+static func _t_no_pace_not_capped() -> Dictionary:
+	var m: Array = []
+	for mode in [EncounterResolutionModes.PROTECT, EncounterResolutionModes.ENDURE]:
+		for started in [1, 2, 3]:
+			if _win_rank(started, started, 12, mode) != "S":
+				m.append("%s %d started all home ranked %s, expected S" % [mode, started, _win_rank(started, started, 12, mode)])
+		if _win_rank(1, 2, 12, mode) != "A":
+			m.append("%s 2 started 1 home ranked %s, expected A" % [mode, _win_rank(1, 2, 12, mode)])
+	var rd := RewardCalc.compute(true, [_obj(0, "combat", true)], 2, 2, 12, 0, _rewards_cfg(),
+		EncounterResolutionModes.ENDURE, 0.0)
+	if bool(rd["pace_mode"]) or str(rd["pace_state"]) != "" or bool(rd["pace_changed_rank"]):
+		m.append("a no-pace mode carries pace state: %s" % str(rd))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Part A pays no Ase for speed: a full-pace win and a slow win pay the same, on the fight and on the stage.
+static func _t_speed_pays_no_ase() -> Dictionary:
+	var m: Array = []
+	var cfg := _rewards_cfg()
+	var paid: Array = []
+	for r in [_FULL, _PARTIAL, _SLOW]:
+		var rd := RewardCalc.compute(true, [_obj(0, "combat", true)], 2, 2, r, 0, cfg,
+			EncounterResolutionModes.COMBAT, _PAR, "", null, 0, 0)
+		var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
+		var res := econ.reward_encounter_complete(true, int(rd["consolation_base"]), int(rd["echo_bonus"]), 2,
+			float(rd["redo_multiplier"]), str(rd["rank"]), true, _logger(), 1)
+		paid.append(int(res["ase_awarded"]))
+		if (res["breakdown"] as Array).size() != 1:
+			m.append("round %d: expected one row, got %s" % [r, JSON.stringify(res["breakdown"])])
+	if paid != [20, 20, 20]:
+		m.append("full / partial / slow paid %s, expected 20 each" % str(paid))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 

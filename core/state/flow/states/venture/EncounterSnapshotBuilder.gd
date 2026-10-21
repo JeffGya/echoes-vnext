@@ -289,8 +289,7 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 	var _pace_src: Dictionary = combat_state if not combat_state.is_empty() \
 		else (ectx.pace_cfg if ectx != null else {})
 	var _pace: String = PaceService.pace_state(_round, float(_pace_src.get("par_rounds", 0.0)),
-		float(_pace_src.get("pace_full_ratio", 0.0)), float(_pace_src.get("pace_zero_ratio", 0.0)),
-		int(_pace_src.get("stage_base", 0)), float(_pace_src.get("pace_bonus_pct", 0.0)))
+		float(_pace_src.get("pace_full_ratio", 0.0)), float(_pace_src.get("pace_zero_ratio", 0.0)))
 	if not _pace.is_empty():
 		out["pace_state"] = _pace
 	return out

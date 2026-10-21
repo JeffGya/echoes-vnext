@@ -1555,14 +1555,18 @@
 			},
 			"_objective_count_excluded_comment": "Objective types left out of the 'overcome of total' count on the payout ledger. boss is a stub today; remove it from this list when the boss becomes a real objective. No payout effect.",
 			"objective_count_excluded_types": ["boss"],
-			"enemy_defeated_bonus": 5,
 			"echo_survived_bonus": 10,
 			"pace_full_ratio": 1.1,
 			"pace_zero_ratio": 1.6,
-			"pace_bonus_pct": 0.05,
 			"redo_penalty_per_run": 0.1,
 			"redo_penalty_floor": 0.5,
 			"defeat_factor": 0.25,
+			"_rank_points_comment": "V2-ECONOMY-004 D-49: rank score = win + home + pace. home is Echoes alive / Echoes started in the fight; pace is the pace fraction (a no-pace mode gets the full pace points). Ase amounts do not enter the score.",
+			"rank_points": {
+				"win": 0.4,
+				"home": 0.4,
+				"pace": 0.2
+			},
 			"rank_thresholds": {
 				"S": 0.9,
 				"A": 0.75,
@@ -1570,15 +1574,6 @@
 				"C": 0.35,
 				"D": 0.15
 			},
-			"_comment_realm005": "REALM-005: Virtue-based stage bonus. Formula: roundi((virtue_bonuses[virtue] + stage_index * stage_index_bonus_per) * (base + run_index * step)). Victory-only.",
-			"virtue_bonuses": {
-				"courage": 10,
-				"wisdom": 15,
-				"faith": 20
-			},
-			"stage_index_bonus_per": 5,
-			"realm_order_multiplier_base": 1.0,
-			"realm_order_multiplier_step": 0.5,
 			"partial_intel_reward_factor": 0.12
 		},
 		"grid": {

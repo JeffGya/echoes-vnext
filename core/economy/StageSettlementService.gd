@@ -4,8 +4,8 @@
 # WHY THIS FILE EXISTS
 # --------------------
 # `FlowEncounterState.build_final_snapshot()` used to pay the whole reward at every combat end:
-# the stage's summed objective weights, the stage's realm-virtue bonus, and the stage-clear
-# Storyweight. Three stage-cadence payouts, fired once per ENCOUNTER, inside a snapshot builder,
+# the stage's summed objective weights, a realm-virtue bonus (removed, D-40), and the stage-clear
+# Storyweight. Stage-cadence payouts, fired once per ENCOUNTER, inside a snapshot builder,
 # in a dispatch that never advances the stage. That produced D77 (every combat situation in a
 # stage paid another full stage reward; a defeat paid a 25% consolation without limit) and D36
 # (quit at the Resolve screen and the money is banked while the stage stays "current"), and its
@@ -47,8 +47,7 @@
 # adds `{}` where the key is absent (it never overwrites a populated one — pinned by
 # tests/SaveBridgeTests.gd:394-431), so a receipt written here survives it.
 #
-# WHAT IS NOT SETTLED HERE, deliberately: the enemies-defeated bonus, the echoes-survived bonus,
-# the pace bonus and per-kill Storyweight. Those measure one FIGHT and are paid at the fight,
+# WHAT IS NOT SETTLED HERE, deliberately: the echoes-survived bonus and per-kill Storyweight. Those measure one FIGHT and are paid at the fight,
 # by `EconomyService.reward_encounter_complete()` and by the mid-combat kill-XP path. See the
 # split writeup at the top of EconomyService.gd's Stage Reward API section.
 
@@ -119,14 +118,13 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 	# --- the stage-cadence Ase/Ekwan ---------------------------------------
 	var plan := _plan(realm_model, stage_ref, stage_index, logger, t)
 	var base: int = plan["base"]
-	var virtue_bonus: int = plan["virtue_bonus"]
-	# REALM-005: same formula log line the encounter path made; it moved to the dispatch that
-	# completes the stage. The preview never logs it.
+	# The preview never logs this.
 	if logger != null:
-		logger.info(t, "economy.stage.reward", "Stage reward formula", plan["formula_inputs"])
+		logger.info(t, "economy.stage.reward", "Stage reward inputs", {
+			"stage_index": stage_index, "base": base, "redo_multiplier": plan["redo_mul"] })
 
 	var payout: Dictionary = econ.settle_stage_complete(
-		base, plan["redo_mul"], virtue_bonus, logger, t, plan["counts"], plan["ekwan_base"]
+		base, plan["redo_mul"], logger, t, plan["counts"], plan["ekwan_base"]
 	)
 	flow_ctx.request_save("stage.reward")
 
@@ -149,7 +147,6 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 			"realm_id":      flow_ctx.realm_id,
 			"stage_index":   stage_index,
 			"base_reward":   base,
-			"virtue_bonus":  virtue_bonus,
 			"ase_awarded":   int(payout.get("ase_awarded", 0)),
 			"ekwan_awarded": int(payout.get("ekwan_awarded", 0)),
 			"xp_events":     xp_events.size(),
@@ -183,7 +180,7 @@ func preview() -> Dictionary:
 		return {}
 	var plan := _plan(realm_model, stage_ref, stage_index, null, 0)
 	var rows := EconomyService.stage_payout_rows(
-		plan["base"], plan["redo_mul"], plan["virtue_bonus"], plan["counts"], plan["ekwan_base"])
+		plan["base"], plan["redo_mul"], plan["counts"], plan["ekwan_base"])
 	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
 
 
@@ -194,14 +191,10 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 	var reward_cfg := ConfigService.get_rewards_cfg(config_service)
 	var objectives_v: Variant = stage_ref.get("objectives", [])
 	var objectives: Array = objectives_v if objectives_v is Array else []
-	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
-		stage_index, str(realm_model.get("virtue", "")), int(realm_model.get("run_index", 0)), reward_cfg)
 
 	return {
 		"base":           RewardCalc.base_reward(objectives, reward_cfg, log, t),
 		"redo_mul":       RewardCalc.redo_multiplier(int(realm_model.get("run_count", 0)), reward_cfg),
-		"virtue_bonus":   int(stage_reward_data.get("virtue_bonus", 0)),
-		"formula_inputs": stage_reward_data.get("formula_inputs", {}),
 		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
 	}

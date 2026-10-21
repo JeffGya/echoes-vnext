@@ -302,8 +302,8 @@ static func count_revealed_situations(flow_ctx_arg: FlowContext) -> int:
 
 
 # Base reward of the current stage, by `mode` (RewardCalc.MODE_*). The default pays completed
-# objectives only (retreat and return-home partials). The pace base passes
-# MODE_COMPLETED_PLUS_FOUGHT; the fought objective is `flow_ctx.active_encounter_objective_index`.
+# objectives only (retreat and return-home partials). The fought objective for the other modes is
+# `flow_ctx.active_encounter_objective_index`.
 static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService,
 		logger: StructuredLogger = null, t: int = 0, mode: String = RewardCalc.MODE_COMPLETED) -> int:
 	return RewardCalc.base_reward(_current_stage_objectives(flow_ctx_arg),

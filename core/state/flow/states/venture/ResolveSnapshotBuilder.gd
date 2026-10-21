@@ -214,9 +214,7 @@ static func add_contact_outcome(
 
 ## 16 — Pace result (docs/stories/pace-reward/design.md §6-§7). Producers A and G, pace-mode wins only:
 ## the call is the gate, so a no-pace fight or a defeat carries none of these keys.
-## pace_bonus_awarded is the pre-redo Ase of the "Pace bonus" breakdown row.
-static func add_pace(data: Dictionary, pace_bonus_awarded: int, pace_state: String,
-		pace_changed_rank: bool) -> void:
-	data["pace_bonus_awarded"] = pace_bonus_awarded
+## pace_changed_rank is true when the pace points moved the grade. Speed pays no Ase (D-49).
+static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bool) -> void:
 	data["pace_state"]         = pace_state
 	data["pace_changed_rank"]  = pace_changed_rank
