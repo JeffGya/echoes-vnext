@@ -64,3 +64,14 @@ Stage Replay tooltip (DECIDED, Jeff): "The party has been here before. The whole
 - Rows come from snapshot data only. A cause with no row is an unused tooltip entry. An unknown cause shows no (i).
 - Row name for `repeat_defeat` is "Consolation" (assumption, Jeff to confirm).
 - The theme got additive Payout* variations (`assets/theme/LivingTreeSystem.tres`).
+| D-16 | Direction E chosen (Jeff, 2026-10-21): no running Ase figure on the mid-stage card. It shows the party and their state, one line on what the fight changed, the objective as a story mark, intel gained, the Thread line, then go on / go home. "Carried home" shows only at the return or retreat confirmation, with a comparator, and only above 0. The flame glow is NOT used. Mockup: `mockups/stage-flow-motion.html`. Build waits for "ROW SET FINAL" and Jeff's go. Open rule questions are with the backend session. |
+
+## Rule answers from the backend session (Jeff, backend D-72, 2026-10-21)
+
+1. An overcome objective stays overcome after a return home (GDD 20.8). The "stage waits" line is true.
+2. The carried amount (12%) is an ADVANCE. At stage end the stage pays in full MINUS what was already carried. No double pay.
+3. Repeat return-home with no new objective carries 0 more (backend step 5.8).
+4. The realm scale and the replay factor apply to the carried amount.
+5. Rank rule (backend D-69): any death caps the rank at A; S needs everyone home. The mockup shows "rank B with one Echo lost" as an example only. It is invented. Do not build it as fact.
+
+Open for the UI: the return and retreat confirmation can say what is banked now and that the rest is paid when the stage is finished (PROPOSAL wording needed from Jeff; use "earned", not "paid", in player text).
