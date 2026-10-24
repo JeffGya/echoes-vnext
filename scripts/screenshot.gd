@@ -108,9 +108,9 @@ func _fixtures() -> Dictionary:
 
 func _summon_grades(uncalled: int, after: int) -> Array:
 	return [
-		{ "key": "uncalled", "label": "Uncalled", "ase_cost": uncalled, "ase_cost_after": after },
-		{ "key": "called", "label": "Called", "ase_cost": uncalled + 90, "ase_cost_after": after + 90 },
-		{ "key": "chosen", "label": "Chosen", "ase_cost": uncalled + 340, "ase_cost_after": after + 340 },
+		{ "key": "uncalled", "label": "Uncalled", "enabled": true, "ase_cost": uncalled, "ase_cost_after": after },
+		{ "key": "called", "label": "Called", "enabled": false, "ase_cost": uncalled + 90, "ase_cost_after": after + 90 },
+		{ "key": "chosen", "label": "Chosen", "enabled": false, "ase_cost": uncalled + 340, "ase_cost_after": after + 340 },
 	]
 
 

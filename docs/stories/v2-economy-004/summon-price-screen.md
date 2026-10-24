@@ -24,13 +24,13 @@ Status: built; Jeff tests in game. Copy is PLACEHOLDER until the ux-copy pass (D
 |---|---|
 | Screen | `ui/screens/sanctum/SummonScreen.tscn`, `.gd` |
 | Copy table (one place to edit) | `data/ui/summon_price_text.json`, read by `ui/components/SummonPriceText.gd` |
-| Locked grades | `_OPEN_GRADES` in `SummonScreen.gd`. Add `"called"` or `"chosen"` to open one. |
+| Locked grades | `summon_grade_options[].enabled` from the core (config `data.summoning.grade_enabled`). A missing key counts as locked for Called and Chosen. |
 | UI tests | `tests/SummonPriceUITests.gd` (suite `summon_price_ui`) |
 | Screenshots | `scripts/screenshot.gd` fixtures `summon_price_rising`, `summon_price_flat`, `summon_price_short` |
 
 ## Open items for Jeff
 
-1. The snapshot has no locked flag per grade. `_OPEN_GRADES` is a UI constant until a field exists.
+1. The core owns which grades are open (`enabled`, Phase 5.5b). The screen has no lock constant.
 2. No lock icon asset exists. Locked grades use the disabled style and a tooltip. `sr-game-artist` can supply an icon.
 3. At 1280x720 the intro line is hidden so the stepper and button stay in view (`INTRO_MIN_HEIGHT` in `SummonScreen.gd`).
 4. Opening Called or Chosen needs `sanctum.grade_select` wiring in the screen. It is not built because both stay locked.

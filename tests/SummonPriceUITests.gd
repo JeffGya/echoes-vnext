@@ -16,6 +16,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("summon_price_ui/short_line_and_disabled_button_when_nothing_affordable", Callable(SummonPriceUITests, "_t_short"))
 	runner.register_test("summon_price_ui/summon_sends_the_chosen_count", Callable(SummonPriceUITests, "_t_action"))
 	runner.register_test("summon_price_ui/called_and_chosen_shown_but_locked", Callable(SummonPriceUITests, "_t_grades_locked"))
+	runner.register_test("summon_price_ui/enabled_flag_unlocks_a_grade_card", Callable(SummonPriceUITests, "_t_grade_unlocks"))
 	runner.register_test("summon_price_ui/no_discount_wording_and_no_id_in_copy_or_screen", Callable(SummonPriceUITests, "_t_no_discount_no_id"))
 	runner.register_test("summon_price_ui/copy_table_has_every_key_the_screen_reads", Callable(SummonPriceUITests, "_t_copy_keys"))
 
@@ -35,9 +36,9 @@ static func _snapshot(over: Dictionary = {}) -> Dictionary:
 		"batch_affordable_max": 3,
 		"ase_short_by": 0,
 		"summon_grade_options": [
-			{ "key": "uncalled", "label": "Uncalled", "ase_cost": 145, "ase_cost_after": 175 },
-			{ "key": "called", "label": "Called", "ase_cost": 235, "ase_cost_after": 265 },
-			{ "key": "chosen", "label": "Chosen", "ase_cost": 485, "ase_cost_after": 515 },
+			{ "key": "uncalled", "label": "Uncalled", "enabled": true, "ase_cost": 145, "ase_cost_after": 175 },
+			{ "key": "called", "label": "Called", "enabled": false, "ase_cost": 235, "ase_cost_after": 265 },
+			{ "key": "chosen", "label": "Chosen", "enabled": false, "ase_cost": 485, "ase_cost_after": 515 },
 		],
 		"pending_summon_reveals": [],
 	}
@@ -168,6 +169,14 @@ static func _t_action() -> Dictionary:
 static func _t_grades_locked() -> Dictionary:
 	var s := _mount()
 	s.call("set_snapshot", _snapshot())
+	# A grade option without the key stays locked (Called and Chosen).
+	var bare := _snapshot()
+	for o: Dictionary in (bare["data"] as Dictionary)["summon_grade_options"]:
+		o.erase("enabled")
+	s.call("set_snapshot", bare)
+	if not (_button(s, "GradeCalledButton").disabled and _button(s, "GradeChosenButton").disabled):
+		return _fail(s, "a missing enabled key must keep Called and Chosen locked")
+	s.call("set_snapshot", _snapshot())
 	var ok := not _button(s, "GradeUncalledButton").disabled \
 		and _button(s, "GradeCalledButton").disabled and _button(s, "GradeChosenButton").disabled \
 		and _button(s, "GradeUncalledButton").button_pressed and not _button(s, "GradeCalledButton").button_pressed
@@ -176,6 +185,18 @@ static func _t_grades_locked() -> Dictionary:
 	var leak := texts.contains("235") or texts.contains("485")
 	_unmount(s)
 	return { "ok": ok and not leak, "error": "Called and Chosen must be visible, locked, and show no price" }
+
+
+static func _t_grade_unlocks() -> Dictionary:
+	var s := _mount()
+	var snap := _snapshot()
+	for o: Dictionary in (snap["data"] as Dictionary)["summon_grade_options"]:
+		if str(o["key"]) == "called":
+			o["enabled"] = true
+	s.call("set_snapshot", snap)
+	var ok := not _button(s, "GradeCalledButton").disabled and _button(s, "GradeChosenButton").disabled
+	_unmount(s)
+	return { "ok": ok, "error": "flipping enabled must unlock the Called card and leave Chosen locked" }
 
 
 static func _t_no_discount_no_id() -> Dictionary:

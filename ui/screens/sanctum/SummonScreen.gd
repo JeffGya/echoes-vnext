@@ -39,9 +39,7 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 @onready var summon_button: Button = %SummonButton
 
-# Grades the player can pick. Called and Chosen are shown but locked until Jeff opens them (D-85).
 const INTRO_MIN_HEIGHT := 800.0
-const _OPEN_GRADES: Array[String] = ["uncalled"]
 
 var _last_snapshot: Dictionary = {}
 
@@ -63,10 +61,6 @@ func _ready() -> void:
 	count_label.text = SummonPriceText.text("summon", "count_label")
 	max_button.text = SummonPriceText.text("summon", "max_button")
 	grade_label.text = SummonPriceText.text("grade", "label")
-	for key: String in grade_buttons.keys():
-		var b: Button = grade_buttons[key]
-		b.disabled = not _OPEN_GRADES.has(key)
-		b.tooltip_text = "" if _OPEN_GRADES.has(key) else SummonPriceText.text("grade", "locked_hint")
 
 	_refresh()
 
@@ -157,6 +151,16 @@ func _grade_option() -> Dictionary:
 			return o_v
 	return {}
 
+# The core says which grades are open (`enabled` on each grade option). A missing key counts as
+# locked for Called and Chosen.
+func _grade_enabled(key: String) -> bool:
+	var opts_v: Variant = _data().get("summon_grade_options", [])
+	var opts: Array = opts_v if opts_v is Array else []
+	for o_v: Variant in opts:
+		if o_v is Dictionary and str((o_v as Dictionary).get("key", "")) == key:
+			return bool((o_v as Dictionary).get("enabled", key == "uncalled"))
+	return key == "uncalled"
+
 func _on_summon_pressed() -> void:
 	if _short_by() > 0:
 		# UI guard only; Core is authoritative anyway.
@@ -182,6 +186,9 @@ func _refresh() -> void:
 
 	for key: String in grade_buttons.keys():
 		var b: Button = grade_buttons[key]
+		var open := _grade_enabled(key)
+		b.disabled = not open
+		b.tooltip_text = "" if open else SummonPriceText.text("grade", "locked_hint")
 		b.theme_type_variation = &"SanctumTabButtonActive" if key == _grade else &"SanctumTabButton"
 		b.button_pressed = key == _grade
 
