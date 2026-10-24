@@ -31,6 +31,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/home_sequence_all_home_has_no_lost_line_or_label", Callable(ResolvePayoutUITests, "_t_home_all"))
 	runner.register_test("payout_ui/home_sequence_motion_skips_on_tap_and_never_blocks", Callable(ResolvePayoutUITests, "_t_home_motion_skip"))
 	runner.register_test("payout_ui/carried_ekwan_line_on_scout_return", Callable(ResolvePayoutUITests, "_t_carried_ekwan"))
+	runner.register_test("payout_ui/carried_line_absent_at_zero_present_with_comparator", Callable(ResolvePayoutUITests, "_t_carried_panel"))
+	runner.register_test("payout_ui/return_home_modal_carries_only_on_success", Callable(ResolvePayoutUITests, "_t_return_modal"))
+	runner.register_test("payout_ui/retreat_button_price_affordable_and_denied", Callable(ResolvePayoutUITests, "_t_retreat_button"))
+	runner.register_test("payout_ui/carried_scenes_hold_no_amount_text", Callable(ResolvePayoutUITests, "_t_carried_no_amounts"))
 	runner.register_test("payout_ui/unknown_cause_shows_no_button", Callable(ResolvePayoutUITests, "_t_unknown_cause"))
 	runner.register_test("payout_ui/other_cards_keep_working", Callable(ResolvePayoutUITests, "_t_other_cards"))
 	runner.register_test("payout_ui/effects_rail_has_no_ase_ekwan_or_defeated_chip", Callable(ResolvePayoutUITests, "_t_rail_chips"))
@@ -734,3 +738,152 @@ static func _t_carried_ekwan() -> Dictionary:
 	if line.visible or (screen.get_node("%EarningsSummary") as Control).visible:
 		return _fail(m, "Ekwan line shows at 0")
 	return _pass(m)
+
+
+# ── Carried home and the retreat button ─────────────────────────────────────
+
+const CarriedPanelScene := preload("res://ui/components/CarriedHomePanel.tscn")
+const ReturnHomeScene := preload("res://ui/overlays/realm/ReturnHomeModal.tscn")
+const PrebattleScene := preload("res://ui/overlays/realm/PrebattleModal.tscn")
+const CarriedStrings := preload("res://ui/components/CarriedHomePresentation.gd")
+
+
+static func _mount_scene(scene: PackedScene) -> Array:
+	var host := (Engine.get_main_loop() as SceneTree).current_scene.get_node("UISnapshotRenderer")
+	var viewport := SubViewport.new()
+	viewport.size = Vector2i(1280, 720)
+	viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	host.add_child(viewport)
+	var node := scene.instantiate() as Control
+	viewport.add_child(node)
+	return [viewport, node]
+
+
+static func _party() -> Array:
+	return [{ "name": "Ama", "emotional_status": "grounded" }, { "name": "Kofi", "emotional_status": "uncertain" }]
+
+
+static func _t_carried_panel() -> Dictionary:
+	var m := _mount_scene(CarriedPanelScene)
+	var panel: CarriedHomePanel = m[1]
+	var ase := panel.get_node("%AseLine") as Label
+	var ekwan := panel.get_node("%EkwanLine") as Label
+	var carried := panel.get_node("%CarriedBlock") as Control
+	var party := panel.get_node("%PartyBlock") as Control
+	var waits := panel.get_node("%WaitsLine") as Control
+	# 0 and 0, nothing overcome: nothing shows.
+	panel.present({ "ase": 0, "ekwan": 0, "overcome": 0, "total": 5 }, _party(), CarriedStrings.RETURN_COST)
+	if panel.visible:
+		return _fail(m, "panel visible with no carry and nothing overcome")
+	# A repeat return that carries 0 with an overcome objective: the stage-waits line only.
+	panel.present({ "ase": 0, "ekwan": 0, "overcome": 1, "total": 5 }, _party(), CarriedStrings.RETURN_COST)
+	if not panel.visible or carried.visible or party.visible or not waits.visible:
+		return _fail(m, "0/0 repeat return must show the waits line only")
+	# Ase only, Ekwan only, both. Amounts come from data.
+	var cases := [[7, 0, true, false], [0, 3, false, true], [11, 5, true, true]]
+	for c in cases:
+		panel.present({ "ase": c[0], "ekwan": c[1], "overcome": 1, "total": 9 }, _party(), CarriedStrings.RETURN_COST)
+		if not carried.visible or ase.visible != c[2] or ekwan.visible != c[3]:
+			return _fail(m, "carry %s: ase visible %s, ekwan visible %s" % [str(c), ase.visible, ekwan.visible])
+		if c[2] and ase.text != "+%d Ase" % c[0] or c[3] and ekwan.text != "+%d Ekwan" % c[1]:
+			return _fail(m, "carry %s: amounts %s / %s" % [str(c), ase.text, ekwan.text])
+		# The comparator is always beside a carried line.
+		if not party.visible or not waits.visible or not (panel.get_node("%CostLine") as Control).visible:
+			return _fail(m, "carry %s: comparator missing" % str(c))
+		if (panel.get_node("%PartyList") as Label).text != "Ama \u2014 Grounded\nKofi \u2014 Uncertain":
+			return _fail(m, "party list: %s" % (panel.get_node("%PartyList") as Label).text)
+		if (panel.get_node("%AdvanceNote") as Label).text != CarriedStrings.ADVANCE_NOTE:
+			return _fail(m, "advance note missing")
+	for t in _visible_texts(panel):
+		if "lost" in str(t).to_lower() or " of " in str(t):
+			return _fail(m, "forbidden text \"%s\"" % t)
+	return _pass(m)
+
+
+static func _t_return_modal() -> Dictionary:
+	var m := _mount_scene(ReturnHomeScene)
+	var modal: ReturnHomeModal = m[1]
+	var panel := modal.get_node("%CarriedPanel") as Control
+	var carry := { "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 }
+	modal.present({ "result": { "success": true, "message": "x" }, "carry": carry, "party": _party() })
+	var shown: bool = panel.visible and (panel.get_node("%AseLine") as Label).text == "+4 Ase"
+	var cost: String = (panel.get_node("%CostLine") as Label).text
+	modal.present({ "result": { "success": false, "message": "x" }, "carry": carry, "party": _party() })
+	var hidden_on_block: bool = not panel.visible
+	var action: Dictionary = modal.get("_action")
+	modal.present({ "result": { "success": true, "message": "x" }, "carry": carry, "party": _party() })
+	var dispatched: Dictionary = modal.get("_action")
+	if not shown or cost != CarriedStrings.RETURN_COST:
+		return _fail(m, "carried panel missing on a successful return")
+	if not hidden_on_block or action != { "type": "stage.dismiss_overlay" }:
+		return _fail(m, "a blocked return must carry nothing and keep its action")
+	if dispatched != { "type": "stage.confirm_return_home" }:
+		return _fail(m, "the confirm action changed")
+	return _pass(m)
+
+
+static func _prebattle_payload(data_extra: Dictionary) -> Dictionary:
+	var combat := (load("res://ui/screens/combat/CombatBoardScreen.tscn") as PackedScene).instantiate() as CombatBoardScreen
+	var emitted: Array = []
+	combat.modal_requested.connect(func(_id: StringName, payload: Dictionary) -> void: emitted.append(payload.duplicate(true)))
+	combat.set("_round_label", combat.get_node("RoundLabel"))
+	combat.set("_objective_label", combat.get_node("ObjectiveLabel"))
+	var data := { "round_phase": "pre_combat", "board_cols": 2, "board_rows": 2,
+		"actors": [_actor("Ama"), _actor("Kofi")], "objective_state": { "type": EncounterResolutionModes.COMBAT },
+		"retreat_eligible": true, "retreat_tier_label": "Risky", "retreat_ase_cost": 13, "retreat_affordable": true }
+	data.merge(data_extra, true)
+	combat.call("_show_prebattle_panel", data, {
+		"cta.combat_init": { "type": "combat.init", "slot": "cta.combat_init" },
+		"cta.retreat": { "type": "encounter.retreat", "slot": "cta.retreat" } })
+	combat.free()
+	return emitted[0] if not emitted.is_empty() else {}
+
+
+static func _t_retreat_button() -> Dictionary:
+	var m := _mount_scene(PrebattleScene)
+	var modal: PrebattleModal = m[1]
+	var button := modal.get_node("%RetreatButton") as Button
+	var note := modal.get_node("%RetreatNoteLabel") as Label
+	# Affordable: enabled, price from data.
+	var payload := _prebattle_payload({})
+	modal.present(payload)
+	if button.disabled or "13" not in button.text or note.visible:
+		return _fail(m, "affordable retreat: disabled=%s text=%s" % [button.disabled, button.text])
+	# Not affordable: disabled, price and reason in the text, 48x48 target.
+	payload = _prebattle_payload({ "retreat_affordable": false })
+	modal.present(payload)
+	if not button.disabled or "13" not in button.text or CarriedStrings.RETREAT_UNAFFORDABLE not in button.text:
+		return _fail(m, "unaffordable retreat: disabled=%s text=%s" % [button.disabled, button.text])
+	var size := button.get_combined_minimum_size()
+	if size.x < 48.0 or size.y < 48.0:
+		return _fail(m, "retreat button %s is under 48x48" % str(size))
+	# After a refused dispatch: one plain line, numbers from data.
+	payload = _prebattle_payload({ "retreat_affordable": false,
+		"retreat_denied": { "reason": "insufficient_ase", "ase_cost": 13, "ase_balance": 4 } })
+	modal.present(payload)
+	if not note.visible or note.text != "Retreating takes 13 Ase. The party has 4." or "lost" in note.text.to_lower():
+		return _fail(m, "denied line: %s" % note.text)
+	# The carried comparator on the retreat decision: only above 0, with the party.
+	var panel := modal.get_node("%CarriedPanel") as Control
+	payload = _prebattle_payload({ "carry_retreat_preview": { "ase": 0, "ekwan": 0, "overcome": 0, "total": 2 } })
+	modal.present(payload)
+	if panel.visible:
+		return _fail(m, "carried panel shows at 0/0")
+	payload = _prebattle_payload({ "carry_retreat_preview": { "ase": 6, "ekwan": 2, "overcome": 1, "total": 2 } })
+	modal.present(payload)
+	if not panel.visible or (panel.get_node("%PartyList") as Label).text != "Ama\nKofi":
+		return _fail(m, "retreat comparator wrong: %s" % (panel.get_node("%PartyList") as Label).text)
+	# The retreat action is unchanged.
+	if modal.get("_retreat_action") != { "type": "encounter.retreat", "slot": "cta.retreat" }:
+		return _fail(m, "the retreat action changed")
+	return _pass(m)
+
+
+static func _t_carried_no_amounts() -> Dictionary:
+	var pattern := RegEx.create_from_string("text = \"[^\"]*[0-9]+\\s*(Ase|Ekwan)")
+	for path in ["res://ui/components/CarriedHomePanel.tscn", "res://ui/overlays/realm/PrebattleModal.tscn",
+			"res://ui/overlays/realm/ReturnHomeModal.tscn"]:
+		var text := FileAccess.get_file_as_string(path)
+		if text.is_empty() or pattern.search(text) != null:
+			return { "ok": false, "error": "%s unreadable or has an amount in a text value" % path }
+	return { "ok": true }

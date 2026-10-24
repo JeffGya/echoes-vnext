@@ -100,3 +100,11 @@ Open for the UI: the return and retreat confirmation can say what is banked now 
   - Thread: no field (see the derivation above).
   - "What the fight changed": no event field. The line comes from `emotion_summary` tag and direction only, and shows only for a real event.
 - Carried Ekwan: on a scout return or forced retreat, `ekwan_awarded` above 0 shows "Ekwan earned" with its amount in the ledger, no row, no (i).
+
+## Carried home and the retreat button, Part B (UI, 2026-10-24)
+
+- Surfaces extended (no new flow, no action changed): `ReturnHomeModal` (the return-home confirmation, after `stage.return_home`; Leave still dispatches `stage.confirm_return_home`) and `PrebattleModal` (the retreat decision). A new `CarriedHomePanel` sits in both.
+- "Carried home" shows only when Ase or Ekwan is above 0, each line only above 0, and then always with the comparator: the party and its state, "The stage waits." and the advance note. A return that carries 0 shows only "The stage waits." (when something is overcome). No zero rows, no totals, no "of N". Only a successful return shows the panel.
+- Retreat button: reads `retreat_affordable` (a missing key reads as affordable) and `retreat_ase_cost`. Not affordable: disabled, price and "Not enough Ase" in the text. After a refused dispatch `retreat_denied` shows one plain line with both numbers from data.
+- PROPOSAL placeholders (not approved copy), all in `ui/components/CarriedHomePresentation.gd`: carried title, advance note, "The stage waits.", "With the party", "Going home costs nothing.", "Not enough Ase", the denied line.
+- BLOCKED: no intel-gained field on either snapshot, so the comparator has no intel line.

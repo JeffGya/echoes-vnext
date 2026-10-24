@@ -62,7 +62,10 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 
 	shell.call("set_layout", layout)
 	for snap in snapshots:
-		if snap is String:
+		if snap is Dictionary and snap.has("_modal"):
+			var req: Dictionary = snap["_modal"]
+			modal_host.call("present_modal_for_id", req["id"], shell.call("modal_scene_for", req["id"]), req["payload"])
+		elif snap is String:
 			_run_step(harness, snap)
 		else:
 			shell.call("set_snapshot", snap)
@@ -110,6 +113,12 @@ func _fixtures() -> Dictionary:
 		"resolve_midstage_event": [_combat(6, recover), _payout_midstage_event(), "skip_motion"],
 		"resolve_defeat_consolation": [_combat(7, recover), _payout_defeat()],
 		"resolve_retreat_zero": [_combat(7, recover), _payout_retreat_zero()],
+		"carry_return_home": [_combat(6, recover), _return_home_modal({ "ase": 4, "ekwan": 2, "overcome": 1, "total": 3 })],
+		"carry_return_home_zero": [_combat(6, recover), _return_home_modal({ "ase": 0, "ekwan": 0, "overcome": 1, "total": 3 })],
+		"carry_retreat": [_prebattle({ "carry_retreat_preview": { "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 } })],
+		"retreat_disabled_price": [_prebattle({ "retreat_affordable": false })],
+		"retreat_denied": [_prebattle({ "retreat_affordable": false,
+			"retreat_denied": { "reason": "insufficient_ase", "ase_cost": 10, "ase_balance": 4 } })],
 		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(false), "skip_motion", "focus_cause:2"],
 	}
 
@@ -307,3 +316,30 @@ func _payout_retreat_zero() -> Dictionary:
 	data["intel_count"] = 0
 	data["actors"] = _actors()
 	return _payout_snap(data)
+
+
+func _return_home_modal(carry: Dictionary) -> Dictionary:
+	return { "_modal": { "id": &"realm.return_home", "payload": {
+		"result": { "success": true, "message": "The party slips away." }, "carry": carry,
+		"party": [{ "name": "Ama", "emotional_status": "grounded" }, { "name": "Kofi", "emotional_status": "uncertain" },
+			{ "name": "Esi", "emotional_status": "whole" }] } } }
+
+
+## A pre-combat snapshot: the shell shows the pre-battle modal with the retreat button.
+func _prebattle(extra: Dictionary) -> Dictionary:
+	var snap := _combat(1, { "type": "combat" })
+	var actors: Array = _actors()
+	for a in actors:
+		if a["faction"] == "echo":
+			a["emotional_status"] = "grounded"
+	snap["data"]["actors"] = actors
+	snap["data"]["round_phase"] = "pre_combat"
+	snap["data"]["retreat_eligible"] = true
+	snap["data"]["retreat_tier_label"] = "Risky"
+	snap["data"]["retreat_ase_cost"] = 10
+	snap["data"]["retreat_affordable"] = true
+	snap["data"].merge(extra, true)
+	snap["actions"] = {
+		"cta.combat_init": { "type": "combat.init", "slot": "cta.combat_init", "label": "Start Combat" },
+		"cta.retreat": { "type": "encounter.retreat", "slot": "cta.retreat", "success_pct": 50, "ase_cost": 10 } }
+	return snap
