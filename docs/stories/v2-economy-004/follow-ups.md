@@ -27,3 +27,4 @@ Written in STE. One line per item: what, why, source decision. No Notion row exi
 | 21 | Copy: fiction frame for the rising price ("the price of holding one more life in the village" is a proposal), wording of every tooltip, "village" not "house" | Copy is Jeff's. | D-57 |
 | 22 | Confirm how the opening affords Echo 2 (52 Ase against an uncalled price of 60) | Possible wall before stage 0; Jeff said keep 52. | D-58 |
 | 23 | In-fight retreat is denied when Ase is below the price: check that a poor player is not trapped in a losing fight (GDD §20.10 safety valve); the map-level return home stays free | Jeff chose deny over free retreat. | D-79 |
+| 24 | When Called and Chosen open on the summon screen: add an `enabled` flag per grade option in the SUMMON snapshot and delete the UI-side locked-grade constant in SummonScreen.gd | The lock is a UI constant for now (D-85). | summon UI session |

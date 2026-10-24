@@ -137,6 +137,11 @@ func handle_summon(action: Dictionary, t: int) -> FlowActionOutcome:
 	if count > SummonService.MAX_BATCH:
 		count = SummonService.MAX_BATCH
 
+	# A locked grade is refused before settling, so the denial changes no state.
+	var lock_cfg := _summoning_cfg()
+	if not SummonService.grade_enabled(lock_cfg, flow_ctx.selected_summon_grade):
+		return _grade_locked_outcome(flow_ctx.selected_summon_grade, t)
+
 	# 1) settle before spend
 	# V2-INFRA-003 Phase 4 Slice 7: routed to EconomySettlementService.settle() — the private
 	# handler this used to call was a ~140-line cross-domain function that unconditionally
@@ -250,6 +255,21 @@ func handle_summon(action: Dictionary, t: int) -> FlowActionOutcome:
 	return FlowActionOutcome.snapshot_outcome(FlowSummonState.build_snapshot(flow_ctx, t)).with_save_reason("sanctum.summon")
 
 
+func _summoning_cfg() -> Dictionary:
+	var data_v: Variant = config_service.get_balance().get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var summ_v: Variant = data.get("summoning", {})
+	return summ_v if summ_v is Dictionary else {}
+
+
+## Refusal for a disabled grade: no spend, no Echo, no change to the selected grade.
+func _grade_locked_outcome(grade: String, t: int) -> FlowActionOutcome:
+	logger.info(t, "sanctum.summon.grade_locked", "Summon grade is locked", { "grade": grade })
+	var denied := FlowSummonState.build_snapshot(flow_ctx, t)
+	(denied["data"] as Dictionary)["summon_denied"] = { "reason": "grade_locked", "grade": grade }
+	return FlowActionOutcome.snapshot_outcome(denied)
+
+
 ## sanctum.grade_select — moved verbatim from FlowRuntime._handle_sanctum_grade_select.
 func handle_grade_select(action: Dictionary, t: int) -> FlowActionOutcome:
 	var grade := str(action.get("grade", "")).strip_edges()
@@ -269,6 +289,9 @@ func handle_grade_select(action: Dictionary, t: int) -> FlowActionOutcome:
 			"valid_grades": SummonService.GRADES
 		})
 		return FlowActionOutcome.handled_outcome()
+
+	if not SummonService.grade_enabled(summ_cfg, grade):
+		return _grade_locked_outcome(grade, t)
 
 	flow_ctx.selected_summon_grade = grade
 

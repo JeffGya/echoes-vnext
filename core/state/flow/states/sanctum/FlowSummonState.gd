@@ -80,6 +80,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"label": str(grade_labels.get(gk, gk)),
 			"ase_cost": SummonService.price_for(summ_cfg, gk, living + 1),
 			"ase_cost_after": SummonService.price_for(summ_cfg, gk, living + 2),
+			"enabled": SummonService.grade_enabled(summ_cfg, gk),
 		})
 	var next_uncalled := SummonService.price_for(summ_cfg, "uncalled", living + 1)
 	var after_uncalled := SummonService.price_for(summ_cfg, "uncalled", living + 2)

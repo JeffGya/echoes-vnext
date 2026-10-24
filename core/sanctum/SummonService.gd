@@ -47,6 +47,16 @@ static func price_for(summoning_cfg: Dictionary, grade: String, echo_number: int
 	return base + int(summoning_cfg.get("%s_extra" % grade, 0))
 
 
+## The one reader of data.summoning.grade_enabled. A missing key means enabled for uncalled and
+## disabled for every other grade, so a broken config never opens a locked grade.
+static func grade_enabled(summoning_cfg: Dictionary, grade: String) -> bool:
+	if not GRADES.has(grade):
+		return false
+	var table_v: Variant = summoning_cfg.get("grade_enabled", {})
+	var table: Dictionary = table_v if table_v is Dictionary else {}
+	return bool(table.get(grade, grade == "uncalled"))
+
+
 static func village_ceiling(summoning_cfg: Dictionary) -> int:
 	return int(summoning_cfg.get("village_ceiling", 14))
 
