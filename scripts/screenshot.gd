@@ -20,6 +20,7 @@
 extends SceneTree
 
 const HarnessScene := preload("res://scripts/screenshot_harness.tscn")
+const SanctumHarnessScene := preload("res://scripts/screenshot_harness_sanctum.tscn")
 const SETTLE_FRAMES := 45
 
 
@@ -49,9 +50,11 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String) ->
 	var layout := ResponsiveLayoutController.calculate_layout(Vector2(root.size))
 	ResponsiveLayoutController.apply_content_scale_size(root, layout)
 
-	var harness := HarnessScene.instantiate()
+	# A fixture of flow.summon snapshots needs the Sanctum shell, which owns that screen.
+	var sanctum_fixture: bool = fixture_name.begins_with("summon_")
+	var harness := (SanctumHarnessScene if sanctum_fixture else HarnessScene).instantiate()
 	root.add_child(harness)
-	var shell := harness.get_node("ContentLayer/RealmShell") as Control
+	var shell := harness.get_node("ContentLayer/SanctumShell" if sanctum_fixture else "ContentLayer/RealmShell") as Control
 	var modal_host := harness.get_node("ModalLayer/ModalHost") as Control
 	shell.modal_requested.connect(func(modal_id: StringName, payload: Dictionary) -> void:
 		modal_host.call("present_modal_for_id", modal_id, shell.call("modal_scene_for", modal_id), payload))
@@ -93,7 +96,37 @@ func _fixtures() -> Dictionary:
 			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_changed_rank": false })],
 		"resolve_no_pace_win": [_combat(8, endure), _resolve(true, "endured", 8, "B", {})],
 		"resolve_pace_defeat": [_combat(7, recover), _resolve(false, "all_echoes_dead", 7, "F", {})],
+		"summon_price_rising":   [_summon({})],
+		"summon_price_flat":     [_summon({ "living_count": 14, "price_flat": true, "batch_affordable_max": 1,
+			"batch_prices": [430, 430, 430, 430, 430, 430, 430, 430, 430, 430],
+			"batch_totals": [430, 860, 1290, 1720, 2150, 2580, 3010, 3440, 3870, 4300],
+			"ase_balance": 500,
+			"summon_grade_options": _summon_grades(430, 430) })],
+		"summon_price_short":    [_summon({ "ase_balance": 100, "batch_affordable_max": 0, "summon_disabled": true, "ase_short_by": 45 })],
 	}
+
+
+func _summon_grades(uncalled: int, after: int) -> Array:
+	return [
+		{ "key": "uncalled", "label": "Uncalled", "ase_cost": uncalled, "ase_cost_after": after },
+		{ "key": "called", "label": "Called", "ase_cost": uncalled + 90, "ase_cost_after": after + 90 },
+		{ "key": "chosen", "label": "Chosen", "ase_cost": uncalled + 340, "ase_cost_after": after + 340 },
+	]
+
+
+# FlowSummonState.build_snapshot data keys, V2-ECONOMY-004 Phase 5.5. Defaults: 7 living, 700 Ase.
+func _summon(over: Dictionary) -> Dictionary:
+	var data := {
+		"title": "Summon Echo", "ase_balance": 700, "ase_rate_per_hour_hint": 4.0, "living_count": 7,
+		"village_ceiling": 14, "price_flat": false, "selected_grade": "uncalled", "summon_disabled": false,
+		"batch_prices": [145, 175, 210, 250, 300, 360, 430, 430, 430, 430],
+		"batch_totals": [145, 320, 530, 780, 1080, 1440, 1870, 2300, 2730, 3160],
+		"batch_affordable_max": 3, "ase_short_by": 0,
+		"summon_grade_options": _summon_grades(145, 175), "pending_summon_reveals": [],
+	}
+	for k in over.keys():
+		data[k] = over[k]
+	return { "type": "flow.summon", "data": data, "actions": { "cta.summon": { "type": "sanctum.summon", "slot": "cta.summon" } } }
 
 
 func _with(d: Dictionary, key: String, value: Variant) -> Dictionary:

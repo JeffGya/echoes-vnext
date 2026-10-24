@@ -6,6 +6,7 @@ signal action_requested(action: Dictionary)
 signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 @onready var title_label: Label = %TitleLabel
+@onready var intro_label: Label = %IntroLabel
 @onready var back_button: Button = %BackButton
 @onready var root_panel: PanelContainer = %RootPanel
 
@@ -37,6 +38,7 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 @onready var summon_button: Button = %SummonButton
 
 # Grades the player can pick. Called and Chosen are shown but locked until Jeff opens them (D-85).
+const INTRO_MIN_HEIGHT := 800.0
 const _OPEN_GRADES: Array[String] = ["uncalled"]
 
 var _last_snapshot: Dictionary = {}
@@ -97,6 +99,8 @@ func set_layout(layout: Dictionary) -> void:
 	var logical_size_v: Variant = layout.get("logical_size", Vector2(1280, 720))
 	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
 	var viewport_w := float(logical_size.x)
+	# The intro line gives way on short views so the stepper and the Summon button stay in view.
+	intro_label.visible = logical_size.y >= INTRO_MIN_HEIGHT
 	var cap := 680.0 if profile == &"compact" else 760.0
 	var available_w := maxf(320.0, viewport_w - float(32 + int(ceilf(safe.x)) + int(ceilf(safe.z))))
 	var content_w := minf(available_w, cap)
@@ -173,6 +177,7 @@ func _refresh() -> void:
 
 	var short := _short_by()
 	short_label.text = SummonPriceText.with_number("summon", "short_line", short) if short > 0 else ""
+	short_label.visible = short > 0
 	summon_button.disabled = short > 0 or bool(data.get("summon_disabled", false))
 
 func _emit_action(action: Dictionary) -> void:
