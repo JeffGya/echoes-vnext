@@ -31,6 +31,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/home_sequence_all_home_has_no_lost_line_or_label", Callable(ResolvePayoutUITests, "_t_home_all"))
 	runner.register_test("payout_ui/home_sequence_motion_skips_on_tap_and_never_blocks", Callable(ResolvePayoutUITests, "_t_home_motion_skip"))
 	runner.register_test("payout_ui/carried_ekwan_line_on_scout_return", Callable(ResolvePayoutUITests, "_t_carried_ekwan"))
+	runner.register_test("payout_ui/ledger_waits_for_home_sequence_then_emits_once", Callable(ResolvePayoutUITests, "_t_ledger_after_sequence"))
+	runner.register_test("payout_ui/ledger_opens_at_once_on_skip_reduced_motion_or_no_sequence", Callable(ResolvePayoutUITests, "_t_ledger_at_once"))
+	runner.register_test("payout_ui/new_snapshot_mid_sequence_drops_old_emit", Callable(ResolvePayoutUITests, "_t_ledger_new_snapshot"))
 	runner.register_test("payout_ui/carried_line_absent_at_zero_present_with_comparator", Callable(ResolvePayoutUITests, "_t_carried_panel"))
 	runner.register_test("payout_ui/return_home_modal_carries_only_on_success", Callable(ResolvePayoutUITests, "_t_return_modal"))
 	runner.register_test("payout_ui/retreat_button_price_affordable_and_denied", Callable(ResolvePayoutUITests, "_t_retreat_button"))
@@ -887,3 +890,111 @@ static func _t_carried_no_amounts() -> Dictionary:
 		if text.is_empty() or pattern.search(text) != null:
 			return { "ok": false, "error": "%s unreadable or has an amount in a text value" % path }
 	return { "ok": true }
+
+
+# ── Ledger and the home sequence ────────────────────────────────────────────
+
+static func _unseen_stage(lost: Array, alive: int, started: int) -> Dictionary:
+	var snap := _stage_home(lost, alive, started)
+	snap["data"]["ledger_seen"] = false
+	return snap
+
+
+static func _t_ledger_after_sequence() -> Dictionary:
+	var before := _set_reduced(false)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var sent: Array = []
+	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
+	var ledger := screen.get_node("%Ledger") as Control
+	var err := ""
+	screen.set_snapshot(_unseen_stage(["Kofi"], 3, 4))
+	if not screen.is_motion_running() or ledger.visible or not sent.is_empty():
+		err = "while the sequence runs: running=%s ledger=%s emits=%d" % [screen.is_motion_running(), ledger.visible, sent.size()]
+	# The host re-renders the same result mid-sequence: still closed, still no emit.
+	if err.is_empty():
+		screen.set_snapshot(_unseen_stage(["Kofi"], 3, 4))
+		if ledger.visible or not sent.is_empty():
+			err = "same-result re-render opened the ledger or emitted"
+	# The sequence ends: the ledger opens and the emit happens once.
+	if err.is_empty():
+		screen._on_motion_done()
+		if not ledger.visible or sent != [MARK_SEEN]:
+			err = "after the sequence: ledger=%s emits=%s" % [ledger.visible, str(sent)]
+	# A second end signal (for example a late skip) never emits again.
+	if err.is_empty():
+		screen.skip_motion()
+		screen.set_snapshot(_stage_home(["Kofi"], 3, 4))
+		if sent.size() != 1 or not ledger.visible:
+			err = "double emit or ledger closed after the re-render (%d emits)" % sent.size()
+	StopMarkMotion.reduced = before
+	if not err.is_empty():
+		return _fail(m, err)
+	return _pass(m)
+
+
+static func _t_ledger_at_once() -> Dictionary:
+	var before := _set_reduced(false)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var sent: Array = []
+	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
+	var ledger := screen.get_node("%Ledger") as Control
+	var err := ""
+	# A tap skips the sequence: the ledger opens at once, one emit.
+	screen.set_snapshot(_unseen_stage(["Kofi"], 3, 4))
+	var tap := InputEventMouseButton.new()
+	tap.button_index = MOUSE_BUTTON_LEFT
+	tap.pressed = true
+	screen._input(tap)
+	if screen.is_motion_running() or not ledger.visible or sent != [MARK_SEEN]:
+		err = "tap skip: ledger=%s emits=%d" % [ledger.visible, sent.size()]
+	# Reduced motion: no sequence, the ledger opens at once.
+	if err.is_empty():
+		sent.clear()
+		StopMarkMotion.reduced = true
+		screen.set_snapshot(_unseen_stage([], 4, 4))
+		if screen.is_motion_running() or not ledger.visible or sent != [MARK_SEEN]:
+			err = "reduced motion: ledger=%s emits=%d" % [ledger.visible, sent.size()]
+		StopMarkMotion.reduced = false
+	# A card with no home sequence (defeat rows) opens at once, as before.
+	if err.is_empty():
+		sent.clear()
+		screen.set_snapshot(_snap([_row("Carried", 7, "partial_return_home")], { "ledger_seen": false }, false))
+		if not ledger.visible or sent != [MARK_SEEN]:
+			err = "no sequence: ledger=%s emits=%d" % [ledger.visible, sent.size()]
+	StopMarkMotion.reduced = before
+	if not err.is_empty():
+		return _fail(m, err)
+	return _pass(m)
+
+
+static func _t_ledger_new_snapshot() -> Dictionary:
+	var before := _set_reduced(false)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var sent: Array = []
+	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
+	var ledger := screen.get_node("%Ledger") as Control
+	var err := ""
+	screen.set_snapshot(_unseen_stage(["Kofi"], 3, 4))
+	# A different result arrives mid-sequence: the old one never emits.
+	screen.set_snapshot(_unseen_stage([], 2, 2))
+	if not sent.is_empty() or ledger.visible or not screen.is_motion_running():
+		err = "new card: emits=%d ledger=%s running=%s" % [sent.size(), ledger.visible, screen.is_motion_running()]
+	if err.is_empty():
+		screen.skip_motion()
+		if sent != [MARK_SEEN] or not ledger.visible:
+			err = "new card after skip: emits=%d ledger=%s" % [sent.size(), ledger.visible]
+	# A seen card that replaces a waiting one leaves nothing to emit.
+	if err.is_empty():
+		sent.clear()
+		screen.set_snapshot(_unseen_stage(["Kofi"], 3, 4))
+		screen.set_snapshot(_snap([], { "ledger_seen": true }))
+		screen.skip_motion()
+		if not sent.is_empty():
+			err = "an old waiting emit survived a new card"
+	StopMarkMotion.reduced = before
+	if not err.is_empty():
+		return _fail(m, err)
+	return _pass(m)

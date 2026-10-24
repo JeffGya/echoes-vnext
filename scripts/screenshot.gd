@@ -107,6 +107,7 @@ func _fixtures() -> Dictionary:
 		"resolve_ledger_closed": [_combat(6, recover), _payout_stage_end(true), "skip_motion"],
 		"resolve_ledger_open_fight": [_combat(6, recover), _payout_repeat_defeat()],
 		"resolve_stage_end": [_combat(6, recover), _payout_stage_end(false), "skip_motion"],
+		"resolve_stage_end_first_view": [_combat(6, recover), _payout_stage_end(false), "freeze_motion"],
 		"resolve_stage_home_lost": [_combat(6, recover), _payout_stage_end(true), "skip_motion"],
 		"resolve_stage_home_all": [_combat(6, recover), _payout_stage_all_home(), "skip_motion"],
 		"resolve_midstage_win_no_rows": [_combat(6, recover), _payout_midstage_win(), "skip_motion"],
@@ -219,6 +220,10 @@ func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pac
 ## A fixture step that is a String acts on the live scene. "focus_cause:N" focuses the Nth (i) button.
 func _run_step(harness: Node, step: String) -> void:
 	var parts := step.split(":")
+	if parts[0] == "freeze_motion":
+		for node in harness.find_children("*", "Control", true, false):
+			if node.has_method("skip_motion") and node.get("_motion") != null:
+				(node.get("_motion") as Tween).pause()
 	if parts[0] == "skip_motion":
 		for node in harness.find_children("*", "Control", true, false):
 			if node.has_method("skip_motion"):

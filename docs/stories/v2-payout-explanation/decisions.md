@@ -108,3 +108,9 @@ Open for the UI: the return and retreat confirmation can say what is banked now 
 - Retreat button: reads `retreat_affordable` (a missing key reads as affordable) and `retreat_ase_cost`. Not affordable: disabled, price and "Not enough Ase" in the text. After a refused dispatch `retreat_denied` shows one plain line with both numbers from data.
 - PROPOSAL placeholders (not approved copy), all in `ui/components/CarriedHomePresentation.gd`: carried title, advance note, "The stage waits.", "With the party", "Going home costs nothing.", "Not enough Ase", the denied line.
 - BLOCKED: no intel-gained field on either snapshot, so the comparator has no intel line.
+
+## QA fixes D1 and D3 (UI, 2026-10-24)
+
+- D1: on a stage-ending card with the home sequence, the first-time ledger stays closed while the sequence runs. It opens when the sequence ends, when the player skips it by tap or key, or at once under reduced motion. `resolve.ledger.mark_seen` is sent when the ledger opens, once. A new snapshot mid-sequence drops the old wish with no emit. Cards with no home sequence open the ledger at once. After it opens, the screen scrolls only as far as needed to keep the "home N of M" line visible.
+- D-17 (PROPOSAL, pending Jeff's read): the pace rank-cause note ("The party's effort earned this rank") is not shown on a mid-stage win, because that card shows no rank letter and the note would have no anchor. It stays on the stage-ending card next to the Rank chip.
+- D3: the Pace UI tests now use the stage-ending card and assert `is_visible_in_tree()`, not the `visible` property.

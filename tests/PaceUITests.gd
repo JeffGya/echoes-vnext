@@ -18,6 +18,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("combat_ui/pace_result_row_at_zero_and_round_color", Callable(PaceUITests, "_t_result_row_at_zero_and_round_color"))
 	runner.register_test("combat_ui/pace_result_rank_cause_only_when_changed", Callable(PaceUITests, "_t_result_rank_cause_only_when_changed"))
 	runner.register_test("combat_ui/pace_result_nothing_on_defeat_or_no_pace_win", Callable(PaceUITests, "_t_result_nothing_without_pace"))
+	runner.register_test("combat_ui/pace_rank_note_on_stage_end_not_on_midstage", Callable(PaceUITests, "_t_rank_note_stage_vs_midstage"))
 	runner.register_test("combat_ui/pace_blend_starts_only_on_state_change", Callable(PaceUITests, "_t_blend_only_on_change"))
 	runner.register_test("combat_ui/pace_blend_brightens_on_drop_and_ends_on_approved_color", Callable(PaceUITests, "_t_blend_drop_brightens_then_settles"))
 	runner.register_test("combat_ui/pace_blend_absent_on_first_snapshot_and_no_pace", Callable(PaceUITests, "_t_blend_absent_first_and_no_pace"))
@@ -60,6 +61,17 @@ static func _resolve_snap(victory: bool, extra: Dictionary) -> Dictionary:
 	}
 	data.merge(extra)
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": {} }
+
+
+## A stage-ending win: the card that shows the Rank, Enemies and Rounds chips and the rank-cause note.
+## A win with no stage rows is a mid-stage card, which shows no chips (Direction E).
+static func _stage_snap(victory: bool, extra: Dictionary) -> Dictionary:
+	var snap := _resolve_snap(victory, extra)
+	snap["data"]["ledger_seen"] = true
+	snap["data"]["stage_payout_rows"] = [{ "label": "Base", "delta": 1, "currency": "ase",
+		"cause": "objectives_overcome", "params": { "overcome": 1, "total": 1 } }]
+	snap["data"]["stage_payout_ase"] = 1
+	return snap
 
 
 static func _recover(pace_state: String) -> Dictionary:
@@ -130,12 +142,38 @@ static func _t_board_no_pace_keeps_authored_color() -> Dictionary:
 static func _t_result_row_at_zero_and_round_color() -> Dictionary:
 	var m := _mount(ResolveScene)
 	var screen: Control = m[1]
-	screen.call("set_snapshot", _resolve_snap(true, { "pace_state": "none", "pace_changed_rank": false }))
+	screen.call("set_snapshot", _stage_snap(true, { "pace_state": "none", "pace_changed_rank": false }))
 	var want := PacePresentation.color("none", true)
 	var colored := _font_color(screen, "%RoundsValue") == want and _font_color(screen, "%RoundsKey") == want
+	var shown: bool = (screen.get_node("%RoundsValue") as Control).is_visible_in_tree() \
+		and (screen.get_node("%RoundsValue") as Control).get_combined_minimum_size().x > 0.0
 	m[0].free()
+	if not shown:
+		return { "ok": false, "error": "Rounds line is not on screen on the stage-ending card" }
 	if not colored:
 		return { "ok": false, "error": "Rounds line does not carry the pace colour" }
+	return { "ok": true }
+
+
+## PROPOSAL (decisions.md D-17): the mid-stage card shows no rank letter, so the note has no anchor
+## there. It stays on the stage-ending card, next to the Rank chip.
+static func _t_rank_note_stage_vs_midstage() -> Dictionary:
+	var m := _mount(ResolveScene)
+	var screen: Control = m[1]
+	var note := screen.get_node("%RankCauseLabel") as Label
+	var rank := screen.get_node("%RankBadge") as Label
+	var extra := { "pace_state": "full", "pace_changed_rank": true }
+	screen.call("set_snapshot", _resolve_snap(true, extra))
+	var mid_note := note.is_visible_in_tree()
+	var mid_rank := rank.is_visible_in_tree()
+	screen.call("set_snapshot", _stage_snap(true, extra))
+	var end_note := note.is_visible_in_tree()
+	var end_rank := rank.is_visible_in_tree()
+	m[0].free()
+	if mid_note or mid_rank:
+		return { "ok": false, "error": "mid-stage card shows the rank note (%s) or the rank (%s)" % [mid_note, mid_rank] }
+	if not end_note or not end_rank:
+		return { "ok": false, "error": "stage-ending card misses the rank note (%s) or rank (%s)" % [end_note, end_rank] }
 	return { "ok": true }
 
 
@@ -145,9 +183,9 @@ static func _t_result_rank_cause_only_when_changed() -> Dictionary:
 	var note := screen.get_node("%RankCauseLabel") as Label
 	var seen: Array = []
 	for changed in [true, false, true]:
-		screen.call("set_snapshot", _resolve_snap(true,
+		screen.call("set_snapshot", _stage_snap(true,
 			{ "pace_state": "full", "pace_changed_rank": changed }))
-		seen.append(note.visible)
+		seen.append(note.is_visible_in_tree())
 	m[0].free()
 	if seen != [true, false, true]:
 		return { "ok": false, "error": "rank-cause visibility %s, expected [true, false, true]" % str(seen) }
@@ -164,12 +202,12 @@ static func _t_result_nothing_without_pace() -> Dictionary:
 	var stray := { "pace_state": "full", "pace_changed_rank": true }
 	var cases := { "defeat": _resolve_snap(false, {}),
 		"defeat_with_stray_keys": _resolve_snap(false, stray),
-		"no_pace_win": _resolve_snap(true, {}) }
+		"no_pace_win": _stage_snap(true, {}) }
 	for case_name in cases:
-		screen.call("set_snapshot", _resolve_snap(true, stray))
+		screen.call("set_snapshot", _stage_snap(true, stray))
 		screen.call("set_snapshot", cases[case_name])
 		var err := ""
-		if (screen.get_node("%RankCauseLabel") as Label).visible:
+		if (screen.get_node("%RankCauseLabel") as Label).is_visible_in_tree():
 			err = "rank-cause note visible"
 		elif _font_color(screen, "%RoundsValue") != authored_value or _font_color(screen, "%RoundsKey") != authored_key:
 			err = "Rounds line carries a pace colour"
