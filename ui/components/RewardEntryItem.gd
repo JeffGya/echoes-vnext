@@ -15,10 +15,11 @@ const PayoutCausePresentation := preload("res://ui/components/PayoutCausePresent
 
 @export var color_positive: Color = Color("#f0e8d0")
 @export var color_negative: Color = Color("#908870")
-# A row that earns exactly 0 is muted, not shown as a gain (pace-reward decisions D-28, D-29).
+# A row that earns exactly 0 is muted, not shown as a gain.
 @export var color_zero: Color = Color("#6E6450")
 
 @onready var entry_label: Label = %EntryLabel
+@onready var note_label: Label = %NoteLabel
 @onready var delta_label: Label = %DeltaLabel
 @onready var cause_button: Button = %CauseButton
 @onready var cause_spacer: Control = %CauseSpacer
@@ -36,6 +37,8 @@ func setup(entry: Dictionary, row_scope: String = PayoutCausePresentation.SCOPE_
 	params = params_v if params_v is Dictionary else {}
 	scope = row_scope
 	entry_label.text = PayoutCausePresentation.row_name(cause, str(entry.get("label", "")))
+	note_label.text = PayoutCausePresentation.row_note(cause, params)
+	note_label.visible = not note_label.text.is_empty()
 	if delta >= 0:
 		delta_label.text = "+%d Ase" % delta
 		delta_label.add_theme_color_override("font_color", color_zero if delta == 0 else color_positive)

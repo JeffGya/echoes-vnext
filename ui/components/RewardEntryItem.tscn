@@ -8,12 +8,25 @@ script = ExtResource("1_rewardentry")
 color_positive = Color(0.1764706, 0.41568628, 0.30980393, 1)
 color_negative = Color(0.627451, 0.23529412, 0.21176471, 1)
 
-[node name="EntryLabel" type="Label" parent="."]
-unique_name_in_owner = true
+[node name="TextColumn" type="VBoxContainer" parent="."]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
+theme_override_constants/separation = 0
+
+[node name="EntryLabel" type="Label" parent="TextColumn"]
+unique_name_in_owner = true
+layout_mode = 2
 text = "Reward entry"
+
+[node name="NoteLabel" type="Label" parent="TextColumn"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
 
 [node name="DeltaLabel" type="Label" parent="."]
 unique_name_in_owner = true

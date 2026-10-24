@@ -1,18 +1,15 @@
 extends RefCounted
 
 ## Maps a payout row `cause` id (and its `params`) to the row name and the tooltip text on the
-## Resolve card. Wording approved by Jeff: docs/stories/v2-payout-explanation/decisions.md.
+## Resolve card. Wording: docs/stories/v2-payout-explanation/decisions.md.
 ## Word rule (D-04): Ase and Ekwan are "earned", never "paid". Objectives are "found and
 ## overcome", never "won". A cause that is not listed has no tooltip and keeps its backend label.
 
 const SCOPE_FIGHT := "fight"
 const SCOPE_STAGE := "stage"
 
-## Row names. enemies_defeated and echoes_alive are absent on purpose: their backend label
-## carries the count ("3 enemies defeated"), so the row keeps it.
+## Row names. A cause that is not listed keeps its backend label.
 const ROW_NAMES: Dictionary = {
-	"bonus_earned": "Bonus",
-	"bonus_missed": "Bonus",
 	"replay": "Replay",
 	"defeat_consolation": "Consolation",
 	"repeat_defeat": "Consolation",
@@ -20,15 +17,15 @@ const ROW_NAMES: Dictionary = {
 	"partial_return_home": "Carried home",
 	"nothing_overcome_yet": "Carried home",
 	"objectives_overcome": "Objectives overcome",
-	"realm_virtue": "Realm virtue",
+	"echoes_alive": "Echoes home",
+	"carried_advance": "Carried home",
 }
 
+## PROPOSAL placeholders, not approved copy: echoes_alive, carried_advance and the lost-names note
+## (docs/stories/v2-payout-explanation/decisions.md). Jeff owns the wording. All copy stays in this table.
 const TEXT: Dictionary = {
-	"enemies_defeated": "Each enemy the party defeats earns Ase.",
-	"echoes_alive": "Each Echo still standing when the fight ends earns Ase.",
-	"bonus_missed": "The party was not quick enough to earn a bonus.",
-	"bonus_earned": "The party was quick enough to earn a bonus.",
-	"realm_virtue": "The realm rewards the virtue the party showed here.",
+	"echoes_alive": "Each Echo that comes home earns Ase.",
+	"carried_advance": "Ase and Ekwan the party carried home earlier are taken off the stage payout, so nothing is earned twice.",
 	"defeat_consolation": "The party lost, but the fight still earns a small part.",
 	"partial_retreat": "The party left early. It keeps a small part of what it overcame.",
 	"partial_return_home": "The party left early. It keeps a small part of what it overcame.",
@@ -59,3 +56,22 @@ static func tooltip(cause: String, params: Dictionary = {}, scope: String = SCOP
 			return "%s %d of %d so far." % [OBJECTIVES, int(params["overcome"]), int(params["total"])]
 		return OBJECTIVES
 	return str(TEXT.get(cause, ""))
+
+
+## A second line under a row, or "" when the row has none. PROPOSAL placeholder wording.
+## `lost` holds display names; the row shows them once, with no figure.
+static func row_note(cause: String, params: Dictionary) -> String:
+	if cause != "echoes_alive":
+		return ""
+	var lost_v: Variant = params.get("lost", [])
+	var names: Array = []
+	if lost_v is Array:
+		for n in (lost_v as Array):
+			if not str(n).is_empty():
+				names.append(str(n))
+	if names.is_empty():
+		return ""
+	var who := str(names[0])
+	if names.size() > 1:
+		who = "%s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[names.size() - 1]]
+	return "%s did not come home." % who

@@ -484,7 +484,8 @@ func _build_ledger(data: Dictionary) -> void:
 	_ekwan_line.visible = ekwan > 0
 
 	var has_rows := not fight_rows.is_empty() or has_stage
-	_summary_button.visible = true
+	# A fight win pays nothing and has no rows: the card then shows no earnings line and no ledger.
+	_summary_button.visible = has_rows
 	_summary_button.disabled = not has_rows
 	_summary_hint.visible = has_rows
 	_chevron.visible = has_rows
