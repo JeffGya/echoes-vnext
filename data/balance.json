@@ -100,12 +100,24 @@
 			"awakening_boost_bank_interval_seconds": 240.0
 		},
 		"summoning": {
-			"ase_cost_per_summon": 60.0,
-			"ase_cost_per_summon_by_grade": {
-				"uncalled": 60.0,
-				"called": 150.0,
-				"chosen": 400.0
+			"price_by_echo_number": {
+				"2": 60,
+				"3": 60,
+				"4": 70,
+				"5": 85,
+				"6": 100,
+				"7": 120,
+				"8": 145,
+				"9": 175,
+				"10": 210,
+				"11": 250,
+				"12": 300,
+				"13": 360,
+				"14": 430
 			},
+			"village_ceiling": 14,
+			"called_extra": 90,
+			"chosen_extra": 340,
 			"trait_min": 30.0,
 			"trait_max": 70.0,
 			"calling_weights": {
@@ -2546,7 +2558,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2564,7 +2576,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2583,7 +2595,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2602,7 +2614,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2620,7 +2632,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2638,7 +2650,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2658,7 +2670,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2677,7 +2689,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2694,7 +2706,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2711,7 +2723,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2728,7 +2740,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2745,7 +2757,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2762,7 +2774,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2779,7 +2791,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				}

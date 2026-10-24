@@ -102,12 +102,12 @@ static func _t_over_cap_capped() -> Dictionary:
 		return env
 
 	var runtime: FlowRuntime = env["runtime"]
-	runtime.dispatch({ "type": "economy.ase.add", "amount": 500, "reason": "test.seed" })
 	runtime.dispatch({ "type": "flow.go_state", "to": "flow.summon" })
 	var now_unix := 444444
 	var save_ref: Dictionary = runtime.get_save_data()
 	var econ_v: Variant = save_ref.get("economy", {})
 	var econ: Dictionary = econ_v if econ_v is Dictionary else {}
+	econ["ase"] = 5000
 	econ["last_settle_unix"] = now_unix
 	save_ref["economy"] = econ
 	runtime.dispatch({ "type": "sanctum.summon", "count": 5, "now_unix": now_unix })
