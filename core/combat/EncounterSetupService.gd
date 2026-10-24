@@ -177,6 +177,7 @@ func setup(t: int) -> void:
 		flow_ctx.encounter_ctx = EncounterContext.new()
 		flow_ctx.encounter_ctx.encounter_id = flow_ctx.encounter_id
 		flow_ctx.encounter_ctx.stop_short_override = flow_ctx.dev_stop_short
+		flow_ctx.encounter_start_revealed_count = ActiveStageService.count_revealed_situations(flow_ctx)
 		# COMBAT-006 dev toggle: use override if set, otherwise default to PURIFY_SHRINE.
 		if not flow_ctx.dev_combat_objective.is_empty():
 			flow_ctx.encounter_ctx.resolution_mode = flow_ctx.dev_combat_objective

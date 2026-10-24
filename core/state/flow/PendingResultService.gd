@@ -494,6 +494,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			bool(stored.get("guide_spirit_protected", false)),
 			str(stored.get("combat_intro_line", ""))
 		)
+	if stored.has("intel_gained"):
+		ResolveSnapshotBuilder.add_intel_gained(data, int(stored.get("intel_gained", 0)))
 	if stored.has("intel_count"):
 		ResolveSnapshotBuilder.add_scout_intel(data, int(stored.get("intel_count", 0)))
 	if stored.has("pace_state"):

@@ -671,6 +671,7 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset after combat resolves
+	flow_ctx.encounter_start_revealed_count = -1
 
 	# V2-WEAVE-001: thread config (read-only). V2-INFRA-003 D84: the inline balance.json walk
 	# became ConfigService.get_threads_cfg() when _end_round() gained a second read of it.

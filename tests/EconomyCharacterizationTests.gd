@@ -107,6 +107,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/carried_rows_clamp_and_sum", Callable(EconomyCharacterizationTests, "_t_carried_rows"))
 	runner.register_test("econ_char/carried_return_home_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_return_home"))
 	runner.register_test("econ_char/carried_retreat_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_retreat"))
+	runner.register_test("econ_char/intel_gained_absent_zero_present_count_absent_on_defeat", Callable(EconomyCharacterizationTests, "_t_intel_gained"))
+	runner.register_test("econ_char/intel_gained_replays_from_stored_result", Callable(EconomyCharacterizationTests, "_t_intel_gained_replay"))
 	runner.register_test("econ_char/ledger_seen_default_false_and_action_sets_it", Callable(EconomyCharacterizationTests, "_t_ledger_seen"))
 
 
@@ -1477,7 +1479,8 @@ static func _t_stage_preview() -> Dictionary:
 ## FlowEncounterState.build_final_snapshot. The fight itself is not played: the combat result is
 ## set directly, which is all build_final_snapshot reads. Stage 0 holds `objectives`; objective 0
 ## is the fought one, linked to situation "sit.econ".
-static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false) -> Dictionary:
+static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false,
+		revealed_during_fight: int = 0) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter("combat", tag)
 	if env.is_empty():
 		return {}
@@ -1489,8 +1492,15 @@ static func _final_card(tag: String, objectives: Array, victory: bool, kill_firs
 	stage["explore_map"] = {
 		"last_situation_id": "sit.econ",
 		"situations": [{ "id": "sit.econ", "resolved": false, "revealed": true,
-			"is_objective": true, "objective_index": 0 }],
+			"is_objective": true, "objective_index": 0 },
+			{ "id": "sit.h1", "resolved": false, "revealed": false },
+			{ "id": "sit.h2", "resolved": false, "revealed": false }],
 	}
+	# The fixture replaced the map after production setup, so record the start count again as setup does.
+	flow_ctx.encounter_start_revealed_count = ActiveStageService.count_revealed_situations(flow_ctx)
+	# Production code reveals nothing during a fight today; this stands in for a future reveal.
+	for i in range(revealed_during_fight):
+		stage["explore_map"]["situations"][1 + i]["revealed"] = true
 	ectx.combat_result = { "victory": victory, "reason": "all_enemies_defeated", "round_ended": 4 }
 	ectx.combat_state["combat_over"] = true
 	if kill_first_echo:
@@ -1962,3 +1972,47 @@ static func _t_carried_retreat() -> Dictionary:
 
 static func _carry_stage_of(flow_ctx: FlowContext) -> Dictionary:
 	return FlowStageExploreState._get_current_stage(flow_ctx)
+
+
+static func _t_intel_gained() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_req(0, "combat", false), ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)]
+
+	var none := _final_card("econ_char_intel_0", objs.duplicate(true), true)
+	if none.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var fc0: FlowContext = none["flow_ctx"]
+	if fc0.encounter_start_revealed_count < 0:
+		m.append("setup did not record the start count")
+	if (none["card"]["data"] as Dictionary).has("intel_gained"):
+		m.append("victory with no new reveal carries intel_gained")
+
+	for n in [1, 2]:
+		var env := _final_card("econ_char_intel_%d" % n, objs.duplicate(true), true, false, n)
+		if int(env["card"]["data"].get("intel_gained", -1)) != n:
+			m.append("%d reveals: intel_gained %s" % [n, str(env["card"]["data"].get("intel_gained"))])
+
+	var lost := _final_card("econ_char_intel_lost", objs.duplicate(true), false, false, 2)
+	if (lost["card"]["data"] as Dictionary).has("intel_gained"):
+		m.append("defeat card carries intel_gained")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+static func _t_intel_gained_replay() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_req(0, "combat", false), ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)]
+	var env := _final_card("econ_char_intel_replay", objs, true, false, 2)
+	var fc: FlowContext = env["flow_ctx"]
+	var card: Dictionary = env["card"]
+	PendingResultService.capture_or_consume(fc, card, 7)
+	var stored := PendingResultService.read(fc.save_data)
+	if int((stored.get("resolve_data", {}) as Dictionary).get("intel_gained", -1)) != 2:
+		m.append("stored result lost intel_gained")
+	var replay := PendingResultService.build_snapshot(fc, 8)
+	if int((replay.get("data", {}) as Dictionary).get("intel_gained", -1)) != 2:
+		m.append("replayed card lost intel_gained")
+	var zero := _final_card("econ_char_intel_replay0", objs.duplicate(true), true)
+	PendingResultService.capture_or_consume(zero["flow_ctx"], zero["card"], 7)
+	if (PendingResultService.build_snapshot(zero["flow_ctx"], 8)["data"] as Dictionary).has("intel_gained"):
+		m.append("replayed zero card gained an intel_gained key")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
