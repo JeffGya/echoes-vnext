@@ -9,6 +9,9 @@ signal dismiss_requested
 @onready var _body: Label = %BodyLabel
 @onready var _continue_button: Button = %ContinueButton
 @onready var _safe_frame: MarginContainer = %SafeFrame
+@onready var _carried: CarriedHomePanel = %CarriedPanel
+
+const Strings := preload("res://ui/components/CarriedHomePresentation.gd")
 
 var _action: Dictionary = {}
 
@@ -24,6 +27,13 @@ func present(payload: Dictionary) -> void:
 	_body.text = str(result.get("message", ""))
 	_continue_button.text = "Leave" if success else "Continue"
 	_action = { "type": "stage.confirm_return_home" } if success else { "type": "stage.dismiss_overlay" }
+	# Only a return that succeeds carries anything home. Going home is free.
+	var carry_v: Variant = payload.get("carry", {})
+	var party_v: Variant = payload.get("party", [])
+	if success:
+		_carried.present(carry_v if carry_v is Dictionary else {}, party_v if party_v is Array else [], Strings.RETURN_COST)
+	else:
+		_carried.visible = false
 
 func _on_continue_pressed() -> void:
 	if _action.is_empty():

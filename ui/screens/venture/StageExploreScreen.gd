@@ -682,6 +682,8 @@ func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
 		_choice_container.visible = false
 		modal_requested.emit(&"realm.return_home", {
 			"result": rhr.duplicate(true),
+			"carry": _dict_or_empty(data.get("carry_home_preview", {})),
+			"party": _array_or_empty(data.get("party_preview", [])),
 		})
 	elif not pending.is_empty() and not eng.is_empty():
 		var ign_v: Variant  = actions.get("cta.ignore_situation", {})
@@ -1992,3 +1994,11 @@ func _min_zoom_for_span(span: Vector2) -> float:
 func _party_bark_anchor() -> Vector2:
 	var viewport_pos: Vector2 = _party_layer.get_global_transform_with_canvas() * (_party_layer.call("display_position") as Vector2)
 	return _bark_layer.get_global_transform_with_canvas().affine_inverse() * viewport_pos
+
+
+func _dict_or_empty(v: Variant) -> Dictionary:
+	return (v as Dictionary).duplicate(true) if v is Dictionary else {}
+
+
+func _array_or_empty(v: Variant) -> Array:
+	return (v as Array).duplicate(true) if v is Array else []

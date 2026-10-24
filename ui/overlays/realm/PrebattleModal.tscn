@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://ui/overlays/realm/PrebattleModal.gd" id="1_script"]
 [ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
+[ext_resource type="PackedScene" path="res://ui/components/CarriedHomePanel.tscn" id="3_carried"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
 content_margin_left = 24.0
@@ -71,6 +72,19 @@ theme_type_variation = &"RealmModalBody"
 theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="CarriedPanel" parent="SafeFrame/Center/Card/Content" instance=ExtResource("3_carried")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RetreatNoteLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/Center/Card/Content"]
 layout_mode = 2

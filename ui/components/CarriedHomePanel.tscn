@@ -1,0 +1,75 @@
+[gd_scene format=3 uid="uid://carried_home_panel_001"]
+
+[ext_resource type="Script" path="res://ui/components/CarriedHomePanel.gd" id="1_panel"]
+
+[node name="CarriedHomePanel" type="VBoxContainer"]
+visible = false
+theme_override_constants/separation = 8
+script = ExtResource("1_panel")
+
+[node name="CarriedBlock" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CarriedTitle" type="Label" parent="CarriedBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalMeta"
+theme_override_font_sizes/font_size = 14
+text = ""
+
+[node name="AseLine" type="Label" parent="CarriedBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 20
+text = "Ase"
+
+[node name="EkwanLine" type="Label" parent="CarriedBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 20
+text = "Ekwan"
+
+[node name="AdvanceNote" type="Label" parent="CarriedBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalMeta"
+theme_override_font_sizes/font_size = 14
+text = ""
+autowrap_mode = 3
+
+[node name="PartyBlock" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="PartyHeader" type="Label" parent="PartyBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalMeta"
+theme_override_font_sizes/font_size = 14
+text = ""
+
+[node name="PartyList" type="Label" parent="PartyBlock"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 3
+
+[node name="WaitsLine" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 16
+text = ""
+
+[node name="CostLine" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmModalMeta"
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 3
