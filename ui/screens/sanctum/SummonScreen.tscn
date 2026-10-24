@@ -49,9 +49,20 @@ theme_override_constants/separation = 10
 [node name="HeaderRow" type="VBoxContainer" parent="RootPanel/MarginContainer/Root/ScrollContainer/ContentVBox" unique_id=1754412997]
 layout_mode = 2
 
-[node name="TitleLabel" type="Label" parent="RootPanel/MarginContainer/Root/ScrollContainer/ContentVBox/HeaderRow" unique_id=1132561822]
+[node name="TopRow" type="HBoxContainer" parent="RootPanel/MarginContainer/Root/ScrollContainer/ContentVBox/HeaderRow"]
+layout_mode = 2
+
+[node name="BackButton" type="Button" parent="RootPanel/MarginContainer/Root/ScrollContainer/ContentVBox/HeaderRow/TopRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 48)
+layout_mode = 2
+theme_type_variation = &"ButtonGhost"
+text = "←"
+
+[node name="TitleLabel" type="Label" parent="RootPanel/MarginContainer/Root/ScrollContainer/ContentVBox/HeaderRow/TopRow" unique_id=1132561822]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 28
 text = "Summon new echo"
 horizontal_alignment = 1
@@ -248,13 +259,6 @@ size_flags_horizontal = 4
 theme_type_variation = &"ButtonPrimary"
 text = "Summon"
 
-[node name="BackButton" type="Button" parent="." unique_id=1421889307]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(80, 48)
-layout_mode = 1
-offset_left = 16.0
-offset_top = 16.0
-offset_right = 96.0
-offset_bottom = 64.0
-theme_type_variation = &"ButtonGhost"
-text = "←"
+[node name="TitleBalance" type="Control" parent="RootPanel/MarginContainer/Root/ScrollContainer/ContentVBox/HeaderRow/TopRow"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
