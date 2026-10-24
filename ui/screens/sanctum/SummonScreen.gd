@@ -9,6 +9,8 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 @onready var intro_label: Label = %IntroLabel
 @onready var back_button: Button = %BackButton
 @onready var root_panel: PanelContainer = %RootPanel
+@onready var content_scroll: ScrollContainer = %ScrollContainer
+@onready var content_vbox: VBoxContainer = %ContentVBox
 
 @onready var ase_label: Label = %AseLabel
 @onready var ase_rate_label: Label = %AseRateLabel
@@ -92,6 +94,7 @@ func set_snapshot(snapshot: Dictionary) -> void:
 
 	_count = clampi(_count, 1, _affordable_max())
 	_refresh()
+	_fit_panel.call_deferred()
 
 func set_layout(layout: Dictionary) -> void:
 	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
@@ -109,6 +112,20 @@ func set_layout(layout: Dictionary) -> void:
 	offset_top = float(16 + int(ceilf(safe.y)))
 	offset_right = -(viewport_w - left - content_w)
 	offset_bottom = -float(_bottom_content_exclusion)
+	_fit_panel.call_deferred()
+
+# The panel is as tall as its content, up to the height this screen has. The scroll area only scrolls
+# when the content is taller than the space left.
+func _fit_panel() -> void:
+	if not is_inside_tree():
+		return
+	content_scroll.custom_minimum_size.y = 0.0
+	var chrome := root_panel.get_combined_minimum_size().y
+	var room := maxf(0.0, size.y - chrome)
+	var content_h := content_vbox.get_combined_minimum_size().y
+	content_scroll.custom_minimum_size.y = minf(content_h, room)
+	root_panel.offset_top = 0.0
+	root_panel.offset_bottom = chrome + content_scroll.custom_minimum_size.y
 
 func set_bottom_content_exclusion(value: int) -> void:
 	_bottom_content_exclusion = maxi(0, value)
