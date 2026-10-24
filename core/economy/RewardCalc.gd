@@ -8,7 +8,7 @@ class_name RewardCalc extends RefCounted
 ## THE single definition of a stage's base reward, for every reader. It sums the weights of the
 ## objectives selected by `mode`; no reader keeps its own copy.
 ##   MODE_COMPLETED:             objectives with `completed` true (stage payer, partials).
-##   MODE_COMPLETED_PLUS_FOUGHT: those, plus the objective at `fought_index` (pace base, rank).
+##   MODE_COMPLETED_PLUS_FOUGHT: those, plus the objective at `fought_index` (the fight base_reward).
 ##   MODE_FOUGHT:                only the objective at `fought_index` (defeat consolation).
 ## Select first, then weigh: an objective that is not selected is never looked up, so it logs
 ## nothing. A selected type with no key in `objective_weights` logs
@@ -76,47 +76,63 @@ static func objective_counts(objectives: Array, reward_cfg: Dictionary) -> Dicti
 	return { "overcome": overcome, "total": total }
 
 
-## V2-INFRA-003 Phase 8: THE single definition of the redo multiplier, for the same reason
-## base_reward() above is one. The settlement split gave the stage cadence its own payer, and
-## that payer must scale the base by exactly the multiplier the combined payer used — a second
-## copy of `maxf(floor, 1.0 - run_count * per_run)` would be free to drift from this one.
-## Degrades per completed run of the realm, clamped at the authored floor.
-static func redo_multiplier(run_count: int, reward_cfg: Dictionary) -> float:
-	var penalty_per_run := float(reward_cfg.get("redo_penalty_per_run", 0.10))
-	var penalty_floor   := float(reward_cfg.get("redo_penalty_floor", 0.50))
-	return maxf(penalty_floor, 1.0 - float(run_count) * penalty_per_run)
+## Realm scale on objective Ase and Ekwan (D-63): 1 + step x (position in `realm_order` - 1).
+## A realm outside `realm_order` (the prologue) uses 1.0. The Echoes stipend is never scaled.
+static func realm_scale(realm_id: String, realm_order: Array, reward_cfg: Dictionary) -> float:
+	var pos := realm_order.find(realm_id)
+	if pos < 0:
+		return 1.0
+	return 1.0 + float(reward_cfg.get("realm_scale_step", 0.25)) * float(pos)
 
 
-## Compute all reward values from encounter result + stage objectives + realm run_count.
-## Returns a dict with pre-computed fields ready for EconomyService.reward_encounter_complete().
+## Replay factor on objective Ase and Ekwan (D-54): flat, 1.0 on a first run (`run_count` 0).
+static func replay_factor(run_count: int, reward_cfg: Dictionary) -> float:
+	if run_count <= 0:
+		return 1.0
+	return float(reward_cfg.get("replay_factor", 0.35))
+
+
+## Rounds a payout amount. The epsilon keeps a true x.5 (30 x 0.35 = 10.5) from falling to x.4999.
+static func round_payout(amount: float) -> int:
+	return roundi(amount + 0.000000001)
+
+
+## The party Echoes of a fight: `alive` (not dead), `started` (all of them) and `lost` (display
+## names of the dead ones). Temporary allies and the guide spirit are not roster Echoes (D-45).
+## Downed and withdrawn Echoes count as home: only `is_dead` removes one.
+static func echo_tally(actors: Array) -> Dictionary:
+	var alive := 0
+	var started := 0
+	var lost: Array = []
+	for a_v in actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) != "echo" or bool(a.get("is_ally", false)) \
+				or bool(a.get("is_spirit", false)):
+			continue
+		started += 1
+		if bool(a.get("is_dead", false)):
+			lost.append(str(a.get("name", "")))
+		else:
+			alive += 1
+	return { "alive": alive, "started": started, "lost": lost }
+
+
+## Compute the fight's reward values from the encounter result.
+## Returns a dict ready for EconomyService.reward_encounter_complete().
 ##
-## victory:         true = win, false = defeat
-## objectives:      Array of {type: String} dicts from StageModel (includes boss)
-## enemies_defeated: how many enemy actors were killed
-## total_enemies:    total enemy actors on board at start (for max_possible rank calc)
-## echoes_survived:  how many echo actors are alive at end
-## total_echoes:     total echo actors in the encounter (for max_possible rank calc)
-## run_count:        from RealmModel — how many times this realm has been completed + restarted
-## reward_cfg:       balance.data.rewards dict
-## resolution_mode:  EncounterResolutionModes value; selects the pace and reached-enemy rules
-## par_rounds:       combat_state["par_rounds"]; 0.0 for a no-pace mode
-## reached_enemies:  PaceService.rank_reached_count(combat_state); replaces total_enemies in
-##                   the rank ceiling for PaceService.REACHED_ENEMY_MODES
-## pace_stage_base:  combat_state["stage_base"], captured at fight start. The pace bonus, its
-##                   rank term and pace_state use it, so they match the live pace_state
-##                   (decisions.md D-21). Every other term keeps `base` below.
-## ally_kills:       combat_state["ally_killed_enemy_ids"].size(). These kills pay the kill Ase
-##                   but leave both sides of the rank (decisions.md D-23).
-## guide_mode:       combat_state["guide_mode"]; GUIDE_SPIRIT carries pace only for "escort".
-## logger, t:        receive the unknown-objective-type error from base_reward(); t is injected.
-## fought_index:     the objective of the situation being fought, -1 for none. Rank uses the
-##                   completed objectives plus this one, on both sides of the ratio; the defeat
-##                   consolation base (`consolation_base`) is this one alone.
+## echoes_survived / total_echoes: roster Echoes home / started in the fight (no allies, no spirit).
+## round_ended, par_rounds, resolution_mode, guide_mode: give the pace fraction. par_rounds is
+##   0.0 for a no-pace mode.
+## logger, t: receive the unknown-objective-type error from base_reward(); t is injected.
+## fought_index: the objective of the situation being fought, -1 for none. `base_reward` is the
+##   completed objectives plus this one; `consolation_base` (the defeat pay base) is this one alone.
+## realm_scale_in: the realm scale (`realm_scale`), handed through for the consolation payer.
+## Speed pays no Ase (D-49). It enters only the rank score (`rank_score`).
 static func compute(
 	victory: bool,
 	objectives: Array,
-	enemies_defeated: int,
-	total_enemies: int,
 	echoes_survived: int,
 	total_echoes: int,
 	round_ended: int,
@@ -124,94 +140,76 @@ static func compute(
 	reward_cfg: Dictionary,
 	resolution_mode: String,
 	par_rounds: float,
-	reached_enemies: int,
-	pace_stage_base: int,
-	ally_kills: int = 0,
 	guide_mode: String = "",
 	logger: StructuredLogger = null,
 	t: int = 0,
-	fought_index: int = -1
+	fought_index: int = -1,
+	realm_scale_in: float = 1.0
 ) -> Dictionary:
 	var base := base_reward(objectives, reward_cfg, logger, t, MODE_COMPLETED_PLUS_FOUGHT, fought_index)
 	# The fought objective is already inside `base`, so it logs there; no second log here.
 	var consolation_base := base_reward(objectives, reward_cfg, null, t, MODE_FOUGHT, fought_index)
 
-	# Per-unit bonuses (actual counts)
-	var enemy_bonus_per := int(reward_cfg.get("enemy_defeated_bonus", 5))
-	var echo_bonus_per  := int(reward_cfg.get("echo_survived_bonus", 10))
-	var enemy_bonus     := enemies_defeated * enemy_bonus_per
-	var echo_bonus      := echoes_survived  * echo_bonus_per
+	var is_pace    := PaceService.is_pace_mode(resolution_mode, guide_mode) and par_rounds > 0.0
+	var full_ratio := float(reward_cfg.get("pace_full_ratio", 1.1))
+	var zero_ratio := float(reward_cfg.get("pace_zero_ratio", 1.6))
+	var fraction   := PaceService.bonus_fraction(round_ended, par_rounds, full_ratio, zero_ratio)
 
-	# Pace bonus (design §4): a win pays pace_stage_base × pace_bonus_pct × the curve fraction.
-	var is_pace       := PaceService.is_pace_mode(resolution_mode, guide_mode) and par_rounds > 0.0
-	var full_ratio    := float(reward_cfg.get("pace_full_ratio", 1.1))
-	var zero_ratio    := float(reward_cfg.get("pace_zero_ratio", 1.6))
-	var pace_pct      := float(reward_cfg.get("pace_bonus_pct", 0.05))
-	var max_pace_bonus := PaceService.max_bonus_ase(pace_stage_base, pace_pct) if is_pace else 0
-	var pace_bonus    := 0
-	if is_pace and victory:
-		pace_bonus = PaceService.bonus_ase(round_ended, par_rounds, full_ratio, zero_ratio,
-			pace_stage_base, pace_pct)
+	var replay := replay_factor(run_count, reward_cfg)
 
-	# Redo multiplier — degrades per run, floor clamped (single definition above)
-	var redo_mul := redo_multiplier(run_count, reward_cfg)
-
-	# Rank (design §5). A no-pace mode has max_pace_bonus 0, so the bonus is out of both sides.
-	# The reached-enemy modes count only enemies that reached the party in the ceiling.
-	# An ally or spirit kill is out of the kill term and the ceiling, in every mode (D-23);
-	# reached_enemies already excludes those ids.
-	# On defeat: use defeat_payout as numerator so defeat always ranks worse than victory.
-	var defeat_factor  := float(reward_cfg.get("defeat_factor", 0.25))
-	var ceiling_enemies := reached_enemies if PaceService.tracks_reached_enemies(resolution_mode) \
-		else maxi(0, total_enemies - ally_kills)
-	var rank_enemy_bonus := maxi(0, enemies_defeated - ally_kills) * enemy_bonus_per
-	var max_possible   := base \
-		+ (ceiling_enemies * enemy_bonus_per) \
-		+ (total_echoes  * echo_bonus_per) \
-		+ max_pace_bonus
-
-	var thresholds_v: Variant = reward_cfg.get("rank_thresholds", {})
-	var thresholds: Dictionary = thresholds_v if thresholds_v is Dictionary else {}
-	var rank: String
-	var rank_without_pace: String
+	# A no-pace mode has no speed to earn, so it takes the full pace points and is not capped.
+	# `rank_without_pace` is the grade with the pace points removed, for the rank-cause note.
+	var rank := "F"
+	var rank_without_pace := "F"
+	var any_death := echoes_survived < total_echoes
 	if victory:
-		var kept := base + rank_enemy_bonus + echo_bonus
-		rank              = _rank_for(kept + pace_bonus, max_possible, redo_mul, run_count, thresholds)
-		rank_without_pace = _rank_for(kept, max_possible, redo_mul, run_count, thresholds)
-	else:
-		rank = _rank_for(roundi(float(base) * defeat_factor), max_possible, redo_mul, run_count, thresholds)
-		rank_without_pace = rank
+		var thresholds_v: Variant = reward_cfg.get("rank_thresholds", {})
+		var thresholds: Dictionary = thresholds_v if thresholds_v is Dictionary else {}
+		var pace_credit := fraction if is_pace else 1.0
+		rank = _compute_rank(rank_score(echoes_survived, total_echoes, pace_credit, reward_cfg),
+			thresholds, any_death)
+		rank_without_pace = _compute_rank(rank_score(echoes_survived, total_echoes, 0.0, reward_cfg),
+			thresholds, any_death) if is_pace else rank
 
 	return {
 		"base_reward":       base,
 		"consolation_base":  consolation_base,
-		"enemy_bonus":       enemy_bonus,
-		"echo_bonus":        echo_bonus,
-		"pace_bonus":        pace_bonus,
 		"pace_mode":         is_pace,
 		# A defeat carries no pace state (design §7).
-		"pace_state":        PaceService.pace_state(round_ended, par_rounds, full_ratio, zero_ratio,
-			pace_stage_base, pace_pct) if is_pace and victory else "",
-		# The rank-cause note (design §6): true when the pace bonus moved this rank.
+		"pace_state":        PaceService.pace_state(round_ended, par_rounds, full_ratio, zero_ratio) \
+			if is_pace and victory else "",
 		"pace_changed_rank": rank != rank_without_pace,
-		"redo_multiplier":   redo_mul,
+		"realm_scale":       realm_scale_in,
+		"replay_factor":     replay,
 		"rank":              rank,
 	}
 
 
-static func _rank_for(numerator: int, max_possible: int, redo_mul: float, run_count: int,
-		thresholds: Dictionary) -> String:
-	var perf_ratio := float(numerator) / float(max_possible) if max_possible > 0 else 0.0
-	return _compute_rank(perf_ratio * redo_mul, run_count, thresholds)
+## The rank score of a win: win points + home points x (home / started) + pace points x pace_credit.
+## Reads no Ase amount and no replay factor (D-74). pace_credit is the pace fraction (0 to 1).
+static func rank_score(echoes_survived: int, total_echoes: int, pace_credit: float,
+		reward_cfg: Dictionary) -> float:
+	var pts_v: Variant = reward_cfg.get("rank_points", {})
+	var pts: Dictionary = pts_v if pts_v is Dictionary else {}
+	var home_share := float(echoes_survived) / float(total_echoes) if total_echoes > 0 else 1.0
+	var score := float(pts.get("win", 0.4)) + float(pts.get("home", 0.4)) * home_share \
+		+ float(pts.get("pace", 0.2)) * pace_credit
+	return score
 
 
-static func _compute_rank(rank_score: float, run_count: int, thresholds: Dictionary) -> String:
+## Any death caps a win at this grade, whatever the pace credit (D-69).
+const DEATH_CAP_RANK := "A"
+
+
+static func _compute_rank(raw_score: float, thresholds: Dictionary, any_death: bool = false) -> String:
+	# A score on a threshold must not be lost to float error (0.4 + 0.4 + 0.2 x 0.5 sums to 0.8999...).
+	var rank_score := raw_score + 0.000000001
 	var s_thresh := float(thresholds.get("S", 0.90))
 	var a_thresh := float(thresholds.get("A", 0.75))
 	var b_thresh := float(thresholds.get("B", 0.55))
 	var c_thresh := float(thresholds.get("C", 0.35))
 	var d_thresh := float(thresholds.get("D", 0.15))
-	if rank_score >= s_thresh and run_count == 0:
+	if rank_score >= s_thresh and not any_death:
 		return "S"
 	if rank_score >= a_thresh:
 		return "A"

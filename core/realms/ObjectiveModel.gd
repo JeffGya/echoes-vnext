@@ -76,3 +76,21 @@ static func validate(model: Dictionary) -> bool:
 		if not model.has(key):
 			return false
 	return true
+
+
+## The stage-completion rule, shared by every caller that offers `flow.complete_stage`.
+## Completable when every required objective is completed AND at least one non-boss objective
+## is completed. The second term keeps the D94 guard: a stage with no required objective
+## (only `pursue` plus the boss stub) must not complete on entry and pay the stipend for
+## walking one step. The boss stub never counts: it is never completed. An optional objective
+## left undone is skipped and pays nothing.
+static func stage_completable(objectives: Array) -> bool:
+	var any_overcome := false
+	for o_v in objectives:
+		var o: Dictionary = o_v if o_v is Dictionary else {}
+		var done := bool(o.get("completed", false))
+		if bool(o.get("required", true)) and not done:
+			return false
+		if done and str(o.get("type", "")) != TYPE_BOSS:
+			any_overcome = true
+	return any_overcome

@@ -159,7 +159,7 @@ static func _test_ekwan_awarded() -> Dictionary:
 
 	# base=30 is an INPUT to the encounter cadence, never its payout, so the Ase this test
 	# needs comes from the stage cadence. ekwan_base 5 is one completed recover objective.
-	var result := econ.settle_stage_complete(30, 1.0, 0, logger, 0, {}, 5)
+	var result := econ.settle_stage_complete(30, 1.0, 1.0, logger, 0, {}, 5)
 
 	var ase_awarded    := int(result.get("ase_awarded", 0))
 	var ekwan_awarded  := int(result.get("ekwan_awarded", 0))

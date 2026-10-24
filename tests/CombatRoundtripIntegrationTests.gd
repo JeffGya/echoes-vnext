@@ -400,7 +400,8 @@ static func test_two_encounters_same_stage_get_distinct_identity() -> Dictionary
 	# to clear encounter_ctx deterministically and free the second situation for engagement.
 	# stage.engage_situation carries no flow-state gate (FlowRuntime.dispatch matches on action
 	# type only), so the second dispatch below is exactly as valid as the first.
-	runtime.dispatch({ "type": "encounter.retreat", "ase_cost": 0, "success_pct": 100 })
+	flow_ctx.save_data["economy"]["ase"] = 500
+	runtime.dispatch({ "type": "encounter.retreat", "success_pct": 100 })
 	if flow_ctx.encounter_ctx != null:
 		return { "ok": false, "error": "retreat at success_pct=100 did not clear encounter_ctx" }
 
@@ -439,7 +440,8 @@ static func test_two_encounters_same_stage_get_distinct_terrain_and_spawn() -> D
 			spawn_a = (a_v as Dictionary).get("grid_pos", {})
 			break
 
-	runtime.dispatch({ "type": "encounter.retreat", "ase_cost": 0, "success_pct": 100 })
+	flow_ctx.save_data["economy"]["ase"] = 500
+	runtime.dispatch({ "type": "encounter.retreat", "success_pct": 100 })
 	if flow_ctx.encounter_ctx != null:
 		return { "ok": false, "error": "retreat at success_pct=100 did not clear encounter_ctx" }
 

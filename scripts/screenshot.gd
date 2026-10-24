@@ -92,13 +92,13 @@ func _fixtures() -> Dictionary:
 		"combat_escort_pace_partial": [_combat(7, _with(escort, "pace_state", "partial"))],
 		"combat_initiative_full": [_combat_initiative(_with(escort, "pace_state", "partial"))],
 		"resolve_escort_win":  [_combat(9, escort),
-			_resolve(true, "spirit_escorted", 9, "S", { "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": false })],
+			_resolve(true, "spirit_escorted", 9, "S", { "pace_state": "full", "pace_changed_rank": false })],
 		"resolve_pace_win":    [_combat(6, recover),
-			_resolve(true, "relic_secured", 6, "B", { "pace_state": "partial", "pace_bonus_awarded": 2, "pace_changed_rank": false })],
+			_resolve(true, "relic_secured", 6, "B", { "pace_state": "partial", "pace_changed_rank": false })],
 		"resolve_pace_win_rank_changed": [_combat(4, recover),
-			_resolve(true, "relic_secured", 4, "A", { "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": true })],
+			_resolve(true, "relic_secured", 4, "A", { "pace_state": "full", "pace_changed_rank": true })],
 		"resolve_pace_win_zero": [_combat(10, recover),
-			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_bonus_awarded": 0, "pace_changed_rank": false })],
+			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_changed_rank": false })],
 		"resolve_no_pace_win": [_combat(8, endure), _resolve(true, "endured", 8, "B", {})],
 		"resolve_pace_defeat": [_combat(7, recover), _resolve(false, "all_echoes_dead", 7, "F", {})],
 		"resolve_ledger_closed": [_combat(6, recover), _payout_fight(true, true)],
@@ -176,14 +176,10 @@ func _combat_initiative(objective_state: Dictionary) -> Dictionary:
 	return snap
 
 
-## An empty pace dict omits the "Pace bonus" row, as EconomyService does for a no-pace fight or a defeat.
 func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pace: Dictionary) -> Dictionary:
 	var breakdown: Array = []
 	if victory:
-		breakdown.append({ "label": "2 enemies defeated", "delta": 10, "currency": "ase" })
 		breakdown.append({ "label": "3 echoes survived", "delta": 15, "currency": "ase" })
-		if pace.has("pace_bonus_awarded"):
-			breakdown.append({ "label": "Pace bonus", "delta": int(pace["pace_bonus_awarded"]), "currency": "ase" })
 	else:
 		breakdown.append({ "label": "Base objectives", "delta": 40, "currency": "ase" })
 		breakdown.append({ "label": "Defeat penalty", "delta": -30, "currency": "ase" })

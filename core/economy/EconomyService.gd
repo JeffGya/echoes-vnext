@@ -93,53 +93,32 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 
 # ---- Stage Reward API ----
 #
-# V2-INFRA-003 Phase 8 — THE SETTLEMENT SPLIT (defects D36 / D77).
-#
-# There used to be ONE payer, `reward_stage_complete()`, called unconditionally from
-# `FlowEncounterState.build_final_snapshot()` at every combat end. It paid the whole reward —
-# the STAGE's summed objective weights and the STAGE's virtue bonus included — for every
-# ENCOUNTER. A stage with three combat situations paid three full stage rewards, and a defeat
-# paid `base × 0.25 × redo` while deliberately leaving the situation unresolved, so one fight
-# could be lost for Ase without limit. That single function is now two, one per cadence:
-#
-#   reward_encounter_complete()  — paid once per ENCOUNTER, in the combat-end dispatch.
-#       Victory: enemies-defeated + echoes-survived + pace bonus, redo-scaled.
-#       Defeat:  the 25% consolation, which is intended design (Jeff, 2026-08-24) — but paid
-#                only ONCE per situation, gated by the caller's `consolation_eligible`.
-#   settle_stage_complete()      — paid once per STAGE, in the `flow.complete_stage` dispatch,
-#       behind the stage's `settlement_receipt` stamp. Base objective weights + virtue bonus.
-#
-# WHAT DID NOT CHANGE. Every component keeps the exact formula and the exact redo exposure it
-# had: redo scaled base+enemy+echo+pace and never the virtue bonus, and it still does — only
-# now inside two `roundi()` calls instead of one, which is the sole arithmetic consequence of
-# splitting (a possible ±1 Ase against the old single rounding). The stage's base stays an
-# INPUT to the encounter cadence (the pace bonus is a share of it), not a PAYOUT of it. The
-# defeat consolation takes 25% of the weight of the fought objective (`consolation_base`), not
-# of the stage base.
+# Two payers, one per cadence:
+#   reward_encounter_complete()  — once per ENCOUNTER, at combat end.
+#       Victory: pays nothing (the Echoes stipend is a stage payout row).
+#       Defeat:  the 25% consolation, paid ONCE per situation (the caller's `consolation_eligible`).
+#   settle_stage_complete()      — once per STAGE, in `flow.complete_stage`, behind the stage's
+#       `settlement_receipt` stamp. Objective weights (and Ekwan), realm-scaled and replay-scaled,
+#       plus the Echoes stipend (D-43, D-44).
+# Speed, enemy kills and the realm virtue pay nothing (D-40, D-49).
 
 ## Encounter-cadence payout. Paid at every combat end, once per encounter.
 ##
-## victory:   on a win pays `roundi((enemy + echo + pace) × redo)`; on a loss pays the
-##            `roundi(base × 0.25 × redo)` consolation.
+## victory:   a win pays 0 Ase and has no rows; a loss pays the
+##            `round(base × realm_scale × 0.25 × replay_factor)` consolation.
 ## base_reward: the weight of the fought objective (`RewardCalc.consolation_base`). Never paid
 ##            here on a victory. Used for the defeat consolation.
 ## consolation_eligible: false on a repeat defeat of a situation that has already paid its
 ##            consolation. Ignored on a victory. When false the defeat branch pays nothing and
 ##            returns one delta-0 `repeat_defeat` row.
-## pace_bonus: RewardCalc's pre-redo pace bonus. pace_mode: RewardCalc's `pace_mode`.
 ## Every row carries `cause` and `params` (see `_row`). A fight pays no Ekwan (D-28):
 ## `ekwan_awarded` stays in the result as 0 so the Resolve snapshot keeps its shape.
 ## Returns reward_result dict with ase_awarded, ekwan_awarded, rank, victory, breakdown.
 func reward_encounter_complete(
 	victory: bool,
 	base_reward: int,
-	enemy_bonus: int,
-	enemies_defeated: int,
-	echo_bonus: int,
-	echoes_survived: int,
-	pace_bonus: int,
-	pace_mode: bool,
-	redo_multiplier: float,
+	realm_scale: float,
+	replay_factor: float,
 	rank: String,
 	consolation_eligible: bool,
 	logger: StructuredLogger,
@@ -149,33 +128,20 @@ func reward_encounter_complete(
 	var breakdown: Array  # Array of {label: String, delta: int, currency: String}
 
 	if victory:
-		var pre_redo := enemy_bonus + echo_bonus + pace_bonus
-		total = roundi(float(pre_redo) * redo_multiplier)
-		var redo_penalty := total - pre_redo  # negative or 0
-
+		total = 0
 		breakdown = []
-		if enemy_bonus > 0:
-			var e_label := "%d %s defeated" % [enemies_defeated, "enemy" if enemies_defeated == 1 else "enemies"]
-			breakdown.append(_row(e_label, enemy_bonus, "enemies_defeated", { "count": enemies_defeated }))
-		if echo_bonus > 0:
-			var ec_label := "%d %s survived" % [echoes_survived, "echo" if echoes_survived == 1 else "echoes"]
-			breakdown.append(_row(ec_label, echo_bonus, "echoes_alive", { "count": echoes_survived }))
-		# Pace modes show the row at every value, 0 included (decisions.md D-13); no-pace modes never.
-		if pace_mode:
-			breakdown.append(_row("Pace bonus", pace_bonus, "bonus_earned" if pace_bonus > 0 else "bonus_missed"))
-		if redo_penalty < 0:
-			breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
 	elif consolation_eligible:
-		total = roundi(float(base_reward) * 0.25 * redo_multiplier)
-		var base_consolation := roundi(float(base_reward) * 0.25)
-		var defeat_penalty   := base_consolation - base_reward  # negative
-		var redo_penalty     := total - base_consolation        # negative or 0
+		var scaled := float(base_reward) * realm_scale
+		var base_row := RewardCalc.round_payout(scaled)
+		var base_consolation := RewardCalc.round_payout(scaled * 0.25)
+		total = RewardCalc.round_payout(scaled * 0.25 * replay_factor)
+		var replay_delta := total - base_consolation  # negative or 0
 
 		breakdown = []
-		breakdown.append(_row("Base objectives", base_reward, "defeat_consolation", { "part": "base" }))
-		breakdown.append(_row("Defeat penalty", defeat_penalty, "defeat_consolation", { "part": "penalty" }))
-		if redo_penalty < 0:
-			breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
+		breakdown.append(_row("Base objectives", base_row, "defeat_consolation", { "part": "base" }))
+		breakdown.append(_row("Defeat penalty", base_consolation - base_row, "defeat_consolation", { "part": "penalty" }))
+		if replay_delta < 0:
+			breakdown.append(_row("Redo penalty", replay_delta, "replay", { "factor": replay_factor }))
 	else:
 		# D77: this situation has already paid its one defeat consolation. Losing it again pays
 		# nothing. The situation still is NOT marked resolved by this path, so the fight stays
@@ -201,22 +167,24 @@ func reward_encounter_complete(
 ##
 ## base_reward:  sum of the stage's objective weights (`RewardCalc.base_reward`).
 ## objective_counts: `RewardCalc.objective_counts()`; feeds the `objectives_overcome` params only.
-## ekwan_base:   `RewardCalc.stage_ekwan()`, the Ekwan of the completed objectives before redo.
-## redo_multiplier: same value the encounter payout used; scales the base exactly as the single
-##               combined payer scaled it.
-## virtue_bonus: REALM-005 realm-virtue + stage-index bonus. Never redo-scaled — it carries its
-##               own realm-order multiplier already (`RealmService.calculate_stage_reward`).
+## ekwan_base:   `RewardCalc.stage_ekwan()`, the Ekwan of the completed objectives before scaling.
+## echo_home:    the Echoes stipend input, see `stage_payout_rows`. Empty means no stipend row.
+## realm_scale, replay_factor: see `stage_payout_rows`.
 ## Returns { ase_awarded, ekwan_awarded, breakdown }.
 func settle_stage_complete(
 	base_reward: int,
-	redo_multiplier: float,
-	virtue_bonus: int,
+	realm_scale: float,
+	replay_factor: float,
 	logger: StructuredLogger,
 	t: int,
 	objective_counts: Dictionary = {},
-	ekwan_base: int = 0
+	ekwan_base: int = 0,
+	echo_home: Dictionary = {},
+	carried_ase: int = 0,
+	carried_ekwan: int = 0
 ) -> Dictionary:
-	var rows := stage_payout_rows(base_reward, redo_multiplier, virtue_bonus, objective_counts, ekwan_base)
+	var rows := stage_payout_rows(base_reward, realm_scale, replay_factor, objective_counts, ekwan_base,
+		echo_home, carried_ase, carried_ekwan)
 	var total: int = rows["ase"]
 	var breakdown: Array = rows["breakdown"]
 
@@ -235,25 +203,52 @@ func settle_stage_complete(
 
 ## The Ase rows of the stage payout, and the Ase and Ekwan totals. The ONE producer:
 ## `settle_stage_complete` pays from it and `StageSettlementService.preview` shows it, so the two
-## cannot drift. Ekwan has no rows (D-32). Like the Ase base, it is rounded once on the stage sum.
+## cannot drift. Ekwan has no rows (D-32).
+## Objective Ase = round(base x realm_scale x replay_factor), rounded ONCE on the stage sum; Ekwan the
+## same with its own sum (D-30, D-54). The base row shows the amount after the realm scale; the
+## `replay` row is the difference the replay factor makes, and exists only when it lowers the amount.
+## `echo_home` = { alive, started, lost: Array of names, rate, cap, replay }. The Echoes stipend is
+## `mini(alive * rate, cap)`, outside the realm scale and the replay factor (D-53; the replay halves
+## its cap instead). It adds an `echoes_alive` row whenever `started` > 0, even at 0 Ase, so the
+## card can show who was lost.
+## `carried_ase`, `carried_ekwan`: what a retreat or return home already paid from this stage (D-72). Both
+## totals are net of it, never below 0. A `carried_advance` row carries the Ase part, only when it is above 0.
 ## Pure. Returns { breakdown: Array, ase: int, ekwan: int }.
-static func stage_payout_rows(base_reward: int, redo_multiplier: float, virtue_bonus: int,
-		objective_counts: Dictionary = {}, ekwan_base: int = 0) -> Dictionary:
-	var base_after_redo := roundi(float(base_reward) * redo_multiplier)
-	var redo_penalty := base_after_redo - base_reward  # negative or 0
+static func stage_payout_rows(base_reward: int, realm_scale: float, replay_factor: float,
+		objective_counts: Dictionary = {}, ekwan_base: int = 0,
+		echo_home: Dictionary = {}, carried_ase: int = 0, carried_ekwan: int = 0) -> Dictionary:
+	var scaled := float(base_reward) * realm_scale
+	var base_row := RewardCalc.round_payout(scaled)
+	var objective_ase := RewardCalc.round_payout(scaled * replay_factor)
+	var replay_delta := objective_ase - base_row  # negative or 0
 	var breakdown: Array = []
-	breakdown.append(_row("Base objectives", base_reward, "objectives_overcome", {
+	breakdown.append(_row("Base objectives", base_row, "objectives_overcome", {
 		"overcome": int(objective_counts.get("overcome", 0)),
 		"total": int(objective_counts.get("total", 0)),
+		"realm_scale": realm_scale,
 	}))
-	if redo_penalty < 0:
-		breakdown.append(_row("Redo penalty", redo_penalty, "replay", { "factor": redo_multiplier }))
-	if virtue_bonus > 0:
-		breakdown.append(_row("Realm virtue", virtue_bonus, "realm_virtue"))
+	if replay_delta < 0:
+		breakdown.append(_row("Redo penalty", replay_delta, "replay", { "factor": replay_factor }))
+	var stipend := 0
+	var started := int(echo_home.get("started", 0))
+	if started > 0:
+		var alive := int(echo_home.get("alive", 0))
+		var cap := int(echo_home.get("cap", 0))
+		stipend = mini(alive * int(echo_home.get("rate", 0)), cap)
+		breakdown.append(_row("Echoes home", stipend, "echoes_alive", {
+			"alive": alive, "started": started, "lost": (echo_home.get("lost", []) as Array).duplicate(),
+			"cap": cap, "replay": bool(echo_home.get("replay", false)),
+		}))
+	var gross := objective_ase + stipend
+	var advance := mini(maxi(carried_ase, 0), gross)
+	if carried_ase > 0:
+		breakdown.append(_row("Carried home", -advance, "carried_advance",
+			{ "carried_ase": carried_ase, "carried_ekwan": carried_ekwan }))
+	var ekwan_gross := RewardCalc.round_payout(float(ekwan_base) * realm_scale * replay_factor)
 	return {
 		"breakdown": breakdown,
-		"ase": base_after_redo + virtue_bonus,
-		"ekwan": roundi(float(ekwan_base) * redo_multiplier),
+		"ase": gross - advance,
+		"ekwan": maxi(0, ekwan_gross - carried_ekwan),
 	}
 
 

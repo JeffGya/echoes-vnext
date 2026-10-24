@@ -68,7 +68,7 @@ static func register(runner) -> void:
 	# B — encounter.retreat
 	runner.register_test("venture_char/retreat_success_spends_ase_and_awards_intel", func(): return _t_retreat_success())
 	runner.register_test("venture_char/retreat_success_snapshot_is_scout_return", func(): return _t_retreat_snapshot())
-	runner.register_test("venture_char/retreat_without_ase_awards_intel_but_spends_nothing", func(): return _t_retreat_no_ase())
+	runner.register_test("venture_char/retreat_without_ase_is_denied", func(): return _t_retreat_no_ase())
 	# C — _build_scout_return_snapshot, both call sites
 	# D1/D2/D3 inverted by V2-INFRA-003 Phase 5 Slice B — the three defects these pinned are fixed.
 	runner.register_test("venture_char/scout_return_meta_carries_t", func(): return _t_scout_return_meta_t())
@@ -635,12 +635,11 @@ static func _t_retreat_success() -> Dictionary:
 
 	var ase_before := int(_economy(save_data).get("ase", -1))
 	var expected_award := _expected_intel_partial(runtime, intel_count)
-	var ase_cost := 40
+	var ase_cost := RetreatService.get_ase_cost(runtime.config_service)
 
 	logger.clear()
 	runtime.dispatch({
 		"type":        "encounter.retreat",
-		"ase_cost":    ase_cost,
 		"success_pct": 100,
 	})
 	var flushes := _flush_count(logger)
@@ -759,30 +758,29 @@ static func _t_retreat_snapshot() -> Dictionary:
 	return { "ok": true }
 
 
-## The affordability guard at :1086–:1092: when the player cannot pay the retreat cost the
-## spend is skipped entirely — but the retreat still succeeds and the intel partial is still
-## awarded. Pinned so the "free retreat when broke" behaviour cannot move silently.
+## D-79: with less Ase than the price the retreat is refused. No spend, no intel partial, the
+## encounter stays, and the returned snapshot is still the encounter with a retreat_denied reason.
 static func _t_retreat_no_ase() -> Dictionary:
 	var env := _setup_retreat_env("retreat_no_ase", 0, 2)
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
-	var intel_count: int = env["intel_count"]
 	var save_data: Dictionary = runtime.get_save_data()
-	var expected_award := _expected_intel_partial(runtime, intel_count)
 
 	var out: Dictionary = runtime.dispatch({
 		"type":        "encounter.retreat",
-		"ase_cost":    999999,
 		"success_pct": 100,
 	})
 
 	var mismatches: Array = []
-	if int(_economy(save_data).get("ase", -1)) != expected_award:
-		mismatches.append("expected an unaffordable cost to be skipped, leaving 0 + %d(intel) = %d Ase, got %d" \
-			% [expected_award, expected_award, int(_economy(save_data).get("ase", -1))])
-	if str(out.get("type", "")) != FlowStateIds.RESOLVE:
-		mismatches.append("expected the retreat to succeed anyway and publish %s, got %s" % [FlowStateIds.RESOLVE, str(out.get("type", ""))])
+	if int(_economy(save_data).get("ase", -1)) != 0:
+		mismatches.append("expected a denied retreat to leave 0 Ase, got %d" % int(_economy(save_data).get("ase", -1)))
+	if runtime.flow_ctx.encounter_ctx == null:
+		mismatches.append("expected the encounter to stay after a denied retreat")
+	if str(out.get("type", "")) == FlowStateIds.RESOLVE:
+		mismatches.append("expected no resolve card after a denied retreat")
+	if not (out.get("data", {}) as Dictionary).has("retreat_denied"):
+		mismatches.append("expected data.retreat_denied in the returned snapshot")
 
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }

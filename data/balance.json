@@ -100,12 +100,25 @@
 			"awakening_boost_bank_interval_seconds": 240.0
 		},
 		"summoning": {
-			"ase_cost_per_summon": 60.0,
-			"ase_cost_per_summon_by_grade": {
-				"uncalled": 60.0,
-				"called": 150.0,
-				"chosen": 400.0
+			"price_by_echo_number": {
+				"2": 60,
+				"3": 60,
+				"4": 70,
+				"5": 85,
+				"6": 100,
+				"7": 120,
+				"8": 145,
+				"9": 175,
+				"10": 210,
+				"11": 250,
+				"12": 300,
+				"13": 360,
+				"14": 430
 			},
+			"village_ceiling": 14,
+			"called_extra": 90,
+			"chosen_extra": 340,
+			"grade_enabled": { "uncalled": true, "called": false, "chosen": false },
 			"trait_min": 30.0,
 			"trait_max": 70.0,
 			"calling_weights": {
@@ -1533,16 +1546,16 @@
 			"_comment": "ECONOMY-004: Stage reward payout config. All values tunable without code changes.",
 			"_objective_weights_comment": "Ase per objective type (D-09). A type with no key logs an error and pays 0. boss stays 0 until a boss story exists (D-02).",
 			"objective_weights": {
-				"pursue": 8,
-				"combat": 10,
-				"recover": 12,
-				"protect": 12,
-				"endure": 14,
-				"shrine": 15,
-				"guide_spirit": 16,
+				"pursue": 16,
+				"combat": 20,
+				"recover": 24,
+				"protect": 24,
+				"endure": 28,
+				"shrine": 30,
+				"guide_spirit": 32,
 				"boss": 0
 			},
-			"_objective_ekwan_comment": "Ekwan per COMPLETED objective type (D-29, working set B). Fights pay none. A type with no key logs an error and pays 0. The stage sum is multiplied by the replay factor and rounded once.",
+			"_objective_ekwan_comment": "Ekwan per COMPLETED objective type (D-29, working set B). Fights pay none. A type with no key logs an error and pays 0. The stage sum is multiplied by the realm scale and the replay factor and rounded once.",
 			"objective_ekwan": {
 				"pursue": 2,
 				"combat": 2,
@@ -1555,14 +1568,23 @@
 			},
 			"_objective_count_excluded_comment": "Objective types left out of the 'overcome of total' count on the payout ledger. boss is a stub today; remove it from this list when the boss becomes a real objective. No payout effect.",
 			"objective_count_excluded_types": ["boss"],
-			"enemy_defeated_bonus": 5,
-			"echo_survived_bonus": 10,
+			"_echo_home_comment": "V2-ECONOMY-004 D-43/D-44/D-53: Echoes stipend, paid once per stage in the stage payout. Ase per Echo home at the stage end, capped; on a replay (run_count > 0) the cap is halved and the rate stays. Outside the replay factor and the realm scale.",
+			"echo_home_ase": 2,
+			"echo_home_cap": 10,
+			"echo_home_cap_replay": 5,
 			"pace_full_ratio": 1.1,
 			"pace_zero_ratio": 1.6,
-			"pace_bonus_pct": 0.05,
-			"redo_penalty_per_run": 0.1,
-			"redo_penalty_floor": 0.5,
+			"_realm_scale_comment": "V2-ECONOMY-004 D-63: scale on objective Ase and Ekwan = 1 + realm_scale_step x (position in realms.json realm_order - 1). A realm outside realm_order (the prologue) uses 1.0. The stipend is not scaled.",
+			"realm_scale_step": 0.25,
+			"_replay_factor_comment": "V2-ECONOMY-004 D-54: flat factor on objective Ase and Ekwan when the realm run_count is above 0. Rounded once on the stage sum. The stipend and the rank ignore it.",
+			"replay_factor": 0.35,
 			"defeat_factor": 0.25,
+			"_rank_points_comment": "V2-ECONOMY-004 D-49: rank score = win + home + pace. home is Echoes alive / Echoes started in the fight; pace is the pace fraction (a no-pace mode gets the full pace points). Ase amounts do not enter the score.",
+			"rank_points": {
+				"win": 0.4,
+				"home": 0.4,
+				"pace": 0.2
+			},
 			"rank_thresholds": {
 				"S": 0.9,
 				"A": 0.75,
@@ -1570,15 +1592,6 @@
 				"C": 0.35,
 				"D": 0.15
 			},
-			"_comment_realm005": "REALM-005: Virtue-based stage bonus. Formula: roundi((virtue_bonuses[virtue] + stage_index * stage_index_bonus_per) * (base + run_index * step)). Victory-only.",
-			"virtue_bonuses": {
-				"courage": 10,
-				"wisdom": 15,
-				"faith": 20
-			},
-			"stage_index_bonus_per": 5,
-			"realm_order_multiplier_base": 1.0,
-			"realm_order_multiplier_step": 0.5,
 			"partial_intel_reward_factor": 0.12
 		},
 		"grid": {
@@ -1876,7 +1889,7 @@
 				"late_count_bonus": 1,
 				"max_count": 4
 			},
-			"retreat_ase_cost": 30.0,
+			"retreat_ase_cost": 10.0,
 			"retreat_agi_tiers": [
 				{
 					"min_delta": 10.0,
@@ -2546,7 +2559,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2564,7 +2577,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2583,7 +2596,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2602,7 +2615,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2620,7 +2633,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2638,7 +2651,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2658,7 +2671,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2677,7 +2690,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2694,7 +2707,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2711,7 +2724,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2728,7 +2741,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2745,7 +2758,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2762,7 +2775,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2779,7 +2792,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				}
@@ -3129,7 +3142,7 @@
 				"protect": { "label": "Protect", "required": true,  "reveal_hint": "A presence here needs guarding." },
 				"endure":  { "label": "Endure",  "required": true,  "reveal_hint": "The pressure here does not relent." },
 				"pursue":  { "label": "Pursue",  "required": false, "reveal_hint": "Something is moving through this area." },
-				"guide_spirit": { "label": "Guide the Spirit", "required": false, "reveal_hint": "A lost spirit lingers here, waiting to be seen home." }
+				"guide_spirit": { "label": "Guide the Spirit", "required": true,  "reveal_hint": "A lost spirit lingers here, waiting to be seen home." }
 			},
 
 			"foundation_objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"],

@@ -388,6 +388,16 @@ static func get_rewards_cfg(config_service: ConfigService) -> Dictionary:
 	return rewards_v if rewards_v is Dictionary else {}
 
 
+## `realm_order` of data/realms.json: the realms the player can pick, in order. The prologue is not in it.
+static func get_realm_order(config_service: ConfigService) -> Array:
+	if config_service == null:
+		return []
+	var data_v: Variant = config_service.get_realms().get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var order_v: Variant = data.get("realm_order", [])
+	return order_v if order_v is Array else []
+
+
 ## data.threads — the V2-WEAVE-001 Thread block (segment_quality_by_grade and the
 ## crystallization table). Two readers since V2-INFRA-003 D84: FlowRuntime._end_round()
 ## contributes the stage-clearing fight's segment, VentureController.handle_complete_stage()

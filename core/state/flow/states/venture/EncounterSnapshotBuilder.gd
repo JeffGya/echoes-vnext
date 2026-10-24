@@ -289,8 +289,7 @@ static func _build_objective_state(ectx: EncounterContext, combat_state: Diction
 	var _pace_src: Dictionary = combat_state if not combat_state.is_empty() \
 		else (ectx.pace_cfg if ectx != null else {})
 	var _pace: String = PaceService.pace_state(_round, float(_pace_src.get("par_rounds", 0.0)),
-		float(_pace_src.get("pace_full_ratio", 0.0)), float(_pace_src.get("pace_zero_ratio", 0.0)),
-		int(_pace_src.get("stage_base", 0)), float(_pace_src.get("pace_bonus_pct", 0.0)))
+		float(_pace_src.get("pace_full_ratio", 0.0)), float(_pace_src.get("pace_zero_ratio", 0.0)))
 	if not _pace.is_empty():
 		out["pace_state"] = _pace
 	return out
@@ -406,8 +405,10 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# UI-004: Retreat eligibility — computed pre_combat only; inert in all other phases.
 	var retreat_eligible:    bool   = false
 	var retreat_ase_cost:    int    = 0
+	var retreat_affordable:  bool   = false
 	var retreat_tier_label:  String = ""
 	var retreat_success_pct: int    = 0
+	var carry_retreat: Dictionary = { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0 }
 
 	match round_phase:
 		"pre_combat":
@@ -424,7 +425,11 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				var bal_r: Dictionary   = flow_ctx.config_service.get_balance()
 				var bdata_r: Dictionary = bal_r.get("data", {})
 				combat_cfg_r = bdata_r.get("combat", {})
-			retreat_ase_cost = int(combat_cfg_r.get("retreat_ase_cost", 30))
+			retreat_ase_cost = RetreatService.get_ase_cost(flow_ctx.config_service)
+			var _carry := StageSettlementService.carry_plan(flow_ctx, flow_ctx.config_service)
+			for _k in carry_retreat:
+				carry_retreat[_k] = _carry[_k]
+			retreat_affordable = int(flow_ctx.save_data.get("economy", {}).get("ase", 0)) >= retreat_ase_cost
 			var tier_cfg_r: Array = combat_cfg_r.get("retreat_agi_tiers", [])
 			var tier_r: Dictionary = RetreatService.get_chance_tier(raw_actors_for_retreat, tier_cfg_r)
 			if not tier_r.is_empty():
@@ -470,8 +475,11 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# UI-004: always present; non-zero/non-empty only in pre_combat phase.
 			"retreat_eligible":        retreat_eligible,
 			"retreat_ase_cost":        retreat_ase_cost,
+			"retreat_affordable":      retreat_affordable,
 			"retreat_tier_label":      retreat_tier_label,
 			"retreat_success_pct":     retreat_success_pct,
+			# What a successful retreat would bank now: { ase, ekwan, overcome, total }. Read only.
+			"carry_retreat_preview":   carry_retreat,
 			# V2-STAGE-002: remaining required objectives (informational during combat).
 			"objectives_remaining":    EncounterSnapshotBuilder._count_remaining_required_objectives(flow_ctx),
 			# V2-STAGE-004 P3a: irregular terrain dict for CombatBoardScreen tilemap.
@@ -555,6 +563,10 @@ static func _count_remaining_required_objectives(flow_ctx: FlowContext) -> int:
 		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
 		if bool(obj.get("required", true)) and not bool(obj.get("completed", false)):
 			remaining += 1
+	# No required objective is open, but nothing was overcome either: the stage is not
+	# completable (ObjectiveModel.stage_completable), so the resolve card must not offer it.
+	if remaining == 0 and not objs.is_empty() and not ObjectiveModel.stage_completable(objs):
+		return 1
 	return remaining
 
 

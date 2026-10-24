@@ -1,6 +1,7 @@
 ## PaceService
-## Pure static owner of the pace bonus rules: which modes carry pace, par at fight start, the
-## pace state and bonus curve, and the reached-enemy and ally-kill sets the rank uses.
+## Pure static owner of the pace rules: which modes carry pace, par at fight start, the pace
+## fraction and state, and the reached-enemy and ally-kill sets. Speed pays no Ase (D-49): the
+## fraction feeds the HUD colour and the rank score only.
 ## Spec: docs/stories/pace-reward/design.md. No RNG, no config reads, no service calls.
 
 class_name PaceService extends RefCounted
@@ -137,7 +138,7 @@ static func _mean_capacity(echoes: Array, capacity_cfg: Dictionary) -> float:
 	return float(cap_sum) / float(echoes.size())
 
 
-## Bonus fraction in [0, 1] for a fight that ends on round_ended (design §4). 0.0 when par is 0.
+## Pace fraction in [0, 1] for a fight that ends on round_ended (design §4). 0.0 when par is 0.
 static func bonus_fraction(round_ended: int, par_rounds: float, full_ratio: float,
 		zero_ratio: float) -> float:
 	if par_rounds <= 0.0:
@@ -150,31 +151,17 @@ static func bonus_fraction(round_ended: int, par_rounds: float, full_ratio: floa
 	return (zero_ratio - ratio) / (zero_ratio - full_ratio)
 
 
-## Ase a win on round_ended pays: roundi(stage base × pace_bonus_pct × fraction).
-static func bonus_ase(round_ended: int, par_rounds: float, full_ratio: float, zero_ratio: float,
-		stage_base: int, bonus_pct: float) -> int:
-	return roundi(float(stage_base) * bonus_pct
-		* bonus_fraction(round_ended, par_rounds, full_ratio, zero_ratio))
-
-
-## The maximum pace bonus in Ase: the bonus at fraction 1.0.
-static func max_bonus_ase(stage_base: int, bonus_pct: float) -> int:
-	return roundi(float(stage_base) * bonus_pct)
-
-
-## "full" / "partial" / "none" (design §6). "" when par is 0 (no-pace mode).
-## Set from the Ase paid (decisions.md D-22): full = the maximum, none = 0, partial = between.
-## The live colour and the result both call this, so they cannot disagree with the Ase row.
+## "full" / "partial" / "none" (design §6), from the pace fraction. "" when par is 0 (no-pace mode).
+## The live colour and the result both call this, so they cannot disagree.
 static func pace_state(round_counter: int, par_rounds: float, full_ratio: float,
-		zero_ratio: float, stage_base: int, bonus_pct: float) -> String:
+		zero_ratio: float) -> String:
 	if par_rounds <= 0.0:
 		return ""
-	var paid := bonus_ase(round_counter, par_rounds, full_ratio, zero_ratio, stage_base, bonus_pct)
-	# 0 Ase is "none" first, so a maximum that rounds to 0 is never "full".
-	if paid <= 0:
-		return PACE_NONE
-	if paid >= max_bonus_ase(stage_base, bonus_pct):
+	var fraction := bonus_fraction(round_counter, par_rounds, full_ratio, zero_ratio)
+	if fraction >= 1.0:
 		return PACE_FULL
+	if fraction <= 0.0:
+		return PACE_NONE
 	return PACE_PARTIAL
 
 

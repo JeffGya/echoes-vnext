@@ -15,9 +15,10 @@
 # 11. objective/party_requesting_return_high_fear  — party_requesting_return true when avg fear > threshold
 # 12. objective/party_requesting_return_low_fear   — party_requesting_return false when avg fear ≤ threshold
 # 13. objective/zero_required_blocked_until_reached — D94: a stage with no REQUIRED objective is
-#     not completable until its objective situations are reached, then it is
+#     not completable until a non-boss objective is overcome, then it is
 # 14. objective/required_stage_gate_unchanged       — D94 regression guard: a normal stage with a
 #     required objective gates exactly as before
+# 16-22. D-82/D-83: optional objectives are skippable; guide_spirit is required in config.
 # 15. objective/calling_action_bonuses_v2_only — guard: calling_action_bonuses config carries no V1 calling id
 
 class_name StageObjectiveTests
@@ -113,6 +114,23 @@ static func _set_objectives_found(ctx: FlowContext, found: int) -> void:
 	FlowStageExploreStateScript._write_stage_back(ctx, stage)
 
 
+# Mark objective `idx` completed on the injected stage. Production also bumps objectives_found
+# in the same write; the gate no longer reads it, so the helper does not.
+static func _complete_objective(ctx: FlowContext, idx: int) -> void:
+	var stage := FlowStageExploreStateScript._get_current_stage(ctx)
+	var objs: Array = stage.get("objectives", [])
+	(objs[idx] as Dictionary)["completed"] = true
+	stage["objectives"] = objs
+	FlowStageExploreStateScript._write_stage_back(ctx, stage)
+
+
+static func _gate_open(ctx: FlowContext) -> bool:
+	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
+	var actions_v: Variant = snap.get("actions", {})
+	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
+	return actions.has("cta.proceed_to_stage_map")
+
+
 static func _make_echo(id: String, calling: String, fear: int = 10) -> Dictionary:
 	return {
 		"id":             id,
@@ -143,6 +161,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("objective/party_requesting_return_low_fear",   Callable(StageObjectiveTests, "_t_party_requesting_return_low_fear"))
 	runner.register_test("objective/zero_required_blocked_until_reached", Callable(StageObjectiveTests, "_t_zero_required_blocked_until_reached"))
 	runner.register_test("objective/required_stage_gate_unchanged",       Callable(StageObjectiveTests, "_t_required_stage_gate_unchanged"))
+	runner.register_test("objective/optional_skipped_completable",        Callable(StageObjectiveTests, "_t_optional_skipped_completable"))
+	runner.register_test("objective/required_open_blocks_despite_optional_done", Callable(StageObjectiveTests, "_t_required_open_blocks"))
+	runner.register_test("objective/zero_required_optional_overcome_completable", Callable(StageObjectiveTests, "_t_zero_required_overcome"))
+	runner.register_test("objective/boss_never_counts",                   Callable(StageObjectiveTests, "_t_boss_never_counts"))
+	runner.register_test("objective/skipped_pays_completed_only_once",    Callable(StageObjectiveTests, "_t_skipped_pays_completed_only"))
+	runner.register_test("objective/resolve_gate_agrees",                 Callable(StageObjectiveTests, "_t_resolve_gate_agrees"))
+	runner.register_test("objective/guide_spirit_required_in_config",     Callable(StageObjectiveTests, "_t_guide_spirit_required_config"))
+	runner.register_test("objective/generated_required_flags_unchanged",  Callable(StageObjectiveTests, "_t_generated_flags_match_config"))
 	runner.register_test("objective/calling_action_bonuses_v2_only",      Callable(StageObjectiveTests, "_t_calling_action_bonuses_v2_only"))
 
 
@@ -533,16 +559,17 @@ static func _t_zero_required_blocked_until_reached() -> Dictionary:
 	if actions.has("cta.proceed_to_stage_map"):
 		return { "ok": false, "error": "D94: stage with no required objective must NOT be completable before its objective is reached" }
 
-	# Now the party engages and resolves the objective situation — production bumps
-	# objectives_found in the same write.
+	# Reaching the situation alone (objectives_found) is not enough: nothing was overcome.
 	_set_objectives_found(ctx, 1)
-	var snap2 := StageExploreSnapshotBuilder.build(ctx, 1)
-	var actions2_v: Variant = snap2.get("actions", {})
-	var actions2: Dictionary = actions2_v if actions2_v is Dictionary else {}
-	if not actions2.has("cta.proceed_to_stage_map"):
-		return { "ok": false, "error": "D94: stage must become completable once its objective situations are reached" }
+	if _gate_open(ctx):
+		return { "ok": false, "error": "D94: reaching an objective without overcoming it must not open the gate" }
 
-	return { "ok": true, "error": "Zero-required stage blocked until reached, then completable" }
+	# Overcoming the pursue objective opens the gate.
+	_complete_objective(ctx, 0)
+	if not _gate_open(ctx):
+		return { "ok": false, "error": "D94: stage must become completable once pursue is overcome" }
+
+	return { "ok": true, "error": "Zero-required stage blocked until pursue is overcome, then completable" }
 
 
 # 14. D94 regression guard — a NORMAL stage (one required objective) gates exactly as before.
@@ -577,6 +604,161 @@ static func _t_required_stage_gate_unchanged() -> Dictionary:
 		return { "ok": false, "error": "Completion action type changed: got '%s'" % str(act.get("type", "")) }
 
 	return { "ok": true, "error": "Normal required-objective stage gates unchanged" }
+
+
+# 16. D-82 — required done, optional pursue skipped: completable.
+static func _t_optional_skipped_completable() -> Dictionary:
+	var ctx := _make_ctx()
+	var combat := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100, {}, true, true)
+	var pursue := ObjectiveModelScript.make(1, ObjectiveModelScript.TYPE_PURSUE, 101, {}, false, false)
+	var boss   := ObjectiveModelScript.make(2, ObjectiveModelScript.TYPE_BOSS,   102, {}, false, false)
+	var sit0 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	var sit1 := SituationModelScript.make("sit.1", SituationModelScript.TYPE_COMBAT, 9, 9, 101, true, 1)
+	_inject_stage(ctx, [combat, pursue, boss], [sit0, sit1])
+	_set_objectives_found(ctx, 1)
+	if not _gate_open(ctx):
+		return { "ok": false, "error": "D-82: required done + optional skipped must be completable" }
+	return { "ok": true, "error": "Skipped optional objective does not block completion" }
+
+
+# 17. A required objective still open blocks the gate even when an optional one is done.
+static func _t_required_open_blocks() -> Dictionary:
+	var ctx := _make_ctx()
+	var combat := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_COMBAT, 100, {}, false, true)
+	var pursue := ObjectiveModelScript.make(1, ObjectiveModelScript.TYPE_PURSUE, 101, {}, true, false)
+	var boss   := ObjectiveModelScript.make(2, ObjectiveModelScript.TYPE_BOSS,   102, {}, false, false)
+	var sit0 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	_inject_stage(ctx, [combat, pursue, boss], [sit0])
+	_set_objectives_found(ctx, 1)
+	if _gate_open(ctx):
+		return { "ok": false, "error": "Required objective open: gate must stay closed" }
+	return { "ok": true, "error": "Open required objective blocks completion" }
+
+
+# 18. Zero required objective: blocked while the optional one is undone, open once overcome.
+static func _t_zero_required_overcome() -> Dictionary:
+	var ctx := _make_ctx()
+	var pursue := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_PURSUE, 100, {}, false, false)
+	var boss   := ObjectiveModelScript.make(1, ObjectiveModelScript.TYPE_BOSS,   101, {}, false, false)
+	var sit0 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	_inject_stage(ctx, [pursue, boss], [sit0])
+	if _gate_open(ctx):
+		return { "ok": false, "error": "Zero required, optional undone: gate must be closed" }
+	_complete_objective(ctx, 0)
+	if not _gate_open(ctx):
+		return { "ok": false, "error": "Zero required, optional overcome: gate must be open" }
+	return { "ok": true, "error": "Zero-required stage opens only after the optional is overcome" }
+
+
+# 19. The boss stub never counts as overcome, even if a fixture marks it completed... it must
+# not be the one objective that opens a stage with no other overcome objective.
+static func _t_boss_never_counts() -> Dictionary:
+	var boss_only := [ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_BOSS, 1, {}, true, false)]
+	if ObjectiveModelScript.stage_completable(boss_only):
+		return { "ok": false, "error": "A completed boss stub must not satisfy the overcome term" }
+	var open_boss := [ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_BOSS, 1, {}, false, false)]
+	if ObjectiveModelScript.stage_completable(open_boss):
+		return { "ok": false, "error": "A stage of only the boss stub must not be completable" }
+	if ObjectiveModelScript.stage_completable([]):
+		return { "ok": false, "error": "A stage with no objectives must not be completable" }
+	return { "ok": true, "error": "Boss stub never counts" }
+
+
+# 20. Payout: a skipped optional objective pays nothing (same payout as a stage without it), and
+# the settlement stays exactly-once.
+static func _t_skipped_pays_completed_only() -> Dictionary:
+	var cfg := EconomyCharacterizationTests._config()
+	var boss := ObjectiveModelScript.make(2, ObjectiveModelScript.TYPE_BOSS, 2, {}, false, false)
+	var with_skip: Array = [
+		EconomyCharacterizationTests._req(0, "combat", true),
+		ObjectiveModelScript.make(1, ObjectiveModelScript.TYPE_PURSUE, 1, {}, false, false), boss]
+	var without: Array = [EconomyCharacterizationTests._req(0, "combat", true), boss]
+	var ctx_a := EconomyCharacterizationTests._stage_ctx(cfg, with_skip)
+	var ctx_b := EconomyCharacterizationTests._stage_ctx(cfg, without)
+	var pa := StageSettlementService.new(ctx_a, cfg, null, null).preview()
+	var pb := StageSettlementService.new(ctx_b, cfg, null, null).preview()
+	if pa.is_empty() or int(pa["ase"]) <= 0:
+		return { "ok": false, "error": "Fixture wrong: empty or zero preview %s" % str(pa) }
+	# The objectives_overcome row legitimately differs in params.total (1 of 2 vs 1 of 1).
+	if int(pa["ase"]) != int(pb["ase"]) or int(pa["ekwan"]) != int(pb["ekwan"]) \
+			or int((pa["rows"][0] as Dictionary)["delta"]) != int((pb["rows"][0] as Dictionary)["delta"]):
+		return { "ok": false, "error": "Skipped optional changed the payout: %s vs %s" % [str(pa), str(pb)] }
+	ctx_a.save_data["economy"] = { "ase": 0, "ekwan": 0 }
+	var econ := EconomyService.new(ctx_a.save_data)
+	var svc := StageSettlementService.new(ctx_a, cfg, econ, null)
+	var first := svc.settle(true, 1)
+	var ase_after_first := int(ctx_a.save_data["economy"]["ase"])
+	var second := svc.settle(true, 2)
+	if first.is_empty() or not second.is_empty():
+		return { "ok": false, "error": "settle must pay once: first %s second %s" % [str(first), str(second)] }
+	if int(ctx_a.save_data["economy"]["ase"]) != ase_after_first or ase_after_first != int(pa["ase"]):
+		return { "ok": false, "error": "Balance %d after first settle, preview said %d" % [ase_after_first, int(pa["ase"])] }
+	return { "ok": true, "error": "Skipped optional pays nothing; settlement exactly-once" }
+
+
+# 21. The resolve card's routing agrees with the explore gate: required done but nothing
+# overcome (zero-required stage) is not offered as complete.
+static func _t_resolve_gate_agrees() -> Dictionary:
+	var ctx := _make_ctx()
+	var pursue := ObjectiveModelScript.make(0, ObjectiveModelScript.TYPE_PURSUE, 100, {}, false, false)
+	var boss   := ObjectiveModelScript.make(1, ObjectiveModelScript.TYPE_BOSS,   101, {}, false, false)
+	var sit0 := SituationModelScript.make("sit.0", SituationModelScript.TYPE_COMBAT, 5, 5, 100, true, 0)
+	_inject_stage(ctx, [pursue, boss], [sit0])
+	if EncounterSnapshotBuilder._count_remaining_required_objectives(ctx) == 0:
+		return { "ok": false, "error": "Resolve gate open on a stage with nothing overcome" }
+	_complete_objective(ctx, 0)
+	if EncounterSnapshotBuilder._count_remaining_required_objectives(ctx) != 0:
+		return { "ok": false, "error": "Resolve gate closed after pursue overcome" }
+	return { "ok": true, "error": "Resolve and explore gates agree" }
+
+
+# Shipped config and generator agree on which types are required (D-83, closes D95).
+static func _shipped_required_flags() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var stages_cfg: Dictionary = (cs.get_balance().get("data", {}) as Dictionary).get("stages", {})
+	var types_cfg: Dictionary = stages_cfg.get("objective_types", {})
+	var out := {}
+	for k in types_cfg:
+		out[k] = bool((types_cfg[k] as Dictionary).get("required", true))
+	return out
+
+
+# 22.
+static func _t_guide_spirit_required_config() -> Dictionary:
+	var flags := _shipped_required_flags()
+	for t in ["combat", "shrine", "recover", "protect", "endure", "guide_spirit"]:
+		if not bool(flags.get(t, false)):
+			return { "ok": false, "error": "objective_types.%s.required must be true" % t }
+	if bool(flags.get("pursue", true)):
+		return { "ok": false, "error": "objective_types.pursue.required must stay false" }
+	return { "ok": true, "error": "guide_spirit required; pursue optional" }
+
+
+# 23. Generated stages keep their flags: every pre-boss objective is required except pursue,
+# the boss is not required, and the flags equal the config flags for each type.
+static func _t_generated_flags_match_config() -> Dictionary:
+	var flags := _shipped_required_flags()
+	var explore_cfg := {
+		"objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"],
+		"sit_count_min": 2, "sit_count_max": 2,
+		"map_width_min": 30, "map_width_max": 30, "map_height_min": 30, "map_height_max": 30,
+	}
+	var seen := {}
+	for seed in range(1, 41):
+		for st_v in RealmGenerator.generate(seed, 6, 2, 4, explore_cfg):
+			for o_v in (st_v as Dictionary).get("objectives", []):
+				var o: Dictionary = o_v
+				var ty := str(o.get("type", ""))
+				var want: bool = (ty != "pursue" and ty != "boss")
+				if bool(o.get("required", true)) != want:
+					return { "ok": false, "error": "seed %d: %s required=%s" % [seed, ty, str(o.get("required"))] }
+				if ty != "boss" and bool(flags.get(ty, true)) != want:
+					return { "ok": false, "error": "config flag for %s disagrees with generator" % ty }
+				seen[ty] = true
+	if not seen.has("guide_spirit") and not seen.has("pursue"):
+		return { "ok": false, "error": "Fixture saw neither guide_spirit nor pursue: %s" % str(seen.keys()) }
+	return { "ok": true, "error": "Generated flags match config (types seen: %s)" % str(seen.keys()) }
 
 
 # 15. Reads the SHIPPED balance.json (not the MockStageConfig fixture) so a regression of

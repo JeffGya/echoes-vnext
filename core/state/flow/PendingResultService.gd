@@ -499,7 +499,6 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if stored.has("pace_state"):
 		ResolveSnapshotBuilder.add_pace(
 			data,
-			int(stored.get("pace_bonus_awarded", 0)),
 			str(stored.get("pace_state", "")),
 			bool(stored.get("pace_changed_rank", false))
 		)

@@ -4,8 +4,8 @@
 # WHY THIS FILE EXISTS
 # --------------------
 # `FlowEncounterState.build_final_snapshot()` used to pay the whole reward at every combat end:
-# the stage's summed objective weights, the stage's realm-virtue bonus, and the stage-clear
-# Storyweight. Three stage-cadence payouts, fired once per ENCOUNTER, inside a snapshot builder,
+# the stage's summed objective weights, a realm-virtue bonus (removed, D-40), and the stage-clear
+# Storyweight. Stage-cadence payouts, fired once per ENCOUNTER, inside a snapshot builder,
 # in a dispatch that never advances the stage. That produced D77 (every combat situation in a
 # stage paid another full stage reward; a defeat paid a 25% consolation without limit) and D36
 # (quit at the Resolve screen and the money is banked while the stage stays "current"), and its
@@ -47,10 +47,8 @@
 # adds `{}` where the key is absent (it never overwrites a populated one — pinned by
 # tests/SaveBridgeTests.gd:394-431), so a receipt written here survives it.
 #
-# WHAT IS NOT SETTLED HERE, deliberately: the enemies-defeated bonus, the echoes-survived bonus,
-# the pace bonus and per-kill Storyweight. Those measure one FIGHT and are paid at the fight,
-# by `EconomyService.reward_encounter_complete()` and by the mid-combat kill-XP path. See the
-# split writeup at the top of EconomyService.gd's Stage Reward API section.
+# NOT SETTLED HERE: the defeat consolation (paid at the fight by
+# `EconomyService.reward_encounter_complete()`) and per-kill Storyweight (mid-combat kill-XP path).
 
 class_name StageSettlementService
 extends RefCounted
@@ -119,14 +117,16 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 	# --- the stage-cadence Ase/Ekwan ---------------------------------------
 	var plan := _plan(realm_model, stage_ref, stage_index, logger, t)
 	var base: int = plan["base"]
-	var virtue_bonus: int = plan["virtue_bonus"]
-	# REALM-005: same formula log line the encounter path made; it moved to the dispatch that
-	# completes the stage. The preview never logs it.
+	# The preview never logs this.
 	if logger != null:
-		logger.info(t, "economy.stage.reward", "Stage reward formula", plan["formula_inputs"])
+		logger.info(t, "economy.stage.reward", "Stage reward inputs", {
+			"stage_index": stage_index, "base": base,
+			"realm_scale": plan["realm_scale"], "replay_factor": plan["replay_factor"] })
 
 	var payout: Dictionary = econ.settle_stage_complete(
-		base, plan["redo_mul"], virtue_bonus, logger, t, plan["counts"], plan["ekwan_base"]
+		base, plan["realm_scale"], plan["replay_factor"], logger, t,
+		plan["counts"], plan["ekwan_base"], plan["echo_home"],
+		plan["carried_ase"], plan["carried_ekwan"]
 	)
 	flow_ctx.request_save("stage.reward")
 
@@ -149,7 +149,6 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 			"realm_id":      flow_ctx.realm_id,
 			"stage_index":   stage_index,
 			"base_reward":   base,
-			"virtue_bonus":  virtue_bonus,
 			"ase_awarded":   int(payout.get("ase_awarded", 0)),
 			"ekwan_awarded": int(payout.get("ekwan_awarded", 0)),
 			"xp_events":     xp_events.size(),
@@ -166,6 +165,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 ## What `settle()` would pay for the current stage, without paying it. Pure and read-only: no
 ## RNG, no save write, no log, no receipt. It reads the same `_plan()` and the same
 ## `EconomyService.stage_payout_rows()` that `settle()` pays from, so the two cannot drift.
+## Ase and Ekwan are NET of what a return home or retreat already carried (D-72).
 ## Returns { rows: Array, ase: int, ekwan: int } (rows are Ase only), or {} when the stage
 ## cannot be located or is already settled.
 func preview() -> Dictionary:
@@ -183,7 +183,8 @@ func preview() -> Dictionary:
 		return {}
 	var plan := _plan(realm_model, stage_ref, stage_index, null, 0)
 	var rows := EconomyService.stage_payout_rows(
-		plan["base"], plan["redo_mul"], plan["virtue_bonus"], plan["counts"], plan["ekwan_base"])
+		plan["base"], plan["realm_scale"], plan["replay_factor"], plan["counts"],
+		plan["ekwan_base"], plan["echo_home"], plan["carried_ase"], plan["carried_ekwan"])
 	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
 
 
@@ -194,17 +195,125 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 	var reward_cfg := ConfigService.get_rewards_cfg(config_service)
 	var objectives_v: Variant = stage_ref.get("objectives", [])
 	var objectives: Array = objectives_v if objectives_v is Array else []
-	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
-		stage_index, str(realm_model.get("virtue", "")), int(realm_model.get("run_index", 0)), reward_cfg)
 
 	return {
 		"base":           RewardCalc.base_reward(objectives, reward_cfg, log, t),
-		"redo_mul":       RewardCalc.redo_multiplier(int(realm_model.get("run_count", 0)), reward_cfg),
-		"virtue_bonus":   int(stage_reward_data.get("virtue_bonus", 0)),
-		"formula_inputs": stage_reward_data.get("formula_inputs", {}),
+		"realm_scale":    RewardCalc.realm_scale(flow_ctx.realm_id,
+			ConfigService.get_realm_order(config_service), reward_cfg),
+		"replay_factor":  RewardCalc.replay_factor(int(realm_model.get("run_count", 0)), reward_cfg),
 		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
+		"echo_home":      _echo_home(realm_model, reward_cfg),
+		"carried_ase":    maxi(0, int(stage_ref.get("carried_ase", 0))),
+		"carried_ekwan":  maxi(0, int(stage_ref.get("carried_ekwan", 0))),
 	}
+
+
+## The Echoes stipend input (D-43 to D-45, D-53). With a fight context, the last fight's party
+## Echoes are home or lost. Without one nobody fought, so the whole active party is home.
+func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary) -> Dictionary:
+	var tally := { "alive": 0, "started": 0, "lost": [] }
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx != null:
+		tally = RewardCalc.echo_tally(ectx.actors)
+	else:
+		var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+		var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
+		var ids_v: Variant = sanctum.get("active_party_ids", [])
+		var ids: Array = ids_v if ids_v is Array else []
+		var roster_v: Variant = sanctum.get("roster", [])
+		var roster: Array = roster_v if roster_v is Array else []
+		for e_v in roster:
+			if e_v is Dictionary and ids.has(str((e_v as Dictionary).get("id", ""))):
+				tally["started"] += 1
+				tally["alive"] += 1
+	var replay := int(realm_model.get("run_count", 0)) > 0
+	tally["rate"] = int(reward_cfg.get("echo_home_ase", 0))
+	tally["cap"] = int(reward_cfg.get("echo_home_cap_replay" if replay else "echo_home_cap", 0))
+	tally["replay"] = replay
+	return tally
+
+
+# ---------------------------------------------------------------------------
+# Carried home: the advance on the stage payout (D-72)
+# ---------------------------------------------------------------------------
+
+## What a retreat or return home carries NOW. Pure and read-only. The ONE formula for both payers
+## and for the `carry_*_preview` snapshot fields, so they cannot drift.
+## Amount = round(completed stage amount x realm_scale x replay_factor x partial_intel_reward_factor
+## [x retention_mul, Ase only]) minus what the stage already carried, never below 0. The retention
+## multiplier applies BEFORE the subtraction. The intel gate (no revealed situation, no partial)
+## is the rule the payers had before D-72.
+## Returns { ase, ekwan, overcome, total, intel_count, carried_ase_before, carried_ekwan_before }.
+static func carry_plan(ctx: FlowContext, cfg_service: ConfigService, retention_mul: float = 1.0,
+		logger: StructuredLogger = null, t: int = 0) -> Dictionary:
+	var plan := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "intel_count": 0,
+		"carried_ase_before": 0, "carried_ekwan_before": 0 }
+	if ctx.realm_id.is_empty() or ctx.stage_id.is_empty():
+		return plan
+	var stage_ref := _live_stage(ctx)
+	if stage_ref.is_empty():
+		return plan
+	var reward_cfg := ConfigService.get_rewards_cfg(cfg_service)
+	var objectives_v: Variant = stage_ref.get("objectives", [])
+	var objectives: Array = objectives_v if objectives_v is Array else []
+	var counts := RewardCalc.objective_counts(objectives, reward_cfg)
+	plan["overcome"] = int(counts.get("overcome", 0))
+	plan["total"] = int(counts.get("total", 0))
+	plan["carried_ase_before"] = maxi(0, int(stage_ref.get("carried_ase", 0)))
+	plan["carried_ekwan_before"] = maxi(0, int(stage_ref.get("carried_ekwan", 0)))
+	plan["intel_count"] = ActiveStageService.count_revealed_situations(ctx)
+	if int(plan["intel_count"]) <= 0:
+		return plan
+	var pf := float(reward_cfg.get("partial_intel_reward_factor", 0.12))
+	var fx := ActiveStageService.get_payout_factors(ctx, cfg_service)
+	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"]) * pf
+	var ase_full := RewardCalc.round_payout(
+		float(RewardCalc.base_reward(objectives, reward_cfg, logger, t)) * k * retention_mul)
+	var ekwan_full := RewardCalc.round_payout(
+		float(RewardCalc.stage_ekwan(objectives, reward_cfg, logger, t)) * k)
+	plan["ase"] = maxi(0, ase_full - int(plan["carried_ase_before"]))
+	plan["ekwan"] = maxi(0, ekwan_full - int(plan["carried_ekwan_before"]))
+	return plan
+
+
+## Pays `carry_plan` through `econ` and adds the amounts to the stage's `carried_ase` and
+## `carried_ekwan`. Both payers (retreat and return home) call only this. The caller requests the save.
+static func carry_home(ctx: FlowContext, cfg_service: ConfigService, econ_service: EconomyService,
+		retention_mul: float, reason: String, logger: StructuredLogger, t: int) -> Dictionary:
+	var plan := carry_plan(ctx, cfg_service, retention_mul, logger, t)
+	var ase: int = plan["ase"]
+	var ekwan: int = plan["ekwan"]
+	if ase > 0:
+		econ_service.add_ase(ase, reason, logger, t)
+	if ekwan > 0:
+		econ_service.add_ekwan(ekwan, reason, logger, t)
+	if ase > 0 or ekwan > 0:
+		var stage_ref := _live_stage(ctx)
+		stage_ref["carried_ase"] = int(plan["carried_ase_before"]) + ase
+		stage_ref["carried_ekwan"] = int(plan["carried_ekwan_before"]) + ekwan
+	return plan
+
+
+## The `intel_retention_bonus` of a directive, or 1.0 when it does not retain intel.
+static func retention_mul(directive: Dictionary) -> float:
+	if bool(directive.get("intel_retention", false)):
+		return float(directive.get("intel_retention_bonus", 1.0))
+	return 1.0
+
+
+## The LIVE stage dict of the active stage, or {}.
+static func _live_stage(ctx: FlowContext) -> Dictionary:
+	var realm_model: Dictionary = RealmService.get_active(ctx)
+	var stages_v: Variant = realm_model.get("stages", [])
+	if not (stages_v is Array):
+		return {}
+	var sid := str(ctx.stage_id)
+	var index := int(sid.split(".")[-1]) if sid.contains(".") else 0
+	for s_v in (stages_v as Array):
+		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == index:
+			return s_v
+	return {}
 
 
 # ---------------------------------------------------------------------------

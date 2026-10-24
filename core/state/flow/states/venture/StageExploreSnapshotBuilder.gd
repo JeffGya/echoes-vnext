@@ -362,28 +362,10 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"slot":         "cta.ignore_situation",
 		}
 
-	# V2-STAGE-002: stage-complete gate — all required objectives done AND every objective
-	# situation actually reached.
-	#
-	# The `objectives_found >= obj_total` term is the fix for D94. `objectives_remaining` counts
-	# only stage.objectives entries flagged `required`, and RealmGenerator writes the boss
-	# objective `required = false` unconditionally (RealmGenerator.gd:152) while a `pursue`
-	# pre-boss is optional too (:146). realm.01 generates exactly two objectives, so about 14%
-	# of its stages carry NO required objective and this gate opened the moment nothing was
-	# pending — on entry, or on the first dismissal of an engagement popup. The explore map
-	# already tracked the honest pair, `objectives_found` against `objectives_total`, and the
-	# gate ignored it.
-	#
-	# Harmless until Phase 8A (091bcfd) moved the stage settlement into
-	# VentureController.handle_complete_stage and paid the no-encounter path as `cleared`
-	# (the D05 fix). From then on, walking one step past a situation paid a full stage reward.
-	#
-	# A stage whose objectives are all optional stays completable: once the frontier is
-	# exhausted, ActiveStageService.find_explore_target Tier 4 re-offers a passed objective,
-	# and situation_blocks_step re-prompts on that deliberate re-target.
-	var objectives_reached := int(explore_map.get("objectives_found", 0)) >= obj_total
-	if is_exploring and not has_pending and objectives_remaining == 0 and obj_total > 0 \
-			and objectives_reached:
+	# Stage-complete gate: ObjectiveModel.stage_completable (D-82). Skipping an optional
+	# objective is allowed; the "one overcome" term is the D94 guard, so a stage with no
+	# required objective cannot complete on entry or on dismissing a popup.
+	if is_exploring and not has_pending and ObjectiveModel.stage_completable(objectives):
 		actions["cta.proceed_to_stage_map"] = {
 			"type":  "flow.complete_stage",
 			"label": "Stage Complete",
@@ -492,6 +474,8 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"effective_steps":         int(explore_map.get("last_effective_steps", _step_budget_snap)),
 			"commitment_depth":        _commitment_depth(explore_map, _step_budget_snap),
 			"presentation":            ConfigService.get_stage_presentation_cfg(flow_ctx.config_service),
+			# What a return home would bank now: { ase, ekwan, overcome, total }. Read only.
+			"carry_home_preview":      _carry_preview(flow_ctx, _dir_snap),
 		},
 		"actions": actions,
 		"meta": { "t": t },
@@ -499,6 +483,12 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 
 ## Steps the last Advance could commit to; the step row crosses out the rest. A malformed value reads as the budget.
+static func _carry_preview(flow_ctx: FlowContext, directive: Dictionary) -> Dictionary:
+	var plan := StageSettlementService.carry_plan(flow_ctx, flow_ctx.config_service,
+		StageSettlementService.retention_mul(directive))
+	return { "ase": plan["ase"], "ekwan": plan["ekwan"], "overcome": plan["overcome"], "total": plan["total"] }
+
+
 static func _commitment_depth(explore_map: Dictionary, step_budget: int) -> int:
 	var v: Variant = explore_map.get("last_commitment_depth", step_budget)
 	return clampi(int(v), 0, step_budget) if (v is int or v is float) else step_budget

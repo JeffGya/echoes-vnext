@@ -81,7 +81,7 @@
 #     data.combat.charge_pressure                 protect_duration_bonus, endure_wave_bonus
 #     data.combat.objective_modes.<mode>          scaled objective params (see D30)
 #     data.combat.encounter_approach.surprise_fear
-#     data.combat.movement.capacity + data.rewards pace_* + stage base -> ectx.pace_cfg
+#     data.combat.movement.capacity + data.rewards pace_* -> ectx.pace_cfg
 #     data.contact.ally                           level_base / growth / max, ally build cfg
 #     data.stages                                 terrain signature, via RealmGenerator
 #     data.maturity_expression                    passed to LeadershipEmotionService
@@ -734,10 +734,6 @@ func _setup_pace(t: int) -> void:
 		"par_rounds":      par,
 		"pace_full_ratio": float(reward_cfg.get("pace_full_ratio", 1.1)),
 		"pace_zero_ratio": float(reward_cfg.get("pace_zero_ratio", 1.6)),
-		"pace_bonus_pct":  float(reward_cfg.get("pace_bonus_pct", 0.05)),
-		# The live state needs the Ase a win would pay (design §7). Pure read, no RNG.
-		"stage_base":      ActiveStageService.get_stage_base_reward(
-			flow_ctx, flow_ctx.config_service, logger, t, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT),
 	}
 	if logger != null:
 		logger.info(t, "combat.pace.par", "Pace par set at fight start", {

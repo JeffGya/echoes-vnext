@@ -744,6 +744,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 	if str(out.get("type", "")) == FlowStateIds.RESOLVE \
 			and str((out.get("data", {}) as Dictionary).get("run_type", "")) == "scout_return":
 		flow_ctx.pending_scout_return_ase         = 0
+		flow_ctx.pending_scout_return_ekwan       = 0
 		flow_ctx.pending_scout_return_intel_count = 0
 
 	# V2-INFRA-003 Phase 3 (slice C): consume _bark_line here, exactly once, AFTER the snapshot
@@ -1159,25 +1160,33 @@ func _apply_action_outcome(outcome: FlowActionOutcome, t: int) -> void:
 # Helpers
 ## UI-004: Player attempts retreat before round 1.
 ## Gate (speed) and tier (agi) were computed at snapshot time and baked into the action dict.
-## Ase is spent regardless of roll outcome.
+## Ase is spent regardless of roll outcome. A balance below the price refuses the action (D-79).
 ## Success → clear encounter, go to Sanctum. Failure → start combat immediately.
 func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		logger.debug(t, "encounter.retreat.no_op", "Retreat: no active encounter context", {})
 		return
 
-	var ase_cost:    int = int(action.get("ase_cost",    0))
+	# The price comes from config, never from the action dict: a UI-built action must not set its own price.
+	var ase_cost:    int = RetreatService.get_ase_cost(config_service)
 	var success_pct: int = int(action.get("success_pct", 0))
 	var encounter_id: String = flow_ctx.encounter_ctx.encounter_id
 
-	# Spend Ase (always, win or lose). Guard: only spend if player can afford.
-	if ase_cost > 0:
-		if econ.can_afford_ase(ase_cost):
-			econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
-		else:
-			logger.debug(t, "encounter.retreat.no_ase", "Retreat: insufficient Ase — no spend", {
-				"ase_cost": ase_cost, "ase_balance": econ.get_ase()
-			})
+	# D-79: a short balance refuses the retreat. Nothing changes; the fight stays at pre-combat.
+	if not econ.can_afford_ase(ase_cost):
+		var ase_balance: int = econ.get_ase()
+		logger.info(t, "encounter.retreat.denied", "Retreat denied: not enough Ase", {
+			"encounter_id": encounter_id, "ase_cost": ase_cost, "ase_balance": ase_balance
+		})
+		var snap_data: Variant = (flow_ctx.last_snapshot as Dictionary).get("data", null)
+		if snap_data is Dictionary:
+			(snap_data as Dictionary)["retreat_denied"] = {
+				"reason": "insufficient_ase", "ase_cost": ase_cost, "ase_balance": ase_balance
+			}
+		return
+
+	# Spend Ase (always, win or lose).
+	econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
 
 	# Seeded roll for determinism.
 	var rng := RandomNumberGenerator.new()
@@ -1197,16 +1206,12 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	})
 
 	if success:
-		# V2-ECONOMY-001: Intel-gated partial Ase award before clearing encounter context.
-		var _intel_count := ActiveStageService.count_revealed_situations(flow_ctx)
-		var _partial_ase := 0
-		if _intel_count > 0:
-			var _pf := float(ConfigService.get_rewards_cfg(config_service).get("partial_intel_reward_factor", 0.12))
-			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * _pf)
-			if _partial_ase > 0:
-				econ.add_ase(_partial_ase, "retreat_intel_partial", logger, t)
-		flow_ctx.pending_scout_return_ase         = _partial_ase
-		flow_ctx.pending_scout_return_intel_count = _intel_count
+		# D-72: the partial is an advance on the stage payout; one helper shared with return home.
+		var _carry := StageSettlementService.carry_home(flow_ctx, config_service, econ, 1.0,
+			"retreat_intel_partial", logger, t)
+		flow_ctx.pending_scout_return_ase         = _carry["ase"]
+		flow_ctx.pending_scout_return_ekwan       = _carry["ekwan"]
+		flow_ctx.pending_scout_return_intel_count = _carry["intel_count"]
 
 		# Clear encounter context — no emotion drift on retreat.
 		# FIX (P4 review bug 2): retreat-success also skipped ally-field teardown — clear
@@ -1262,6 +1267,7 @@ func _resolve_forced_retreat(t: int) -> void:
 	flow_ctx.encounter_machine = null
 	flow_ctx.bond_outcome      = {}
 	flow_ctx.pending_scout_return_ase         = 0
+	flow_ctx.pending_scout_return_ekwan       = 0
 	flow_ctx.pending_scout_return_intel_count = 0
 	_mark_save_requested("combat.no_progress_forced_retreat")
 

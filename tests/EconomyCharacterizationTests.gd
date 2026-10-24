@@ -17,8 +17,8 @@ const _DEFAULT_SEEDS := 25
 # Weight of each type in data.rewards.objective_weights (D-09, D-10). A type with no key logs
 # an error and pays 0 (D-07). The boss has a key with weight 0.
 const _TYPE_WEIGHT := {
-	"pursue": 8, "combat": 10, "recover": 12, "protect": 12,
-	"endure": 14, "shrine": 15, "guide_spirit": 16, "boss": 0,
+	"pursue": 16, "combat": 20, "recover": 24, "protect": 24,
+	"endure": 28, "shrine": 30, "guide_spirit": 32, "boss": 0,
 }
 
 # Ekwan of each type in data.rewards.objective_ekwan (D-29, working set B). Fights pay none.
@@ -27,22 +27,24 @@ const _TYPE_EKWAN := {
 	"endure": 4, "recover": 5, "shrine": 6, "boss": 0,
 }
 
-# Stage base (stage = [type, boss stub]; type boss = [boss] alone) -> run_count -> Ase per stage
-# index 0..3, realm.01 (courage), run_index 0. Ase = roundi(base x redo) + virtue.
-const _STAGE_ASE := {
-	0:  { 0: [10, 15, 20, 25], 1: [10, 15, 20, 25] },
-	8:  { 0: [18, 23, 28, 33], 1: [17, 22, 27, 32] },
-	10: { 0: [20, 25, 30, 35], 1: [19, 24, 29, 34] },
-	12: { 0: [22, 27, 32, 37], 1: [21, 26, 31, 36] },
-	14: { 0: [24, 29, 34, 39], 1: [23, 28, 33, 38] },
-	15: { 0: [25, 30, 35, 40], 1: [24, 29, 34, 39] },
-	16: { 0: [26, 31, 36, 41], 1: [24, 29, 34, 39] },
+# Objective Ase and Ekwan of a stage with one completed pre-boss objective of each type (the boss
+# type is the boss stub alone), by realm and run_count: [Ase, Ekwan]. Ase = round(weight x realm scale
+# x replay factor), D-54 and D-63. The Echoes stipend is not in this table: `_settle_cell` settles
+# with no fight, and the stage environment has a party of one Echo, so the stipend is one Echo x
+# 2 Ase on every cell.
+const _ONE_ECHO_STIPEND := 2
+const _STAGE_CELLS := {
+	"realm.01": {
+		0: { "pursue": [16, 2], "combat": [20, 2], "recover": [24, 5], "protect": [24, 3], "endure": [28, 4], "shrine": [30, 6], "guide_spirit": [32, 3], "boss": [0, 0] },
+		1: { "pursue": [6, 1], "combat": [7, 1], "recover": [8, 2], "protect": [8, 1], "endure": [10, 1], "shrine": [11, 2], "guide_spirit": [11, 1], "boss": [0, 0] },
+	},
+	"realm.02": {
+		0: { "pursue": [20, 3], "combat": [25, 3], "recover": [30, 6], "protect": [30, 4], "endure": [35, 5], "shrine": [38, 8], "guide_spirit": [40, 4], "boss": [0, 0] },
+		1: { "pursue": [7, 1], "combat": [9, 1], "recover": [11, 2], "protect": [11, 1], "endure": [12, 2], "shrine": [13, 3], "guide_spirit": [14, 1], "boss": [0, 0] },
+	},
 }
-# Stage Ekwan of a single completed type at run_count 1 (redo 0.9): roundi(amount x 0.9).
-const _TYPE_EKWAN_RUN1 := {
-	"pursue": 2, "combat": 2, "protect": 3, "guide_spirit": 3,
-	"endure": 4, "recover": 5, "shrine": 5, "boss": 0,
-}
+# The base row of the stage payout is the Ase after the realm scale and before the replay factor.
+const _REALM_SCALE := { "realm.01": 1.0, "realm.02": 1.25 }
 
 
 static func register(runner: CoreTestRunner) -> void:
@@ -53,8 +55,19 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/multi_objective_stage_sums", Callable(EconomyCharacterizationTests, "_t_multi_objective"))
 	runner.register_test("econ_char/partial_payout_uses_stage_base", Callable(EconomyCharacterizationTests, "_t_partial_payout"))
 	runner.register_test("econ_char/unknown_type_logs_and_pays_zero", Callable(EconomyCharacterizationTests, "_t_unknown_type"))
-	runner.register_test("econ_char/redo_multiplier_by_run_count", Callable(EconomyCharacterizationTests, "_t_redo_multiplier"))
-	runner.register_test("econ_char/virtue_bonus_by_stage_and_run_index", Callable(EconomyCharacterizationTests, "_t_virtue_bonus"))
+	runner.register_test("econ_char/realm_scale_and_replay_factor", Callable(EconomyCharacterizationTests, "_t_scale_and_replay"))
+	runner.register_test("econ_char/stage_ase_rounds_once_on_the_sum", Callable(EconomyCharacterizationTests, "_t_ase_rounds_once"))
+	runner.register_test("econ_char/stage_payout_realm_scale_not_on_stipend", Callable(EconomyCharacterizationTests, "_t_scale_not_on_stipend"))
+	runner.register_test("econ_char/consolation_takes_scale_and_replay", Callable(EconomyCharacterizationTests, "_t_consolation_scaled"))
+	runner.register_test("econ_char/partial_factors_follow_the_realm", Callable(EconomyCharacterizationTests, "_t_partial_factors"))
+	runner.register_test("econ_char/removed_bonus_keys_absent", Callable(EconomyCharacterizationTests, "_t_removed_keys_absent"))
+	runner.register_test("econ_char/rank_score_table", Callable(EconomyCharacterizationTests, "_t_rank_table"))
+	runner.register_test("econ_char/death_caps_rank_at_a", Callable(EconomyCharacterizationTests, "_t_death_cap"))
+	runner.register_test("econ_char/rank_ignores_replay_factor", Callable(EconomyCharacterizationTests, "_t_rank_ignores_replay"))
+	runner.register_test("econ_char/death_lowers_rank", Callable(EconomyCharacterizationTests, "_t_death_lowers_rank"))
+	runner.register_test("econ_char/speed_never_outranks_survival", Callable(EconomyCharacterizationTests, "_t_speed_vs_survival"))
+	runner.register_test("econ_char/no_pace_mode_not_capped", Callable(EconomyCharacterizationTests, "_t_no_pace_not_capped"))
+	runner.register_test("econ_char/speed_pays_no_ase", Callable(EconomyCharacterizationTests, "_t_speed_pays_no_ase"))
 	runner.register_test("econ_char/stage_payer_matrix", Callable(EconomyCharacterizationTests, "_t_stage_payer_matrix"))
 	runner.register_test("econ_char/ekwan_per_type", Callable(EconomyCharacterizationTests, "_t_ekwan_per_type"))
 	runner.register_test("econ_char/ekwan_sums_completed_only", Callable(EconomyCharacterizationTests, "_t_ekwan_completed_only"))
@@ -82,6 +95,18 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/cause_old_saved_row_replays", Callable(EconomyCharacterizationTests, "_t_cause_old_row_replays"))
 	runner.register_test("econ_char/stage_preview_equals_paid", Callable(EconomyCharacterizationTests, "_t_stage_preview"))
 	runner.register_test("econ_char/stage_payout_keys_on_real_victory_card", Callable(EconomyCharacterizationTests, "_t_stage_payout_card"))
+	runner.register_test("econ_char/stipend_per_echo_and_cap", Callable(EconomyCharacterizationTests, "_t_stipend_counts"))
+	runner.register_test("econ_char/stipend_replay_cap", Callable(EconomyCharacterizationTests, "_t_stipend_replay"))
+	runner.register_test("econ_char/stipend_dead_echo_and_no_encounter", Callable(EconomyCharacterizationTests, "_t_stipend_dead_and_none"))
+	runner.register_test("econ_char/stipend_dead_echo_on_real_card", Callable(EconomyCharacterizationTests, "_t_stipend_real_card"))
+	runner.register_test("econ_char/carried_first_return_by_realm_and_run", Callable(EconomyCharacterizationTests, "_t_carried_first"))
+	runner.register_test("econ_char/carried_repeat_and_increment", Callable(EconomyCharacterizationTests, "_t_carried_increment"))
+	runner.register_test("econ_char/carried_scout_bonus_before_subtraction", Callable(EconomyCharacterizationTests, "_t_carried_scout"))
+	runner.register_test("econ_char/carried_nothing_overcome_and_old_save", Callable(EconomyCharacterizationTests, "_t_carried_zero_and_old"))
+	runner.register_test("econ_char/carried_stage_end_pays_full_minus_carried", Callable(EconomyCharacterizationTests, "_t_carried_settle"))
+	runner.register_test("econ_char/carried_rows_clamp_and_sum", Callable(EconomyCharacterizationTests, "_t_carried_rows"))
+	runner.register_test("econ_char/carried_return_home_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_return_home"))
+	runner.register_test("econ_char/carried_retreat_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_retreat"))
 	runner.register_test("econ_char/ledger_seen_default_false_and_action_sets_it", Callable(EconomyCharacterizationTests, "_t_ledger_seen"))
 
 
@@ -125,21 +150,21 @@ static func _expected_base(type: String) -> int:
 
 
 ## `fought_index` is the objective being fought. A defeat leaves it uncompleted, as in production.
-static func _encounter_pay(objectives: Array, victory: bool, run_count: int, fought_index: int = 0) -> Dictionary:
+static func _encounter_pay(objectives: Array, victory: bool, run_count: int, fought_index: int = 0,
+		realm_scale: float = 1.0) -> Dictionary:
 	var reward_cfg := _rewards_cfg()
 	var objs: Array = objectives.duplicate(true)
 	if not victory and fought_index >= 0:
 		(objs[fought_index] as Dictionary)["completed"] = false
 	var rd: Dictionary = RewardCalc.compute(
-		victory, objs, 3, 3, 2, 2, 2, run_count, reward_cfg,
-		EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, fought_index)
+		victory, objs, 2, 2, 2, run_count, reward_cfg,
+		EncounterResolutionModes.COMBAT, 0.0, "", null, 0, fought_index, realm_scale)
 	var save := { "economy": { "ase": 0, "ekwan": 0 } }
 	var econ := EconomyService.new(save)
 	var paid: Dictionary = econ.reward_encounter_complete(
 		victory,
-		int(rd.get("consolation_base", 0)), int(rd.get("enemy_bonus", 0)), 3,
-		int(rd.get("echo_bonus", 0)), 2, int(rd.get("pace_bonus", 0)),
-		bool(rd.get("pace_mode", false)), float(rd.get("redo_multiplier", 1.0)),
+		int(rd.get("consolation_base", 0)),
+		float(rd.get("realm_scale", 1.0)), float(rd.get("replay_factor", 1.0)),
 		str(rd.get("rank", "F")), true, _logger(), 1)
 	paid["base_reward"] = int(rd.get("base_reward", 0))
 	paid["balance_ase"] = int((save["economy"] as Dictionary)["ase"])
@@ -206,11 +231,11 @@ static func _t_boss_stub_adds_zero() -> Dictionary:
 static func _t_combat_and_shrine() -> Dictionary:
 	var cfg := _rewards_cfg()
 	var mismatches: Array = []
-	for c in [["combat", 10, 3], ["shrine", 15, 4]]:
+	for c in [["combat", 20, 5], ["shrine", 30, 8]]:
 		for victory in [true, false]:
 			var rd: Dictionary = RewardCalc.compute(
-				victory, [_obj(0, c[0], victory)], 3, 3, 2, 2, 2, 0, cfg,
-				EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, 0)
+				victory, [_obj(0, c[0], victory)], 2, 2, 2, 0, cfg,
+				EncounterResolutionModes.COMBAT, 0.0, "", null, 0, 0)
 			if int(rd["base_reward"]) != int(c[1]):
 				mismatches.append("%s victory=%s base %d, expected %d" % [c[0], str(victory), int(rd["base_reward"]), int(c[1])])
 		var paid := _encounter_pay([_obj(0, c[0], true)], false, 0)
@@ -221,7 +246,7 @@ static func _t_combat_and_shrine() -> Dictionary:
 
 ## Three objectives (realm.02 shape plus the boss stub), both pre-boss objectives completed: the
 ## base is the sum; the boss adds 0.
-## Stage 0, run 0: Ase = 25 + 10 virtue = 35, Ekwan = combat 2 + shrine 6 = 8.
+## Stage 0, run 0: Ase = 50, Ekwan = combat 2 + shrine 6 = 8.
 static func _t_multi_objective() -> Dictionary:
 	var cfg := _rewards_cfg()
 	var objs: Array = [
@@ -229,15 +254,15 @@ static func _t_multi_objective() -> Dictionary:
 		ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false),
 	]
 	var mismatches: Array = []
-	if RewardCalc.base_reward(objs, cfg) != 25:
-		mismatches.append("sum of combat + shrine + boss is %d, expected 25" % RewardCalc.base_reward(objs, cfg))
+	if RewardCalc.base_reward(objs, cfg) != 50:
+		mismatches.append("sum of combat + shrine + boss is %d, expected 50" % RewardCalc.base_reward(objs, cfg))
 	var env := VentureCharacterizationTests._setup_stage_env("econ_char_multi")
 	if not bool(env.get("ok", false)):
 		return env
 	var out := _settle_cell(env, objs, 0, 0, 1)
-	if int(out.get("ase_awarded", -1)) != 35 or int(out.get("ekwan_awarded", -1)) != 8 \
-			or _breakdown_delta(out, "Base objectives") != 25:
-		mismatches.append("stage paid %s/%s base row %d, expected 35/8 base row 25" \
+	if int(out.get("ase_awarded", -1)) != 50 + _ONE_ECHO_STIPEND or int(out.get("ekwan_awarded", -1)) != 8 \
+			or _breakdown_delta(out, "Base objectives") != 50:
+		mismatches.append("stage paid %s/%s base row %d, expected 52/8 base row 50" \
 			% [str(out.get("ase_awarded")), str(out.get("ekwan_awarded")), _breakdown_delta(out, "Base objectives")])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
@@ -249,7 +274,7 @@ static func _t_partial_payout() -> Dictionary:
 	var cfg := _config()
 	var factor := float(ConfigService.get_rewards_cfg(cfg).get("partial_intel_reward_factor", 0.12))
 	var mismatches: Array = []
-	for c in [[["combat"], 10, 1], [["guide_spirit"], 16, 2], [["combat", "shrine"], 25, 3], [["pursue"], 8, 1]]:
+	for c in [[["combat"], 20, 2], [["guide_spirit"], 32, 4], [["combat", "shrine"], 50, 6], [["pursue"], 16, 2]]:
 		var objs: Array = []
 		for k in range((c[0] as Array).size()):
 			objs.append(_obj(k, c[0][k], true))
@@ -280,8 +305,8 @@ static func _t_unknown_type() -> Dictionary:
 	var logger := StructuredLogger.new()
 	var objs: Array = [{ "type": "mystery", "completed": true }, _obj(1, "combat", true)]
 	var base := RewardCalc.base_reward(objs, cfg, logger, 7)
-	if base != 10:
-		mismatches.append("unknown + combat paid %d, expected 10" % base)
+	if base != 20:
+		mismatches.append("unknown + combat paid %d, expected 20" % base)
 	var logs := logger.get_logs()
 	if logs.size() != 1:
 		mismatches.append("expected 1 log line, got %d" % logs.size())
@@ -318,30 +343,197 @@ static func _t_unknown_type() -> Dictionary:
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-static func _t_redo_multiplier() -> Dictionary:
+## D-63: scale = 1 + step x (position in realm_order - 1); outside the list it is 1.0. D-54: the
+## replay factor is flat, and 1.0 on a first run. Both read from data.rewards.
+static func _t_scale_and_replay() -> Dictionary:
+	var m: Array = []
 	var cfg := _rewards_cfg()
-	var m0 := RewardCalc.redo_multiplier(0, cfg)
-	var m1 := RewardCalc.redo_multiplier(1, cfg)
-	var ok := is_equal_approx(m0, 1.0) and is_equal_approx(m1, 0.9)
-	return { "ok": ok, "error": "redo multiplier run 0 = %s, run 1 = %s" % [str(m0), str(m1)] }
+	var order: Array = ConfigService.get_realm_order(_config())
+	if order != ["realm.01", "realm.02"]:
+		m.append("realm_order is %s, expected [realm.01, realm.02]" % str(order))
+	var by_rule: Array = ["realm.01", "realm.02", "realm.03", "realm.04"]
+	for c in [["realm.01", 1.0], ["realm.02", 1.25], ["realm.03", 1.5], ["realm.04", 1.75]]:
+		var got := RewardCalc.realm_scale(c[0], by_rule, cfg)
+		if not is_equal_approx(got, c[1]):
+			m.append("%s scale %s, expected %s" % [c[0], str(got), str(c[1])])
+	for outside in ["realm.prologue", "", "realm.09"]:
+		if not is_equal_approx(RewardCalc.realm_scale(outside, by_rule, cfg), 1.0):
+			m.append("'%s' is outside realm_order and must scale 1.0" % outside)
+	if not is_equal_approx(float(cfg.get("realm_scale_step", 0.0)), 0.25) \
+			or not is_equal_approx(float(cfg.get("replay_factor", 0.0)), 0.35):
+		m.append("data.rewards holds step %s, replay %s" % [str(cfg.get("realm_scale_step")), str(cfg.get("replay_factor"))])
+	for run_count in [-1, 0]:
+		if not is_equal_approx(RewardCalc.replay_factor(run_count, cfg), 1.0):
+			m.append("run_count %d must take no factor" % run_count)
+	for run_count in [1, 2, 9]:
+		if not is_equal_approx(RewardCalc.replay_factor(run_count, cfg), 0.35):
+			m.append("run_count %d must take the flat 0.35" % run_count)
+	# The step is read from config, not fixed in code.
+	var wide := cfg.duplicate(true)
+	wide["realm_scale_step"] = 0.5
+	if not is_equal_approx(RewardCalc.realm_scale("realm.03", by_rule, wide), 2.0):
+		m.append("realm_scale_step 0.5 must give realm.03 a scale of 2.0")
+	# The factors of the real stage context.
+	var ctx := _stage_ctx(_config(), [_obj(0, "combat", true)])
+	var f := ActiveStageService.get_payout_factors(ctx, ctx.config_service)
+	if not is_equal_approx(float(f["realm_scale"]), 1.0) or not is_equal_approx(float(f["replay_factor"]), 1.0):
+		m.append("realm.01 run 0 factors %s" % str(f))
+	(ctx.save_data["realms"]["realm.01"] as Dictionary)["run_count"] = 2
+	ctx.realm_id = "realm.02"
+	ctx.save_data["realms"]["realm.02"] = (ctx.save_data["realms"]["realm.01"] as Dictionary).duplicate(true)
+	f = ActiveStageService.get_payout_factors(ctx, ctx.config_service)
+	if not is_equal_approx(float(f["realm_scale"]), 1.25) or not is_equal_approx(float(f["replay_factor"]), 0.35):
+		m.append("realm.02 run 2 factors %s" % str(f))
+	ctx.realm_id = "realm.prologue"
+	f = ActiveStageService.get_payout_factors(ctx, ctx.config_service)
+	if not is_equal_approx(float(f["realm_scale"]), 1.0):
+		m.append("the prologue must scale 1.0, got %s" % str(f))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-static func _t_virtue_bonus() -> Dictionary:
+## D-30, D-54: Ase and Ekwan are rounded ONCE on the stage sum, after the scale and the factor.
+## Each cell is chosen so that per-objective rounding gives another number. Pure rows, so realm.03
+## (not in the shipped realm_order) is reached by the rule.
+static func _t_ase_rounds_once() -> Dictionary:
+	var m: Array = []
 	var cfg := _rewards_cfg()
-	# virtue -> run_index -> bonus per stage index 0..3
-	var expected := {
-		"courage": { 0: [10, 15, 20, 25], 1: [15, 23, 30, 38] },
-		"wisdom":  { 0: [15, 20, 25, 30], 1: [23, 30, 38, 45] },
-	}
-	var mismatches: Array = []
-	for virtue in expected:
-		for run_index in expected[virtue]:
-			for i in range(_STAGE_COUNT):
-				var got := int(RealmService.calculate_stage_reward(i, virtue, run_index, cfg).get("virtue_bonus", -1))
-				var want := int(expected[virtue][run_index][i])
-				if got != want:
-					mismatches.append("%s run_index %d stage %d: %d, expected %d" % [virtue, run_index, i, got, want])
-	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
+	var counts := { "overcome": 2, "total": 2 }
+	# [objective types, realm scale, replay factor, Ase, Ekwan, why]
+	for c in [
+		[["shrine"], 1.0, 0.35, 11, 2, "30 x 0.35 = 10.5 -> 11 (x.5 Ase); 6 x 0.35 = 2.1"],
+		[["recover"], 1.25, 0.35, 11, 2, "24 x 0.4375 = 10.5 -> 11 (x.5 Ase)"],
+		[["shrine"], 1.25, 1.0, 38, 8, "30 x 1.25 = 37.5 -> 38 (x.5 Ase); 6 x 1.25 = 7.5 -> 8 (x.5 Ekwan)"],
+		[["recover", "protect"], 1.0, 0.35, 17, 3, "48 x 0.35 = 16.8 -> 17, per objective 8 + 8; Ekwan 8 x 0.35 = 2.8"],
+		[["endure", "endure", "combat"], 1.0, 0.35, 27, 4, "Ekwan 10 x 0.35 = 3.5 -> 4 (x.5 Ekwan), per objective 1 + 1 + 1"],
+		[["recover", "recover"], 1.25, 1.0, 60, 13, "Ekwan 10 x 1.25 = 12.5 -> 13 (x.5 Ekwan), per objective 6 + 6"],
+		[["shrine", "combat"], 1.25, 0.35, 22, 4, "50 x 0.4375 = 21.875 -> 22; Ekwan 8 x 0.4375 = 3.5 -> 4 (x.5 Ekwan)"],
+		[["shrine", "combat"], 1.5, 0.35, 26, 4, "realm.03 by rule: 50 x 0.525 = 26.25; Ekwan 8 x 0.525 = 4.2"],
+	]:
+		var objs: Array = []
+		for k in range((c[0] as Array).size()):
+			objs.append(_obj(k, c[0][k], true))
+		var rows := EconomyService.stage_payout_rows(RewardCalc.base_reward(objs, cfg), c[1], c[2], counts,
+			RewardCalc.stage_ekwan(objs, cfg))
+		if int(rows["ase"]) != int(c[3]) or int(rows["ekwan"]) != int(c[4]):
+			m.append("%s scale %s x %s: paid %d/%d, expected %d/%d (%s)" % [str(c[0]), str(c[1]), str(c[2]),
+				int(rows["ase"]), int(rows["ekwan"]), int(c[3]), int(c[4]), str(c[5])])
+		var total_rows := 0
+		for row_v in rows["breakdown"]:
+			total_rows += int((row_v as Dictionary)["delta"])
+		if total_rows != int(rows["ase"]):
+			m.append("%s: the rows add to %d, the payout is %d" % [str(c[0]), total_rows, int(rows["ase"])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-63, D-53: the realm scale and the replay factor leave the Echoes stipend alone. The replay
+## row exists only when the factor lowers the amount, and carries the factor as `factor`.
+static func _t_scale_not_on_stipend() -> Dictionary:
+	var m: Array = []
+	var home := { "alive": 3, "started": 3, "lost": [], "rate": 2, "cap": 10, "replay": false }
+	var plain := EconomyService.stage_payout_rows(20, 1.0, 1.0, {}, 2, home)
+	var scaled := EconomyService.stage_payout_rows(20, 1.5, 1.0, {}, 2, home)
+	var replayed := EconomyService.stage_payout_rows(20, 1.5, 0.35, {}, 2, home)
+	for c in [["run 0 realm.01", plain, 20 + 6], ["realm.03 run 0", scaled, 30 + 6], ["realm.03 replay", replayed, 11 + 6]]:
+		var stipend := _row_by_cause(c[1]["breakdown"], "echoes_alive")
+		if int(stipend.get("delta", -1)) != 6 or int(c[1]["ase"]) != int(c[2]):
+			m.append("%s: stipend row %s, stage ase %s, expected stipend 6 and ase %d" \
+				% [c[0], JSON.stringify(stipend), str(c[1]["ase"]), int(c[2])])
+	if not _row_by_cause(plain["breakdown"], "replay").is_empty() or not _row_by_cause(scaled["breakdown"], "replay").is_empty():
+		m.append("a replay row exists with no replay factor")
+	var replay_row := _row_by_cause(replayed["breakdown"], "replay")
+	# 20 x 1.5 = 30 before the factor; 30 x 0.35 = 10.5 -> 11; the delta is -19.
+	if int(replay_row.get("delta", 0)) != -19 \
+			or not is_equal_approx(float((replay_row.get("params", {}) as Dictionary).get("factor", 0.0)), 0.35):
+		m.append("replay row %s, expected delta -19 and factor 0.35" % JSON.stringify(replay_row))
+	var base_row := _row_by_cause(replayed["breakdown"], "objectives_overcome")
+	if int(base_row.get("delta", 0)) != 30 or not is_equal_approx(float((base_row.get("params", {}) as Dictionary).get("realm_scale", 0.0)), 1.5):
+		m.append("base row %s, expected delta 30 and realm_scale 1.5" % JSON.stringify(base_row))
+	# A zero base has nothing to lower: no replay row.
+	if not _row_by_cause(EconomyService.stage_payout_rows(0, 1.25, 0.35)["breakdown"], "replay").is_empty():
+		m.append("a replay row exists on a base of 0")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## ASSUMED (phase5-3-build.md): the defeat consolation takes the realm scale and the replay factor
+## of the objective it is paid for: round(weight x scale x 0.25 x replay). The 0.25 is unchanged.
+static func _t_consolation_scaled() -> Dictionary:
+	var m: Array = []
+	# [type, run_count, realm scale, expected]
+	for c in [
+		["combat", 0, 1.0, 5], ["combat", 1, 1.0, 2], ["shrine", 0, 1.0, 8], ["shrine", 1, 1.0, 3],
+		["combat", 0, 1.25, 6], ["combat", 1, 1.25, 2], ["shrine", 0, 1.25, 9], ["shrine", 1, 1.25, 3],
+		["guide_spirit", 0, 1.25, 10], ["guide_spirit", 1, 1.25, 4], ["pursue", 1, 1.5, 2], ["boss", 0, 1.25, 0],
+	]:
+		var paid := _encounter_pay(_objectives(c[0]), false, c[1], 0, c[2])
+		if int(paid["ase_awarded"]) != int(c[3]):
+			m.append("%s run %d scale %s: consolation %d, expected %d" % [c[0], c[1], str(c[2]), int(paid["ase_awarded"]), int(c[3])])
+		var sum := 0
+		for row_v in paid["breakdown"]:
+			sum += int((row_v as Dictionary)["delta"])
+		if int(c[3]) > 0 and sum != int(paid["ase_awarded"]):
+			m.append("%s run %d scale %s: the rows add to %d, paid %d" % [c[0], c[1], str(c[2]), sum, int(paid["ase_awarded"])])
+	# A replay never pays more consolation than the same defeat on a first run.
+	for type in ["pursue", "combat", "recover", "endure", "shrine", "guide_spirit"]:
+		for scale in [1.0, 1.25, 1.5]:
+			if int(_encounter_pay(_objectives(type), false, 1, 0, scale)["ase_awarded"]) \
+					> int(_encounter_pay(_objectives(type), false, 0, 0, scale)["ase_awarded"]):
+				m.append("%s scale %s: a replay pays more consolation than a first run" % [type, str(scale)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The retreat and return-home partials read the stage base through ActiveStageService, then the
+## realm factors: a replay never carries home more than the first run (the advance rule is step 5.8).
+static func _t_partial_factors() -> Dictionary:
+	var m: Array = []
+	var cfg := _config()
+	var rewards := ConfigService.get_rewards_cfg(cfg)
+	var pf := float(rewards.get("partial_intel_reward_factor", 0.12))
+	var boss := ObjectiveModel.make(1, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	# [realm, run_count, expected partial of a completed shrine (30)]
+	for c in [["realm.01", 0, 4], ["realm.01", 1, 1], ["realm.02", 0, 5], ["realm.02", 1, 2]]:
+		var ctx := _stage_ctx(cfg, [_obj(0, "shrine", true), boss.duplicate(true)])
+		var stage_realm: Dictionary = ctx.save_data["realms"]["realm.01"]
+		stage_realm["run_count"] = c[1]
+		ctx.save_data["realms"][c[0]] = stage_realm
+		ctx.realm_id = c[0]
+		var f := ActiveStageService.get_payout_factors(ctx, cfg)
+		var partial := RewardCalc.round_payout(float(ActiveStageService.get_stage_base_reward(ctx, cfg)) \
+			* float(f["realm_scale"]) * float(f["replay_factor"]) * pf)
+		if partial != int(c[2]):
+			m.append("%s run %d: partial %d, expected %d" % [c[0], c[1], partial, int(c[2])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Names removed by D-40, D-49 and D-54. None may stay in data.rewards or in core/ (no alias).
+const _REMOVED_NAMES := [
+	"redo_penalty_per_run", "redo_penalty_floor", "redo_multiplier",
+	"enemy_defeated_bonus", "virtue_bonuses", "stage_index_bonus_per", "realm_order_multiplier",
+	"calculate_stage_reward", "pace_bonus_pct", "max_bonus_ase", "bonus_ase", "pace_bonus",
+	"bonus_earned", "bonus_missed", "enemy_bonus", "pace_stage_base",
+	"echo_survived_bonus", "echo_bonus",
+]
+
+static func _t_removed_keys_absent() -> Dictionary:
+	var m: Array = []
+	var cfg := _rewards_cfg()
+	for name in _REMOVED_NAMES:
+		if cfg.has(name):
+			m.append("data.rewards still has %s" % name)
+	if not cfg.has("rank_points"):
+		m.append("data.rewards.rank_points missing")
+	var pending: Array = ["res://core"]
+	while not pending.is_empty():
+		var dir_path: String = pending.pop_back()
+		for sub in DirAccess.get_directories_at(dir_path):
+			pending.append(dir_path + "/" + sub)
+		for file_name in DirAccess.get_files_at(dir_path):
+			if not file_name.ends_with(".gd"):
+				continue
+			var text := FileAccess.get_file_as_string(dir_path + "/" + file_name)
+			for name in _REMOVED_NAMES:
+				if text.contains(name):
+					m.append("%s/%s still names %s" % [dir_path, file_name, name])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
 # ---------------------------------------------------------------------------
@@ -350,10 +542,13 @@ static func _t_virtue_bonus() -> Dictionary:
 
 ## Pays one cell through the real settle() on a real booted runtime and returns the payout.
 static func _settle_cell(env: Dictionary, objectives: Array, stage_index: int, run_count: int, n: int,
-		preview_out: Dictionary = {}) -> Dictionary:
+		preview_out: Dictionary = {}, realm_id: String = "realm.01",
+		carried_ase: int = 0, carried_ekwan: int = 0) -> Dictionary:
 	var runtime: FlowRuntime = env["runtime"]
 	var save_data: Dictionary = runtime.get_save_data()
-	var realm: Dictionary = VentureCharacterizationTests._realm(save_data, "realm.01")
+	if realm_id != "realm.01" and not (save_data["realms"] as Dictionary).has(realm_id):
+		(save_data["realms"] as Dictionary)[realm_id] = VentureCharacterizationTests._realm(save_data, "realm.01").duplicate(true)
+	var realm: Dictionary = VentureCharacterizationTests._realm(save_data, realm_id)
 	var stages: Array = realm["stages"]
 	var stage: Dictionary = {}
 	for s_v in stages:
@@ -364,12 +559,17 @@ static func _settle_cell(env: Dictionary, objectives: Array, stage_index: int, r
 		stages.append(stage)
 	stage["objectives"] = objectives
 	stage["settlement_receipt"] = {}
+	stage.erase("carried_ase")
+	stage.erase("carried_ekwan")
+	if carried_ase > 0 or carried_ekwan > 0:
+		stage["carried_ase"] = carried_ase
+		stage["carried_ekwan"] = carried_ekwan
 	realm["run_count"] = run_count
 	realm["run_index"] = 0
 	var economy: Dictionary = save_data["economy"]
 	economy["ase"] = 0
 	economy["ekwan"] = 0
-	runtime.flow_ctx.realm_id = "realm.01"
+	runtime.flow_ctx.realm_id = realm_id
 	runtime.flow_ctx.stage_id = "stage.%d" % stage_index
 	if preview_out != null:
 		var before := JSON.stringify(save_data, "", true)
@@ -391,28 +591,39 @@ static func _t_stage_payer_matrix() -> Dictionary:
 		return env
 	var mismatches: Array = []
 	var n := 0
-	for type in ObjectiveModel.VALID_TYPES:
-		var base := _expected_base(type)
+	for realm_id in _STAGE_CELLS:
 		for run_count in [0, 1]:
-			for i in range(_STAGE_COUNT):
-				n += 1
-				var out := _settle_cell(env, _objectives(type), i, run_count, n)
-				var want_ase: int = _STAGE_ASE[base][run_count][i]
-				var want_ekwan: int = _TYPE_EKWAN[type] if run_count == 0 else _TYPE_EKWAN_RUN1[type]
-				var cell := "%s run %d stage %d" % [type, run_count, i]
-				if int(out.get("ase_awarded", -1)) != want_ase or int(out.get("balance_ase", -1)) != want_ase:
-					mismatches.append("%s ase %s/%s, expected %d" % [cell, str(out.get("ase_awarded")), str(out.get("balance_ase")), want_ase])
-				if int(out.get("ekwan_awarded", -1)) != want_ekwan or int(out.get("balance_ekwan", -1)) != want_ekwan:
-					mismatches.append("%s ekwan %s/%s, expected %d" % [cell, str(out.get("ekwan_awarded")), str(out.get("balance_ekwan")), want_ekwan])
-				for row_v in out.get("breakdown", []):
-					if str((row_v as Dictionary).get("currency", "")) == "ekwan":
-						mismatches.append("%s has an Ekwan breakdown row (D-32)" % cell)
-				var base_row := _breakdown_delta(out, "Base objectives")
-				if base_row != base:
-					mismatches.append("%s base row %d, expected %d" % [cell, base_row, base])
-				var virtue_row := _breakdown_delta(out, "Realm virtue")
-				if virtue_row != 10 + 5 * i:
-					mismatches.append("%s virtue row %d, expected %d" % [cell, virtue_row, 10 + 5 * i])
+			for type in ObjectiveModel.VALID_TYPES:
+				for i in range(_STAGE_COUNT):
+					n += 1
+					var pv: Dictionary = {}
+					var out := _settle_cell(env, _objectives(type), i, run_count, n, pv, realm_id)
+					var cell := "%s %s run %d stage %d" % [realm_id, type, run_count, i]
+					var want_ase: int = int(_STAGE_CELLS[realm_id][run_count][type][0]) + _ONE_ECHO_STIPEND
+					var want_ekwan: int = _STAGE_CELLS[realm_id][run_count][type][1]
+					if int(out.get("ase_awarded", -1)) != want_ase or int(out.get("balance_ase", -1)) != want_ase:
+						mismatches.append("%s ase %s/%s, expected %d" % [cell, str(out.get("ase_awarded")), str(out.get("balance_ase")), want_ase])
+					if int(out.get("ekwan_awarded", -1)) != want_ekwan or int(out.get("balance_ekwan", -1)) != want_ekwan:
+						mismatches.append("%s ekwan %s/%s, expected %d" % [cell, str(out.get("ekwan_awarded")), str(out.get("balance_ekwan")), want_ekwan])
+					var first: Dictionary = pv["first"]
+					if int(first.get("ase", -1)) != want_ase or int(first.get("ekwan", -1)) != want_ekwan:
+						mismatches.append("%s preview %s/%s, expected %d/%d" % [cell, str(first.get("ase")), str(first.get("ekwan")), want_ase, want_ekwan])
+					for row_v in out.get("breakdown", []):
+						if str((row_v as Dictionary).get("currency", "")) == "ekwan":
+							mismatches.append("%s has an Ekwan breakdown row (D-32)" % cell)
+					var base_row := _breakdown_delta(out, "Base objectives")
+					var want_base := RewardCalc.round_payout(float(_TYPE_WEIGHT[type]) * float(_REALM_SCALE[realm_id]))
+					if base_row != want_base:
+						mismatches.append("%s base row %d, expected %d" % [cell, base_row, want_base])
+					var replay_row := _row_by_cause(out.get("breakdown", []), "replay")
+					var changes: bool = run_count > 0 and int(_STAGE_CELLS[realm_id][run_count][type][0]) != want_base
+					if changes != not replay_row.is_empty():
+						mismatches.append("%s replay row present=%s, expected %s" % [cell, str(not replay_row.is_empty()), str(changes)])
+					elif changes and (int(replay_row["delta"]) != int(_STAGE_CELLS[realm_id][run_count][type][0]) - want_base \
+							or not is_equal_approx(float((replay_row["params"] as Dictionary).get("factor", 0.0)), 0.35)):
+						mismatches.append("%s replay row %s" % [cell, JSON.stringify(replay_row)])
+					if not _row_by_cause(out.get("breakdown", []), "realm_virtue").is_empty():
+						mismatches.append("%s has a realm_virtue row (D-40)" % cell)
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
@@ -500,15 +711,15 @@ static func _t_ekwan_unknown_type() -> Dictionary:
 		m.append("shrine without an Ekwan key did not pay 0 with one log line")
 	# The Ase table still has the key, so the Ase base logs nothing for it.
 	var logger3 := StructuredLogger.new()
-	if RewardCalc.base_reward([_obj(0, "shrine", true)], trimmed, logger3, 3) != 15 or not logger3.get_logs().is_empty():
+	if RewardCalc.base_reward([_obj(0, "shrine", true)], trimmed, logger3, 3) != 30 or not logger3.get_logs().is_empty():
 		m.append("the Ase table was affected by the missing Ekwan key")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## D-30: the stage Ekwan follows the replay factor and is rounded ONCE on the stage sum. The
-## x.5 cells are pinned: Set B recover 5 at 0.7 = 3.5, protect 3 at 0.5 = 1.5 (roundi rounds half
-## away from zero). combat 2 + protect 3 at 0.7 = 3.5 -> 4, while per-objective rounding gives
-## roundi(1.4) + roundi(2.1) = 3.
+## D-30, D-54: the stage Ekwan follows the replay factor (flat 0.35) and the realm scale, and is
+## rounded ONCE on the stage sum. x.5 cells: endure 4 + endure 4 + combat 2 = 10 at 0.35 = 3.5 -> 4,
+## while per-objective rounding gives 1 + 1 + 1 = 3; recover 5 + recover 5 at 1.25 = 12.5 -> 13,
+## while per-objective rounding gives 6 + 6 = 12 (roundi rounds half away from zero).
 static func _t_ekwan_replay() -> Dictionary:
 	var env := VentureCharacterizationTests._setup_stage_env("econ_char_ekwan_replay")
 	if not bool(env.get("ok", false)):
@@ -516,21 +727,23 @@ static func _t_ekwan_replay() -> Dictionary:
 	var boss := ObjectiveModel.make(3, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var m: Array = []
 	var n := 0
-	# [objective types, run_count, expected Ekwan]. Redo: run 3 = 0.7, run 5 and 6 = 0.5 (floor).
+	# [objective types, realm, run_count, expected Ekwan]
 	for c in [
-		[["recover"], 3, 4], [["protect"], 5, 2], [["protect"], 6, 2],
-		[["combat", "protect"], 3, 4], [["shrine", "guide_spirit"], 0, 9],
-		[["shrine", "guide_spirit"], 5, 5], [["combat"], 5, 1], [["pursue"], 6, 1],
+		[["recover"], "realm.01", 1, 2], [["protect"], "realm.01", 1, 1], [["protect"], "realm.01", 6, 1],
+		[["endure", "endure", "combat"], "realm.01", 1, 4], [["shrine", "guide_spirit"], "realm.01", 0, 9],
+		[["shrine", "guide_spirit"], "realm.01", 5, 3], [["combat"], "realm.01", 5, 1], [["pursue"], "realm.01", 6, 1],
+		[["recover", "recover"], "realm.02", 0, 13], [["shrine", "combat"], "realm.02", 1, 4],
+		[["shrine"], "realm.02", 0, 8],
 	]:
 		n += 1
 		var objs: Array = []
 		for k in range((c[0] as Array).size()):
 			objs.append(_obj(k, c[0][k], true))
 		objs.append(boss.duplicate(true))
-		var out := _settle_cell(env, objs, 0, int(c[1]), 20 + n)
-		if int(out.get("ekwan_awarded", -1)) != int(c[2]) or int(out.get("balance_ekwan", -1)) != int(c[2]):
-			m.append("%s run %d paid ekwan %s/%s, expected %d" \
-				% [str(c[0]), int(c[1]), str(out.get("ekwan_awarded")), str(out.get("balance_ekwan")), int(c[2])])
+		var out := _settle_cell(env, objs, 0, int(c[2]), 20 + n, {}, c[1])
+		if int(out.get("ekwan_awarded", -1)) != int(c[3]) or int(out.get("balance_ekwan", -1)) != int(c[3]):
+			m.append("%s %s run %d paid ekwan %s/%s, expected %d" \
+				% [str(c[0]), c[1], int(c[2]), str(out.get("ekwan_awarded")), str(out.get("balance_ekwan")), int(c[3])])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
@@ -538,10 +751,10 @@ static func _t_ekwan_replay() -> Dictionary:
 # Encounter payer (EconomyService.reward_encounter_complete)
 # ---------------------------------------------------------------------------
 
-## Fight: 3 of 3 enemies, 2 of 2 echoes, a no-pace mode. Victory pays (15 + 20) x redo.
-## The stage base and the stage index never enter a victory payout.
+## Fight: 2 of 2 echoes, a no-pace mode. A won fight pays 0 Ase and has no rows (D-43, D-44):
+## the Echoes stipend is a stage payout row.
 static func _t_encounter_victory() -> Dictionary:
-	var want := { 0: 35, 1: 32 }
+	var want := { 0: 0, 1: 0 }
 	var mismatches: Array = []
 	for type in ObjectiveModel.VALID_TYPES:
 		for run_count in [0, 1]:
@@ -552,21 +765,23 @@ static func _t_encounter_victory() -> Dictionary:
 				mismatches.append("%s run %d victory ekwan %d, expected 0 (D-28)" % [type, run_count, int(paid["ekwan_awarded"])])
 			if int(paid["base_reward"]) != _expected_base(type):
 				mismatches.append("%s base_reward %d" % [type, int(paid["base_reward"])])
+			if not (paid["breakdown"] as Array).is_empty():
+				mismatches.append("%s run %d victory has rows %s" % [type, run_count, JSON.stringify(paid["breakdown"])])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-## Defeat pays roundi(base x 0.25 x redo), the one consolation. The base is the weight of the
-## fought objective (D-13); here the fought objective is the only pre-boss objective.
+## Defeat pays round(base x scale x 0.25 x replay), the one consolation. The base is the weight of
+## the fought objective (D-13); here the fought objective is the only pre-boss objective.
 static func _t_encounter_defeat() -> Dictionary:
-	# fought weight -> run_count -> Ase. A defeat pays no Ekwan (D-28).
+	# fought weight -> run_count -> Ase, at realm.01. A defeat pays no Ekwan (D-28).
 	var want := {
 		0:  { 0: 0, 1: 0 },
-		8:  { 0: 2, 1: 2 },
-		10: { 0: 3, 1: 2 },
-		12: { 0: 3, 1: 3 },
-		14: { 0: 4, 1: 3 },
-		15: { 0: 4, 1: 3 },
-		16: { 0: 4, 1: 4 },
+		16: { 0: 4, 1: 1 },
+		20: { 0: 5, 1: 2 },
+		24: { 0: 6, 1: 2 },
+		28: { 0: 7, 1: 2 },
+		30: { 0: 8, 1: 3 },
+		32: { 0: 8, 1: 3 },
 	}
 	var mismatches: Array = []
 	for type in ObjectiveModel.VALID_TYPES:
@@ -583,14 +798,14 @@ static func _t_encounter_defeat() -> Dictionary:
 ## D-28, D-32: no fight result carries Ekwan, and no breakdown row has currency "ekwan".
 static func _t_fights_pay_no_ekwan() -> Dictionary:
 	var m: Array = []
-	for c in [[true, true, 2, 1.0], [true, false, 0, 0.9], [false, false, 0, 1.0], [false, false, 0, 0.7]]:
-		var paid := _pay(c[0], c[1], c[2], c[3])
+	for c in [[true, 1.0], [true, 0.35], [false, 1.0], [false, 0.35]]:
+		var paid := _pay(c[0], c[1])
 		if int(paid["ekwan_awarded"]) != 0:
 			m.append("%s paid ekwan %d" % [str(c), int(paid["ekwan_awarded"])])
 		for row_v in paid["breakdown"]:
 			if str((row_v as Dictionary).get("currency", "")) != "ase":
 				m.append("%s has a non-Ase row %s" % [str(c), JSON.stringify(row_v)])
-	var repeat := _pay(false, false, 0, 1.0, false)
+	var repeat := _pay(false, 1.0, false)
 	if int(repeat["ekwan_awarded"]) != 0:
 		m.append("a repeat defeat paid ekwan")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
@@ -751,7 +966,7 @@ static func _same(a: Variant, b: Variant) -> bool:
 # ---------------------------------------------------------------------------
 
 ## (a) The stage payer pays the weights of completed objectives. Stage 0, run 0: combat done
-## (10), shrine not done, boss stub: base row 10, Ase 10 + 10 virtue.
+## (20), shrine not done, boss stub: base row 20, Ase 20.
 static func _t_stage_payer_completed_only() -> Dictionary:
 	var env := VentureCharacterizationTests._setup_stage_env("econ_char_completed_only")
 	if not bool(env.get("ok", false)):
@@ -759,12 +974,12 @@ static func _t_stage_payer_completed_only() -> Dictionary:
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var out := _settle_cell(env, [_obj(0, "combat", true), _obj(1, "shrine", false), boss], 0, 0, 1)
 	var mismatches: Array = []
-	if _breakdown_delta(out, "Base objectives") != 10 or int(out.get("ase_awarded", -1)) != 20:
-		mismatches.append("one of two objectives done: base row %d, ase %s, expected 10 / 20" \
+	if _breakdown_delta(out, "Base objectives") != 20 or int(out.get("ase_awarded", -1)) != 20 + _ONE_ECHO_STIPEND:
+		mismatches.append("one of two objectives done: base row %d, ase %s, expected 20 / 22" \
 			% [_breakdown_delta(out, "Base objectives"), str(out.get("ase_awarded"))])
 	out = _settle_cell(env, [_obj(0, "combat", false), boss.duplicate(true)], 0, 0, 2)
-	if _breakdown_delta(out, "Base objectives") != 0 or int(out.get("ase_awarded", -1)) != 10:
-		mismatches.append("nothing done: base row %d, ase %s, expected 0 / 10" \
+	if _breakdown_delta(out, "Base objectives") != 0 or int(out.get("ase_awarded", -1)) != _ONE_ECHO_STIPEND:
+		mismatches.append("nothing done: base row %d, ase %s, expected 0 / 2" \
 			% [_breakdown_delta(out, "Base objectives"), str(out.get("ase_awarded"))])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
@@ -779,45 +994,44 @@ static func _t_uncompleted_adds_nothing() -> Dictionary:
 	var skipped := RewardCalc.base_reward(objs, cfg)
 	(objs[1] as Dictionary)["completed"] = true
 	var done := RewardCalc.base_reward(objs, cfg)
-	if skipped != 10 or done != 18:
-		mismatches.append("optional skipped %d (expected 10), done %d (expected 18)" % [skipped, done])
+	if skipped != 20 or done != 36:
+		mismatches.append("optional skipped %d (expected 20), done %d (expected 36)" % [skipped, done])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-## (c) The pace base is the completed objectives plus the fought one, so the first fight of a
-## stage has a base and a pace bonus is possible (completed-only would give 0).
+## (c) The completed-plus-fought base is the completed objectives plus the fought one, so the
+## first fight of a stage has a base (completed-only would give 0).
 static func _t_pace_base() -> Dictionary:
 	var cfg := _config()
-	var pct := float(ConfigService.get_rewards_cfg(cfg).get("pace_bonus_pct", 0.05))
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var mismatches: Array = []
 	var first := _stage_ctx(cfg, [_obj(0, "guide_spirit", false), _obj(1, "combat", false), boss], 0)
 	var plain := ActiveStageService.get_stage_base_reward(first, cfg)
 	var pace := ActiveStageService.get_stage_base_reward(first, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
-	if plain != 0 or pace != 16 or PaceService.max_bonus_ase(pace, pct) < 1:
-		mismatches.append("first fight: completed-only %d (expected 0), pace base %d (expected 16)" % [plain, pace])
+	if plain != 0 or pace != 32:
+		mismatches.append("first fight: completed-only %d (expected 0), pace base %d (expected 32)" % [plain, pace])
 	var second := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], 1)
 	pace = ActiveStageService.get_stage_base_reward(second, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
-	if pace != 26:
-		mismatches.append("second fight: pace base %d, expected 26 (16 done + 10 fought)" % pace)
+	if pace != 52:
+		mismatches.append("second fight: pace base %d, expected 52 (32 done + 20 fought)" % pace)
 	var none := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], -1)
 	pace = ActiveStageService.get_stage_base_reward(none, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
-	if pace != 16:
-		mismatches.append("no fought objective: pace base %d, expected 16" % pace)
+	if pace != 32:
+		mismatches.append("no fought objective: pace base %d, expected 32" % pace)
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
 ## (d) The first defeat of a stage pays 25% of the fought objective's weight, not of the stage sum.
-## Fought: shrine (15), after a completed combat (10): roundi(15 x 0.25) = 4 Ase.
+## Fought: shrine (30), after a completed combat (20): round(30 x 0.25) = 8 Ase.
 static func _t_first_defeat() -> Dictionary:
 	var objs: Array = [_obj(0, "combat", true), _obj(1, "shrine", false)]
 	var paid := _encounter_pay(objs, false, 0, 1)
 	var mismatches: Array = []
-	if int(paid["ase_awarded"]) != 4:
-		mismatches.append("defeat on the second objective paid %d, expected 4" % int(paid["ase_awarded"]))
+	if int(paid["ase_awarded"]) != 8:
+		mismatches.append("defeat on the second objective paid %d, expected 8" % int(paid["ase_awarded"]))
 	var first := _encounter_pay([_obj(0, "combat", false), _obj(1, "shrine", false)], false, 0, 0)
-	if int(first["ase_awarded"]) != 3:
-		mismatches.append("first defeat with no completed objective paid %d, expected 3" % int(first["ase_awarded"]))
+	if int(first["ase_awarded"]) != 5:
+		mismatches.append("first defeat with no completed objective paid %d, expected 5" % int(first["ase_awarded"]))
 	var no_objective := _encounter_pay([_obj(0, "combat", true)], false, 0, -1)
 	if int(no_objective["ase_awarded"]) != 0:
 		mismatches.append("defeat of a non-objective situation paid %d, expected 0" % int(no_objective["ase_awarded"]))
@@ -837,25 +1051,24 @@ static func _t_partials_completed() -> Dictionary:
 		mismatches.append("before any completion: base %d, expected 0" % base)
 	var after := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], 1)
 	base = ActiveStageService.get_stage_base_reward(after, cfg)
-	if base != 16 or roundi(float(base) * factor) != 2:
-		mismatches.append("after one completion: base %d partial %d, expected 16 / 2" % [base, roundi(float(base) * factor)])
+	if base != 32 or roundi(float(base) * factor) != 4:
+		mismatches.append("after one completion: base %d partial %d, expected 32 / 4" % [base, roundi(float(base) * factor)])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-## (f) Rank has the same base on both sides: an objective the party never reached is in neither
-## the numerator nor the ceiling, so the rank equals the rank of a stage without it.
+## (f) Rank reads no objective weight: an objective the party never reached changes nothing.
 static func _t_rank_unreached() -> Dictionary:
 	var cfg := _rewards_cfg()
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var with_unreached: Array = [_obj(0, "combat", true), _obj(1, "shrine", false), boss]
 	var without: Array = [_obj(0, "combat", true), boss]
 	var mismatches: Array = []
-	for c in [[3, 3, 2, 2], [1, 3, 1, 2], [0, 3, 0, 2]]:
+	for c in [[2, 2], [1, 2], [0, 2]]:
 		for victory in [true, false]:
-			var a: Dictionary = RewardCalc.compute(victory, with_unreached, c[0], c[1], c[2], c[3], 2, 0, cfg,
-				EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, 0)
-			var b: Dictionary = RewardCalc.compute(victory, without, c[0], c[1], c[2], c[3], 2, 0, cfg,
-				EncounterResolutionModes.COMBAT, 0.0, 0, 0, 0, "", null, 0, 0)
+			var a: Dictionary = RewardCalc.compute(victory, with_unreached, c[0], c[1], 2, 0, cfg,
+				EncounterResolutionModes.COMBAT, 0.0, "", null, 0, 0)
+			var b: Dictionary = RewardCalc.compute(victory, without, c[0], c[1], 2, 0, cfg,
+				EncounterResolutionModes.COMBAT, 0.0, "", null, 0, 0)
 			if str(a["rank"]) != str(b["rank"]) or int(a["base_reward"]) != int(b["base_reward"]):
 				mismatches.append("%s %s: rank %s/%s base %d/%d" % [str(c), str(victory),
 					str(a["rank"]), str(b["rank"]), int(a["base_reward"]), int(b["base_reward"])])
@@ -874,42 +1087,31 @@ static func _row_by_cause(breakdown: Array, cause: String) -> Dictionary:
 
 
 ## Pays one encounter straight through EconomyService with explicit inputs.
-static func _pay(victory: bool, pace_mode: bool, pace_bonus: int, redo: float, eligible: bool = true) -> Dictionary:
+static func _pay(victory: bool, replay: float, eligible: bool = true, scale: float = 1.0) -> Dictionary:
 	var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
-	return econ.reward_encounter_complete(victory, 10, 15, 3, 20, 2, pace_bonus, pace_mode,
-		redo, "B", eligible, _logger(), 1)
+	return econ.reward_encounter_complete(victory, 10, scale, replay, "B", eligible, _logger(), 1)
 
 
 static func _t_cause_encounter_rows() -> Dictionary:
 	var m: Array = []
-	var bd: Array = _pay(true, true, 2, 0.9)["breakdown"]
-	var enemies := _row_by_cause(bd, "enemies_defeated")
-	var echoes := _row_by_cause(bd, "echoes_alive")
-	if int((enemies.get("params", {}) as Dictionary).get("count", -1)) != 3 or int(enemies.get("delta", -1)) != 15:
-		m.append("enemies_defeated row: %s" % JSON.stringify(enemies))
-	if int((echoes.get("params", {}) as Dictionary).get("count", -1)) != 2 or int(echoes.get("delta", -1)) != 20:
-		m.append("echoes_alive row: %s" % JSON.stringify(echoes))
-	if _row_by_cause(bd, "bonus_earned").is_empty() or int(_row_by_cause(bd, "bonus_earned").get("delta", 0)) != 2:
-		m.append("bonus_earned missing for a positive pace bonus")
+	for factor in [0.35, 1.0]:
+		var win := _pay(true, factor)
+		if int(win["ase_awarded"]) != 0 or not (win["breakdown"] as Array).is_empty():
+			m.append("a won fight at replay factor %s paid %s rows %s" % [str(factor), str(win["ase_awarded"]), JSON.stringify(win["breakdown"])])
+	var bd: Array = _pay(false, 0.35)["breakdown"]
 	var replay := _row_by_cause(bd, "replay")
-	if replay.is_empty() or not is_equal_approx(float((replay.get("params", {}) as Dictionary).get("factor", 0.0)), 0.9):
-		m.append("replay row or factor: %s" % JSON.stringify(replay))
-	if _row_by_cause(_pay(true, true, 0, 1.0)["breakdown"], "bonus_missed").is_empty():
-		m.append("bonus_missed missing for a zero pace bonus in a pace mode")
-	var no_replay: Array = _pay(true, true, 2, 1.0)["breakdown"]
-	if not _row_by_cause(no_replay, "replay").is_empty():
-		m.append("replay row present at redo 1.0 (run_count 0)")
-	var no_pace: Array = _pay(true, false, 0, 1.0)["breakdown"]
-	if not _row_by_cause(no_pace, "bonus_earned").is_empty() or not _row_by_cause(no_pace, "bonus_missed").is_empty():
-		m.append("a no-pace mode shows a bonus row")
-	var defeat: Array = _pay(false, false, 0, 0.9)["breakdown"]
+	if replay.is_empty() or not is_equal_approx(float((replay.get("params", {}) as Dictionary).get("factor", 0.0)), 0.35):
+		m.append("defeat replay row or factor: %s" % JSON.stringify(replay))
+	if not _row_by_cause(_pay(false, 1.0)["breakdown"], "replay").is_empty():
+		m.append("replay row present at replay factor 1.0 (run_count 0)")
+	var defeat: Array = _pay(false, 0.35)["breakdown"]
 	var parts: Array = []
 	for row_v in defeat:
 		if str((row_v as Dictionary).get("cause", "")) == "defeat_consolation":
 			parts.append(str(((row_v as Dictionary).get("params", {}) as Dictionary).get("part", "")))
 	if parts != ["base", "penalty"]:
 		m.append("defeat_consolation parts %s" % str(parts))
-	for row_v in _pay(true, true, 2, 0.9)["breakdown"]:
+	for row_v in bd:
 		var row: Dictionary = row_v
 		if not row.has("cause") or not (row.get("params") is Dictionary) or not row.has("label") or not row.has("currency"):
 			m.append("row missing a key: %s" % JSON.stringify(row))
@@ -918,7 +1120,7 @@ static func _t_cause_encounter_rows() -> Dictionary:
 
 static func _t_cause_zero_rows() -> Dictionary:
 	var m: Array = []
-	var paid := _pay(false, false, 0, 1.0, false)
+	var paid := _pay(false, 1.0, false)
 	var bd: Array = paid["breakdown"]
 	if int(paid["ase_awarded"]) != 0 or bd.size() != 1 or str((bd[0] as Dictionary).get("cause", "")) != "repeat_defeat" \
 			or int((bd[0] as Dictionary).get("delta", -1)) != 0:
@@ -938,8 +1140,8 @@ static func _t_cause_stage_rows() -> Dictionary:
 	var p: Dictionary = base.get("params", {})
 	if int(p.get("overcome", -1)) != 1 or int(p.get("total", -1)) != 2:
 		m.append("objectives_overcome params %s, expected overcome 1 of 2 (boss stub excluded)" % JSON.stringify(base))
-	if _row_by_cause(bd, "realm_virtue").is_empty():
-		m.append("realm_virtue row missing")
+	if not _row_by_cause(bd, "realm_virtue").is_empty():
+		m.append("realm_virtue row present (D-40)")
 	if _row_by_cause(bd, "replay").is_empty():
 		m.append("replay row missing at run_count 1")
 	for row_v in bd:
@@ -999,7 +1201,7 @@ static func _t_cause_boss_stub() -> Dictionary:
 	counts = RewardCalc.objective_counts(objs, no_exclusion)
 	if int(counts["total"]) != 3:
 		m.append("with the list emptied the boss must count: %s" % str(counts))
-	if RewardCalc.base_reward(objs, cfg) != 10:
+	if RewardCalc.base_reward(objs, cfg) != 20:
 		m.append("the exclusion list changed a payout")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
@@ -1009,7 +1211,7 @@ static func _t_cause_pending_copy() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
-	var row := { "label": "Pace bonus", "delta": 2, "currency": "ase", "cause": "bonus_earned", "params": { "x": 1 } }
+	var row := { "label": "Echoes home", "delta": 2, "currency": "ase", "cause": "echoes_alive", "params": { "x": 1 } }
 	var card := { "type": FlowStateIds.RESOLVE, "meta": { "t": 1 }, "actions": {}, "data": {
 		"encounter_id": "enc", "victory": true, "objectives_remaining": 0,
 		"ase_awarded": 2, "reward_breakdown": [row] } }
@@ -1021,14 +1223,14 @@ static func _t_cause_pending_copy() -> Dictionary:
 	var m: Array = []
 	for pair in [["durable copy", copied], ["replay", replayed]]:
 		var rows: Array = pair[1]
-		if rows.size() != 1 or str((rows[0] as Dictionary).get("cause", "")) != "bonus_earned" \
+		if rows.size() != 1 or str((rows[0] as Dictionary).get("cause", "")) != "echoes_alive" \
 				or int(((rows[0] as Dictionary).get("params", {}) as Dictionary).get("x", 0)) != 1:
 			m.append("%s lost cause or params: %s" % [pair[0], JSON.stringify(rows)])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
 static func _t_cause_old_row_replays() -> Dictionary:
-	var old_row := { "label": "Pace bonus", "delta": 2, "currency": "ase" }
+	var old_row := { "label": "Echoes home", "delta": 2, "currency": "ase" }
 	var ctx := FlowContext.new()
 	ctx.save_data = { "flow": { "pending_result": { "resolve_data": {
 		"encounter_id": "enc", "victory": true, "ase_awarded": 2, "reward_breakdown": [old_row] },
@@ -1071,6 +1273,156 @@ static func _t_ledger_seen() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
+# ---------------------------------------------------------------------------
+# Phase 5.1: the rank score (D-49). 0.40 win + 0.40 x home share + 0.20 x pace fraction.
+# Pace fraction with par 20, full 1.1, zero 1.6: round 22 = 1.0, round 27 = 0.5, round 32 = 0.
+# ---------------------------------------------------------------------------
+
+const _PAR := 20.0
+const _SLOW := 32
+const _PARTIAL := 27
+const _FULL := 22
+const _GRADE_STEPS := ["F", "D", "C", "B", "A", "S"]
+
+static func _win_rank(alive: int, started: int, round_ended: int, mode: String = EncounterResolutionModes.COMBAT,
+		run_count: int = 0) -> String:
+	var par := _PAR if mode == EncounterResolutionModes.COMBAT else 0.0
+	return str(RewardCalc.compute(true, [_obj(0, "combat", true)], alive, started, round_ended, run_count,
+		_rewards_cfg(), mode, par).get("rank", ""))
+
+
+static func _t_rank_table() -> Dictionary:
+	# started, alive -> [slow, partial, full]  (phase5-risk-and-rank.md section 4.2)
+	var table := [
+		[1, 1, ["A", "S", "S"]], [2, 2, ["A", "S", "S"]], [2, 1, ["B", "B", "A"]],
+		[3, 3, ["A", "S", "S"]], [3, 2, ["B", "A", "A"]], [3, 1, ["C", "B", "B"]],
+	]
+	var m: Array = []
+	for row in table:
+		var got := [_win_rank(row[1], row[0], _SLOW), _win_rank(row[1], row[0], _PARTIAL), _win_rank(row[1], row[0], _FULL)]
+		if got != row[2]:
+			m.append("%d started %d home: %s, expected %s" % [row[0], row[1], str(got), str(row[2])])
+	# A defeat is F whatever the pace and the survivors.
+	var lost := RewardCalc.compute(false, [_obj(0, "combat", false)], 1, 3, _FULL, 0, _rewards_cfg(),
+		EncounterResolutionModes.COMBAT, _PAR, "", null, 0, 0)
+	if str(lost["rank"]) != "F":
+		m.append("a defeat ranked %s, expected F" % str(lost["rank"]))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-69: any death caps a win at A. The score alone gives S at 4 and 5 started (one lost, full pace
+## = 0.90), so those rows prove the cap. At 1 to 3 started the score is already below A or at A.
+## Grades for [slow, partial, full], one dead, 1 to 5 started; and all home for the same sizes.
+static func _t_death_cap() -> Dictionary:
+	var m: Array = []
+	var dead_table := {
+		1: ["C", "C", "B"], 2: ["B", "B", "A"], 3: ["B", "A", "A"], 4: ["B", "A", "A"], 5: ["B", "A", "A"],
+	}
+	var home_table := {
+		1: ["A", "S", "S"], 2: ["A", "S", "S"], 3: ["A", "S", "S"], 4: ["A", "S", "S"], 5: ["A", "S", "S"],
+	}
+	for started in [1, 2, 3, 4, 5]:
+		var paces := [_SLOW, _PARTIAL, _FULL]
+		for i in 3:
+			var dead := _win_rank(started - 1, started, paces[i])
+			var home := _win_rank(started, started, paces[i])
+			if dead != dead_table[started][i]:
+				m.append("%d started 1 dead pace %d: %s, expected %s" % [started, i, dead, dead_table[started][i]])
+			if home != home_table[started][i]:
+				m.append("%d started all home pace %d: %s, expected %s" % [started, i, home, home_table[started][i]])
+			if _GRADE_STEPS.find(dead) > _GRADE_STEPS.find("A"):
+				m.append("%d started 1 dead pace %d: %s is above A" % [started, i, dead])
+	# More than one death is capped too.
+	if _GRADE_STEPS.find(_win_rank(3, 5, _FULL)) > _GRADE_STEPS.find("A"):
+		m.append("5 started 2 dead full pace is above A")
+	# A death with full pace never outranks all home with no pace.
+	for started in [1, 2, 3, 4, 5]:
+		if _GRADE_STEPS.find(_win_rank(started - 1, started, _FULL)) > _GRADE_STEPS.find(_win_rank(started, started, _SLOW)):
+			m.append("%d started: dead + full pace outranks all home + slow" % started)
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-74, D-75: the replay factor does not touch the rank, and S is allowed on any run.
+static func _t_rank_ignores_replay() -> Dictionary:
+	var m: Array = []
+	for started in [1, 2, 3, 4, 5]:
+		for alive in range(0, started + 1):
+			for r in [_SLOW, _PARTIAL, _FULL]:
+				var base := _win_rank(alive, started, r, EncounterResolutionModes.COMBAT, 0)
+				for runs in [1, 3, 9]:
+					var got := _win_rank(alive, started, r, EncounterResolutionModes.COMBAT, runs)
+					if got != base:
+						m.append("%d/%d round %d run %d: %s, run 0 gave %s" % [alive, started, r, runs, got, base])
+	for runs in [1, 3]:
+		if _win_rank(3, 3, _FULL, EncounterResolutionModes.COMBAT, runs) != "S":
+			m.append("all home full pace run_count %d is not S" % runs)
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A death lowers the grade at every pace (1 to 3 Echoes started).
+static func _t_death_lowers_rank() -> Dictionary:
+	var m: Array = []
+	for started in [2, 3]:
+		for r in [_SLOW, _PARTIAL, _FULL]:
+			var home := _GRADE_STEPS.find(_win_rank(started, started, r))
+			var one_dead := _GRADE_STEPS.find(_win_rank(started - 1, started, r))
+			if one_dead >= home:
+				m.append("%d started, round %d: all home %s, one dead %s" % [started, r,
+					_GRADE_STEPS[home], _GRADE_STEPS[one_dead]])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Relation: with 1 to 3 Echoes started, a FULL-pace win that lost an Echo never ranks above a
+## SLOW win that kept everyone home. Speed also never lowers a grade.
+## This does not hold from 4 Echoes started (one lost, full pace = 0.90 = S); see phase5-1-build.md.
+static func _t_speed_vs_survival() -> Dictionary:
+	var m: Array = []
+	for started in [1, 2, 3]:
+		var slow_home := _GRADE_STEPS.find(_win_rank(started, started, _SLOW))
+		for alive in range(0, started):
+			if _GRADE_STEPS.find(_win_rank(alive, started, _FULL)) > slow_home:
+				m.append("%d started %d home: a full-pace win outranks a slow all-home win" % [started, alive])
+		for alive in range(0, started + 1):
+			if _GRADE_STEPS.find(_win_rank(alive, started, _FULL)) < _GRADE_STEPS.find(_win_rank(alive, started, _SLOW)):
+				m.append("%d started %d home: speed lowered the grade" % [started, alive])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A no-pace mode takes the full pace points, so all home is S there, as a fast all-home win is.
+static func _t_no_pace_not_capped() -> Dictionary:
+	var m: Array = []
+	for mode in [EncounterResolutionModes.PROTECT, EncounterResolutionModes.ENDURE]:
+		for started in [1, 2, 3]:
+			if _win_rank(started, started, 12, mode) != "S":
+				m.append("%s %d started all home ranked %s, expected S" % [mode, started, _win_rank(started, started, 12, mode)])
+		if _win_rank(1, 2, 12, mode) != "A":
+			m.append("%s 2 started 1 home ranked %s, expected A" % [mode, _win_rank(1, 2, 12, mode)])
+	var rd := RewardCalc.compute(true, [_obj(0, "combat", true)], 2, 2, 12, 0, _rewards_cfg(),
+		EncounterResolutionModes.ENDURE, 0.0)
+	if bool(rd["pace_mode"]) or str(rd["pace_state"]) != "" or bool(rd["pace_changed_rank"]):
+		m.append("a no-pace mode carries pace state: %s" % str(rd))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Part A pays no Ase for speed: a full-pace win and a slow win pay the same, on the fight and on the stage.
+static func _t_speed_pays_no_ase() -> Dictionary:
+	var m: Array = []
+	var cfg := _rewards_cfg()
+	var paid: Array = []
+	for r in [_FULL, _PARTIAL, _SLOW]:
+		var rd := RewardCalc.compute(true, [_obj(0, "combat", true)], 2, 2, r, 0, cfg,
+			EncounterResolutionModes.COMBAT, _PAR, "", null, 0, 0)
+		var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
+		var res := econ.reward_encounter_complete(true, int(rd["consolation_base"]),
+			float(rd["realm_scale"]), float(rd["replay_factor"]), str(rd["rank"]), true, _logger(), 1)
+		paid.append(int(res["ase_awarded"]))
+		if not (res["breakdown"] as Array).is_empty():
+			m.append("round %d: expected no rows, got %s" % [r, JSON.stringify(res["breakdown"])])
+	if paid != [0, 0, 0]:
+		m.append("full / partial / slow paid %s, expected 0 each" % str(paid))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
 ## The preview is read-only and shows what the next settle pays, row for row (D-24).
 static func _t_stage_preview() -> Dictionary:
 	var env := VentureCharacterizationTests._setup_stage_env("econ_char_stage_preview")
@@ -1079,7 +1431,7 @@ static func _t_stage_preview() -> Dictionary:
 	var m: Array = []
 	var n := 0
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
-	# Case 0: combat done, shrine open (base 10, Ekwan 2). Case 1: recover + protect done (Ekwan 8).
+	# Case 0: combat done, shrine open (base 20, Ekwan 2). Case 1: recover + protect done (Ekwan 8).
 	var cases: Array = [
 		[_obj(0, "combat", true), _obj(1, "shrine", false), boss],
 		[_obj(0, "recover", true), _obj(1, "protect", true), boss],
@@ -1109,8 +1461,8 @@ static func _t_stage_preview() -> Dictionary:
 			if int(first.get("ekwan", -1)) != int(paid["ekwan_awarded"]) or int(paid["balance_ekwan"]) != int(paid["ekwan_awarded"]):
 				m.append("%s: preview ekwan %s, paid %s, balance %s" \
 					% [tag, str(first.get("ekwan")), str(paid["ekwan_awarded"]), str(paid["balance_ekwan"])])
-			# Completed-only base: case 0 pays combat (10) and not the open shrine; case 1 pays 12 + 12.
-			var want_base := 10 if case_index == 0 else 24
+			# Completed-only base: case 0 pays combat (20) and not the open shrine; case 1 pays 24 + 24.
+			var want_base := 20 if case_index == 0 else 48
 			var base_row := _row_by_cause(first.get("rows", []), "objectives_overcome")
 			if int(base_row.get("delta", -1)) != want_base:
 				m.append("%s: preview base row %s, expected %d" % [tag, JSON.stringify(base_row), want_base])
@@ -1125,7 +1477,7 @@ static func _t_stage_preview() -> Dictionary:
 ## FlowEncounterState.build_final_snapshot. The fight itself is not played: the combat result is
 ## set directly, which is all build_final_snapshot reads. Stage 0 holds `objectives`; objective 0
 ## is the fought one, linked to situation "sit.econ".
-static func _final_card(tag: String, objectives: Array, victory: bool) -> Dictionary:
+static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter("combat", tag)
 	if env.is_empty():
 		return {}
@@ -1141,6 +1493,12 @@ static func _final_card(tag: String, objectives: Array, victory: bool) -> Dictio
 	}
 	ectx.combat_result = { "victory": victory, "reason": "all_enemies_defeated", "round_ended": 4 }
 	ectx.combat_state["combat_over"] = true
+	if kill_first_echo:
+		for a_v in ectx.actors:
+			if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "echo":
+				(a_v as Dictionary)["is_dead"] = true
+				env["dead_name"] = str((a_v as Dictionary).get("name", ""))
+				break
 	if victory:
 		env["runtime"]._stage_explore_session_service().resolve_combat_situation_and_objective(
 			5, true, true, "stage.combat_resolved", "econ_char pre-snapshot", true)
@@ -1170,8 +1528,8 @@ static func _t_stage_payout_card() -> Dictionary:
 	else:
 		var base := _row_by_cause(data["stage_payout_rows"], "objectives_overcome")
 		var p: Dictionary = base.get("params", {})
-		if int(p.get("overcome", -1)) != 2 or int(p.get("total", -1)) != 2 or int(base.get("delta", -1)) != 25:
-			m.append("(a) objectives_overcome row %s, expected 2 of 2 and delta 25" % JSON.stringify(base))
+		if int(p.get("overcome", -1)) != 2 or int(p.get("total", -1)) != 2 or int(base.get("delta", -1)) != 50:
+			m.append("(a) objectives_overcome row %s, expected 2 of 2 and delta 50" % JSON.stringify(base))
 		var runtime: FlowRuntime = env["runtime"]
 		var before := int(runtime.get_save_data()["economy"]["ase"])
 		var ekwan_before := int(runtime.get_save_data()["economy"]["ekwan"])
@@ -1184,6 +1542,19 @@ static func _t_stage_payout_card() -> Dictionary:
 		if paid_ekwan != int(data["stage_payout_ekwan"]) or paid_ekwan != 8:
 			m.append("(a) flow.complete_stage paid ekwan %d, card previewed %s, expected 8" \
 				% [paid_ekwan, str(data["stage_payout_ekwan"])])
+		# D-43, D-44: the harness party is 5 Echoes, all home: the stage row pays 10, the fight pays 0.
+		var home := _row_by_cause(data["stage_payout_rows"], "echoes_alive")
+		var hp: Dictionary = home.get("params", {})
+		if int(home.get("delta", -1)) != 10 or int(hp.get("alive", -1)) != 5 or int(hp.get("started", -1)) != 5 \
+				or not (hp.get("lost", [1]) as Array).is_empty() or int(hp.get("cap", -1)) != 10 or bool(hp.get("replay", true)):
+			m.append("(a) echoes_alive stage row %s, expected 10 Ase, 5 of 5, no lost, cap 10, no replay" % JSON.stringify(home))
+		if int(data["stage_payout_ase"]) != 50 + 10:
+			m.append("(a) stage_payout_ase %s, expected 60" % str(data["stage_payout_ase"]))
+		if int(data.get("ase_awarded", -1)) != 0 or not _row_by_cause(data.get("reward_breakdown", []), "echoes_alive").is_empty():
+			m.append("(a) won fight card ase_awarded %s rows %s, expected 0 and no echoes_alive row" \
+				% [str(data.get("ase_awarded")), JSON.stringify(data.get("reward_breakdown"))])
+		if int(data.get("echoes_survived", -1)) != 5:
+			m.append("(a) echoes_survived %s, expected 5 (the chip still reads it)" % str(data.get("echoes_survived")))
 		# D-28: the fight itself paid no Ekwan, so the card's own figure is 0.
 		if int(data.get("ekwan_awarded", -1)) != 0:
 			m.append("(a) fight card ekwan_awarded %s, expected 0" % str(data.get("ekwan_awarded")))
@@ -1204,3 +1575,390 @@ static func _t_stage_payout_card() -> Dictionary:
 	if data.has("stage_payout_rows") or data.has("stage_payout_ase") or data.has("stage_payout_ekwan"):
 		m.append("(c) defeat card carries stage_payout keys")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+# ---------------------------------------------------------------------------
+# Echoes stipend (Phase 5.2: D-43 to D-46, D-53, D-81)
+# ---------------------------------------------------------------------------
+
+static func _echo_actor(id: String, dead: bool, extra: Dictionary = {}) -> Dictionary:
+	var a := { "id": id, "name": "Name " + id, "faction": "echo", "is_dead": dead }
+	a.merge(extra, true)
+	return a
+
+
+## The stage preview of a stage with one completed combat objective, on a bare context: no
+## booted runtime. `actors` null means no encounter context (nobody fought); `party` then sizes
+## the active party in the save.
+static func _stipend_preview(actors: Variant, party: int, run_count: int) -> Dictionary:
+	var objs: Array = [_obj(0, "combat", true)]
+	var ctx := _stage_ctx(_config(), objs)
+	var realm: Dictionary = (ctx.save_data["realms"] as Dictionary)["realm.01"]
+	realm["run_count"] = run_count
+	var roster: Array = []
+	var ids: Array = []
+	for i in party:
+		roster.append({ "id": "e%d" % i, "name": "Name e%d" % i })
+		ids.append("e%d" % i)
+	ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids }
+	if actors != null:
+		ctx.encounter_ctx = EncounterContext.new()
+		ctx.encounter_ctx.actors = actors
+	return StageSettlementService.new(ctx, ctx.config_service, null, null).preview()
+
+
+static func _stipend_row(preview: Dictionary) -> Dictionary:
+	return _row_by_cause(preview.get("rows", []), "echoes_alive")
+
+
+## D-43: 1 to 5 Echoes home pay 2, 4, 6, 8, 10. More than 5 stay at the cap of 10.
+static func _t_stipend_counts() -> Dictionary:
+	var m: Array = []
+	var want := { 1: 2, 2: 4, 3: 6, 4: 8, 5: 10, 6: 10, 7: 10 }
+	for n in want:
+		var actors: Array = []
+		for i in n:
+			actors.append(_echo_actor("e%d" % i, false))
+		var pv := _stipend_preview(actors, 0, 0)
+		var row := _stipend_row(pv)
+		var p: Dictionary = row.get("params", {})
+		if int(row.get("delta", -1)) != want[n] or int(p.get("alive", -1)) != n or int(p.get("started", -1)) != n \
+				or int(p.get("cap", -1)) != 10 or bool(p.get("replay", true)):
+			m.append("%d home: row %s, expected delta %d" % [n, JSON.stringify(row), want[n]])
+		if int(pv.get("ase", -1)) != 20 + int(want[n]):
+			m.append("%d home: stage ase %s, expected %d" % [n, str(pv.get("ase")), 20 + int(want[n])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-53: on a replay the rate stays 2 and the cap falls to 5. The stipend ignores the replay factor.
+static func _t_stipend_replay() -> Dictionary:
+	var m: Array = []
+	var want := { 1: 2, 2: 4, 3: 5, 5: 5 }
+	for n in want:
+		var actors: Array = []
+		for i in n:
+			actors.append(_echo_actor("e%d" % i, false))
+		var pv := _stipend_preview(actors, 0, 1)
+		var row := _stipend_row(pv)
+		var p: Dictionary = row.get("params", {})
+		if int(row.get("delta", -1)) != want[n] or int(p.get("cap", -1)) != 5 or not bool(p.get("replay", false)):
+			m.append("%d home on a replay: row %s, expected delta %d, cap 5" % [n, JSON.stringify(row), want[n]])
+		# base 20 x 0.35 = 7, plus the stipend untouched by the factor.
+		if int(pv.get("ase", -1)) != 7 + int(want[n]):
+			m.append("%d home on a replay: stage ase %s, expected %d" % [n, str(pv.get("ase")), 7 + int(want[n])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## One dead Echo: alive, started and the lost NAME. Allies and the spirit never count. The
+## no-encounter path counts the whole active party as home (ASSUMED in phase5-2-build.md).
+static func _t_stipend_dead_and_none() -> Dictionary:
+	var m: Array = []
+	var actors: Array = [
+		_echo_actor("a", false), _echo_actor("b", true), _echo_actor("c", false),
+		_echo_actor("ally", false, { "is_ally": true }), _echo_actor("sp", true, { "is_spirit": true }),
+		{ "id": "en", "name": "Enemy", "faction": "enemy", "is_dead": true },
+	]
+	var row := _stipend_row(_stipend_preview(actors, 0, 0))
+	var p: Dictionary = row.get("params", {})
+	if int(row.get("delta", -1)) != 4 or int(p.get("alive", -1)) != 2 or int(p.get("started", -1)) != 3 \
+			or str(p.get("lost", [])) != str(["Name b"]):
+		m.append("one dead of three: row %s, expected 4 Ase, 2 of 3, lost [Name b]" % JSON.stringify(row))
+	for key in (p.keys() if p is Dictionary else []):
+		if str(key).contains("id"):
+			m.append("params carry an id-like key: %s" % str(key))
+	var all_dead := _stipend_row(_stipend_preview([_echo_actor("a", true)], 0, 0))
+	if all_dead.is_empty() or int(all_dead.get("delta", -1)) != 0 \
+			or str((all_dead.get("params", {}) as Dictionary).get("lost", [])) != str(["Name a"]):
+		m.append("all dead: row %s, expected a delta-0 row naming the lost Echo" % JSON.stringify(all_dead))
+	var none := _stipend_row(_stipend_preview(null, 3, 0))
+	var np: Dictionary = none.get("params", {})
+	if int(none.get("delta", -1)) != 6 or int(np.get("alive", -1)) != 3 or int(np.get("started", -1)) != 3 \
+			or not (np.get("lost", [1]) as Array).is_empty():
+		m.append("no-encounter, party of 3: row %s, expected 6 Ase, 3 of 3" % JSON.stringify(none))
+	if not _stipend_row(_stipend_preview(null, 0, 0)).is_empty():
+		m.append("an empty party still gets a stipend row")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The real stage-ending victory card with one Echo dead: the row names it, the preview equals
+## what flow.complete_stage pays, and the fight itself pays nothing.
+static func _t_stipend_real_card() -> Dictionary:
+	var m: Array = []
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var env := _final_card("econ_char_card_dead", [_req(0, "combat", false), _req(1, "shrine", true), boss], true, true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var data: Dictionary = env["card"]["data"]
+	var row := _row_by_cause(data.get("stage_payout_rows", []), "echoes_alive")
+	var p: Dictionary = row.get("params", {})
+	if int(row.get("delta", -1)) != 8 or int(p.get("alive", -1)) != 4 or int(p.get("started", -1)) != 5 \
+			or str(p.get("lost", [])) != str([str(env.get("dead_name", "?"))]):
+		m.append("one dead of five: row %s, expected 8 Ase, 4 of 5, lost [%s]" % [JSON.stringify(row), str(env.get("dead_name"))])
+	if int(data.get("echoes_survived", -1)) != 4:
+		m.append("echoes_survived %s, expected 4" % str(data.get("echoes_survived")))
+	if int(data.get("ase_awarded", -1)) != 0:
+		m.append("the won fight paid %s Ase at fight level, expected 0" % str(data.get("ase_awarded")))
+	var runtime: FlowRuntime = env["runtime"]
+	var before := int(runtime.get_save_data()["economy"]["ase"])
+	runtime.dispatch({ "type": "flow.complete_stage" })
+	var paid := int(runtime.get_save_data()["economy"]["ase"]) - before
+	if paid != int(data.get("stage_payout_ase", -2)) or paid != 50 + 8:
+		m.append("flow.complete_stage paid %d, card previewed %s, expected 58" % [paid, str(data.get("stage_payout_ase"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+# ---------------------------------------------------------------------------
+# D-72: carried home is an advance on the stage payout (step 5.8)
+# ---------------------------------------------------------------------------
+
+## A pure context: one stage, objectives as given, one revealed situation (the intel gate), the
+## realm's run_count, and what the stage already carried.
+static func _carry_ctx(realm_id: String, run_count: int, objs: Array, carried_ase: int = 0,
+		carried_ekwan: int = 0, revealed: bool = true) -> FlowContext:
+	var ctx := FlowContext.new()
+	ctx.config_service = _config()
+	ctx.realm_id = realm_id
+	ctx.stage_id = "stage.0"
+	var stage := { "index": 0, "objectives": objs, "settlement_receipt": {},
+		"explore_map": { "situations": [{ "id": "s0", "revealed": revealed }] } }
+	if carried_ase > 0 or carried_ekwan > 0:
+		stage["carried_ase"] = carried_ase
+		stage["carried_ekwan"] = carried_ekwan
+	ctx.save_data = { "economy": { "ase": 0, "ekwan": 0 },
+		"realms": { realm_id: { "run_count": run_count, "stages": [stage] } } }
+	return ctx
+
+
+static func _carry_econ(ctx: FlowContext) -> EconomyService:
+	return EconomyService.new(ctx.save_data)
+
+
+static func _carry_stage(ctx: FlowContext) -> Dictionary:
+	return ((ctx.save_data["realms"] as Dictionary)[ctx.realm_id] as Dictionary)["stages"][0]
+
+
+static func _carry_boss() -> Dictionary:
+	return ObjectiveModel.make(9, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+
+
+## First return: 12% of the completed Ase and Ekwan with the scale and the replay factor, one
+## rounding on each sum. Shrine 30/6 + recover 24/5 + protect 24/3 = Ase 78, Ekwan 14.
+## [realm, run_count, Ase, Ekwan]: 78 x 1.0 x 0.12 = 9.36; 97.5 x 0.12 = 11.7; 27.3 x 0.12 = 3.28;
+## 34.125 x 0.12 = 4.1. Ekwan: 1.68, 2.1, 0.59, 0.74.
+static func _t_carried_first() -> Dictionary:
+	var m: Array = []
+	for c in [["realm.01", 0, 9, 2], ["realm.02", 0, 12, 2], ["realm.01", 1, 3, 1], ["realm.02", 1, 4, 1]]:
+		var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _obj(2, "protect", true), _carry_boss()]
+		var ctx := _carry_ctx(c[0], c[1], objs)
+		var got := StageSettlementService.carry_home(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", _logger(), 1)
+		var st := _carry_stage(ctx)
+		var bal := ctx.save_data["economy"] as Dictionary
+		if int(got["ase"]) != int(c[2]) or int(got["ekwan"]) != int(c[3]):
+			m.append("%s run %d: carried %s/%s, expected %d/%d" % [c[0], c[1], got["ase"], got["ekwan"], c[2], c[3]])
+		if int(st.get("carried_ase", -1)) != int(c[2]) or int(st.get("carried_ekwan", -1)) != int(c[3]) \
+				or int(bal["ase"]) != int(c[2]) or int(bal["ekwan"]) != int(c[3]):
+			m.append("%s run %d: stage %s balance %s" % [c[0], c[1], str(st), str(bal)])
+		if int(got["overcome"]) != 3 or int(got["total"]) != 3:
+			m.append("%s run %d: overcome %s of %s, expected 3 of 3 (boss stub excluded)" % [c[0], c[1], got["overcome"], got["total"]])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A second return with no new objective carries 0 (B5 closed). A new objective carries only the
+## increment. Shrine alone: 30 x 0.12 = 3.6 -> 4 Ase, 0.72 -> 1 Ekwan. Shrine + recover: 54 x 0.12 =
+## 6.48 -> 6 Ase (2 more), 11 x 0.12 = 1.32 -> 1 Ekwan (0 more).
+static func _t_carried_increment() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", false), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, objs)
+	var econ := _carry_econ(ctx)
+	var a := StageSettlementService.carry_home(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 1)
+	var b := StageSettlementService.carry_home(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 2)
+	if int(a["ase"]) != 4 or int(a["ekwan"]) != 1 or int(b["ase"]) != 0 or int(b["ekwan"]) != 0:
+		m.append("first %s/%s, repeat %s/%s, expected 4/1 then 0/0" % [a["ase"], a["ekwan"], b["ase"], b["ekwan"]])
+	((_carry_stage(ctx)["objectives"] as Array)[1] as Dictionary)["completed"] = true
+	var c := StageSettlementService.carry_home(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 3)
+	var st := _carry_stage(ctx)
+	if int(c["ase"]) != 2 or int(c["ekwan"]) != 0 or int(st["carried_ase"]) != 6 or int(st["carried_ekwan"]) != 1:
+		m.append("increment %s/%s, stage %s, expected 2/0 and 6/1" % [c["ase"], c["ekwan"], str(st)])
+	var bal := ctx.save_data["economy"] as Dictionary
+	if int(bal["ase"]) != 6 or int(bal["ekwan"]) != 1:
+		m.append("balance %s, expected 6/1" % str(bal))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The Scout multiplier applies to the 12% BEFORE the carried amount is subtracted, to Ase only.
+## Shrine, realm.01 run 0: 30 x 0.12 x 1.5 = 5.4 -> 5 Ase; Ekwan 0.72 -> 1 (no multiplier).
+## After a plain 4: the Scout return carries 5 - 4 = 1.
+static func _t_carried_scout() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_obj(0, "shrine", true), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, objs)
+	var econ := _carry_econ(ctx)
+	var scout := { "intel_retention": true, "intel_retention_bonus": 1.5 }
+	var mul := StageSettlementService.retention_mul(scout)
+	if mul != 1.5 or StageSettlementService.retention_mul({ "intel_retention": false, "intel_retention_bonus": 1.5 }) != 1.0 \
+			or StageSettlementService.retention_mul({}) != 1.0:
+		m.append("retention_mul wrong: %s" % str(mul))
+	var a := StageSettlementService.carry_home(ctx, ctx.config_service, econ, mul, "test", _logger(), 1)
+	if int(a["ase"]) != 5 or int(a["ekwan"]) != 1 or int(_carry_stage(ctx)["carried_ase"]) != 5:
+		m.append("scout first return %s/%s stage %s, expected 5/1 and carried 5" % [a["ase"], a["ekwan"], str(_carry_stage(ctx))])
+	var plain := _carry_ctx("realm.01", 0, objs.duplicate(true), 4, 1)
+	var b := StageSettlementService.carry_home(plain, plain.config_service, _carry_econ(plain), mul, "test", _logger(), 2)
+	if int(b["ase"]) != 1 or int(b["ekwan"]) != 0 or int(_carry_stage(plain)["carried_ase"]) != 5:
+		m.append("scout after a plain 4: %s/%s stage %s, expected 1/0 and carried 5" % [b["ase"], b["ekwan"], str(_carry_stage(plain))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Nothing overcome carries 0 and writes nothing; no revealed situation carries 0; a stage
+## without the fields (an old save) reads 0 and pays like before.
+static func _t_carried_zero_and_old() -> Dictionary:
+	var m: Array = []
+	var none: Array = [_obj(0, "shrine", false), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, none)
+	var got := StageSettlementService.carry_home(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", _logger(), 1)
+	var st := _carry_stage(ctx)
+	if int(got["ase"]) != 0 or int(got["ekwan"]) != 0 or st.has("carried_ase") or st.has("carried_ekwan"):
+		m.append("nothing overcome: %s, stage %s" % [str(got), str(st)])
+	var blind := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], 0, 0, false)
+	var g2 := StageSettlementService.carry_plan(blind, blind.config_service)
+	if int(g2["ase"]) != 0 or int(g2["ekwan"]) != 0:
+		m.append("no revealed situation carried %s" % str(g2))
+	var old := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()])
+	var svc := StageSettlementService.new(old, old.config_service, null, null)
+	var pre := svc.preview()
+	if int(pre.get("ase", -1)) != 30 or int(pre.get("ekwan", -1)) != 6 or not _row_by_cause(pre["rows"], "carried_advance").is_empty():
+		m.append("old save preview %s, expected 30/6 and no carried_advance row" % str(pre))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The real settle path: the stage pays the full amount MINUS what was carried, the preview shows
+## the same net, the rows add up, and the receipt stays exactly-once.
+static func _t_carried_settle() -> Dictionary:
+	var m: Array = []
+	var env := VentureCharacterizationTests._setup_stage_env("econ_char_carried_settle")
+	if not bool(env.get("ok", false)):
+		return env
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var objs: Array = [_obj(0, "combat", true), _obj(1, "shrine", true), boss]
+	var pv := {}
+	# Full amount: 50 + 2 stipend = 52 Ase, 8 Ekwan. Carried 6 / 1 (12% of 50 and of 8).
+	var out := _settle_cell(env, objs, 0, 0, 1, pv, "realm.01", 6, 1)
+	var row := _row_by_cause(out["breakdown"], "carried_advance")
+	var sum := 0
+	for r_v in out["breakdown"]:
+		sum += int((r_v as Dictionary).get("delta", 0))
+	if int(out.get("ase_awarded", -1)) != 46 or int(out.get("ekwan_awarded", -1)) != 7:
+		m.append("paid %s/%s, expected 46/7" % [out.get("ase_awarded"), out.get("ekwan_awarded")])
+	if int(row.get("delta", 0)) != -6 or int((row.get("params", {}) as Dictionary).get("carried_ase", -1)) != 6 \
+			or int((row.get("params", {}) as Dictionary).get("carried_ekwan", -1)) != 1:
+		m.append("carried_advance row %s" % JSON.stringify(row))
+	if sum != int(out.get("ase_awarded", -1)):
+		m.append("rows sum to %d, paid %s" % [sum, out.get("ase_awarded")])
+	var first: Dictionary = pv.get("first", {})
+	if int(first.get("ase", -1)) != 46 or int(first.get("ekwan", -1)) != 7 or not bool(pv.get("pure", false)):
+		m.append("preview %s pure=%s, expected 46/7" % [str(first.get("ase")) + "/" + str(first.get("ekwan")), str(pv.get("pure"))])
+	var again := StageSettlementService.new((env["runtime"] as FlowRuntime).flow_ctx,
+		(env["runtime"] as FlowRuntime).config_service, EconomyService.new((env["runtime"] as FlowRuntime).get_save_data()),
+		env["logger"]).settle(true, 6000)
+	if not again.is_empty():
+		m.append("second settle paid again: %s" % str(again))
+	# Without a carried amount there is no row and the full amount is paid.
+	var plain := _settle_cell(env, objs, 0, 0, 2)
+	if int(plain.get("ase_awarded", -1)) != 52 or int(plain.get("ekwan_awarded", -1)) != 8 \
+			or not _row_by_cause(plain["breakdown"], "carried_advance").is_empty():
+		m.append("no carry: paid %s/%s, expected 52/8 and no row" % [plain.get("ase_awarded"), plain.get("ekwan_awarded")])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The pure producer: never below 0, and the row delta stays inside the gross amount.
+static func _t_carried_rows() -> Dictionary:
+	var m: Array = []
+	var echo := { "alive": 1, "started": 1, "lost": [], "rate": 2, "cap": 10, "replay": false }
+	var r := EconomyService.stage_payout_rows(30, 1.0, 1.0, {}, 6, echo, 100, 100)
+	var row := _row_by_cause(r["breakdown"], "carried_advance")
+	if int(r["ase"]) != 0 or int(r["ekwan"]) != 0 or int(row.get("delta", 0)) != -32:
+		m.append("oversize carry: %s" % JSON.stringify(r))
+	var z := EconomyService.stage_payout_rows(30, 1.0, 1.0, {}, 6, echo, 0, 0)
+	if not _row_by_cause(z["breakdown"], "carried_advance").is_empty() or int(z["ase"]) != 32 or int(z["ekwan"]) != 6:
+		m.append("zero carry: %s" % JSON.stringify(z))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Real return-home dispatch. The explore snapshot previews what the action then pays, and the
+## preview after the return shows 0 more.
+static func _t_carried_return_home() -> Dictionary:
+	var env := VentureCharacterizationTests._setup_explore_env("econ_char_carried_home")
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	stage["objectives"] = [_obj(0, "shrine", true), _obj(1, "recover", true), _carry_boss()]
+	var emap: Dictionary = stage["explore_map"]
+	var sits: Array = emap.get("situations", [])
+	if sits.is_empty():
+		return { "ok": false, "error": "test setup failed: the stage has no situation" }
+	(sits[0] as Dictionary)["revealed"] = true
+	var realm_seed := int(VentureCharacterizationTests._realm(runtime.get_save_data(), "realm.01").get("seed", 0))
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var threshold: int = maxi(0, 40 - int(directive.get("escape_bonus", 0)))
+	var turn := -1
+	for cand in range(0, 200):
+		if CampaignSeed.get_rng_from(realm_seed, "stage.escape.%s.%d" % [flow_ctx.stage_id, cand]).randi_range(0, 100) > threshold:
+			turn = cand
+			break
+	if turn < 0:
+		return { "ok": false, "error": "test setup failed: no successful escape roll" }
+	emap["turn_count"] = turn
+	runtime.get_save_data()["economy"]["ase"] = 0
+	runtime.get_save_data()["economy"]["ekwan"] = 0
+	var pre: Dictionary = StageExploreSnapshotBuilder.build(flow_ctx, 50)["data"]["carry_home_preview"]
+	var out: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
+	var data: Dictionary = out.get("data", {})
+	var econ: Dictionary = runtime.get_save_data()["economy"]
+	if int(pre["ase"]) <= 0 or int(pre["ekwan"]) <= 0 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2:
+		m.append("preview %s, expected Ase and Ekwan above 0, 2 of 2" % str(pre))
+	if int(data.get("ase_awarded", -1)) != int(pre["ase"]) or int(data.get("ekwan_awarded", -1)) != int(pre["ekwan"]) \
+			or int(econ["ase"]) != int(pre["ase"]) or int(econ["ekwan"]) != int(pre["ekwan"]):
+		m.append("action paid card %s/%s balance %s/%s, preview %s" % [data.get("ase_awarded"), data.get("ekwan_awarded"),
+			econ["ase"], econ["ekwan"], str(pre)])
+	var row := _row_by_cause(data.get("reward_breakdown", []), "partial_return_home")
+	if int((row.get("params", {}) as Dictionary).get("carried_before", -1)) != 0:
+		m.append("partial row %s lacks carried_before 0" % JSON.stringify(row))
+	var after: Dictionary = StageExploreSnapshotBuilder.build(flow_ctx, 51)["data"]["carry_home_preview"]
+	if int(after["ase"]) != 0 or int(after["ekwan"]) != 0:
+		m.append("preview after the return %s, expected 0/0" % str(after))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Real retreat dispatch (roll forced to success). Same equality for the pre-combat preview.
+static func _t_carried_retreat() -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "econ_char_carried_retreat")
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var m: Array = []
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	stage["objectives"] = [_obj(0, "shrine", true), _obj(1, "recover", true), _carry_boss()]
+	stage["explore_map"] = { "situations": [{ "id": "sit.econ", "resolved": false, "revealed": true }] }
+	flow_ctx.save_data["economy"]["ase"] = 50
+	flow_ctx.save_data["economy"]["ekwan"] = 0
+	var pre: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 1)["data"]["carry_retreat_preview"]
+	var out: Dictionary = (env["runtime"] as FlowRuntime).dispatch(
+		{ "type": "encounter.retreat", "ase_cost": 999, "success_pct": 100 })
+	var data: Dictionary = out.get("data", {})
+	var econ: Dictionary = flow_ctx.save_data["economy"]
+	if int(pre["ase"]) <= 0 or int(pre["ekwan"]) <= 0 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2:
+		m.append("preview %s, expected Ase and Ekwan above 0, 2 of 2" % str(pre))
+	if int(data.get("ase_awarded", -1)) != int(pre["ase"]) or int(data.get("ekwan_awarded", -1)) != int(pre["ekwan"]) \
+			or int(econ["ase"]) != 50 - 10 + int(pre["ase"]) or int(econ["ekwan"]) != int(pre["ekwan"]):
+		m.append("retreat paid card %s/%s balance %s/%s, preview %s" % [data.get("ase_awarded"), data.get("ekwan_awarded"),
+			econ["ase"], econ["ekwan"], str(pre)])
+	if int(_carry_stage_of(flow_ctx).get("carried_ase", -1)) != int(pre["ase"]):
+		m.append("stage carried_ase %s, expected %d" % [str(_carry_stage_of(flow_ctx).get("carried_ase")), int(pre["ase"])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+static func _carry_stage_of(flow_ctx: FlowContext) -> Dictionary:
+	return FlowStageExploreState._get_current_stage(flow_ctx)

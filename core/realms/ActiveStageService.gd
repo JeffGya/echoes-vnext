@@ -302,8 +302,8 @@ static func count_revealed_situations(flow_ctx_arg: FlowContext) -> int:
 
 
 # Base reward of the current stage, by `mode` (RewardCalc.MODE_*). The default pays completed
-# objectives only (retreat and return-home partials). The pace base passes
-# MODE_COMPLETED_PLUS_FOUGHT; the fought objective is `flow_ctx.active_encounter_objective_index`.
+# objectives only (retreat and return-home partials). The fought objective for the other modes is
+# `flow_ctx.active_encounter_objective_index`.
 static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService,
 		logger: StructuredLogger = null, t: int = 0, mode: String = RewardCalc.MODE_COMPLETED) -> int:
 	return RewardCalc.base_reward(_current_stage_objectives(flow_ctx_arg),
@@ -311,10 +311,35 @@ static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg:
 		mode, flow_ctx_arg.active_encounter_objective_index)
 
 
+# The realm scale and replay factor of the active realm (D-63, D-54), for the payers that do not
+# hold the realm model: the defeat consolation and the retreat and return-home partials.
+static func get_payout_factors(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> Dictionary:
+	var reward_cfg := ConfigService.get_rewards_cfg(config_service_arg)
+	var run_count := int(RealmService.get_active(flow_ctx_arg).get("run_count", 0))
+	return {
+		"realm_scale": RewardCalc.realm_scale(flow_ctx_arg.realm_id,
+			ConfigService.get_realm_order(config_service_arg), reward_cfg),
+		"replay_factor": RewardCalc.replay_factor(run_count, reward_cfg),
+	}
+
+
 # "Overcome of total" for the current stage; the boss stub is excluded by config. Read only.
 static func get_objective_counts(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> Dictionary:
 	return RewardCalc.objective_counts(_current_stage_objectives(flow_ctx_arg),
 		ConfigService.get_rewards_cfg(config_service_arg))
+
+
+# What the active stage already carried home (D-72): { ase, ekwan }, 0 when the fields are absent.
+static func get_carried(flow_ctx_arg: FlowContext) -> Dictionary:
+	var _stage_idx := int(flow_ctx_arg.stage_id.replace("stage.", ""))
+	var _realm_v: Variant = flow_ctx_arg.save_data.get("realms", {}).get(flow_ctx_arg.realm_id, {})
+	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
+	var _stages_v: Variant = _realm.get("stages", [])
+	var _stages: Array = _stages_v if _stages_v is Array else []
+	if _stage_idx >= 0 and _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
+		var _st: Dictionary = _stages[_stage_idx]
+		return { "ase": maxi(0, int(_st.get("carried_ase", 0))), "ekwan": maxi(0, int(_st.get("carried_ekwan", 0))) }
+	return { "ase": 0, "ekwan": 0 }
 
 
 static func _current_stage_objectives(flow_ctx_arg: FlowContext) -> Array:

@@ -256,7 +256,7 @@ static func _t_pre_combat_has_retreat_fields() -> Dictionary:
 	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
 	var data: Dictionary = snap.get("data", {})
 
-	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_tier_label", "retreat_success_pct"]:
+	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_affordable", "retreat_tier_label", "retreat_success_pct"]:
 		if not data.has(key):
 			return { "ok": false, "error": "pre_combat data missing UI-004 key: '%s'" % key }
 
