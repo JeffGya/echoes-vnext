@@ -114,7 +114,7 @@ func set_layout(layout: Dictionary) -> void:
 	offset_bottom = -float(_bottom_content_exclusion)
 	_fit_panel.call_deferred()
 
-# The panel is as tall as its content, up to the height this screen has. The scroll area only scrolls
+# The panel is as tall as its content, up to the height this screen has, and sits in the vertical middle. The scroll area only scrolls
 # when the content is taller than the space left.
 func _fit_panel() -> void:
 	if not is_inside_tree():
@@ -124,8 +124,9 @@ func _fit_panel() -> void:
 	var room := maxf(0.0, size.y - chrome)
 	var content_h := content_vbox.get_combined_minimum_size().y
 	content_scroll.custom_minimum_size.y = minf(content_h, room)
-	root_panel.offset_top = 0.0
-	root_panel.offset_bottom = chrome + content_scroll.custom_minimum_size.y
+	var panel_h := chrome + content_scroll.custom_minimum_size.y
+	root_panel.offset_top = maxf(0.0, (size.y - panel_h) * 0.5)
+	root_panel.offset_bottom = root_panel.offset_top + panel_h
 
 func set_bottom_content_exclusion(value: int) -> void:
 	_bottom_content_exclusion = maxi(0, value)
