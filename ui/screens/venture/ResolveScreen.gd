@@ -40,12 +40,30 @@ const EffectChipScene     := preload("res://ui/components/EffectChip.tscn")
 const PacePresentation    := preload("res://ui/components/PacePresentation.gd")
 const PayoutCausePresentation := preload("res://ui/components/PayoutCausePresentation.gd")
 
+# Seconds. Pacing from the approved motion mockup (stage-flow-motion.html, Direction E).
+@export var home_start_delay: float = 0.5
+@export var home_step: float = 0.13
+@export var home_lost_hold: float = 0.55
+@export var home_pause: float = 0.15
+@export var rise_step: float = 0.1
+@export var rise_fade: float = 0.25
+@export var fade_quiet: float = 0.6
+## The quiet Ase figure after the home count: smaller and muted next to the 20 px summary default.
+@export var quiet_font_size: int = 16
+@export var quiet_color: Color = Color("#6E6450")
+
 ## Fixed action the host dispatches once a first-time ledger is shown open (no slot, no payload).
 const LEDGER_SEEN_ACTION := { "type": "resolve.ledger.mark_seen" }
 
 @onready var _banner:            Label         = %BannerLabel
 @onready var _reason:            Label         = %ReasonLabel
-@onready var _fight_strip:       HFlowContainer = %FightStrip
+@onready var _fight_strip:       VBoxContainer = %FightHeader
+@onready var _home_count:        Label         = %HomeCountLabel
+@onready var _emotion_header:    Label         = %EmotionHeader
+@onready var _story_lines:       VBoxContainer = %StoryLines
+@onready var _change_line:       Label         = %ChangeLine
+@onready var _intel_line:        Label         = %IntelLine
+@onready var _thread_line:       Label         = %ThreadLine
 @onready var _rank_chip:         PanelContainer = %RankChip
 @onready var _enemies_chip:      PanelContainer = %EnemiesChip
 @onready var _echoes_chip:       PanelContainer = %EchoesChip
@@ -99,6 +117,8 @@ var _ledger_open := false
 # the mark_seen dispatch, and that re-render must keep the ledger as the player left it.
 var _result_key: int = 0
 var _has_result_key := false
+var _motion: Tween = null
+var _motion_final: Callable = Callable()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -138,8 +158,18 @@ func _clear() -> void:
 	_sanctum_button.visible    = false
 	_next_stage_button.visible = false
 	_banner.remove_theme_color_override("font_color")
+	_stop_motion()
 	_tooltip.hide_tooltip()
 	_fight_strip.visible = false
+	_home_count.visible = false
+	_emotion_header.text = "Echo Emotion"
+	_story_lines.visible = false
+	for line in [_change_line, _intel_line, _thread_line]:
+		line.visible = false
+	_ase_total.remove_theme_font_size_override("font_size")
+	_ase_total.remove_theme_color_override("font_color")
+	_ekwan_total.modulate.a = 1.0
+	_ase_total.modulate.a = 1.0
 	for chip in [_rank_chip, _enemies_chip, _echoes_chip, _rounds_chip]:
 		chip.visible = true
 	_rank_badge.text = "—"
@@ -158,6 +188,7 @@ func _clear() -> void:
 			section.remove_child(row)
 			row.queue_free()
 	for child in _emotion_list.get_children():
+		_emotion_list.remove_child(child)
 		child.queue_free()
 	# Phase 1 Close: reset new nodes
 	_summary_label.text    = ""
@@ -272,6 +303,8 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 			_tween.tween_property(_bl, "modulate:a", 1.0, 0.3)
 
 	# V2-VOW-002: vow outcome + discovery sections (inserted before ButtonRow).
+	_build_direction_e(data)
+
 	_build_vow_section(data)
 	_build_vow_discovered_section(data)
 
@@ -477,13 +510,15 @@ func _build_ledger(data: Dictionary) -> void:
 		total += int(data["stage_payout_ase"])
 	_ase_total.text = "+%d Ase" % total
 	_total_value.text = "= %d Ase" % total
-	var ekwan := int(data.get("stage_payout_ekwan", 0))
+	# The stage-ending card carries stage_payout_ekwan. A scout return or forced retreat carries the
+	# Ekwan it banked in ekwan_awarded. A fight card has 0 there.
+	var ekwan := int(data["stage_payout_ekwan"]) if data.has("stage_payout_ekwan") else int(data.get("ekwan_awarded", 0))
 	_ekwan_total.text = "+%d Ekwan" % ekwan
 	_ekwan_total.visible = ekwan > 0
 	_ekwan_line_value.text = "+%d Ekwan" % ekwan
 	_ekwan_line.visible = ekwan > 0
 
-	var has_rows := not fight_rows.is_empty() or has_stage
+	var has_rows := not fight_rows.is_empty() or has_stage or ekwan > 0
 	# A fight win pays nothing and has no rows: the card then shows no earnings line and no ledger.
 	_summary_button.visible = has_rows
 	_summary_button.disabled = not has_rows
@@ -535,6 +570,199 @@ func _add_row(section: VBoxContainer, entry: Dictionary, scope: String) -> void:
 func _on_cause_requested(anchor: Control, title: String, cause: String, params: Dictionary,
 		scope: String, pinned: bool) -> void:
 	_tooltip.show_for(anchor, title, PayoutCausePresentation.tooltip(cause, params, scope), pinned)
+
+
+# ─────────────────────────────────────────────────────────────
+# Direction E: mid-stage win card and home sequence (stage-flow-motion.html)
+# ─────────────────────────────────────────────────────────────
+
+## A fight win pays nothing and has no rows: the Direction E mid-stage card.
+func _is_midstage_win(data: Dictionary) -> bool:
+	return bool(data.get("victory", false)) and str(data.get("run_type", "")).is_empty() \
+		and _ase_rows(data.get("reward_breakdown", [])).is_empty() \
+		and _ase_rows(data.get("stage_payout_rows", [])).is_empty()
+
+
+## Params of the stage `echoes_alive` row, or {} when the card has none.
+func _home_params(data: Dictionary) -> Dictionary:
+	for row in _ase_rows(data.get("stage_payout_rows", [])):
+		if str(row.get("cause", "")) == "echoes_alive":
+			var params_v: Variant = row.get("params", {})
+			if params_v is Dictionary and int((params_v as Dictionary).get("started", 0)) > 0:
+				return params_v
+	return {}
+
+
+## PLACEHOLDER: the snapshot has no Thread field. The Thread is whole while every roster Echo
+## (not an ally or a spirit) is alive. It can only worsen.
+func _thread_whole(data: Dictionary, home: Dictionary) -> bool:
+	var party := 0
+	var actors_v: Variant = data.get("actors", [])
+	if actors_v is Array:
+		for actor_v in (actors_v as Array):
+			if actor_v is Dictionary and str(actor_v.get("faction", "")) == "echo" \
+					and not bool(actor_v.get("is_ally", false)) and not bool(actor_v.get("is_spirit", false)):
+				party += 1
+	if party <= 0 or int(data.get("echoes_survived", -1)) != party:
+		return false
+	var lost_v: Variant = home.get("lost", [])
+	return not (lost_v is Array and not (lost_v as Array).is_empty())
+
+
+func _echo_rows() -> Array:
+	var rows: Array = []
+	for child in _emotion_list.get_children():
+		if child.has_node("%HomeTagLabel"):
+			rows.append(child)
+	return rows
+
+
+func _build_direction_e(data: Dictionary) -> void:
+	if not bool(data.get("victory", false)) or not str(data.get("run_type", "")).is_empty():
+		return
+	var home := _home_params(data)
+	if _is_midstage_win(data):
+		_build_midstage(data, home)
+	elif not home.is_empty():
+		_build_home(home)
+
+
+## Party and state (the emotion list), one change line, intel, the Thread line. Each line shows
+## only when the snapshot has data for it. No Ase number, no zero rows.
+func _build_midstage(data: Dictionary, home: Dictionary) -> void:
+	_fight_strip.visible = false
+	var summary_v: Variant = data.get("emotion_summary", [])
+	_change_line.text = PayoutCausePresentation.change_line(summary_v if summary_v is Array else [])
+	_intel_line.text = PayoutCausePresentation.INTEL_LEARNED
+	_thread_line.text = PayoutCausePresentation.THREAD_WHOLE
+	_change_line.visible = not _change_line.text.is_empty()
+	_intel_line.visible = int(data.get("intel_gained", 0)) > 0
+	_thread_line.visible = _thread_whole(data, home)
+	var lines: Array = [_change_line, _intel_line, _thread_line].filter(func(l: Label) -> bool: return l.visible)
+	_story_lines.visible = not lines.is_empty()
+	var nodes: Array = _echo_rows() + lines
+	if nodes.is_empty() or StopMarkMotion.reduced or not is_inside_tree():
+		return
+	_motion_final = func() -> void:
+		for node in nodes:
+			node.modulate.a = 1.0
+	for node in nodes:
+		node.modulate.a = 0.0
+	_motion = create_tween()
+	for i in nodes.size():
+		var step := _motion.tween_property(nodes[i], "modulate:a", 1.0, rise_fade).set_delay(float(i) * rise_step)
+		if i > 0:
+			step.parallel()
+		else:
+			step.set_trans(Tween.TRANS_SINE)
+
+
+## The party first; each Echo marked home in turn; the count completes; then the quiet Ase figure.
+## A lost Echo holds a beat and is named once. No minus figure, no label for a full party.
+func _build_home(home: Dictionary) -> void:
+	var started := int(home["started"])
+	var alive := int(home.get("alive", 0))
+	var lost_names: Array = []
+	var lost_v: Variant = home.get("lost", [])
+	if lost_v is Array:
+		for n in (lost_v as Array):
+			lost_names.append(str(n))
+	_echoes_chip.visible = false
+	_emotion_header.text = "Echoes"
+	_home_count.visible = true
+	_ase_total.add_theme_font_size_override("font_size", quiet_font_size)
+	_ase_total.add_theme_color_override("font_color", quiet_color)
+	var plan: Array = []
+	for row in _echo_rows():
+		var who := (row.get_node("%EchoNameLabel") as Label).text
+		var is_lost := who in lost_names
+		if is_lost:
+			lost_names.erase(who)
+		plan.append({ "row": row, "tag": row.get_node("%HomeTagLabel"), "lost": is_lost, "name": who })
+	# The sequence names each lost Echo once, so the ledger row drops its own note then.
+	if not plan.is_empty() and lost_names.is_empty():
+		for item in _stage_section.get_children():
+			if item is RewardEntryItem and (item as RewardEntryItem).cause == "echoes_alive":
+				(item as RewardEntryItem).note_label.visible = false
+	var final_count := PayoutCausePresentation.home_count(alive, started)
+	_motion_final = func() -> void:
+		for st in plan:
+			if st["lost"]:
+				_set_row_lost(st["row"], st["name"])
+			else:
+				(st["tag"] as Label).visible = true
+				(st["tag"] as Label).modulate.a = 1.0
+		_home_count.text = final_count
+		_ase_total.modulate.a = 1.0
+		_ekwan_total.modulate.a = 1.0
+	if StopMarkMotion.reduced or not is_inside_tree():
+		_motion_final.call()
+		_motion_final = Callable()
+		return
+	for st in plan:
+		(st["tag"] as Label).text = PayoutCausePresentation.HOME_TAG
+		if not st["lost"]:
+			(st["tag"] as Label).visible = true
+			(st["tag"] as Label).modulate.a = 0.0
+	_home_count.text = PayoutCausePresentation.home_count(0, started)
+	_ase_total.modulate.a = 0.0
+	_ekwan_total.modulate.a = 0.0
+	_motion = create_tween()
+	_motion.tween_interval(home_start_delay)
+	var count := 0
+	for st in plan:
+		if st["lost"]:
+			_motion.tween_callback(_set_row_lost.bind(st["row"], st["name"]))
+			_motion.tween_interval(home_lost_hold)
+		else:
+			count += 1
+			_motion.tween_callback(_mark_home.bind(st["tag"], count, started))
+			_motion.tween_interval(home_step)
+	_motion.tween_interval(home_pause)
+	_motion.tween_callback(func() -> void: _home_count.text = final_count)
+	_motion.tween_property(_ase_total, "modulate:a", 1.0, fade_quiet)
+	_motion.parallel().tween_property(_ekwan_total, "modulate:a", 1.0, fade_quiet)
+
+
+func _mark_home(tag: Label, count: int, started: int) -> void:
+	tag.modulate.a = 1.0
+	_home_count.text = PayoutCausePresentation.home_count(count, started)
+
+
+## The row names the lost Echo once, in place of the state arc.
+func _set_row_lost(row: Node, who: String) -> void:
+	for path in ["%EchoNameLabel", "%EmotionArcLabel", "%DirectionCueLabel", "%HomeTagLabel", "%KoTagLabel", "%RefusedLabel"]:
+		(row.get_node(path) as Control).visible = false
+	var line := row.get_node("%LostLineLabel") as Label
+	line.text = PayoutCausePresentation.lost_line(who)
+	line.visible = true
+
+
+## A tap or a key press skips the motion to its final state. It never consumes the input.
+func skip_motion() -> void:
+	if _motion != null and _motion.is_valid():
+		_motion.kill()
+	_motion = null
+	if _motion_final.is_valid():
+		_motion_final.call()
+	_motion_final = Callable()
+
+
+func is_motion_running() -> bool:
+	return _motion != null and _motion.is_valid() and _motion.is_running()
+
+
+func _stop_motion() -> void:
+	if _motion != null and _motion.is_valid():
+		_motion.kill()
+	_motion = null
+	_motion_final = Callable()
+
+
+func _input(event: InputEvent) -> void:
+	if is_motion_running() and ((event is InputEventMouseButton and event.pressed) \
+			or (event is InputEventKey and event.pressed) or (event is InputEventScreenTouch and event.pressed)):
+		skip_motion()
 
 
 func _key_of(data: Dictionary) -> int:

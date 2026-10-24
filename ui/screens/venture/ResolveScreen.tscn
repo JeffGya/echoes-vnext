@@ -130,79 +130,85 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 10
 
-[node name="FightStrip" type="HFlowContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
+[node name="FightHeader" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="FightStrip" type="HFlowContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 alignment = 1
 theme_override_constants/h_separation = 6
 theme_override_constants/v_separation = 6
-[node name="RankChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip"]
+[node name="RankChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChip"
-[node name="RankChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/RankChip"]
+[node name="RankChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/RankChip"]
 layout_mode = 2
 theme_override_constants/separation = 6
-[node name="RankKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/RankChip/RankChipRow"]
+[node name="RankKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/RankChip/RankChipRow"]
 layout_mode = 2
 theme_type_variation = &"PayoutChipKey"
 text = "Rank"
-[node name="RankBadge" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/RankChip/RankChipRow"]
+[node name="RankBadge" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/RankChip/RankChipRow"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChipValue"
 text = "—"
-[node name="EnemiesChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip"]
+[node name="EnemiesChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChip"
-[node name="EnemiesChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/EnemiesChip"]
+[node name="EnemiesChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/EnemiesChip"]
 layout_mode = 2
 theme_override_constants/separation = 6
-[node name="EnemiesDefeatedKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/EnemiesChip/EnemiesChipRow"]
+[node name="EnemiesDefeatedKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/EnemiesChip/EnemiesChipRow"]
 layout_mode = 2
 theme_type_variation = &"PayoutChipKey"
 text = "Enemies defeated"
-[node name="EnemiesDefeatedValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/EnemiesChip/EnemiesChipRow"]
+[node name="EnemiesDefeatedValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/EnemiesChip/EnemiesChipRow"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChipValue"
 text = "0"
-[node name="EchoesChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip"]
+[node name="EchoesChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChip"
-[node name="EchoesChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/EchoesChip"]
+[node name="EchoesChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/EchoesChip"]
 layout_mode = 2
 theme_override_constants/separation = 6
-[node name="EchoesAliveKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/EchoesChip/EchoesChipRow"]
+[node name="EchoesAliveKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/EchoesChip/EchoesChipRow"]
 layout_mode = 2
 theme_type_variation = &"PayoutChipKey"
 text = "Echoes alive"
-[node name="EchoesAliveValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/EchoesChip/EchoesChipRow"]
+[node name="EchoesAliveValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/EchoesChip/EchoesChipRow"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChipValue"
 text = "0"
-[node name="RoundsChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip"]
+[node name="RoundsChip" type="PanelContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChip"
-[node name="RoundsChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/RoundsChip"]
+[node name="RoundsChipRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/RoundsChip"]
 layout_mode = 2
 theme_override_constants/separation = 6
-[node name="RoundsKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/RoundsChip/RoundsChipRow"]
+[node name="RoundsKey" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/RoundsChip/RoundsChipRow"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChipKey"
 text = "Rounds"
-[node name="RoundsValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightStrip/RoundsChip/RoundsChipRow"]
+[node name="RoundsValue" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader/FightStrip/RoundsChip/RoundsChipRow"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"PayoutChipValue"
 text = "0"
-[node name="RankCauseLabel" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
+[node name="RankCauseLabel" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/FightHeader"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
@@ -356,10 +362,24 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="EmotionHeader" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection"]
+[node name="EmotionHeaderRow" type="HBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection"]
 layout_mode = 2
+
+[node name="EmotionHeader" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection/EmotionHeaderRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
 text = "Echo Emotion"
 theme_override_font_sizes/font_size = 14
+
+[node name="HomeCountLabel" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection/EmotionHeaderRow"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"PayoutChipValue"
+theme_override_font_sizes/font_size = 14
+text = "home"
+horizontal_alignment = 2
 
 [node name="EmotionSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection"]
 layout_mode = 2
@@ -368,6 +388,35 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 4
+
+[node name="StoryLines" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ChangeLine" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StoryLines"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 3
+
+[node name="IntelLine" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StoryLines"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 3
+
+[node name="ThreadLine" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/StoryLines"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 3
 
 [node name="EffectsRail" type="HFlowContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true

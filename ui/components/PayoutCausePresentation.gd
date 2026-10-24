@@ -71,7 +71,49 @@ static func row_note(cause: String, params: Dictionary) -> String:
 				names.append(str(n))
 	if names.is_empty():
 		return ""
-	var who := str(names[0])
-	if names.size() > 1:
-		who = "%s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[names.size() - 1]]
+	return lost_line(_join_names(names))
+
+
+## PROPOSAL placeholders for the Direction E cards (docs/stories/v2-payout-explanation/decisions.md).
+## Jeff owns the wording. Every string below is a placeholder, not approved copy.
+const HOME_TAG := "home"
+const THREAD_WHOLE := "The Thread is whole so far."
+const INTEL_LEARNED := "Something new is known about the stage."
+## One line about what the fight changed. Only for a real event in emotion_summary; first match wins.
+## [name(s), singular form, plural form] by emotion_summary tag or direction.
+const CHANGE_LINES: Array = [
+	["ko", "%s fell.", "%s fell."],
+	["refused", "%s held back.", "%s held back."],
+	["fall", "%s was shaken.", "%s were shaken."],
+]
+
+
+static func lost_line(who: String) -> String:
 	return "%s did not come home." % who
+
+
+static func home_count(alive: int, started: int) -> String:
+	return "%s %d of %d" % [HOME_TAG, alive, started]
+
+
+static func _join_names(names: Array) -> String:
+	if names.size() == 1:
+		return str(names[0])
+	return "%s and %s" % [", ".join(names.slice(0, names.size() - 1)), names[names.size() - 1]]
+
+
+## The change line for a win, or "" when emotion_summary reports no event.
+static func change_line(emotion_summary: Array) -> String:
+	for rule in CHANGE_LINES:
+		var names: Array = []
+		for entry_v in emotion_summary:
+			if not entry_v is Dictionary:
+				continue
+			var entry: Dictionary = entry_v
+			var hit: bool = str(entry.get("tag", "")) == rule[0] or \
+				(rule[0] == "fall" and str(entry.get("direction", "")) == "fall" and str(entry.get("tag", "")).is_empty())
+			if hit and not str(entry.get("name", "")).is_empty():
+				names.append(str(entry["name"]))
+		if not names.is_empty():
+			return str(rule[1] if names.size() == 1 else rule[2]) % _join_names(names)
+	return ""
