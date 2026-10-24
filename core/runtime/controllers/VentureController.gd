@@ -360,25 +360,13 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 		FlowStageExploreState._write_stage_back(flow_ctx, stage)
 		flow_ctx.request_save("stage.escaped")
 
-		# V2-ECONOMY-001: Intel-gated partial Ase award.
-		# V2-STAGE-004-P2: intel_retention keeps full revealed-count value (no penalty on withdrawal).
-		var _intel_count := ActiveStageService.count_revealed_situations(flow_ctx)
-		var _partial_ase := 0
-		if _intel_count > 0:
-			var _pf := float(ConfigService.get_rewards_cfg(config_service).get("partial_intel_reward_factor", 0.12))
-			# V2-STAGE-004-P2: intel_retention — a directive that retains intel on a failed/partial
-			# withdrawal multiplies the partial reward by its `intel_retention_bonus` (data-driven,
-			# default 1.0 = no change). Scout (retention true, bonus 1.5) keeps more of the value it
-			# gathered; Seek (false) does not. Magnitude is tunable in data.directives.
-			var _retention_mul := 1.0
-			if bool(directive.get("intel_retention", false)):
-				_retention_mul = float(directive.get("intel_retention_bonus", 1.0))
-			var _pfx := ActiveStageService.get_payout_factors(flow_ctx, config_service)
-			_partial_ase = RewardCalc.round_payout(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * float(_pfx["realm_scale"]) * float(_pfx["replay_factor"]) * _pf * _retention_mul)
-			if _partial_ase > 0:
-				econ.add_ase(_partial_ase, "return_home_intel_partial", logger, t)
-		flow_ctx.pending_scout_return_ase         = _partial_ase
-		flow_ctx.pending_scout_return_intel_count = _intel_count
+		# D-72: the partial is an advance on the stage payout; one helper shared with the retreat.
+		# The Scout `intel_retention_bonus` multiplies the 12% before what was carried is subtracted.
+		var _carry := StageSettlementService.carry_home(flow_ctx, config_service, econ,
+			StageSettlementService.retention_mul(directive), "return_home_intel_partial", logger, t)
+		flow_ctx.pending_scout_return_ase         = _carry["ase"]
+		flow_ctx.pending_scout_return_ekwan       = _carry["ekwan"]
+		flow_ctx.pending_scout_return_intel_count = _carry["intel_count"]
 
 		_emotion_consequence_service().apply_sanctum_emotion_tick(t)
 		var _outcome := FlowActionOutcome.snapshot_outcome_no_refresh(

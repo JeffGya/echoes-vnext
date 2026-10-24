@@ -492,6 +492,8 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"effective_steps":         int(explore_map.get("last_effective_steps", _step_budget_snap)),
 			"commitment_depth":        _commitment_depth(explore_map, _step_budget_snap),
 			"presentation":            ConfigService.get_stage_presentation_cfg(flow_ctx.config_service),
+			# What a return home would bank now: { ase, ekwan, overcome, total }. Read only.
+			"carry_home_preview":      _carry_preview(flow_ctx, _dir_snap),
 		},
 		"actions": actions,
 		"meta": { "t": t },
@@ -499,6 +501,12 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 
 ## Steps the last Advance could commit to; the step row crosses out the rest. A malformed value reads as the budget.
+static func _carry_preview(flow_ctx: FlowContext, directive: Dictionary) -> Dictionary:
+	var plan := StageSettlementService.carry_plan(flow_ctx, flow_ctx.config_service,
+		StageSettlementService.retention_mul(directive))
+	return { "ase": plan["ase"], "ekwan": plan["ekwan"], "overcome": plan["overcome"], "total": plan["total"] }
+
+
 static func _commitment_depth(explore_map: Dictionary, step_budget: int) -> int:
 	var v: Variant = explore_map.get("last_commitment_depth", step_budget)
 	return clampi(int(v), 0, step_budget) if (v is int or v is float) else step_budget

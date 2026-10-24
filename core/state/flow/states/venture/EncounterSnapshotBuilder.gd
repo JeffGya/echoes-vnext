@@ -408,6 +408,7 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var retreat_affordable:  bool   = false
 	var retreat_tier_label:  String = ""
 	var retreat_success_pct: int    = 0
+	var carry_retreat: Dictionary = { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0 }
 
 	match round_phase:
 		"pre_combat":
@@ -425,6 +426,9 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 				var bdata_r: Dictionary = bal_r.get("data", {})
 				combat_cfg_r = bdata_r.get("combat", {})
 			retreat_ase_cost = RetreatService.get_ase_cost(flow_ctx.config_service)
+			var _carry := StageSettlementService.carry_plan(flow_ctx, flow_ctx.config_service)
+			for _k in carry_retreat:
+				carry_retreat[_k] = _carry[_k]
 			retreat_affordable = int(flow_ctx.save_data.get("economy", {}).get("ase", 0)) >= retreat_ase_cost
 			var tier_cfg_r: Array = combat_cfg_r.get("retreat_agi_tiers", [])
 			var tier_r: Dictionary = RetreatService.get_chance_tier(raw_actors_for_retreat, tier_cfg_r)
@@ -474,6 +478,8 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"retreat_affordable":      retreat_affordable,
 			"retreat_tier_label":      retreat_tier_label,
 			"retreat_success_pct":     retreat_success_pct,
+			# What a successful retreat would bank now: { ase, ekwan, overcome, total }. Read only.
+			"carry_retreat_preview":   carry_retreat,
 			# V2-STAGE-002: remaining required objectives (informational during combat).
 			"objectives_remaining":    EncounterSnapshotBuilder._count_remaining_required_objectives(flow_ctx),
 			# V2-STAGE-004 P3a: irregular terrain dict for CombatBoardScreen tilemap.
