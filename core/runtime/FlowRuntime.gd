@@ -744,6 +744,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 	if str(out.get("type", "")) == FlowStateIds.RESOLVE \
 			and str((out.get("data", {}) as Dictionary).get("run_type", "")) == "scout_return":
 		flow_ctx.pending_scout_return_ase         = 0
+		flow_ctx.pending_scout_return_ekwan       = 0
 		flow_ctx.pending_scout_return_intel_count = 0
 
 	# V2-INFRA-003 Phase 3 (slice C): consume _bark_line here, exactly once, AFTER the snapshot
@@ -1205,17 +1206,12 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	})
 
 	if success:
-		# V2-ECONOMY-001: Intel-gated partial Ase award before clearing encounter context.
-		var _intel_count := ActiveStageService.count_revealed_situations(flow_ctx)
-		var _partial_ase := 0
-		if _intel_count > 0:
-			var _pf := float(ConfigService.get_rewards_cfg(config_service).get("partial_intel_reward_factor", 0.12))
-			var _pfx := ActiveStageService.get_payout_factors(flow_ctx, config_service)
-			_partial_ase = RewardCalc.round_payout(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service, logger, t)) * float(_pfx["realm_scale"]) * float(_pfx["replay_factor"]) * _pf)
-			if _partial_ase > 0:
-				econ.add_ase(_partial_ase, "retreat_intel_partial", logger, t)
-		flow_ctx.pending_scout_return_ase         = _partial_ase
-		flow_ctx.pending_scout_return_intel_count = _intel_count
+		# D-72: the partial is an advance on the stage payout; one helper shared with return home.
+		var _carry := StageSettlementService.carry_home(flow_ctx, config_service, econ, 1.0,
+			"retreat_intel_partial", logger, t)
+		flow_ctx.pending_scout_return_ase         = _carry["ase"]
+		flow_ctx.pending_scout_return_ekwan       = _carry["ekwan"]
+		flow_ctx.pending_scout_return_intel_count = _carry["intel_count"]
 
 		# Clear encounter context — no emotion drift on retreat.
 		# FIX (P4 review bug 2): retreat-success also skipped ally-field teardown — clear
@@ -1271,6 +1267,7 @@ func _resolve_forced_retreat(t: int) -> void:
 	flow_ctx.encounter_machine = null
 	flow_ctx.bond_outcome      = {}
 	flow_ctx.pending_scout_return_ase         = 0
+	flow_ctx.pending_scout_return_ekwan       = 0
 	flow_ctx.pending_scout_return_intel_count = 0
 	_mark_save_requested("combat.no_progress_forced_retreat")
 

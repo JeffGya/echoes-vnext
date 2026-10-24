@@ -41,6 +41,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("sanctum.summon/snapshot_price_flat_at_ceiling", Callable(SanctumSummonTests, "_t_price_flat"))
 	runner.register_test("sanctum.summon/grade_options_carry_next_and_after", Callable(SanctumSummonTests, "_t_grade_options_prices"))
 	runner.register_test("sanctum.summon/all_skills_cost_60", Callable(SanctumSummonTests, "_t_skills_cost_60"))
+	runner.register_test("sanctum.summon/grade_options_carry_enabled", Callable(SanctumSummonTests, "_t_options_enabled"))
+	runner.register_test("sanctum.summon/grade_select_locked_refused", Callable(SanctumSummonTests, "_t_select_locked"))
+	runner.register_test("sanctum.summon/summon_locked_grade_refused", Callable(SanctumSummonTests, "_t_summon_locked"))
+	runner.register_test("sanctum.summon/unlocked_called_summons_at_called_price", Callable(SanctumSummonTests, "_t_unlocked_called"))
+	runner.register_test("sanctum.summon/grade_enabled_missing_key_rule", Callable(SanctumSummonTests, "_t_enabled_missing_key"))
 	runner.register_test("sanctum.summon/legacy_price_config_removed", Callable(SanctumSummonTests, "_t_legacy_config_removed"))
 
 # -------------------------
@@ -318,6 +323,7 @@ static func _t_called_grade_spends_150() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 
+	_unlock_all(env)
 	var runtime: FlowRuntime = env["runtime"]
 	var save_ref: Dictionary = runtime.get_save_data()
 
@@ -346,6 +352,7 @@ static func _t_denied_when_balance_insufficient_for_grade() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 
+	_unlock_all(env)
 	var runtime: FlowRuntime = env["runtime"]
 	var save_ref: Dictionary = runtime.get_save_data()
 
@@ -375,6 +382,7 @@ static func _t_summon_disabled_true_when_insufficient() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 
+	_unlock_all(env)
 	var runtime: FlowRuntime = env["runtime"]
 	var save_ref: Dictionary = runtime.get_save_data()
 
@@ -413,6 +421,7 @@ static func _t_summon_disabled_false_when_sufficient() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 
+	_unlock_all(env)
 	var runtime: FlowRuntime = env["runtime"]
 	var save_ref: Dictionary = runtime.get_save_data()
 
@@ -591,6 +600,7 @@ static func _t_grade_options_prices() -> Dictionary:
 	var env := _summon_env(3, 1000)
 	if not bool(env.get("ok", false)):
 		return env
+	_unlock_all(env)
 	var runtime: FlowRuntime = env["runtime"]
 	var snap: Dictionary = runtime.dispatch({ "type": "sanctum.grade_select", "grade": "called" })
 	var d: Dictionary = snap.get("data", {}) as Dictionary
@@ -602,6 +612,94 @@ static func _t_grade_options_prices() -> Dictionary:
 			return { "ok": false, "error": "%s: expected %s, got %s/%s" % [opt["key"], str(w), str(opt["ase_cost"]), str(opt["ase_cost_after"])] }
 	if (d.get("batch_prices", []) as Array).slice(0, 2) != [160, 175]:
 		return { "ok": false, "error": "batch_prices must follow the selected grade (called)" }
+	return { "ok": true }
+
+# -------------------------
+# Phase 5.5b: the grade lock lives in the core
+# -------------------------
+
+static func _option_enabled(d: Dictionary) -> Dictionary:
+	var out := {}
+	for opt_v: Variant in d.get("summon_grade_options", []):
+		var opt: Dictionary = opt_v
+		out[str(opt["key"])] = opt.get("enabled", null)
+	return out
+
+static func _t_options_enabled() -> Dictionary:
+	var env := _summon_env(3, 1000)
+	if not bool(env.get("ok", false)):
+		return env
+	var got := _option_enabled(_summon_data(env["runtime"]))
+	if got != { "uncalled": true, "called": false, "chosen": false }:
+		return { "ok": false, "error": "enabled flags wrong: %s" % str(got) }
+	return { "ok": true }
+
+static func _t_select_locked() -> Dictionary:
+	var env := _summon_env(3, 1000)
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	for grade in ["called", "chosen"]:
+		var snap: Dictionary = runtime.dispatch({ "type": "sanctum.grade_select", "grade": grade })
+		var d: Dictionary = snap.get("data", {}) as Dictionary
+		var den: Dictionary = d.get("summon_denied", {}) as Dictionary
+		if str(den.get("reason", "")) != "grade_locked" or str(den.get("grade", "")) != grade:
+			return { "ok": false, "error": "%s: expected grade_locked denial, got %s" % [grade, str(den)] }
+		if str(d.get("selected_grade", "")) != "uncalled":
+			return { "ok": false, "error": "%s: selected grade must stay uncalled" % grade }
+	return { "ok": true }
+
+static func _t_summon_locked() -> Dictionary:
+	var env := _summon_env(3, 1000)
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	# Select called while open, then lock it: the summon itself must refuse.
+	_unlock_all(env)
+	runtime.dispatch({ "type": "sanctum.grade_select", "grade": "called" })
+	_set_grade_enabled(env, { "uncalled": true, "called": false, "chosen": false })
+	var before := int(EconomyService.new(runtime.get_save_data()).get_ase())
+	var roster_before := SummonService.living_count(runtime.get_save_data())
+	var snap: Dictionary = runtime.dispatch({ "type": "sanctum.summon", "count": 1, "now_unix": 555999 })
+	var den: Dictionary = (snap.get("data", {}) as Dictionary).get("summon_denied", {}) as Dictionary
+	if str(den.get("reason", "")) != "grade_locked" or str(den.get("grade", "")) != "called":
+		return { "ok": false, "error": "expected grade_locked denial, got %s" % str(den) }
+	if int(EconomyService.new(runtime.get_save_data()).get_ase()) != before:
+		return { "ok": false, "error": "a locked summon must not spend Ase" }
+	if SummonService.living_count(runtime.get_save_data()) != roster_before:
+		return { "ok": false, "error": "a locked summon must not add an Echo" }
+	if not ((snap.get("data", {}) as Dictionary).get("pending_summon_reveals", []) as Array).is_empty():
+		return { "ok": false, "error": "a locked summon must not queue a reveal" }
+	return { "ok": true }
+
+static func _t_unlocked_called() -> Dictionary:
+	var env := _summon_env(3, 1000)
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	_unlock_all(env)
+	var snap: Dictionary = runtime.dispatch({ "type": "sanctum.grade_select", "grade": "called" })
+	if _option_enabled(snap.get("data", {}) as Dictionary).get("called", false) != true:
+		return { "ok": false, "error": "called must show enabled=true after the flip" }
+	var before := int(EconomyService.new(runtime.get_save_data()).get_ase())
+	runtime.dispatch({ "type": "sanctum.summon", "count": 1, "now_unix": 555555 })
+	var spent := before - int(EconomyService.new(runtime.get_save_data()).get_ase())
+	if spent != 160:
+		return { "ok": false, "error": "called at echo 4 must cost 160, spent %d" % spent }
+	return { "ok": true }
+
+static func _t_enabled_missing_key() -> Dictionary:
+	var cases := [
+		[{}, "uncalled", true], [{}, "called", false], [{}, "chosen", false],
+		[{ "grade_enabled": {} }, "uncalled", true], [{ "grade_enabled": {} }, "called", false],
+		[{ "grade_enabled": { "uncalled": false } }, "uncalled", false],
+		[{ "grade_enabled": { "called": true } }, "called", true],
+		[{ "grade_enabled": { "called": true } }, "chosen", false],
+		[{ "grade_enabled": { "uncalled": true } }, "mythic", false],
+	]
+	for c: Array in cases:
+		if SummonService.grade_enabled(c[0], c[1]) != c[2]:
+			return { "ok": false, "error": "grade_enabled(%s, %s) expected %s" % [str(c[0]), c[1], str(c[2])] }
 	return { "ok": true }
 
 static func _t_skills_cost_60() -> Dictionary:
@@ -661,6 +759,18 @@ static func _fingerprint(e: Dictionary) -> String:
 		int(stats.get("cha", 0)),
 	]
 
+## Test-only: write data.summoning.grade_enabled into the config the runtime reads.
+static func _set_grade_enabled(env: Dictionary, table: Variant) -> void:
+	var config: ConfigService = env["config"]
+	var summ: Dictionary = ((config._balance["data"] as Dictionary)["summoning"]) as Dictionary
+	if table == null:
+		summ.erase("grade_enabled")
+	else:
+		summ["grade_enabled"] = table
+
+static func _unlock_all(env: Dictionary) -> void:
+	_set_grade_enabled(env, { "uncalled": true, "called": true, "chosen": true })
+
 static func _make_runtime_env() -> Dictionary:
 	# Creates a FlowRuntime wired like AppRoot, but with logging off.
 	# Returns { ok=true, runtime=FlowRuntime } or { ok=false, error=... }.
@@ -687,4 +797,4 @@ static func _make_runtime_env() -> Dictionary:
 	if not runtime.has_method("get_save_data"):
 		return {"ok": false, "error": "FlowRuntime.get_save_data() missing"}
 
-	return {"ok": true, "runtime": runtime}
+	return {"ok": true, "runtime": runtime, "config": config}

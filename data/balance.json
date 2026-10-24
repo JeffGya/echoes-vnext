@@ -118,6 +118,7 @@
 			"village_ceiling": 14,
 			"called_extra": 90,
 			"chosen_extra": 340,
+			"grade_enabled": { "uncalled": true, "called": false, "chosen": false },
 			"trait_min": 30.0,
 			"trait_max": 70.0,
 			"calling_weights": {
