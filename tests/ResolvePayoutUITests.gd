@@ -15,7 +15,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/stage_end_card_group_total_and_ekwan_line", Callable(ResolvePayoutUITests, "_t_stage_end"))
 	runner.register_test("payout_ui/mid_stage_card_has_no_stage_group_or_ekwan", Callable(ResolvePayoutUITests, "_t_mid_stage"))
 	runner.register_test("payout_ui/defeat_consolation_rows_net_into_one", Callable(ResolvePayoutUITests, "_t_consolation_net"))
-	runner.register_test("payout_ui/replay_absent_and_bonus_missed_zero_row", Callable(ResolvePayoutUITests, "_t_replay_and_bonus"))
+	runner.register_test("payout_ui/replay_absent_and_zero_echoes_row", Callable(ResolvePayoutUITests, "_t_replay_and_bonus"))
 	runner.register_test("payout_ui/zero_rows_show_muted_with_button", Callable(ResolvePayoutUITests, "_t_zero_rows"))
 	runner.register_test("payout_ui/cause_rows_have_48_button_others_none", Callable(ResolvePayoutUITests, "_t_buttons"))
 	runner.register_test("payout_ui/tooltip_text_matches_approved_wording", Callable(ResolvePayoutUITests, "_t_wording"))
@@ -97,18 +97,16 @@ static func _t_fight_card() -> Dictionary:
 	var m := _mount()
 	var screen: ResolveScreen = m[1]
 	var rows := [
-		_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 }),
-		_row("3 echoes survived", 11, "echoes_alive", { "count": 3 }),
-		_row("Pace bonus", 0, "bonus_missed"),
-		_row("Redo penalty", -3, "replay", { "factor": 0.9 }),
+		_row("Carried", 11, "partial_return_home"),
+		_row("Redo penalty", -3, "replay", { "factor": 0.35 }),
 	]
-	screen.set_snapshot(_snap(rows, { "ledger_seen": true }))
+	screen.set_snapshot(_snap(rows, { "ledger_seen": true }, false))
 	var shown := _rows_in(screen, "%BreakdownSection")
-	if shown.size() != 4:
-		return _fail(m, "expected 4 fight rows, got %d" % shown.size())
-	if _names(shown) != ["2 enemies defeated", "3 echoes survived", "Bonus", "Replay"]:
+	if shown.size() != 2:
+		return _fail(m, "expected 2 fight rows, got %d" % shown.size())
+	if _names(shown) != ["Carried home", "Replay"]:
 		return _fail(m, "row names %s" % str(_names(shown)))
-	if _label(screen, "%AseTotalLabel").text != "+15 Ase" or _label(screen, "%TotalValue").text != "= 15 Ase":
+	if _label(screen, "%AseTotalLabel").text != "+8 Ase" or _label(screen, "%TotalValue").text != "= 8 Ase":
 		return _fail(m, "totals %s / %s" % [_label(screen, "%AseTotalLabel").text, _label(screen, "%TotalValue").text])
 	if screen.get_node("%StageGroup").visible:
 		return _fail(m, "stage group visible on a fight card")
@@ -121,14 +119,21 @@ static func _t_stage_end() -> Dictionary:
 	var stage := [
 		_row("Base objectives", 40, "objectives_overcome", { "overcome": 2, "total": 3 }),
 		_row("Redo penalty", -4, "replay", { "factor": 0.9 }),
-		_row("Realm virtue", 9, "realm_virtue"),
+		_row("Echoes home", 6, "echoes_alive", { "alive": 2, "started": 3, "lost": ["Kofi"], "cap": 10, "replay": false }),
+		_row("Carried home", -12, "carried_advance", { "carried_ase": 12, "carried_ekwan": 2 }),
 	]
-	var fight := [_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })]
-	screen.set_snapshot(_snap(fight, {
-		"ledger_seen": true, "stage_payout_rows": stage, "stage_payout_ase": 45, "stage_payout_ekwan": 6 }))
-	if _rows_in(screen, "%StageSection").size() != 3 or not screen.get_node("%StageGroup").visible:
-		return _fail(m, "stage group does not show the 3 stage rows")
-	if _label(screen, "%TotalValue").text != "= 52 Ase" or _label(screen, "%AseTotalLabel").text != "+52 Ase":
+	screen.set_snapshot(_snap([], {
+		"ledger_seen": true, "stage_payout_rows": stage, "stage_payout_ase": 30, "stage_payout_ekwan": 6 }))
+	var stage_rows := _rows_in(screen, "%StageSection")
+	if stage_rows.size() != 4 or not screen.get_node("%StageGroup").visible:
+		return _fail(m, "stage group does not show the 4 stage rows")
+	if (stage_rows[2] as RewardEntryItem).note_label.text != "Kofi did not come home." \
+			or not (stage_rows[2] as RewardEntryItem).note_label.visible:
+		return _fail(m, "lost-name note missing: %s" % (stage_rows[2] as RewardEntryItem).note_label.text)
+	var carried: RewardEntryItem = stage_rows[3]
+	if carried.delta_label.text != "\u221212 Ase" or carried.entry_label.text != "Carried home":
+		return _fail(m, "carried row is %s / %s" % [carried.entry_label.text, carried.delta_label.text])
+	if _label(screen, "%TotalValue").text != "= 30 Ase" or _label(screen, "%AseTotalLabel").text != "+30 Ase":
 		return _fail(m, "total is not ase_awarded + stage_payout_ase")
 	var line := screen.get_node("%EkwanLine") as Control
 	if not line.visible or _label(screen, "%EkwanLineValue").text != "+6 Ekwan":
@@ -146,13 +151,20 @@ static func _t_stage_end() -> Dictionary:
 static func _t_mid_stage() -> Dictionary:
 	var m := _mount()
 	var screen: ResolveScreen = m[1]
-	screen.set_snapshot(_snap([_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })],
-		{ "ledger_seen": true }))
+	var sent: Array = []
+	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
+	# A fight win pays nothing and has no rows: no earnings line, no ledger, no mark_seen.
+	screen.set_snapshot(_snap([], { "ledger_seen": false }))
+	if (screen.get_node("%EarningsSummary") as Control).visible or (screen.get_node("%Ledger") as Control).visible \
+			or not sent.is_empty():
+		return _fail(m, "a rowless win shows earnings or emitted (%d)" % sent.size())
+	if not (screen.get_node("%EchoesChip") as Control).visible or _label(screen, "%EchoesAliveValue").text != "3":
+		return _fail(m, "the echoes chip is missing on a rowless win")
 	if screen.get_node("%StageGroup").visible or screen.get_node("%EkwanLine").visible \
 			or screen.get_node("%EkwanTotalLabel").visible or screen.get_node("%FightGroupHeader").visible:
 		return _fail(m, "stage group, Ekwan or group header visible on a mid-stage card")
 	# A stage card whose Ekwan is 0 shows no Ekwan either.
-	screen.set_snapshot(_snap([_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })], {
+	screen.set_snapshot(_snap([], {
 		"ledger_seen": true, "stage_payout_ase": 5, "stage_payout_ekwan": 0,
 		"stage_payout_rows": [_row("Base objectives", 5, "objectives_overcome", { "overcome": 1, "total": 2 })] }))
 	if screen.get_node("%EkwanLine").visible or screen.get_node("%EkwanTotalLabel").visible:
@@ -181,19 +193,22 @@ static func _t_consolation_net() -> Dictionary:
 static func _t_replay_and_bonus() -> Dictionary:
 	var m := _mount()
 	var screen: ResolveScreen = m[1]
-	screen.set_snapshot(_snap([
-		_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 }),
-		_row("Pace bonus", 0, "bonus_missed"),
-	], { "ledger_seen": true }))
-	var shown := _rows_in(screen, "%BreakdownSection")
+	var stage := [
+		_row("Base objectives", 7, "objectives_overcome", { "overcome": 1, "total": 2 }),
+		_row("Echoes home", 0, "echoes_alive", { "alive": 0, "started": 2, "lost": ["Ama", "Kofi"], "cap": 10 }),
+	]
+	screen.set_snapshot(_snap([], { "ledger_seen": true, "stage_payout_rows": stage, "stage_payout_ase": 7 }))
+	var shown := _rows_in(screen, "%StageSection")
 	if "Replay" in _names(shown):
 		return _fail(m, "Replay row present without a replay cause")
-	var bonus: RewardEntryItem = shown[1]
-	if bonus.entry_label.text != "Bonus" or bonus.delta_label.text != "+0 Ase" or not bonus.cause_button.visible:
-		return _fail(m, "bonus row %s %s" % [bonus.entry_label.text, bonus.delta_label.text])
-	if not bonus.delta_label.get_theme_color("font_color").is_equal_approx(bonus.color_zero) \
-			or not bonus.entry_label.get_theme_color("font_color").is_equal_approx(bonus.color_zero):
-		return _fail(m, "zero bonus row is not muted")
+	var home: RewardEntryItem = shown[1]
+	if home.entry_label.text != "Echoes home" or home.delta_label.text != "+0 Ase" or not home.cause_button.visible:
+		return _fail(m, "echoes row %s %s" % [home.entry_label.text, home.delta_label.text])
+	if home.note_label.text != "Ama and Kofi did not come home.":
+		return _fail(m, "lost names note: %s" % home.note_label.text)
+	if not home.delta_label.get_theme_color("font_color").is_equal_approx(home.color_zero) \
+			or not home.entry_label.get_theme_color("font_color").is_equal_approx(home.color_zero):
+		return _fail(m, "zero echoes row is not muted")
 	return _pass(m)
 
 
@@ -220,8 +235,8 @@ static func _t_buttons() -> Dictionary:
 	var screen: ResolveScreen = m[1]
 	screen.set_snapshot(_snap([
 		_row("Found", 4, ""),
-		_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 }),
-		_row("Realm virtue", 3, "realm_virtue"),
+		_row("Carried", 7, "partial_return_home"),
+		_row("Redo penalty", -3, "replay", { "factor": 0.35 }),
 	], { "ledger_seen": true }))
 	for row in _rows_in(screen, "%BreakdownSection"):
 		var r: RewardEntryItem = row
@@ -239,11 +254,8 @@ static func _t_buttons() -> Dictionary:
 ## The approved wording, written out here on purpose: a changed sentence must fail this test.
 static func _t_wording() -> Dictionary:
 	var want := {
-		"enemies_defeated": "Each enemy the party defeats earns Ase.",
-		"echoes_alive": "Each Echo still standing when the fight ends earns Ase.",
-		"bonus_missed": "The party was not quick enough to earn a bonus.",
-		"bonus_earned": "The party was quick enough to earn a bonus.",
-		"realm_virtue": "The realm rewards the virtue the party showed here.",
+		"echoes_alive": "Each Echo that comes home earns Ase.",
+		"carried_advance": "Ase and Ekwan the party carried home earlier are taken off the stage payout, so nothing is earned twice.",
 		"defeat_consolation": "The party lost, but the fight still earns a small part.",
 		"partial_retreat": "The party left early. It keeps a small part of what it overcame.",
 		"partial_return_home": "The party left early. It keeps a small part of what it overcame.",
@@ -262,15 +274,20 @@ static func _t_wording() -> Dictionary:
 	var objectives := PayoutCausePresentation.tooltip("objectives_overcome", { "overcome": 4, "total": 7 })
 	if objectives != "Only objectives the party found and overcame earn Ase. 4 of 7 so far.":
 		return { "ok": false, "error": "objectives: \"%s\"" % objectives }
-	var names := { "bonus_earned": "Bonus", "bonus_missed": "Bonus", "replay": "Replay",
-		"defeat_consolation": "Consolation", "partial_retreat": "Carried home",
+	var names := { "replay": "Replay", "defeat_consolation": "Consolation", "partial_retreat": "Carried home",
 		"partial_return_home": "Carried home", "objectives_overcome": "Objectives overcome",
-		"realm_virtue": "Realm virtue" }
+		"echoes_alive": "Echoes home", "carried_advance": "Carried home" }
 	for cause in names:
 		if PayoutCausePresentation.row_name(cause, "x") != names[cause]:
 			return { "ok": false, "error": "row name of %s" % cause }
-	if PayoutCausePresentation.row_name("enemies_defeated", "9 enemies defeated") != "9 enemies defeated":
-		return { "ok": false, "error": "fight rows must keep their backend label" }
+	# Removed causes: no entry, so a stray row keeps its backend label and shows no (i).
+	for cause in ["enemies_defeated", "realm_virtue", "bonus_earned", "bonus_missed"]:
+		if PayoutCausePresentation.has_cause(cause) or PayoutCausePresentation.row_name(cause, "Label") != "Label":
+			return { "ok": false, "error": "%s still has an entry" % cause }
+	if PayoutCausePresentation.row_note("echoes_alive", { "lost": ["Ama", "Kofi", "Esi"] }) != "Ama, Kofi and Esi did not come home.":
+		return { "ok": false, "error": "three lost names note" }
+	if PayoutCausePresentation.row_note("echoes_alive", { "lost": [] }) != "":
+		return { "ok": false, "error": "a note shows with no lost Echo" }
 	return { "ok": true }
 
 
@@ -278,14 +295,14 @@ static func _t_tooltip_rules() -> Dictionary:
 	var m := _mount()
 	var screen: ResolveScreen = m[1]
 	screen.set_snapshot(_snap([
-		_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 }),
+		_row("Carried", 7, "partial_return_home"),
 		_row("Realm virtue", 3, "realm_virtue"),
 	], { "ledger_seen": true }))
 	var tip := screen.get_node("%CauseTooltip") as CauseTooltip
 	var first: RewardEntryItem = _rows_in(screen, "%BreakdownSection")[0]
 	var button := first.cause_button
 	button.mouse_entered.emit()
-	if not tip.is_open() or tip.is_pinned() or (tip.get_node("%TitleLabel") as Label).text != "2 enemies defeated":
+	if not tip.is_open() or tip.is_pinned() or (tip.get_node("%TitleLabel") as Label).text != "Carried home":
 		return _fail(m, "hover did not open an unpinned tooltip with the row name")
 	button.mouse_exited.emit()
 	if tip.is_open():
@@ -321,7 +338,7 @@ static func _t_tooltip_rules() -> Dictionary:
 static func _t_tap_outside() -> Dictionary:
 	var m := _mount()
 	var screen: ResolveScreen = m[1]
-	screen.set_snapshot(_snap([_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })], { "ledger_seen": true }))
+	screen.set_snapshot(_snap([_row("Carried", 7, "partial_return_home")], { "ledger_seen": true }))
 	var tip := screen.get_node("%CauseTooltip") as CauseTooltip
 	var button: Button = (_rows_in(screen, "%BreakdownSection")[0] as RewardEntryItem).cause_button
 	button.global_position = Vector2(600, 300)
@@ -346,8 +363,8 @@ static func _t_two_results() -> Dictionary:
 	var screen: ResolveScreen = m[1]
 	var sent: Array = []
 	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
-	var first := [_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })]
-	var second := [_row("4 enemies defeated", 9, "enemies_defeated", { "count": 4 })]
+	var first := [_row("Carried", 7, "partial_return_home")]
+	var second := [_row("Carried", 9, "partial_return_home")]
 	screen.set_snapshot(_snap(first, { "ledger_seen": false }))
 	screen.set_snapshot(_snap(first, { "ledger_seen": true }))
 	if sent.size() != 1 or not screen.get_node("%Ledger").visible:
@@ -367,7 +384,7 @@ static func _t_first_time_open() -> Dictionary:
 	var screen: ResolveScreen = m[1]
 	var sent: Array = []
 	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
-	var rows := [_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })]
+	var rows := [_row("Carried", 7, "partial_return_home")]
 	screen.set_snapshot(_snap(rows, { "ledger_seen": false }))
 	if not screen.get_node("%Ledger").visible:
 		return _fail(m, "ledger closed on an unseen result")
@@ -390,7 +407,7 @@ static func _t_seen_or_absent() -> Dictionary:
 	var screen: ResolveScreen = m[1]
 	var sent: Array = []
 	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
-	var rows := [_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })]
+	var rows := [_row("Carried", 7, "partial_return_home")]
 	screen.set_snapshot(_snap(rows, { "ledger_seen": true }))
 	var seen_open: bool = screen.get_node("%Ledger").visible
 	var m2 := _mount()
@@ -420,8 +437,8 @@ static func _t_any_subset() -> Dictionary:
 		return _fail(m, "stage-only card header or total wrong")
 	screen.set_snapshot(_snap([], { "ledger_seen": false, "ase_awarded": 0 }))
 	var summary := screen.get_node("%EarningsSummary") as Button
-	if not summary.visible or not summary.disabled or screen.get_node("%Ledger").visible:
-		return _fail(m, "an empty card must show a disabled summary and no ledger")
+	if summary.visible or screen.get_node("%Ledger").visible:
+		return _fail(m, "an empty card must show no earnings line and no ledger")
 	return _pass(m)
 
 
@@ -458,7 +475,7 @@ static func _t_other_cards() -> Dictionary:
 	if (screen.get_node("%EarningsSummary") as Button).visible or not (screen.get_node("%RankChip") as Control).visible \
 			or (screen.get_node("%EnemiesChip") as Control).visible:
 		return _fail(m, "situation card shows wrong chips")
-	screen.set_snapshot(_snap([_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })], { "ledger_seen": true }))
+	screen.set_snapshot(_snap([_row("Carried", 7, "partial_return_home")], { "ledger_seen": true }))
 	if not (screen.get_node("%EnemiesChip") as Control).visible or _label(screen, "%EnemiesDefeatedValue").text != "2" \
 			or _label(screen, "%EchoesAliveValue").text != "3" or _label(screen, "%RoundsValue").text != "5" \
 			or _label(screen, "%RankBadge").text != "B":
@@ -469,7 +486,7 @@ static func _t_other_cards() -> Dictionary:
 static func _t_rail_chips() -> Dictionary:
 	var m := _mount()
 	var screen: ResolveScreen = m[1]
-	screen.set_snapshot(_snap([_row("2 enemies defeated", 7, "enemies_defeated", { "count": 2 })], {
+	screen.set_snapshot(_snap([_row("Carried", 7, "partial_return_home")], {
 		"ledger_seen": true, "ekwan_awarded": 5, "effects": [{ "kind": "item", "label": "Gourd", "tone": "good" }] }))
 	var rail := screen.get_node("%EffectsRail")
 	var texts: Array = []

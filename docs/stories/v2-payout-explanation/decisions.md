@@ -75,3 +75,14 @@ Stage Replay tooltip (DECIDED, Jeff): "The party has been here before. The whole
 5. Rank rule (backend D-69): any death caps the rank at A; S needs everyone home. The mockup shows "rank B with one Echo lost" as an example only. It is invented. Do not build it as fact.
 
 Open for the UI: the return and retreat confirmation can say what is banked now and that the rest is paid when the stage is finished (PROPOSAL wording needed from Jeff; use "earned", not "paid", in player text).
+
+## Ledger update to the final backend row set (UI, 2026-10-24)
+
+- Removed from the UI table: `enemies_defeated`, `realm_virtue`, `bonus_earned`, `bonus_missed`, and the fight-level `echoes_alive`. A stray row with one of these shows its backend label and no (i).
+- A fight win has no rows: the card shows no earnings line, no ledger and sends no `resolve.ledger.mark_seen`.
+- Stage rows added: `echoes_alive` (row name "Echoes home", lost names in a second line) and `carried_advance` (row name "Carried home", negative amount).
+- PROPOSAL placeholders, not approved copy (Jeff owns the wording; a later ux-copy pass):
+  - `echoes_alive` tooltip: "Each Echo that comes home earns Ase."
+  - `carried_advance` tooltip: "Ase and Ekwan the party carried home earlier are taken off the stage payout, so nothing is earned twice."
+  - lost-names note: "Kofi did not come home." / "Ama and Kofi did not come home." / "Ama, Kofi and Esi did not come home."
+- All copy stays in `ui/components/PayoutCausePresentation.gd`.

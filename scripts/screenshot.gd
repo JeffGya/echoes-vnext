@@ -101,12 +101,13 @@ func _fixtures() -> Dictionary:
 			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_changed_rank": false })],
 		"resolve_no_pace_win": [_combat(8, endure), _resolve(true, "endured", 8, "B", {})],
 		"resolve_pace_defeat": [_combat(7, recover), _resolve(false, "all_echoes_dead", 7, "F", {})],
-		"resolve_ledger_closed": [_combat(6, recover), _payout_fight(true, true)],
-		"resolve_ledger_open_fight": [_combat(6, recover), _payout_fight(true, false)],
-		"resolve_stage_end": [_combat(6, recover), _payout_stage_end()],
+		"resolve_ledger_closed": [_combat(6, recover), _payout_stage_end(true)],
+		"resolve_ledger_open_fight": [_combat(6, recover), _payout_repeat_defeat()],
+		"resolve_stage_end": [_combat(6, recover), _payout_stage_end(false)],
+		"resolve_midstage_win_no_rows": [_combat(6, recover), _payout_midstage_win()],
 		"resolve_defeat_consolation": [_combat(7, recover), _payout_defeat()],
 		"resolve_retreat_zero": [_combat(7, recover), _payout_retreat_zero()],
-		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(), "focus_cause:3"],
+		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(false), "focus_cause:2"],
 	}
 
 
@@ -240,30 +241,31 @@ func _payout_snap(data: Dictionary) -> Dictionary:
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
 
 
-func _payout_fight(pace_missed: bool, seen: bool) -> Dictionary:
-	var rows := [
-		_row("3 enemies defeated", 30, "enemies_defeated", { "count": 3 }),
-		_row("3 echoes survived", 24, "echoes_alive", { "count": 3 }),
-		_row("Pace bonus", 0, "bonus_missed") if pace_missed else _row("Pace bonus", 6, "bonus_earned"),
-		_row("Redo penalty", -5, "replay", { "factor": 0.9 }),
-	]
-	var data := _payout_data(true, "relic_secured", "A", rows, seen)
+## A mid-stage win pays nothing and has no rows.
+func _payout_midstage_win() -> Dictionary:
+	var data := _payout_data(true, "relic_secured", "A", [], true)
 	data["pace_state"] = "partial"
 	return _payout_snap(data)
 
 
-func _payout_stage_end() -> Dictionary:
-	var snap := _payout_fight(true, false)
+func _payout_stage_end(seen: bool) -> Dictionary:
+	var snap := _payout_midstage_win()
 	var stage_rows := [
-		_row("Base objectives", 90, "objectives_overcome", { "overcome": 2, "total": 3 }),
-		_row("Redo penalty", -9, "replay", { "factor": 0.9 }),
-		_row("Realm virtue", 20, "realm_virtue"),
+		_row("Base objectives", 90, "objectives_overcome", { "overcome": 2, "total": 3, "realm_scale": 1.0 }),
+		_row("Redo penalty", -58, "replay", { "factor": 0.35 }),
+		_row("Echoes home", 4, "echoes_alive", { "alive": 2, "started": 3, "lost": ["Kofi"], "cap": 10, "replay": true }),
+		_row("Carried home", -20, "carried_advance", { "carried_ase": 20, "carried_ekwan": 3 }),
 	]
+	snap["data"]["ledger_seen"] = seen
 	snap["data"]["stage_payout_rows"] = stage_rows
-	snap["data"]["stage_payout_ase"] = 101
-	snap["data"]["stage_payout_ekwan"] = 12
+	snap["data"]["stage_payout_ase"] = 16
+	snap["data"]["stage_payout_ekwan"] = 4
 	snap["actions"]["cta.next_stage"] = { "type": "flow.complete_stage", "slot": "cta.next_stage", "label": "Complete Stage" }
 	return snap
+
+
+func _payout_repeat_defeat() -> Dictionary:
+	return _payout_snap(_payout_data(false, "all_echoes_dead", "F", [_row("Repeat defeat", 0, "repeat_defeat")], false))
 
 
 func _payout_defeat() -> Dictionary:

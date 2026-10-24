@@ -1,8 +1,8 @@
 extends RefCounted
 class_name PaceUITests
 
-## Pace bonus screens (docs/stories/pace-reward/design.md §6): the pace colour on the combat
-## board and the result screen, the "Pace bonus" row at 0 Ase, and the rank-cause note.
+## Pace screens (docs/stories/pace-reward/design.md §6): the pace colour on the combat
+## board and the result screen, and the rank-cause note. The "Pace bonus" row is gone (ECONOMY-004).
 ## Each test mounts the real .tscn in a SubViewport so @onready nodes and authored colours exist.
 
 const PacePresentation := preload("res://ui/components/PacePresentation.gd")
@@ -52,14 +52,11 @@ static func _combat_snap(objective_state: Dictionary, encounter_id: String = "pa
 	}
 
 
-static func _resolve_snap(victory: bool, extra: Dictionary, pace_row: bool) -> Dictionary:
-	var breakdown: Array = [{ "label": "2 enemies defeated", "delta": 10, "currency": "ase" }]
-	if pace_row:
-		breakdown.append({ "label": "Pace bonus", "delta": int(extra.get("pace_bonus_awarded", 0)), "currency": "ase" })
+static func _resolve_snap(victory: bool, extra: Dictionary) -> Dictionary:
 	var data := {
-		"victory": victory, "reason": "relic_secured", "rank": "B", "ase_awarded": 10,
+		"victory": victory, "reason": "relic_secured", "rank": "B", "ase_awarded": 0,
 		"enemies_defeated": 2, "echoes_survived": 3, "round_ended": 6,
-		"reward_breakdown": breakdown, "emotion_summary": [],
+		"reward_breakdown": [], "emotion_summary": [],
 	}
 	data.merge(extra)
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": {} }
@@ -80,16 +77,6 @@ static func _labels_show(screen: Node, want: Color, what: String) -> String:
 
 static func _font_color(screen: Node, path: String) -> Color:
 	return (screen.get_node(path) as Label).get_theme_color("font_color")
-
-
-static func _pace_rows(screen: Node) -> Array:
-	var rows: Array = []
-	for child in screen.get_node("%BreakdownSection").get_children():
-		if child.is_queued_for_deletion() or not (child is RewardEntryItem):
-			continue
-		if (child.get_node("%EntryLabel") as Label).text == "Pace bonus":
-			rows.append(child)
-	return rows
 
 
 # ── Combat board ────────────────────────────────────────────────────────────
@@ -143,15 +130,10 @@ static func _t_board_no_pace_keeps_authored_color() -> Dictionary:
 static func _t_result_row_at_zero_and_round_color() -> Dictionary:
 	var m := _mount(ResolveScene)
 	var screen: Control = m[1]
-	screen.call("set_snapshot", _resolve_snap(true,
-		{ "pace_state": "none", "pace_bonus_awarded": 0, "pace_changed_rank": false }, true))
-	var rows := _pace_rows(screen)
-	var ok := rows.size() == 1 and (rows[0].get_node("%DeltaLabel") as Label).text == "+0 Ase"
+	screen.call("set_snapshot", _resolve_snap(true, { "pace_state": "none", "pace_changed_rank": false }))
 	var want := PacePresentation.color("none", true)
 	var colored := _font_color(screen, "%RoundsValue") == want and _font_color(screen, "%RoundsKey") == want
 	m[0].free()
-	if not ok:
-		return { "ok": false, "error": "expected one \"Pace bonus\" row showing +0 Ase, got %d rows" % rows.size() }
 	if not colored:
 		return { "ok": false, "error": "Rounds line does not carry the pace colour" }
 	return { "ok": true }
@@ -164,7 +146,7 @@ static func _t_result_rank_cause_only_when_changed() -> Dictionary:
 	var seen: Array = []
 	for changed in [true, false, true]:
 		screen.call("set_snapshot", _resolve_snap(true,
-			{ "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": changed }, true))
+			{ "pace_state": "full", "pace_changed_rank": changed }))
 		seen.append(note.visible)
 	m[0].free()
 	if seen != [true, false, true]:
@@ -179,20 +161,18 @@ static func _t_result_nothing_without_pace() -> Dictionary:
 	var screen: Control = m[1]
 	var authored_value := _font_color(screen, "%RoundsValue")
 	var authored_key := _font_color(screen, "%RoundsKey")
-	var stray := { "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": true }
-	var cases := { "defeat": _resolve_snap(false, {}, false),
-		"defeat_with_stray_keys": _resolve_snap(false, stray, false),
-		"no_pace_win": _resolve_snap(true, {}, false) }
+	var stray := { "pace_state": "full", "pace_changed_rank": true }
+	var cases := { "defeat": _resolve_snap(false, {}),
+		"defeat_with_stray_keys": _resolve_snap(false, stray),
+		"no_pace_win": _resolve_snap(true, {}) }
 	for case_name in cases:
-		screen.call("set_snapshot", _resolve_snap(true, stray, true))
+		screen.call("set_snapshot", _resolve_snap(true, stray))
 		screen.call("set_snapshot", cases[case_name])
 		var err := ""
 		if (screen.get_node("%RankCauseLabel") as Label).visible:
 			err = "rank-cause note visible"
 		elif _font_color(screen, "%RoundsValue") != authored_value or _font_color(screen, "%RoundsKey") != authored_key:
 			err = "Rounds line carries a pace colour"
-		elif not _pace_rows(screen).is_empty():
-			err = "\"Pace bonus\" row present"
 		if not err.is_empty():
 			m[0].free()
 			return { "ok": false, "error": "%s: %s" % [case_name, err] }
@@ -289,7 +269,7 @@ static func _t_reward_row_zero_delta_muted() -> Dictionary:
 	for delta in [0, 3, -2]:
 		var item := RewardEntryScene.instantiate() as RewardEntryItem
 		section.add_child(item)
-		item.setup({ "label": "Pace bonus", "delta": delta, "currency": "ase" })
+		item.setup({ "label": "Row", "delta": delta, "currency": "ase" })
 		var want: Color = item.color_positive
 		if delta == 0:
 			want = Color("#6E6450")
