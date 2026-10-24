@@ -583,6 +583,7 @@ func _run_tests(parts: Array) -> void:
 	VoiceTests.register(runner)           # V2-VOICE-001
 	InstitutionTests.register(runner)     # V2-SANCTUM-002
 	SanctumLayoutTests.register(runner)  # V2-SANCTUM-002: layout + occupant placement
+	SummonPriceUITests.register(runner)  # V2-ECONOMY-004: Summon price card
 	BoardCameraInputTests.register(runner)  # V2-COMBAT-003.5 camera unification: input routing
 	CombatCameraSelectTests.register(runner)  # follow-up #15: combat selection-lock camera
 	BoardCameraPointerTests.register(runner)  # Story 3 phase C: Sanctum tap versus drag
