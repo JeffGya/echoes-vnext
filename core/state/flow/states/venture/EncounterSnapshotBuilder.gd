@@ -563,6 +563,10 @@ static func _count_remaining_required_objectives(flow_ctx: FlowContext) -> int:
 		var obj: Dictionary = obj_v if obj_v is Dictionary else {}
 		if bool(obj.get("required", true)) and not bool(obj.get("completed", false)):
 			remaining += 1
+	# No required objective is open, but nothing was overcome either: the stage is not
+	# completable (ObjectiveModel.stage_completable), so the resolve card must not offer it.
+	if remaining == 0 and not objs.is_empty() and not ObjectiveModel.stage_completable(objs):
+		return 1
 	return remaining
 
 

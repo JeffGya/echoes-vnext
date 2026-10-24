@@ -3142,7 +3142,7 @@
 				"protect": { "label": "Protect", "required": true,  "reveal_hint": "A presence here needs guarding." },
 				"endure":  { "label": "Endure",  "required": true,  "reveal_hint": "The pressure here does not relent." },
 				"pursue":  { "label": "Pursue",  "required": false, "reveal_hint": "Something is moving through this area." },
-				"guide_spirit": { "label": "Guide the Spirit", "required": false, "reveal_hint": "A lost spirit lingers here, waiting to be seen home." }
+				"guide_spirit": { "label": "Guide the Spirit", "required": true,  "reveal_hint": "A lost spirit lingers here, waiting to be seen home." }
 			},
 
 			"foundation_objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"],
