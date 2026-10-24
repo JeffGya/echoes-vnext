@@ -118,6 +118,7 @@ var _ledger_open := false
 var _result_key: int = 0
 var _has_result_key := false
 var _motion: Tween = null
+var _awaiting_seen := false
 var _motion_final: Callable = Callable()
 
 
@@ -722,6 +723,7 @@ func _build_home(home: Dictionary) -> void:
 	_motion.tween_callback(func() -> void: _home_count.text = final_count)
 	_motion.tween_property(_ase_total, "modulate:a", 1.0, fade_quiet)
 	_motion.parallel().tween_property(_ekwan_total, "modulate:a", 1.0, fade_quiet)
+	_motion.tween_callback(_on_motion_done)
 
 
 func _mark_home(tag: Label, count: int, started: int) -> void:
@@ -746,6 +748,7 @@ func skip_motion() -> void:
 	if _motion_final.is_valid():
 		_motion_final.call()
 	_motion_final = Callable()
+	_on_motion_done()
 
 
 func is_motion_running() -> bool:
@@ -775,11 +778,46 @@ func _key_of(data: Dictionary) -> int:
 ## host to record it. A re-render of the same result keeps the ledger as the player left it.
 func _finish_ledger(data: Dictionary, same_result: bool) -> void:
 	var can_open := _summary_button.visible and not _summary_button.disabled
-	var first_time := data.has("ledger_seen") and not bool(data["ledger_seen"])
-	var open := _ledger_open if same_result else first_time
-	_set_ledger_open(open and can_open)
-	if first_time and not same_result and _ledger_open:
-		action_requested.emit(LEDGER_SEEN_ACTION.duplicate())
+	if not same_result:
+		# A new result drops any open wish of the old one: no emit for it.
+		_awaiting_seen = can_open and data.has("ledger_seen") and not bool(data["ledger_seen"])
+		_ledger_open = false
+	_set_ledger_open(_ledger_open and can_open)
+	if not _awaiting_seen:
+		return
+	# The home sequence runs first: the ledger opens when it ends, is skipped, or never starts.
+	if is_motion_running():
+		return
+	_open_first_time()
+
+
+## Opens the ledger for a result the player has not seen, then asks the host to record it once.
+func _open_first_time() -> void:
+	_awaiting_seen = false
+	_set_ledger_open(true)
+	_keep_count_in_view.call_deferred()
+	action_requested.emit(LEDGER_SEEN_ACTION.duplicate())
+
+
+## The home count line and the Echo rows stay in view after the ledger opens above them.
+func _keep_count_in_view() -> void:
+	if not is_inside_tree():
+		return
+	await get_tree().process_frame
+	if is_instance_valid(_home_count) and _home_count.is_visible_in_tree():
+		# Last Echo row first, then the count line: the count stays in view when both fit.
+		var rows := _echo_rows()
+		if not rows.is_empty():
+			_scroll_body.ensure_control_visible(rows[rows.size() - 1])
+		_scroll_body.ensure_control_visible(_home_count)
+
+
+## The motion ended or was skipped: a waiting first-time ledger opens now.
+func _on_motion_done() -> void:
+	_motion = null
+	_motion_final = Callable()
+	if _awaiting_seen:
+		_open_first_time()
 
 
 func _set_ledger_open(open: bool) -> void:
