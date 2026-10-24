@@ -86,3 +86,17 @@ Open for the UI: the return and retreat confirmation can say what is banked now 
   - `carried_advance` tooltip: "Ase and Ekwan the party carried home earlier are taken off the stage payout, so nothing is earned twice."
   - lost-names note: "Kofi did not come home." / "Ama and Kofi did not come home." / "Ama, Kofi and Esi did not come home."
 - All copy stays in `ui/components/PayoutCausePresentation.gd`.
+
+## Direction E cards, Part A (UI, 2026-10-24)
+
+- Mid-stage win card (a win with no fight rows and no stage rows): party and state, then up to three lines, each only when the snapshot has data. No Ase, no ledger, no chips. The rows rise in turn (alpha fade, 100 ms apart).
+- Stage-ending card: the home sequence (party first, each Echo "home" in turn at 130 ms, a lost Echo holds 550 ms and is named once, then the count "home N of M" completes, then the quiet Ase figure fades in at 16 px, muted). The "Echoes alive" chip gives way to the count.
+- Motion: reduced motion shows the final state at once. The one flag is `StopMarkMotion.reduced` (nothing sets it yet). A tap or key press skips to the final state and never consumes the input. Footer buttons stay usable.
+- PROPOSAL placeholders (not approved copy), all in `PayoutCausePresentation`: `THREAD_WHOLE`, `INTEL_LEARNED`, `CHANGE_LINES` ("<name> fell." / "held back." / "was shaken."), `HOME_TAG`.
+- PLACEHOLDER derivation: the Thread line shows when `echoes_survived` equals the number of roster Echoes in `actors` (not ally, not spirit) and the stage `echoes_alive` row has an empty `lost` list. No Thread field exists.
+- Data gaps (BLOCKED, nothing invented):
+  - Objective story mark ("found and overcome"): the combat resolve snapshot has no flag that this fight overcame an objective and no objective description. Not built.
+  - Intel: no `intel_gained` field on the combat victory card (`intel_count` is scout-return only). The line is built behind `intel_gained` > 0 and stays hidden today. The key is requested from the backend.
+  - Thread: no field (see the derivation above).
+  - "What the fight changed": no event field. The line comes from `emotion_summary` tag and direction only, and shows only for a real event.
+- Carried Ekwan: on a scout return or forced retreat, `ekwan_awarded` above 0 shows "Ekwan earned" with its amount in the ledger, no row, no (i).

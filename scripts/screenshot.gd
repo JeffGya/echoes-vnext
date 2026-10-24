@@ -101,13 +101,16 @@ func _fixtures() -> Dictionary:
 			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_changed_rank": false })],
 		"resolve_no_pace_win": [_combat(8, endure), _resolve(true, "endured", 8, "B", {})],
 		"resolve_pace_defeat": [_combat(7, recover), _resolve(false, "all_echoes_dead", 7, "F", {})],
-		"resolve_ledger_closed": [_combat(6, recover), _payout_stage_end(true)],
+		"resolve_ledger_closed": [_combat(6, recover), _payout_stage_end(true), "skip_motion"],
 		"resolve_ledger_open_fight": [_combat(6, recover), _payout_repeat_defeat()],
-		"resolve_stage_end": [_combat(6, recover), _payout_stage_end(false)],
-		"resolve_midstage_win_no_rows": [_combat(6, recover), _payout_midstage_win()],
+		"resolve_stage_end": [_combat(6, recover), _payout_stage_end(false), "skip_motion"],
+		"resolve_stage_home_lost": [_combat(6, recover), _payout_stage_end(true), "skip_motion"],
+		"resolve_stage_home_all": [_combat(6, recover), _payout_stage_all_home(), "skip_motion"],
+		"resolve_midstage_win_no_rows": [_combat(6, recover), _payout_midstage_win(), "skip_motion"],
+		"resolve_midstage_event": [_combat(6, recover), _payout_midstage_event(), "skip_motion"],
 		"resolve_defeat_consolation": [_combat(7, recover), _payout_defeat()],
 		"resolve_retreat_zero": [_combat(7, recover), _payout_retreat_zero()],
-		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(false), "focus_cause:2"],
+		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(false), "skip_motion", "focus_cause:2"],
 	}
 
 
@@ -207,6 +210,10 @@ func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pac
 ## A fixture step that is a String acts on the live scene. "focus_cause:N" focuses the Nth (i) button.
 func _run_step(harness: Node, step: String) -> void:
 	var parts := step.split(":")
+	if parts[0] == "skip_motion":
+		for node in harness.find_children("*", "Control", true, false):
+			if node.has_method("skip_motion"):
+				node.call("skip_motion")
 	if parts[0] == "focus_cause":
 		var buttons := harness.find_children("CauseButton", "Button", true, false)
 		var visible_buttons := buttons.filter(func(b: Node) -> bool: return (b as Button).is_visible_in_tree())
@@ -241,11 +248,19 @@ func _payout_snap(data: Dictionary) -> Dictionary:
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
 
 
-## A mid-stage win pays nothing and has no rows.
+## A mid-stage win pays nothing and has no rows: the Direction E card. Three Echoes, all alive.
 func _payout_midstage_win() -> Dictionary:
 	var data := _payout_data(true, "relic_secured", "A", [], true)
 	data["pace_state"] = "partial"
 	return _payout_snap(data)
+
+
+## The same card after a shaken Echo. `intel_gained` is a hypothetical key: the backend has not added it.
+func _payout_midstage_event() -> Dictionary:
+	var snap := _payout_midstage_win()
+	snap["data"]["emotion_summary"][1]["direction"] = "fall"
+	snap["data"]["intel_gained"] = 1
+	return snap
 
 
 func _payout_stage_end(seen: bool) -> Dictionary:
@@ -257,10 +272,19 @@ func _payout_stage_end(seen: bool) -> Dictionary:
 		_row("Carried home", -20, "carried_advance", { "carried_ase": 20, "carried_ekwan": 3 }),
 	]
 	snap["data"]["ledger_seen"] = seen
+	snap["data"]["echoes_survived"] = 2
 	snap["data"]["stage_payout_rows"] = stage_rows
 	snap["data"]["stage_payout_ase"] = 16
 	snap["data"]["stage_payout_ekwan"] = 4
 	snap["actions"]["cta.next_stage"] = { "type": "flow.complete_stage", "slot": "cta.next_stage", "label": "Complete Stage" }
+	return snap
+
+
+func _payout_stage_all_home() -> Dictionary:
+	var snap := _payout_stage_end(true)
+	var rows: Array = snap["data"]["stage_payout_rows"]
+	rows[2] = _row("Echoes home", 6, "echoes_alive", { "alive": 3, "started": 3, "lost": [], "cap": 10, "replay": false })
+	snap["data"]["echoes_survived"] = 3
 	return snap
 
 

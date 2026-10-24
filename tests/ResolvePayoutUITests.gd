@@ -25,6 +25,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/ledger_opens_once_when_unseen", Callable(ResolvePayoutUITests, "_t_first_time_open"))
 	runner.register_test("payout_ui/ledger_closed_when_seen_or_key_absent", Callable(ResolvePayoutUITests, "_t_seen_or_absent"))
 	runner.register_test("payout_ui/any_subset_of_rows_renders", Callable(ResolvePayoutUITests, "_t_any_subset"))
+	runner.register_test("payout_ui/midstage_card_has_no_ase_text_or_ledger", Callable(ResolvePayoutUITests, "_t_midstage_no_ase"))
+	runner.register_test("payout_ui/midstage_lines_appear_only_with_data", Callable(ResolvePayoutUITests, "_t_midstage_lines"))
+	runner.register_test("payout_ui/home_sequence_final_state_with_lost_name_once", Callable(ResolvePayoutUITests, "_t_home_final"))
+	runner.register_test("payout_ui/home_sequence_all_home_has_no_lost_line_or_label", Callable(ResolvePayoutUITests, "_t_home_all"))
+	runner.register_test("payout_ui/home_sequence_motion_skips_on_tap_and_never_blocks", Callable(ResolvePayoutUITests, "_t_home_motion_skip"))
+	runner.register_test("payout_ui/carried_ekwan_line_on_scout_return", Callable(ResolvePayoutUITests, "_t_carried_ekwan"))
 	runner.register_test("payout_ui/unknown_cause_shows_no_button", Callable(ResolvePayoutUITests, "_t_unknown_cause"))
 	runner.register_test("payout_ui/other_cards_keep_working", Callable(ResolvePayoutUITests, "_t_other_cards"))
 	runner.register_test("payout_ui/effects_rail_has_no_ase_ekwan_or_defeated_chip", Callable(ResolvePayoutUITests, "_t_rail_chips"))
@@ -158,8 +164,8 @@ static func _t_mid_stage() -> Dictionary:
 	if (screen.get_node("%EarningsSummary") as Control).visible or (screen.get_node("%Ledger") as Control).visible \
 			or not sent.is_empty():
 		return _fail(m, "a rowless win shows earnings or emitted (%d)" % sent.size())
-	if not (screen.get_node("%EchoesChip") as Control).visible or _label(screen, "%EchoesAliveValue").text != "3":
-		return _fail(m, "the echoes chip is missing on a rowless win")
+	if (screen.get_node("%FightHeader") as Control).visible:
+		return _fail(m, "a rowless win must show the Direction E card, not the chips")
 	if screen.get_node("%StageGroup").visible or screen.get_node("%EkwanLine").visible \
 			or screen.get_node("%EkwanTotalLabel").visible or screen.get_node("%FightGroupHeader").visible:
 		return _fail(m, "stage group, Ekwan or group header visible on a mid-stage card")
@@ -463,12 +469,12 @@ static func _t_other_cards() -> Dictionary:
 		"reward_breakdown": [_row("Carried", 6, "partial_return_home")], "actors": [] } })
 	if not (screen.get_node("%EarningsSummary") as Button).visible or _label(screen, "%AseTotalLabel").text != "+6 Ase":
 		return _fail(m, "scout return lost its earnings summary")
-	if (screen.get_node("%FightStrip") as Control).visible:
+	if (screen.get_node("%FightHeader") as Control).visible:
 		return _fail(m, "scout return shows the fight strip")
 	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 4 }, "actions": {}, "data": {
 		"run_type": "contact_result", "outcome": "good", "role_label": "Elder", "outcome_text": "Done." } })
 	if (screen.get_node("%EarningsSummary") as Button).visible or (screen.get_node("%Ledger") as Control).visible \
-			or (screen.get_node("%FightStrip") as Control).visible:
+			or (screen.get_node("%FightHeader") as Control).visible:
 		return _fail(m, "contact card shows payout parts")
 	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 5 }, "actions": {}, "data": {
 		"run_type": "situation_result", "surface": "shrine", "verdict": "passed", "emotion_summary": [] } })
@@ -511,3 +517,220 @@ static func _t_no_hard_coded_amounts() -> Dictionary:
 		if id_pattern.search(text) != null:
 			return { "ok": false, "error": "%s has an id in a text value" % path }
 	return { "ok": true }
+
+
+# ── Direction E ─────────────────────────────────────────────────────────────
+
+static func _actor(who: String, faction: String = "echo", extra: Dictionary = {}) -> Dictionary:
+	var a := { "id": "id_" + who, "name": who, "faction": faction, "status": "alive" }
+	a.merge(extra, true)
+	return a
+
+
+static func _summary(who: String, tag: String = "", direction: String = "steady") -> Dictionary:
+	return { "echo_id": "id_" + who, "name": who, "pre_emotional_status": "grounded",
+		"post_emotional_status": "grounded", "direction": direction, "tag": tag }
+
+
+## Mid-stage win: three Echoes in the party, all alive, plus an ally and a spirit that do not count.
+static func _midstage(extra: Dictionary = {}) -> Dictionary:
+	var data := { "ledger_seen": true, "echoes_survived": 3,
+		"actors": [_actor("Ama"), _actor("Kofi"), _actor("Esi"),
+			_actor("Yaw", "echo", { "is_ally": true }), _actor("Nana", "echo", { "is_spirit": true })],
+		"emotion_summary": [_summary("Ama"), _summary("Kofi"), _summary("Esi")] }
+	data.merge(extra, true)
+	return _snap([], data)
+
+
+static func _visible_texts(root: Node) -> Array:
+	var out: Array = []
+	for node in root.find_children("*", "Label", true, false):
+		if (node as Label).is_visible_in_tree() and not (node as Label).text.is_empty():
+			out.append((node as Label).text)
+	for node in root.find_children("*", "Button", true, false):
+		if (node as Button).is_visible_in_tree() and not (node as Button).text.is_empty():
+			out.append((node as Button).text)
+	return out
+
+
+static func _set_reduced(value: bool) -> bool:
+	var before: bool = StopMarkMotion.reduced
+	StopMarkMotion.reduced = value
+	return before
+
+
+static func _t_midstage_no_ase() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot(_midstage({ "ledger_seen": false, "ase_awarded": 0, "ekwan_awarded": 0 }))
+	var sent_ledger: bool = (screen.get_node("%Ledger") as Control).visible
+	var summary_visible: bool = (screen.get_node("%EarningsSummary") as Control).visible
+	var texts := _visible_texts(screen)
+	StopMarkMotion.reduced = before
+	if sent_ledger or summary_visible:
+		return _fail(m, "mid-stage card shows the ledger or the earnings line")
+	for t in texts:
+		if "Ase" in str(t) or "Ekwan" in str(t) or " of " in str(t):
+			return _fail(m, "mid-stage card shows \"%s\"" % t)
+	return _pass(m)
+
+
+static func _t_midstage_lines() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var change := screen.get_node("%ChangeLine") as Label
+	var intel := screen.get_node("%IntelLine") as Label
+	var thread := screen.get_node("%ThreadLine") as Label
+	var err := ""
+	# No event, no intel field: only the Thread line shows.
+	screen.set_snapshot(_midstage())
+	if change.visible or intel.visible or not thread.visible or thread.text != PayoutCausePresentation.THREAD_WHOLE:
+		err = "plain win: change=%s intel=%s thread=%s" % [change.visible, intel.visible, thread.visible]
+	# A shaken Echo gives the change line. intel_gained gives the intel line.
+	if err.is_empty():
+		screen.set_snapshot(_midstage({ "intel_gained": 2,
+			"emotion_summary": [_summary("Ama"), _summary("Kofi", "", "fall"), _summary("Esi")] }))
+		if change.text != "Kofi was shaken." or not intel.visible or intel.text != PayoutCausePresentation.INTEL_LEARNED:
+			err = "event win: change \"%s\", intel visible %s" % [change.text, intel.visible]
+	# Two Echoes held back: one line, both names.
+	if err.is_empty():
+		screen.set_snapshot(_midstage({ "emotion_summary": [_summary("Ama", "refused"), _summary("Kofi", "refused")] }))
+		if change.text != "Ama and Kofi held back.":
+			err = "two refused: \"%s\"" % change.text
+	# A fallen Echo: the Thread line is gone, and cannot come back with the same snapshot.
+	if err.is_empty():
+		screen.set_snapshot(_midstage({ "echoes_survived": 2, "emotion_summary": [_summary("Ama"), _summary("Kofi", "ko")] }))
+		if thread.visible or change.text != "Kofi fell.":
+			err = "fallen Echo: thread visible %s, change \"%s\"" % [thread.visible, change.text]
+	# No party data: no Thread line (nothing is claimed).
+	if err.is_empty():
+		screen.set_snapshot(_snap([], { "ledger_seen": true, "echoes_survived": 3, "emotion_summary": [] }))
+		if thread.visible or change.visible or intel.visible or (screen.get_node("%StoryLines") as Control).visible:
+			err = "a win without data shows story lines"
+	StopMarkMotion.reduced = before
+	if not err.is_empty():
+		return _fail(m, err)
+	return _pass(m)
+
+
+## Stage-ending card: 4 started, 3 home, Kofi lost.
+static func _stage_home(lost: Array, alive: int, started: int) -> Dictionary:
+	var names := ["Ama", "Kofi", "Esi", "Yaw"]
+	var actors: Array = []
+	var summary: Array = []
+	for n in names.slice(0, started):
+		actors.append(_actor(n))
+		summary.append(_summary(n))
+	var rows := [
+		_row("Base objectives", 20, "objectives_overcome", { "overcome": 2, "total": 3 }),
+		_row("Echoes home", 2 * alive, "echoes_alive", { "alive": alive, "started": started, "lost": lost, "cap": 10 }),
+	]
+	return _snap([], { "ledger_seen": true, "echoes_survived": alive, "actors": actors, "emotion_summary": summary,
+		"stage_payout_rows": rows, "stage_payout_ase": 20 + 2 * alive, "stage_payout_ekwan": 0 })
+
+
+static func _t_home_final() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot(_stage_home(["Kofi"], 3, 4))
+	var count := _label(screen, "%HomeCountLabel")
+	var texts := _visible_texts(screen)
+	var running: bool = screen.is_motion_running()
+	StopMarkMotion.reduced = before
+	if running:
+		return _fail(m, "reduced motion must not start a sequence")
+	if not count.visible or count.text != "home 3 of 4":
+		return _fail(m, "count is \"%s\"" % count.text)
+	var lost_lines := texts.filter(func(t: Variant) -> bool: return "did not come home" in str(t))
+	if lost_lines != ["Kofi did not come home."]:
+		return _fail(m, "lost name lines: %s" % str(lost_lines))
+	var homes := texts.filter(func(t: Variant) -> bool: return str(t) == "home")
+	if homes.size() != 3:
+		return _fail(m, "expected 3 home marks, got %d" % homes.size())
+	if (screen.get_node("%EchoesChip") as Control).visible:
+		return _fail(m, "the Echoes alive chip must give way to the home sequence")
+	for t in texts:
+		if "perfect" in str(t).to_lower() or "\u2212" in str(t) and "Echo" in str(t):
+			return _fail(m, "forbidden text \"%s\"" % t)
+	return _pass(m)
+
+
+static func _t_home_all() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot(_stage_home([], 4, 4))
+	var texts := _visible_texts(screen)
+	StopMarkMotion.reduced = before
+	if _label(screen, "%HomeCountLabel").text != "home 4 of 4":
+		return _fail(m, "count is \"%s\"" % _label(screen, "%HomeCountLabel").text)
+	for t in texts:
+		if "did not come home" in str(t) or "perfect" in str(t).to_lower() or "flawless" in str(t).to_lower():
+			return _fail(m, "all-home card shows \"%s\"" % t)
+	return _pass(m)
+
+
+static func _t_home_motion_skip() -> Dictionary:
+	var before := _set_reduced(false)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot(_stage_home(["Kofi"], 3, 4))
+	var err := ""
+	var count := _label(screen, "%HomeCountLabel")
+	var ase := _label(screen, "%AseTotalLabel")
+	if not screen.is_motion_running() or count.text != "home 0 of 4" or ase.modulate.a != 0.0:
+		err = "motion start: running=%s count=%s ase alpha=%s" % [screen.is_motion_running(), count.text, ase.modulate.a]
+	# The footer stays usable while the motion runs.
+	if err.is_empty():
+		var sanctum := screen.get_node("%SanctumButton") as Button
+		var next := screen.get_node("%NextStageButton") as Button
+		sanctum.visible = true
+		if sanctum.disabled or sanctum.mouse_filter == Control.MOUSE_FILTER_IGNORE or next.disabled:
+			err = "footer buttons are blocked during the motion"
+	if err.is_empty():
+		var tap := InputEventMouseButton.new()
+		tap.button_index = MOUSE_BUTTON_LEFT
+		tap.pressed = true
+		screen._input(tap)
+		if screen.is_motion_running() or count.text != "home 3 of 4" or ase.modulate.a != 1.0:
+			err = "a tap did not reach the final state: count=%s alpha=%s" % [count.text, ase.modulate.a]
+	if err.is_empty():
+		var lost_lines := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not come home" in str(t))
+		if lost_lines != ["Kofi did not come home."]:
+			err = "lost lines after skip: %s" % str(lost_lines)
+	# A new snapshot ends the old motion.
+	if err.is_empty():
+		screen.set_snapshot(_stage_home([], 4, 4))
+		if not screen.is_motion_running():
+			err = "a new stage card must start its own motion"
+		screen.set_snapshot(_snap([], { "ledger_seen": true }))
+		if screen.is_motion_running():
+			err = "motion survived a new snapshot"
+	StopMarkMotion.reduced = before
+	if not err.is_empty():
+		return _fail(m, err)
+	return _pass(m)
+
+
+static func _t_carried_ekwan() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 3 }, "actions": {}, "data": {
+		"run_type": "scout_return", "intel_count": 1, "ase_awarded": 0, "ekwan_awarded": 3, "ledger_seen": true,
+		"reward_breakdown": [], "actors": [] } })
+	var line := screen.get_node("%EkwanLine") as Control
+	if not line.visible or _label(screen, "%EkwanLineValue").text != "+3 Ekwan":
+		return _fail(m, "carried Ekwan line missing")
+	if not line.find_children("*", "Button", true, false).is_empty():
+		return _fail(m, "Ekwan line has a button")
+	if not (screen.get_node("%EarningsSummary") as Control).visible:
+		return _fail(m, "summary hidden while Ekwan is carried")
+	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 4 }, "actions": {}, "data": {
+		"run_type": "forced_retreat", "ase_awarded": 0, "ekwan_awarded": 0, "ledger_seen": true,
+		"reward_breakdown": [], "actors": [] } })
+	if line.visible or (screen.get_node("%EarningsSummary") as Control).visible:
+		return _fail(m, "Ekwan line shows at 0")
+	return _pass(m)
