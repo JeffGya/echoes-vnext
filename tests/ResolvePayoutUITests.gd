@@ -39,6 +39,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/carried_line_absent_at_zero_present_with_comparator", Callable(ResolvePayoutUITests, "_t_carried_panel"))
 	runner.register_test("payout_ui/return_home_confirmation_opens_before_dispatch", Callable(ResolvePayoutUITests, "_t_return_confirm_before_dispatch"))
 	runner.register_test("payout_ui/return_home_confirm_once_cancel_and_esc_send_nothing", Callable(ResolvePayoutUITests, "_t_return_confirm_buttons"))
+	runner.register_test("payout_ui/return_home_through_real_shell_and_host", Callable(ResolvePayoutUITests, "_t_return_real_host"))
 	runner.register_test("payout_ui/return_home_confirmation_zero_carry_and_failed_escape", Callable(ResolvePayoutUITests, "_t_return_confirm_zero_and_failure"))
 	runner.register_test("payout_ui/retreat_button_price_affordable_and_denied", Callable(ResolvePayoutUITests, "_t_retreat_button"))
 	runner.register_test("payout_ui/carried_scenes_hold_no_amount_text", Callable(ResolvePayoutUITests, "_t_carried_no_amounts"))
@@ -1147,3 +1148,88 @@ static func _t_no_placeholder() -> Dictionary:
 		if "\"%s\"" % field not in code:
 			return { "ok": false, "error": "ResolveScreen.gd does not read %s" % field }
 	return { "ok": true }
+
+
+## Real chain: a real stage (FlowRuntime, StageExploreSnapshotBuilder), a real RealmShell and
+## StageExploreScreen, a real ModalHost, the real %ReturnButton. No private field is set, so the
+## carry payload proves the cache fill from the snapshot. Not testable headless: the real mouse
+## click (the test emits the button's `pressed`) and the focus ring (only focus ownership is checked).
+static func _t_return_real_host() -> Dictionary:
+	var fx := StageCameraSelectTests._make_fixture("payout_return")
+	if fx.is_empty():
+		return { "ok": false, "error": "could not build the real stage fixture" }
+	var vp: SubViewport = fx["viewport"]
+	var realm: RealmShell = fx["realm"]
+	var stage: StageExploreScreen = fx["stage"]
+	var snap: Dictionary = fx["snap"]
+	var host := preload("res://ui/components/ModalHost.tscn").instantiate() as ModalHost
+	vp.add_child(host)
+	var modals: Array = []
+	var actions: Array = []
+	realm.modal_requested.connect(func(id: StringName, payload: Dictionary) -> void:
+		modals.append([id, payload.duplicate(true)])
+		host.present_modal_for_id(id, realm.modal_scene_for(id), payload))
+	host.action_requested.connect(func(a: Dictionary) -> void: actions.append(a))
+	var ret := stage.get_node("%ReturnButton") as Button
+	var err := ""
+	var data: Dictionary = snap["data"]
+	# 1. The press opens the confirmation and dispatches nothing.
+	ret.grab_focus()
+	ret.pressed.emit()
+	if modals.size() != 1 or modals[0][0] != &"realm.return_home" or not host.has_active_modal() or not actions.is_empty():
+		err = "press: modals=%d active=%s actions=%d" % [modals.size(), host.has_active_modal(), actions.size()]
+	if err.is_empty():
+		var payload: Dictionary = modals[0][1]
+		if payload.get("carry") != data["carry_home_preview"] or payload.get("party") != data["party_preview"] \
+				or not bool(payload.get("confirm", false)):
+			err = "payload does not match the snapshot: %s vs %s" % [str(payload.get("carry")), str(data["carry_home_preview"])]
+	# 2. Confirm sends one stage.return_home; a second press adds none.
+	if err.is_empty():
+		var modal := host.get_node("%ModalSlot/ReturnHomeModal") as ReturnHomeModal
+		var confirm := modal.get_node("%ConfirmButton") as Button
+		confirm.pressed.emit()
+		confirm.pressed.emit()
+		if actions != [{ "type": "stage.return_home" }] or host.has_active_modal():
+			err = "Confirm: actions=%s active=%s" % [str(actions), host.has_active_modal()]
+	# 3. Cancel: no action, the modal closes, focus returns to the Return button.
+	if err.is_empty():
+		actions.clear()
+		ret.grab_focus()
+		ret.pressed.emit()
+		# A closed modal waits for deletion, so the open one is read from the host, not by node name.
+		var cancel := (host.get("_active_modal") as Node).get_node("%CancelButton") as Button
+		cancel.pressed.emit()
+		if not actions.is_empty() or host.has_active_modal() or vp.gui_get_focus_owner() != ret:
+			err = "Cancel: actions=%d active=%s focus=%s" % [actions.size(), host.has_active_modal(), str(vp.gui_get_focus_owner())]
+	# 4. Esc through the viewport input path does the same.
+	if err.is_empty():
+		ret.grab_focus()
+		ret.pressed.emit()
+		var esc := InputEventAction.new()
+		esc.action = &"ui_cancel"
+		esc.pressed = true
+		vp.push_input(esc)
+		if not actions.is_empty() or host.has_active_modal() or vp.gui_get_focus_owner() != ret:
+			err = "Esc: actions=%d active=%s focus=%s" % [actions.size(), host.has_active_modal(), str(vp.gui_get_focus_owner())]
+	# 5. The failed escape: the result modal shows with Continue, no carried figure.
+	if err.is_empty():
+		var failed := snap.duplicate(true)
+		failed["data"]["return_home_result"] = { "success": false, "message": "The way is blocked." }
+		realm.set_snapshot(failed)
+		SanctumLayoutTests._force_control_layout(realm)
+		if not host.has_active_modal():
+			stage.call("_apply_pending_overlay")
+		if not host.has_active_modal() or host.active_modal_id() != &"realm.return_home":
+			err = "failed escape: no result modal"
+		else:
+			var modal2 := host.get("_active_modal") as ReturnHomeModal
+			var carried := modal2.get_node("%CarriedPanel") as Control
+			if carried.visible or (modal2.get_node("%ConfirmRow") as Control).visible \
+					or not (modal2.get_node("%ContinueButton") as Control).visible:
+				err = "failed escape display wrong"
+			else:
+				(modal2.get_node("%ContinueButton") as Button).pressed.emit()
+				if actions != [{ "type": "stage.dismiss_overlay" }]:
+					err = "failed escape Continue sent %s" % str(actions)
+	vp.free()
+	return { "ok": err.is_empty(), "error": err }

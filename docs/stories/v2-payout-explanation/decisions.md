@@ -131,3 +131,8 @@ Open for the UI: the return and retreat confirmation can say what is banked now 
 - Only Confirm sends `stage.return_home`, once (a second press does nothing). Cancel and Esc dispatch nothing and close the panel. Both buttons are 56 px high. Focus starts on Cancel.
 - The failed-escape display is unchanged: "Blocked", no carried figure, Continue sends `stage.dismiss_overlay`.
 - PROPOSAL placeholder copy in `CarriedHomePresentation.gd`: "Take the party home?", "Go home", "Stay".
+
+## Real-host test and dead branch removed (UI, 2026-10-25)
+
+- New test `payout_ui/return_home_through_real_shell_and_host`: a real stage, a real `RealmShell` and `StageExploreScreen`, a real `ModalHost`, the real Return button. It proves the payload carries `carry_home_preview` and `party_preview` from the snapshot (no private field set), Confirm sends one `stage.return_home`, Cancel and Esc send nothing and return focus to the Return button, and the failed-escape result modal shows with Continue. Not testable headless: the real mouse click (the test emits `pressed`).
+- Removed `StageExploreScreen._show_return_home_overlay`, including its dead `stage.confirm_return_home` success branch. Grep found no caller in `ui/`, `core/` or `tests/`. The core still handles `stage.confirm_return_home` (`VentureController`), and `venture_char` tests cover it; nothing there changed.
