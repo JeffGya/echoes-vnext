@@ -809,27 +809,6 @@ func _show_result_overlay(result: Dictionary) -> void:
 	_sit_overlay.show()
 
 
-func _show_return_home_overlay(result: Dictionary) -> void:
-	var success := bool(result.get("success", false))
-	_sit_header_label.text = "Return Home"
-	_sit_header_label.remove_theme_color_override("font_color")
-	if success:
-		_sit_type_label.text   = "Escaped"
-		_dismiss_btn.text      = "Leave"
-		_cached_overlay_action = { "type": "stage.confirm_return_home" }
-	else:
-		_sit_type_label.text   = "Blocked"
-		_dismiss_btn.text      = "Continue"
-		_cached_overlay_action = { "type": "stage.dismiss_overlay" }
-	_sit_result_label.text        = str(result.get("message", ""))
-	_intel_clue_label.visible     = false
-	_enemy_estimate_label.visible = false
-	_dismiss_btn.visible          = true
-	_ignore_btn.visible           = false
-	_choice_container.visible     = false
-	_sit_overlay.show()
-
-
 # ─── Board rendering ─────────────────────────────────────────────────────────
 
 func _fill_board(cols: int, rows: int, data: Dictionary = {}, mode: String = "") -> void:
