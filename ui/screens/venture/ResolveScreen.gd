@@ -62,7 +62,9 @@ const LEDGER_SEEN_ACTION := { "type": "resolve.ledger.mark_seen" }
 @onready var _emotion_header:    Label         = %EmotionHeader
 @onready var _story_lines:       VBoxContainer = %StoryLines
 @onready var _change_line:       Label         = %ChangeLine
+@onready var _objective_line:    Label         = %ObjectiveLine
 @onready var _intel_line:        Label         = %IntelLine
+@onready var _home_note:         Label         = %HomeNoteLabel
 @onready var _thread_line:       Label         = %ThreadLine
 @onready var _rank_chip:         PanelContainer = %RankChip
 @onready var _enemies_chip:      PanelContainer = %EnemiesChip
@@ -165,7 +167,7 @@ func _clear() -> void:
 	_home_count.visible = false
 	_emotion_header.text = "Echo Emotion"
 	_story_lines.visible = false
-	for line in [_change_line, _intel_line, _thread_line]:
+	for line in [_change_line, _objective_line, _intel_line, _thread_line, _home_note]:
 		line.visible = false
 	_ase_total.remove_theme_font_size_override("font_size")
 	_ase_total.remove_theme_color_override("font_color")
@@ -594,22 +596,6 @@ func _home_params(data: Dictionary) -> Dictionary:
 	return {}
 
 
-## PLACEHOLDER: the snapshot has no Thread field. The Thread is whole while every roster Echo
-## (not an ally or a spirit) is alive. It can only worsen.
-func _thread_whole(data: Dictionary, home: Dictionary) -> bool:
-	var party := 0
-	var actors_v: Variant = data.get("actors", [])
-	if actors_v is Array:
-		for actor_v in (actors_v as Array):
-			if actor_v is Dictionary and str(actor_v.get("faction", "")) == "echo" \
-					and not bool(actor_v.get("is_ally", false)) and not bool(actor_v.get("is_spirit", false)):
-				party += 1
-	if party <= 0 or int(data.get("echoes_survived", -1)) != party:
-		return false
-	var lost_v: Variant = home.get("lost", [])
-	return not (lost_v is Array and not (lost_v as Array).is_empty())
-
-
 func _echo_rows() -> Array:
 	var rows: Array = []
 	for child in _emotion_list.get_children():
@@ -623,23 +609,29 @@ func _build_direction_e(data: Dictionary) -> void:
 		return
 	var home := _home_params(data)
 	if _is_midstage_win(data):
-		_build_midstage(data, home)
+		_build_midstage(data)
 	elif not home.is_empty():
 		_build_home(home)
 
 
-## Party and state (the emotion list), one change line, intel, the Thread line. Each line shows
-## only when the snapshot has data for it. No Ase number, no zero rows.
-func _build_midstage(data: Dictionary, home: Dictionary) -> void:
+## Party and state (the emotion list), then up to four lines. Each line shows only when the snapshot
+## has its field: emotion_summary events, objective_overcome, intel_gained, thread_whole. No Ase
+## number, no zero rows. The index and type of an objective are never shown.
+func _build_midstage(data: Dictionary) -> void:
 	_fight_strip.visible = false
 	var summary_v: Variant = data.get("emotion_summary", [])
 	_change_line.text = PayoutCausePresentation.change_line(summary_v if summary_v is Array else [])
+	var objective_v: Variant = data.get("objective_overcome", {})
+	var objective: Dictionary = objective_v if objective_v is Dictionary else {}
+	_objective_line.text = PayoutCausePresentation.objective_line(str(objective.get("label", "")))
 	_intel_line.text = PayoutCausePresentation.INTEL_LEARNED
 	_thread_line.text = PayoutCausePresentation.THREAD_WHOLE
 	_change_line.visible = not _change_line.text.is_empty()
+	_objective_line.visible = not objective.is_empty()
 	_intel_line.visible = int(data.get("intel_gained", 0)) > 0
-	_thread_line.visible = _thread_whole(data, home)
-	var lines: Array = [_change_line, _intel_line, _thread_line].filter(func(l: Label) -> bool: return l.visible)
+	# Hidden when false or missing: no wording exists for a broken Thread.
+	_thread_line.visible = data.get("thread_whole", false) == true
+	var lines: Array = [_change_line, _objective_line, _intel_line, _thread_line].filter(func(l: Label) -> bool: return l.visible)
 	_story_lines.visible = not lines.is_empty()
 	var nodes: Array = _echo_rows() + lines
 	if nodes.is_empty() or StopMarkMotion.reduced or not is_inside_tree():
@@ -680,11 +672,14 @@ func _build_home(home: Dictionary) -> void:
 		if is_lost:
 			lost_names.erase(who)
 		plan.append({ "row": row, "tag": row.get_node("%HomeTagLabel"), "lost": is_lost, "name": who })
-	# The sequence names each lost Echo once, so the ledger row drops its own note then.
-	if not plan.is_empty() and lost_names.is_empty():
-		for item in _stage_section.get_children():
-			if item is RewardEntryItem and (item as RewardEntryItem).cause == "echoes_alive":
-				(item as RewardEntryItem).note_label.visible = false
+	# A name left over died in an EARLIER fight (params.lost holds the whole stage): no row of this
+	# fight carries it, so one note under the rows names it. The ledger row then drops its own note,
+	# so every lost Echo is named once.
+	var unmatched: Array = lost_names.duplicate()
+	_home_note.text = PayoutCausePresentation.lost_line_many(unmatched) if not unmatched.is_empty() else ""
+	for item in _stage_section.get_children():
+		if item is RewardEntryItem and (item as RewardEntryItem).cause == "echoes_alive":
+			(item as RewardEntryItem).note_label.visible = false
 	var final_count := PayoutCausePresentation.home_count(alive, started)
 	_motion_final = func() -> void:
 		for st in plan:
@@ -694,6 +689,7 @@ func _build_home(home: Dictionary) -> void:
 				(st["tag"] as Label).visible = true
 				(st["tag"] as Label).modulate.a = 1.0
 		_home_count.text = final_count
+		_home_note.visible = not _home_note.text.is_empty()
 		_ase_total.modulate.a = 1.0
 		_ekwan_total.modulate.a = 1.0
 	if StopMarkMotion.reduced or not is_inside_tree():
@@ -720,7 +716,9 @@ func _build_home(home: Dictionary) -> void:
 			_motion.tween_callback(_mark_home.bind(st["tag"], count, started))
 			_motion.tween_interval(home_step)
 	_motion.tween_interval(home_pause)
-	_motion.tween_callback(func() -> void: _home_count.text = final_count)
+	_motion.tween_callback(func() -> void:
+		_home_count.text = final_count
+		_home_note.visible = not _home_note.text.is_empty())
 	_motion.tween_property(_ase_total, "modulate:a", 1.0, fade_quiet)
 	_motion.parallel().tween_property(_ekwan_total, "modulate:a", 1.0, fade_quiet)
 	_motion.tween_callback(_on_motion_done)

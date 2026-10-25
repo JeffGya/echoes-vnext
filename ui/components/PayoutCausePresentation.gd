@@ -71,7 +71,7 @@ static func row_note(cause: String, params: Dictionary) -> String:
 				names.append(str(n))
 	if names.is_empty():
 		return ""
-	return lost_line(_join_names(names))
+	return lost_line_many(names)
 
 
 ## PROPOSAL placeholders for the Direction E cards (docs/stories/v2-payout-explanation/decisions.md).
@@ -79,6 +79,7 @@ static func row_note(cause: String, params: Dictionary) -> String:
 const HOME_TAG := "home"
 const THREAD_WHOLE := "The Thread is whole so far."
 const INTEL_LEARNED := "Something new is known about the stage."
+const OBJECTIVE_MARK := "Found and overcome."
 ## One line about what the fight changed. Only for a real event in emotion_summary; first match wins.
 ## [name(s), singular form, plural form] by emotion_summary tag or direction.
 const CHANGE_LINES: Array = [
@@ -88,8 +89,18 @@ const CHANGE_LINES: Array = [
 ]
 
 
+## The story mark for the objective this fight overcame. The label comes from data; with no label
+## only the frame text shows. Never the index or the type.
+static func objective_line(label: String) -> String:
+	return OBJECTIVE_MARK if label.is_empty() else "%s %s" % [OBJECTIVE_MARK, label]
+
+
 static func lost_line(who: String) -> String:
 	return "%s did not come home." % who
+
+
+static func lost_line_many(names: Array) -> String:
+	return lost_line(_join_names(names))
 
 
 static func home_count(alive: int, started: int) -> String:
