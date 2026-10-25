@@ -1703,6 +1703,11 @@ func _end_round(t: int) -> void:
 		# victory. See ANSWERS.md #28/#31.
 		_recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(_arr_victory, round, t)
 
+		# Deaths are recorded on the stage record here, where the fight ends (win or loss), not in
+		# the snapshot builder. The card reads the union of the record and this fight, so order
+		# against build_final_snapshot does not matter.
+		_stage_explore_session_service().record_fight_deaths(t)
+
 		# V2-STAGE-002: on victory, resolve the situation AND mark objective complete BEFORE
 		# the final snapshot so objectives_remaining is accurate AND the situation is not
 		# re-targeted if the player returns to stage_explore.

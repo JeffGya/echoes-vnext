@@ -757,3 +757,8 @@ The payout UI session reported that Jeff had approved only the ledger update in 
 
 ## D-100 — Phase 5.10 verified: no recorded value moved (2026-10-25)
 `data.intel_gained` seam (key only above 0; dormant, D-99). MEASURED: fingerprints 6/6 and 1/1; seek+baseline+roundtrip+maturity 74/74; `reward` 35/35; determinism 7/7; wider group 625/625; `balance.json` and `git status` unchanged by the runs.
+
+## D-101 — Phase 5.11 re-recorded: thread_whole (2026-10-25)
+Steps built: stage death record `lost_echo_names` (written once at the end of each fight in the combat-over branch of `_end_round`; the snapshot builder stays pure), `data.thread_whole` (always on a combat victory card), `data.objective_overcome` {index, type, label} (only when this fight overcame an objective), and the stipend row `lost`/`alive` from the union of the stage record and the last fight (so an earlier-fight death is not home). One place changes with permadeath: `ActiveStageService.lost_echo_names_with`.
+MEASURED long run: `reward` 35/35, determinism 7/7, wider group 632/632, seek group: only the 7 seek drifts failed (baseline, roundtrip and maturity passed); 14 FINAL constants drifted, SAVE and ROUNDS held, `balance.json` and `git status` unchanged by the runs. Proof: removing the key `thread_whole` from `data_keys` of each of the 14 new payloads gives the old constant (14 of 14). Re-recorded.
+Limits: a retreat does not record deaths; the record matches by display name; the `FlowRuntime` call is covered by direct-call tests only.
