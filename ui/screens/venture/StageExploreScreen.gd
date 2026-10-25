@@ -85,6 +85,8 @@ var _cached_back_action:    Dictionary = {}
 var _cached_stage_complete_action: Dictionary = {}
 var _cached_advance_action: Dictionary = {}
 var _cached_return_action:  Dictionary = {}
+var _cached_carry_preview:  Dictionary = {}
+var _cached_party_preview:  Array = []
 var _cached_overlay_action: Dictionary = {}
 var _cached_ignore_action:  Dictionary = {}
 
@@ -618,6 +620,8 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_advance_btn.disabled = not _advance_allowed or is_travel
 	_cached_advance_action = { "type": "stage.advance_turn" }
 	_cached_return_action  = { "type": "stage.return_home" }
+	_cached_carry_preview  = _dict_or_empty(data.get("carry_home_preview", {}))
+	_cached_party_preview  = _array_or_empty(data.get("party_preview", []))
 
 	# Stage Complete button — shown when all required objectives are done.
 	var sc_v: Variant = actions.get("cta.proceed_to_stage_map", {})
@@ -682,8 +686,6 @@ func _apply_overlay_from(data: Dictionary, actions: Dictionary) -> void:
 		_choice_container.visible = false
 		modal_requested.emit(&"realm.return_home", {
 			"result": rhr.duplicate(true),
-			"carry": _dict_or_empty(data.get("carry_home_preview", {})),
-			"party": _array_or_empty(data.get("party_preview", [])),
 		})
 	elif not pending.is_empty() and not eng.is_empty():
 		var ign_v: Variant  = actions.get("cta.ignore_situation", {})
@@ -804,27 +806,6 @@ func _show_result_overlay(result: Dictionary) -> void:
 	_cached_overlay_action  = { "type": "stage.dismiss_overlay" }
 	_ignore_btn.visible     = false
 	_choice_container.visible = false
-	_sit_overlay.show()
-
-
-func _show_return_home_overlay(result: Dictionary) -> void:
-	var success := bool(result.get("success", false))
-	_sit_header_label.text = "Return Home"
-	_sit_header_label.remove_theme_color_override("font_color")
-	if success:
-		_sit_type_label.text   = "Escaped"
-		_dismiss_btn.text      = "Leave"
-		_cached_overlay_action = { "type": "stage.confirm_return_home" }
-	else:
-		_sit_type_label.text   = "Blocked"
-		_dismiss_btn.text      = "Continue"
-		_cached_overlay_action = { "type": "stage.dismiss_overlay" }
-	_sit_result_label.text        = str(result.get("message", ""))
-	_intel_clue_label.visible     = false
-	_enemy_estimate_label.visible = false
-	_dismiss_btn.visible          = true
-	_ignore_btn.visible           = false
-	_choice_container.visible     = false
 	_sit_overlay.show()
 
 
@@ -1095,9 +1076,16 @@ func _on_advance_pressed() -> void:
 		action_requested.emit(_cached_advance_action)
 
 
+## The Return button only opens the confirmation. The modal's Confirm button sends the action.
 func _on_return_pressed() -> void:
-	if not _cached_return_action.is_empty():
-		action_requested.emit(_cached_return_action)
+	if _cached_return_action.is_empty():
+		return
+	modal_requested.emit(&"realm.return_home", {
+		"confirm": true,
+		"action": _cached_return_action.duplicate(true),
+		"carry": _cached_carry_preview.duplicate(true),
+		"party": _cached_party_preview.duplicate(true),
+	})
 
 
 func _on_begin_pressed() -> void:

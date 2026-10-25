@@ -86,3 +86,22 @@ layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"RealmModalPrimaryButton"
 text = "Continue"
+
+[node name="ConfirmRow" type="HBoxContainer" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="CancelButton" type="Button" parent="SafeFrame/Center/Card/Content/ConfirmRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 56)
+layout_mode = 2
+theme_type_variation = &"RealmModalSecondaryButton"
+
+[node name="ConfirmButton" type="Button" parent="SafeFrame/Center/Card/Content/ConfirmRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 56)
+layout_mode = 2
+theme_type_variation = &"RealmModalPrimaryButton"
