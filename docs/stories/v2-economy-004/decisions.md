@@ -768,3 +768,12 @@ QA (`qa-verifier`, opus, HEAD b968eb3): no blocker; C4 (decisions against code a
 - **D1 (defect):** a quit and resume at the stage-ending card pays more than the card showed: `StageSettlementService._echo_home` (no encounter context after a reload) counts every active-party Echo as home and ignores the stage death record. Card "home 4 of 5, 58 Ase", paid 60. **Jeff: fix now** (step 5.12, backend).
 - **D2 (defect):** the "carried home" panel never shows on a return home: `ReturnHomeModal` shows only when `result.success` is true, but the core writes `return_home_result` only on a failed escape (`VentureController.gd:386-390`). **Jeff: confirmation BEFORE the action, UI only:** the return-home button opens the panel first with `carry_home_preview` (already in the stage-explore snapshot), people safe, whether the stage waits; only "Confirm" dispatches `stage.return_home`. The payout UI session builds it; no core change.
 - Notes taken: N2 (add per-mode re-record comments to `FlowFingerprintSeekTests.gd`; fix the stale "realm-virtue bonus" comment in `VentureCharacterizationTests.gd:247`) and N8 (follow-up 9 is stale: closed by D-72) go with step 5.12. N1 stands as accepted by D-35 and noted. N3, N4 (legacy snapshot key `ase_cost_per_summon` and four unread summon keys), N5 (hard-coded defaults, the 0.25 defeat factor), N6, N7 are follow-ups 29 to 32.
+
+## D-103 — Final QA result and decisions (2026-10-25)
+QA (`qa-verifier`, opus, HEAD 9cfd2e4): claims 1, 3 and 4 hold; claim 2 partly (F2, F3). Jeff's decisions:
+- **F4 (stage death record):** **keep the full record until the stage clears.** A death stays on the stage record for every later visit; a stipend, "home N of M", rank cap and `thread_whole` all stay reduced. Reason (Jeff): after a death, the next visit must not give a full payout. Reset per visit was considered and rejected. Step 5.14 must check that the record is cleared when the stage is cleared, so a replay run does not inherit old deaths. If no code clears it, add the clear and test it.
+- **F2:** route `echo_home_ase`, `echo_home_cap` and `echo_home_cap_replay` through `RewardCalc.cfg_num`. Fix.
+- **F1:** the red `realm_ui` test (`EarningsSummary` width 0 in `ResolveScreen.tscn`). Fix (UI layout only).
+- **F6:** remove `stage.confirm_return_home` (no UI sender) and the unreachable `return_failed` message. Fix.
+- **F3 (ContactController literal 20, summon grade surcharge default):** not fixed; stays a follow-up.
+- **F5 (confirmation copy when the escape can fail):** Jeff's wording; open. Not fixed.

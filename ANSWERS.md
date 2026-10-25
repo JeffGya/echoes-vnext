@@ -90,6 +90,8 @@
 | 81 | directive-is-data-only-to-add | A new Directive is added as a data entry plus tests, with no logic change. No Directive id literal or substring match in `core/` logic. Unlock stays `unlock_condition: always` until V2-DIRECTIVE-003 | 2026-10-10 |
 | 82 | directive-profile-inputs | Profile inputs that may bend a Directive: Calling family, virtue domains (through the identity state only), Standing/Judgment, fear, morale. Bonds are an interrupt only. Vows and equipment wait for their own stories | 2026-10-10 |
 | 83 | tunables-live-in-config | Tunable values live in `data/balance.json`, not hard-coded in `core/` or `ui/`, unless there is a documented reason (for example a contract floor that code and contract must share). Applies to new work and to code a story touches | 2026-10-11 |
+| 84 | ekwan-only-from-stage-objectives | Ekwan is paid only by completed stage objectives, per objective type. Fights pay none. Revisit when the GDD sets the Ekwan cadence. | 2026-10-20 |
+| 85 | permadeath-connection-points | Permadeath is not built in V2-ECONOMY-004. The reward code is written so the permadeath story changes only named places. | 2026-10-22 |
 
 ---
 
@@ -843,5 +845,23 @@
 **A:** In `data/balance.json`, not hard-coded in `core/` or `ui/`, unless there is a documented reason (for example a contract floor that code and the movement contract must share). A story that touches code with a hard-coded tunable lists it and either moves it to config or states why it stays. Jeff: "I would rather not have hardcoded values whenever possible. These should live in config unless there is a good reason for having them hardcoded."
 **Source:** Jeff, 2026-10-11 (V2-DIRECTIVE-002 design question Q10; decisions.md D-33)
 **Date:** 2026-10-11
+
+---
+
+### 84. ekwan-only-from-stage-objectives
+
+**Q:** Where does Ekwan come from?
+**A:** Only from stage objectives. Each objective type pays its own Ekwan amount (`data.rewards.objective_ekwan`). Only COMPLETED objectives count. The replay factor and the realm scale apply. A fight pays no Ekwan, and no payout row carries `currency: ekwan`. Revisit when the Working GDD sets the early Ekwan cadence (GDD §19.10, §21.1 leave it open).
+**Source:** Jeff, 2026-10-20 (V2-ECONOMY-004; decisions.md D-05, D-06, D-16, D-28, D-32)
+**Date:** 2026-10-20
+
+---
+
+### 85. permadeath-connection-points
+
+**Q:** Does V2-ECONOMY-004 build permadeath, and what must the permadeath story change?
+**A:** No. Jeff chose to build the reward system so it connects to permadeath later. The permadeath story changes these places: `ActiveStageService.lost_echo_names_with` (the stage death record), `SummonService.living_count` (the summon price counts living Echoes), and the `echo_id = roster.size() + 1` scheme in three places (ids repeat once Echoes leave the roster). A note is on Notion story V2-INFRA-005.
+**Source:** Jeff, 2026-10-22 (V2-ECONOMY-004; decisions.md D-66, D-67, D-81, D-92, D-101)
+**Date:** 2026-10-22
 
 ---
