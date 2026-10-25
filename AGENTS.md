@@ -84,7 +84,7 @@ it reads as a pass.** Always confirm a `Tests:` line came back. Suite names are 
 ```bash
 <godot ...> -- tests __nomatch__ 2>&1 | sed -n 's/.*Debug output "  \([a-z0-9_.]*\)"/\1/p'
 ```
-The 136 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `econ_char`, `skill_reach`, `stop_short`, `stop_short_wiring`, `stop_short_search`, `directive_char`, `contact_cfg`, `stage_stop_ui`, `fingerprint_seek`, `felt_state`, `risk_probe` and `payout_ui` added since; post-`fingerprint`-suite split — see below.
+The 137 registered suite names (115 captured 2026-09-20, nine camera and pointer suites, `econ_char`, `skill_reach`, `stop_short`, `stop_short_wiring`, `stop_short_search`, `directive_char`, `contact_cfg`, `stage_stop_ui`, `fingerprint_seek`, `felt_state`, `risk_probe`, `payout_ui` and `summon_price_ui` added since; post-`fingerprint`-suite split — see below.
 A `seam`-suite split was also tried, measured to give no speedup, and reverted — `seam` remains
 one suite):
 ```
@@ -270,7 +270,7 @@ take 2527 s, which is 69% of all test time: `reward/pace_guide_spirit_runtime_es
 `fingerprint_guide_spirit` (279 s) and `fingerprint_determinism_pursue` (201 s). Cutting the cost of these
 tests is the next gain. It needs a decision by Jeff and is not part of the runner work.
 
-**Shard map and counts.** The map has 13 shards and one merge suite for the 136 registered suites. The runner
+**Shard map and counts.** The map has 13 shards and one merge suite for the 137 registered suites. The runner
 checks the map before it starts a shard (`scripts/check-shard-map.sh`, see above). The comment at the top of
 `scripts/test-shard-map.sh` describes how the map was packed and how to pack it again from new timing data
 (`scripts/rebalance-shards.sh`). Update the counts in this file in the same commit that changes the map.

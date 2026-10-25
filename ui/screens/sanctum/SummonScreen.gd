@@ -6,62 +6,72 @@ signal action_requested(action: Dictionary)
 signal modal_requested(modal_id: StringName, payload: Dictionary)
 
 @onready var title_label: Label = %TitleLabel
+@onready var intro_label: Label = %IntroLabel
 @onready var back_button: Button = %BackButton
 @onready var root_panel: PanelContainer = %RootPanel
+@onready var content_scroll: ScrollContainer = %ScrollContainer
+@onready var content_vbox: VBoxContainer = %ContentVBox
 
 @onready var ase_label: Label = %AseLabel
 @onready var ase_rate_label: Label = %AseRateLabel
 
-@onready var grade_option: OptionButton = %GradeOption
+@onready var living_label: Label = %LivingLabel
+@onready var next_label: Label = %NextLabel
+@onready var next_price_label: Label = %NextPriceLabel
+@onready var after_label: Label = %AfterLabel
+@onready var after_price_label: Label = %AfterPriceLabel
+@onready var reason_label: Label = %ReasonLabel
+
+@onready var grade_label: Label = %GradeLabel
+@onready var grade_buttons: Dictionary = {
+	"uncalled": %GradeUncalledButton,
+	"called": %GradeCalledButton,
+	"chosen": %GradeChosenButton,
+}
 
 @onready var count_label: Label = %CountLabel
-@onready var count_slider: HSlider = %CountSlider
-@onready var cost_label: Label = %CostLabel
+@onready var count_value_label: Label = %CountValueLabel
+@onready var minus_button: Button = %MinusButton
+@onready var plus_button: Button = %PlusButton
+@onready var max_button: Button = %MaxButton
+@onready var total_label: Label = %TotalLabel
+@onready var short_label: Label = %ShortLabel
 
 @onready var summon_button: Button = %SummonButton
+
+const INTRO_MIN_HEIGHT := 800.0
 
 var _last_snapshot: Dictionary = {}
 
 var _count: int = 1
-var _cost_each: int = 60
-var _ase: int = 0
 var _grade: String = "uncalled"
 var _bottom_content_exclusion := 108
 
 func _ready() -> void:
-	# Slider
-	count_slider.min_value = 1
-	count_slider.max_value = 10
-	count_slider.step = 1
-	count_slider.value = 1
-	count_slider.value_changed.connect(_on_count_changed)
-
-	# Buttons
 	back_button.pressed.connect(func():
 		_emit_slot_action("nav.back")
 	)
-
+	minus_button.pressed.connect(func(): _set_count(_count - 1))
+	plus_button.pressed.connect(func(): _set_count(_count + 1))
+	max_button.pressed.connect(func(): _set_count(_affordable_max()))
 	summon_button.pressed.connect(_on_summon_pressed)
 
-	# Grade options (MVP: only "uncalled" enabled)
-	_setup_grade_options()
+	next_label.text = SummonPriceText.text("price_card", "next_label")
+	after_label.text = SummonPriceText.text("price_card", "after_label")
+	count_label.text = SummonPriceText.text("summon", "count_label")
+	max_button.text = SummonPriceText.text("summon", "max_button")
+	grade_label.text = SummonPriceText.text("grade", "label")
 
-	_refresh_labels_and_button()
+	_refresh()
 
 func set_snapshot(snapshot: Dictionary) -> void:
 	_last_snapshot = snapshot
 
-	var data_v: Variant = snapshot.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var data := _data()
 
-	# Title
 	title_label.text = str(data.get("title", "Call for a new Echo"))
+	_grade = str(data.get("selected_grade", "uncalled"))
 
-	# Economy (authoritative)
-	_ase = int(data.get("ase_balance", 0))
-	_cost_each = int(data.get("ase_cost_per_summon", 60))
-
-	# Rate hint (~ X / hour)
 	var rate := float(data.get("ase_rate_per_hour_hint", 0.0))
 	ase_rate_label.text = "(~ %.1f Ase / hour)" % rate
 
@@ -76,7 +86,9 @@ func set_snapshot(snapshot: Dictionary) -> void:
 			"dismiss_action": dismiss_action,
 		})
 
-	_refresh_labels_and_button()
+	_count = clampi(_count, 1, _affordable_max())
+	_refresh()
+	_fit_panel.call_deferred()
 
 func set_layout(layout: Dictionary) -> void:
 	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
@@ -84,6 +96,8 @@ func set_layout(layout: Dictionary) -> void:
 	var logical_size_v: Variant = layout.get("logical_size", Vector2(1280, 720))
 	var logical_size: Vector2 = logical_size_v if logical_size_v is Vector2 else Vector2(1280, 720)
 	var viewport_w := float(logical_size.x)
+	# The intro line gives way on short views so the stepper and the Summon button stay in view.
+	intro_label.visible = logical_size.y >= INTRO_MIN_HEIGHT
 	var cap := 680.0 if profile == &"compact" else 760.0
 	var available_w := maxf(320.0, viewport_w - float(32 + int(ceilf(safe.x)) + int(ceilf(safe.z))))
 	var content_w := minf(available_w, cap)
@@ -92,61 +106,104 @@ func set_layout(layout: Dictionary) -> void:
 	offset_top = float(16 + int(ceilf(safe.y)))
 	offset_right = -(viewport_w - left - content_w)
 	offset_bottom = -float(_bottom_content_exclusion)
+	_fit_panel.call_deferred()
+
+# The panel is as tall as its content, up to the height this screen has, and sits in the vertical middle. The scroll area only scrolls
+# when the content is taller than the space left.
+func _fit_panel() -> void:
+	if not is_inside_tree():
+		return
+	content_scroll.custom_minimum_size.y = 0.0
+	var chrome := root_panel.get_combined_minimum_size().y
+	var room := maxf(0.0, size.y - chrome)
+	var content_h := content_vbox.get_combined_minimum_size().y
+	content_scroll.custom_minimum_size.y = minf(content_h, room)
+	var panel_h := chrome + content_scroll.custom_minimum_size.y
+	root_panel.offset_top = maxf(0.0, (size.y - panel_h) * 0.5)
+	root_panel.offset_bottom = root_panel.offset_top + panel_h
 
 func set_bottom_content_exclusion(value: int) -> void:
 	_bottom_content_exclusion = maxi(0, value)
 
-func _setup_grade_options() -> void:
-	grade_option.clear()
+func _data() -> Dictionary:
+	var data_v: Variant = _last_snapshot.get("data", {})
+	return data_v if data_v is Dictionary else {}
 
-	# Show three grades, but only "uncalled" is active in MVP
-	grade_option.add_item("Uncalled", 0)
-	grade_option.add_item("Called (Locked)", 1)
-	grade_option.add_item("Chosen (Locked)", 2)
+func _int_at(key: String, index: int) -> int:
+	var arr_v: Variant = _data().get(key, [])
+	var arr: Array = arr_v if arr_v is Array else []
+	return int(arr[index]) if index >= 0 and index < arr.size() else 0
 
-	# Disable locked items (Godot 4 OptionButton supports per-item disable)
-	grade_option.set_item_disabled(1, true)
-	grade_option.set_item_disabled(2, true)
+# The largest count the player can pay for, at least 1 (the snapshot gives 0 when even one is too dear).
+func _affordable_max() -> int:
+	return maxi(1, int(_data().get("batch_affordable_max", 0)))
 
-	grade_option.select(0)
-	_grade = "uncalled"
+func _set_count(v: int) -> void:
+	_count = clampi(v, 1, _affordable_max())
+	_refresh()
 
-	grade_option.item_selected.connect(func(idx: int):
-		# MVP: only idx 0 possible due to disabled items, but keep it safe.
-		if idx == 0:
-			_grade = "uncalled"
-		elif idx == 1:
-			_grade = "called"
-		else:
-			_grade = "chosen"
-		_refresh_labels_and_button()
-	)
+# The grade option row for the selected grade; prices come from the snapshot as given.
+func _grade_option() -> Dictionary:
+	var opts_v: Variant = _data().get("summon_grade_options", [])
+	var opts: Array = opts_v if opts_v is Array else []
+	for o_v: Variant in opts:
+		if o_v is Dictionary and str((o_v as Dictionary).get("key", "")) == _grade:
+			return o_v
+	return {}
 
-func _on_count_changed(v: float) -> void:
-	_count = int(v)
-	_refresh_labels_and_button()
+# The core says which grades are open (`enabled` on each grade option). A missing key counts as
+# locked for Called and Chosen.
+func _grade_enabled(key: String) -> bool:
+	var opts_v: Variant = _data().get("summon_grade_options", [])
+	var opts: Array = opts_v if opts_v is Array else []
+	for o_v: Variant in opts:
+		if o_v is Dictionary and str((o_v as Dictionary).get("key", "")) == key:
+			return bool((o_v as Dictionary).get("enabled", key == "uncalled"))
+	return key == "uncalled"
 
 func _on_summon_pressed() -> void:
-	var total_cost := _cost_each * _count
-	if _ase < total_cost:
+	if _short_by() > 0:
 		# UI guard only; Core is authoritative anyway.
 		return
-
 	_emit_slot_action("cta.summon", {
 		"count": _count,
 		"grade": _grade,
 		"now_unix": int(Time.get_unix_time_from_system()),
 	})
 
-func _refresh_labels_and_button() -> void:
-	count_label.text = "Summons: %d" % _count
+# Subtraction only: the snapshot total for this count minus the balance.
+func _short_by() -> int:
+	return maxi(0, _int_at("batch_totals", _count - 1) - int(_data().get("ase_balance", 0)))
 
-	var total_cost := _cost_each * _count
-	cost_label.text = "Cost: %d" % total_cost
+func _refresh() -> void:
+	var data := _data()
+	var opt := _grade_option()
 
-	ase_label.text = "Ase: %d" % _ase
+	living_label.text = SummonPriceText.with_number("price_card", "living_line", int(data.get("living_count", 0)))
+	next_price_label.text = SummonPriceText.with_number("price_card", "price", int(opt.get("ase_cost", 0)))
+	after_price_label.text = SummonPriceText.with_number("price_card", "price", int(opt.get("ase_cost_after", 0)))
+	reason_label.text = SummonPriceText.text("price_card", "reason_flat" if bool(data.get("price_flat", false)) else "reason_rising")
 
-	summon_button.disabled = (_ase < total_cost)
+	for key: String in grade_buttons.keys():
+		var b: Button = grade_buttons[key]
+		var open := _grade_enabled(key)
+		b.disabled = not open
+		b.tooltip_text = "" if open else SummonPriceText.text("grade", "locked_hint")
+		b.theme_type_variation = &"SanctumTabButtonActive" if key == _grade else &"SanctumTabButton"
+		b.button_pressed = key == _grade
+
+	count_value_label.text = str(_count)
+	total_label.text = SummonPriceText.with_number("price_card", "price", _int_at("batch_totals", _count - 1))
+	minus_button.disabled = _count <= 1
+	plus_button.disabled = _count >= _affordable_max()
+	max_button.disabled = _count >= _affordable_max()
+
+	ase_label.text = "Ase: %d" % int(data.get("ase_balance", 0))
+
+	var short := _short_by()
+	short_label.text = SummonPriceText.with_number("summon", "short_line", short) if short > 0 else ""
+	short_label.visible = short > 0
+	summon_button.disabled = short > 0 or bool(data.get("summon_disabled", false))
 
 func _emit_action(action: Dictionary) -> void:
 	action_requested.emit(action)
