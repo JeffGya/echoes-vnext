@@ -203,7 +203,7 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 		"replay_factor":  RewardCalc.replay_factor(int(realm_model.get("run_count", 0)), reward_cfg, log, t),
 		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
-		"echo_home":      _echo_home(realm_model, reward_cfg),
+		"echo_home":      _echo_home(realm_model, reward_cfg, log, t),
 		"carried_ase":    maxi(0, int(stage_ref.get("carried_ase", 0))),
 		"carried_ekwan":  maxi(0, int(stage_ref.get("carried_ekwan", 0))),
 	}
@@ -211,7 +211,8 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 
 ## The Echoes stipend input (D-43 to D-45, D-53). Both branches read the stage death record (D-50),
 ## so the card preview equals the payout after a reload, when no fight context exists.
-func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary) -> Dictionary:
+func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary,
+		log: StructuredLogger, t: int) -> Dictionary:
 	var tally: Dictionary
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	if ectx != null:
@@ -233,8 +234,9 @@ func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary) -> Dictionary:
 		tally = RewardCalc.echo_tally(party, stage_lost)
 		tally["lost"] = stage_lost
 	var replay := int(realm_model.get("run_count", 0)) > 0
-	tally["rate"] = int(reward_cfg.get("echo_home_ase", 0))
-	tally["cap"] = int(reward_cfg.get("echo_home_cap_replay" if replay else "echo_home_cap", 0))
+	tally["rate"] = int(RewardCalc.cfg_num(reward_cfg, "echo_home_ase", 0.0, log, t))
+	tally["cap"] = int(RewardCalc.cfg_num(reward_cfg,
+		"echo_home_cap_replay" if replay else "echo_home_cap", 0.0, log, t))
 	tally["replay"] = replay
 	return tally
 

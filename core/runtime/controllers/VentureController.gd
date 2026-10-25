@@ -15,9 +15,9 @@
 #   - No UI or scene-tree reference.
 #   - Reached through FlowRuntime._venture_controller(), a per-call factory.
 #
-# Owns 11 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
+# Owns 10 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
 # flow.complete_stage, stage.return_home, stage.ignore_situation, directive.select,
-# stage.dismiss_overlay, flow.select_realm, stage.confirm_return_home, and — added in Phase 6
+# stage.dismiss_overlay, flow.select_realm, and — added in Phase 6
 # Slice 6F — flow.select_stage.
 #
 # ---------------------------------------------------------------------------
@@ -441,13 +441,6 @@ func handle_dismiss_overlay(_action: Dictionary, t: int) -> FlowActionOutcome:
 	if FlowStageExploreState._get_current_stage(flow_ctx).is_empty():
 		return FlowActionOutcome.handled_outcome()
 	return FlowActionOutcome.snapshot_outcome(StageExploreSnapshotBuilder.build(flow_ctx, t))
-
-
-## stage.confirm_return_home — the player acknowledged the failed-escape overlay.
-func handle_confirm_return_home(_action: Dictionary, _t: int) -> FlowActionOutcome:
-	return FlowActionOutcome.transition_outcome(
-		FlowStateIds.STAGE_MAP, "stage.return_home.confirmed"
-	)
 
 
 # ---------------------------------------------------------------------------

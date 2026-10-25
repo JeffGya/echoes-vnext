@@ -117,6 +117,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/reboot_after_death_pays_what_the_card_showed", Callable(EconomyCharacterizationTests, "_t_reboot_after_death"))
 	runner.register_test("econ_char/reboot_replayed_card_pays_what_it_showed", Callable(EconomyCharacterizationTests, "_t_reboot_replayed_card"))
 	runner.register_test("econ_char/charge_completion_after_death_pays_with_record", Callable(EconomyCharacterizationTests, "_t_charge_after_death"))
+	runner.register_test("econ_char/death_record_survives_return_home_and_replay_starts_empty", Callable(EconomyCharacterizationTests, "_t_death_record_lifetime"))
 	runner.register_test("econ_char/missing_rewards_key_logs_and_returns_safe_value", Callable(EconomyCharacterizationTests, "_t_missing_key_logs"))
 	runner.register_test("econ_char/balance_defeat_factor_is_one_quarter", Callable(EconomyCharacterizationTests, "_t_defeat_factor_config"))
 
@@ -318,6 +319,16 @@ static func _t_missing_key_logs() -> Dictionary:
 		mismatches.append("realm_scale with no step is not 1.0")
 	if not is_equal_approx(RewardCalc.replay_factor(1, {}, logger, 5), 1.0):
 		mismatches.append("replay_factor with no key is not 1.0")
+	# Step 5.14 (F2): the Echoes stipend keys read through the same reader.
+	var echo_logger := StructuredLogger.new()
+	var echo_ctx := _stage_ctx(_config(), [])
+	var echo_svc := StageSettlementService.new(echo_ctx, echo_ctx.config_service, null, null)
+	var tally: Dictionary = echo_svc._echo_home({ "run_count": 1 }, {}, echo_logger, 5)
+	var echo_keys: Array = []
+	for le in echo_logger.get_logs():
+		echo_keys.append(str((le["data"] as Dictionary).get("key")))
+	if echo_keys != ["echo_home_ase", "echo_home_cap_replay"] or int(tally["rate"]) != 0 or int(tally["cap"]) != 0:
+		mismatches.append("echo_home with no keys logged %s, tally %s" % [str(echo_keys), str(tally)])
 	var logs := logger.get_logs()
 	if logs.size() != 2:
 		mismatches.append("expected 2 log lines, got %d" % logs.size())
@@ -2193,6 +2204,41 @@ static func _t_death_record_old_and_replay() -> Dictionary:
 			or JSON.stringify(replay.get("objective_overcome")) != JSON.stringify(data.get("objective_overcome")):
 		m.append("(h) replayed card %s / %s, stored %s / %s" % [str(replay.get("thread_whole")),
 			JSON.stringify(replay.get("objective_overcome")), str(data.get("thread_whole")), JSON.stringify(data.get("objective_overcome"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-103 (F4): a death stays on the stage record through a return home, so visit 2 keeps the
+## reduced stipend; a re-run builds a fresh realm model, so a replay starts with no record.
+static func _t_death_record_lifetime() -> Dictionary:
+	var m: Array = []
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var env := _final_card("econ_char_lifetime", [_req(0, "combat", false), _req(1, "shrine", true), boss], true, true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var runtime: FlowRuntime = env["runtime"]
+	var fc: FlowContext = env["flow_ctx"]
+	var first := str(env["dead_name"])
+	runtime._stage_explore_session_service().record_fight_deaths(7)
+	fc.encounter_ctx = null
+	runtime.dispatch({ "type": "stage.return_home" })
+	if str(ActiveStageService.stage_lost_echo_names(fc)) != str([first]):
+		m.append("after return home the record is %s, expected [%s]" % [str(ActiveStageService.stage_lost_echo_names(fc)), first])
+	var svc := StageSettlementService.new(fc, fc.config_service, null, null)
+	var p: Dictionary = _stipend_row(svc.preview()).get("params", {})
+	if str(p.get("lost", [])) != str([first]):
+		m.append("visit 2 stipend row lost %s, expected [%s]" % [str(p.get("lost")), first])
+	# Stage cleared: the next run of the realm is a new model with new stages.
+	var realm_id := fc.realm_id
+	var old_model: Dictionary = fc.save_data["realms"][realm_id]
+	var old_runs := int(old_model.get("run_count", 0))
+	old_model["status"] = RealmModel.STATUS_COMPLETED
+	var fresh: Dictionary = RealmService.get_or_create(realm_id, fc, 20)
+	if int(fresh.get("run_count", 0)) != old_runs + 1:
+		m.append("re-run did not increment run_count")
+	for s_v in fresh.get("stages", []):
+		if (s_v as Dictionary).has("lost_echo_names"):
+			m.append("a replay stage inherited lost_echo_names")
+			break
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 

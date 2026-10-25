@@ -8,7 +8,7 @@
 #   C. FlowRuntime._build_scout_return_snapshot()                               (:4326–:4381)
 #      — reached from BOTH call sites: encounter.retreat (:1134) and
 #        _handle_stage_return_home (:4869)
-#   D. "stage.confirm_return_home" (:562–:563) and "stage.dismiss_overlay" (:565–:571)
+#   D. "stage.dismiss_overlay" (:565–:571)
 #   E. ContactController._build_contact_resolve_snapshot()
 #      — shape guard only; the SITUATION side of the same merge is already covered by
 #        tests/UnifiedResolveTests.gd and is deliberately NOT duplicated here.
@@ -75,8 +75,7 @@ static func register(runner) -> void:
 	runner.register_test("venture_char/scout_return_builder_is_pure_dispatch_consumes_once", func(): return _t_scout_return_pure_dispatch_consumes())
 	runner.register_test("venture_char/return_home_call_site_builds_scout_return", func(): return _t_return_home_scout_return())
 	runner.register_test("venture_char/scout_return_builder_uses_static_party_reader", func(): return _t_scout_return_static_party_reader())
-	# D — stage.confirm_return_home / stage.dismiss_overlay
-	runner.register_test("venture_char/confirm_return_home_transitions_to_stage_map", func(): return _t_confirm_return_home())
+	# D — stage.dismiss_overlay
 	runner.register_test("venture_char/dismiss_overlay_rebuilds_stage_explore", func(): return _t_dismiss_overlay())
 	# E — contact resolve snapshot shape
 	runner.register_test("venture_char/contact_resolve_shape_back_to_stage", func(): return _t_contact_resolve_to_stage())
@@ -898,9 +897,9 @@ static func _t_scout_return_pure_dispatch_consumes() -> Dictionary:
 
 	# 3 — the closure's gate. This dispatch publishes flow.stage_map, not a scout-return
 	#     resolve, so it must NOT touch the one-shots.
-	var out_other: Dictionary = runtime.dispatch({ "type": "stage.confirm_return_home" })
+	var out_other: Dictionary = runtime.dispatch({ "type": "stage.dismiss_overlay" })
 	if str(out_other.get("type", "")) == FlowStateIds.RESOLVE:
-		mismatches.append("test setup failed: expected stage.confirm_return_home to publish a non-resolve snapshot")
+		mismatches.append("test setup failed: expected stage.dismiss_overlay to publish a non-resolve snapshot")
 	if ctx.pending_scout_return_ase != awarded or ctx.pending_scout_return_intel_count != intel_count:
 		mismatches.append("expected a dispatch that publishes a non-scout snapshot to leave the one-shots intact — the closure's run_type gate is missing or broken")
 
@@ -1045,41 +1044,8 @@ static func _t_scout_return_static_party_reader() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# D — "stage.confirm_return_home" (:562) and "stage.dismiss_overlay" (:565)
+# D — "stage.dismiss_overlay" (:565)
 # ---------------------------------------------------------------------------
-
-## The whole handler is one transition line: RESOLVE/EXPLORE → flow.stage_map. No save is
-## requested, so this dispatch must flush nothing.
-static func _t_confirm_return_home() -> Dictionary:
-	var env := _setup_explore_env("confirm_return")
-	if not bool(env.get("ok", false)):
-		return env
-	var runtime: FlowRuntime = env["runtime"]
-	var logger: StructuredLogger = env["logger"]
-
-	logger.clear()
-	var out: Dictionary = runtime.dispatch({ "type": "stage.confirm_return_home" })
-	var flushes := _flush_count(logger)
-
-	var mismatches: Array = []
-	if str(out.get("type", "")) != FlowStateIds.STAGE_MAP:
-		mismatches.append("expected %s, got %s" % [FlowStateIds.STAGE_MAP, str(out.get("type", ""))])
-	var keys := _sorted_action_keys(out)
-	# FlowStageMapState.build_snapshot() emits exactly two slots: "nav.back" unconditionally and
-	# "cta.enter_stage" only while the realm is incomplete (core/state/flow/states/venture/
-	# FlowStageMapState.gd:97-113). There is no "nav.skills" slot anywhere in core/ or ui/ —
-	# `git log -S"nav.skills"` finds no commit that ever added one. The earlier expectation was
-	# invented, not observed; corrected here rather than reported as a missing action.
-	var expected_keys := ["cta.enter_stage", "nav.back"]
-	if keys != expected_keys:
-		mismatches.append("flow.stage_map action slots changed: expected %s, got %s" % [str(expected_keys), str(keys)])
-	if flushes != 0:
-		mismatches.append("expected 0 save flushes for a pure transition, got %d" % flushes)
-
-	if not mismatches.is_empty():
-		return { "ok": false, "error": " | ".join(mismatches) }
-	return { "ok": true }
-
 
 ## stage.dismiss_overlay rebuilds the flow.stage_explore snapshot from save_data (rather than
 ## calling refresh_snapshot() alone, which would just re-validate the stale snapshot — Lesson

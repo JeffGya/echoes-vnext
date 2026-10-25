@@ -648,9 +648,6 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"stage.disengage_contact":
 				_apply_action_outcome(_contact_controller().handle_disengage_contact(action, t), t)
 	
-			"stage.confirm_return_home":
-				_apply_action_outcome(_venture_controller().handle_confirm_return_home(action, t), t)
-
 			# V2-INFRA-003 Phase 5 Slice D: originally planned as runtime-owned, but its body
 			# rebuilds a stage-explore snapshot, so it is venture-domain and moved with the rest.
 			"stage.dismiss_overlay":
@@ -1100,10 +1097,10 @@ func _contact_controller() -> ContactController:
 
 ## V2-INFRA-003 Phase 5 Slice D: builds a fresh VentureController scoped to the current
 ## flow_ctx/config_service/econ/directive_service/logger. Same per-call construction rationale
-## as _weave_controller() above. Owns 10 actions: stage.advance_turn, stage.engage_situation,
+## as _weave_controller() above. Owns 9 actions: stage.advance_turn, stage.engage_situation,
 ## stage.resolve_situation_choice, flow.complete_stage, stage.return_home,
-## stage.ignore_situation, directive.select, stage.dismiss_overlay, flow.select_realm,
-## stage.confirm_return_home. `directive_service` is a dependency because three of those
+## stage.ignore_situation, directive.select, stage.dismiss_overlay, flow.select_realm.
+## `directive_service` is a dependency because three of those
 ## handlers resolve the active directive (advance_turn's step budget / reveal radius,
 ## return_home's escape bonus, and directive.select itself).
 func _venture_controller() -> VentureController:
