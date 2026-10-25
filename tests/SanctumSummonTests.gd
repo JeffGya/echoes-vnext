@@ -14,6 +14,7 @@ static func _summoning_cfg() -> Dictionary:
 	}
 
 static func register(runner: CoreTestRunner) -> void:
+	runner.register_test("sanctum.summon/missing_grade_surcharge_pays_base_only", Callable(SanctumSummonTests, "_t_missing_surcharge"))
 	runner.register_test("sanctum.summon/echo_factory_same_path_is_identical", Callable(SanctumSummonTests, "_t_same_path_is_identical"))
 	runner.register_test("sanctum.summon/echo_factory_diff_path_differs", Callable(SanctumSummonTests, "_t_diff_path_differs"))
 	runner.register_test("sanctum.summon/starter_uses_reserved_namespace", Callable(SanctumSummonTests, "_t_starter_namespace"))
@@ -687,6 +688,17 @@ static func _t_unlocked_called() -> Dictionary:
 	if spent != 160:
 		return { "ok": false, "error": "called at echo 4 must cost 160, spent %d" % spent }
 	return { "ok": true }
+
+## A missing surcharge key pays the base price only. The push_error line is read from the run output:
+## the runner cannot capture it. Look for "data.summoning.chosen_extra is missing".
+static func _t_missing_surcharge() -> Dictionary:
+	var cfg := { "village_ceiling": 14, "price_by_echo_number": { "2": 60 }, "called_extra": 90 }
+	var called := SummonService.price_for(cfg, "called", 2)
+	var chosen := SummonService.price_for(cfg, "chosen", 2)
+	if called != 150 or chosen != 60:
+		return { "ok": false, "error": "called %d (expected 150), chosen with no key %d (expected 60)" % [called, chosen] }
+	return { "ok": true }
+
 
 static func _t_enabled_missing_key() -> Dictionary:
 	var cases := [

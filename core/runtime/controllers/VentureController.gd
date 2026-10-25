@@ -386,7 +386,7 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 	var snap_fail := StageExploreSnapshotBuilder.build(flow_ctx, t)
 	snap_fail["data"]["return_home_result"] = {
 		"success": false,
-		"message": "The way is blocked. The party cannot leave yet.",
+		"message": "It was not possible to escape at the moment. Move on, we can try again later.",
 	}
 	return FlowActionOutcome.snapshot_outcome(snap_fail)
 

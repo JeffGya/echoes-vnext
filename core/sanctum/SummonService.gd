@@ -44,7 +44,11 @@ static func price_for(summoning_cfg: Dictionary, grade: String, echo_number: int
 		base = low_base
 	if grade == "uncalled":
 		return base
-	return base + int(summoning_cfg.get("%s_extra" % grade, 0))
+	var extra_key := "%s_extra" % grade
+	if not summoning_cfg.has(extra_key):
+		push_error("SummonService: data.summoning.%s is missing; no surcharge applied" % extra_key)
+		return base
+	return base + int(summoning_cfg[extra_key])
 
 
 ## The one reader of data.summoning.grade_enabled. A missing key means enabled for uncalled and

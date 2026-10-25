@@ -375,7 +375,7 @@ func _return_home_modal(carry: Dictionary, failed: bool = false) -> Dictionary:
 		{ "name": "Esi", "emotional_status": "whole" }]
 	if failed:
 		return { "_modal": { "id": &"realm.return_home", "payload": {
-			"result": { "success": false, "message": "The way is blocked. The party cannot leave yet." } } } }
+			"result": { "success": false, "message": "It was not possible to escape at the moment. Move on, we can try again later." } } } }
 	return { "_modal": { "id": &"realm.return_home", "payload": {
 		"confirm": true, "action": { "type": "stage.return_home" }, "carry": carry, "party": party } } }
 

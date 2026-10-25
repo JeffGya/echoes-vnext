@@ -74,6 +74,7 @@ static func register(runner) -> void:
 	runner.register_test("venture_char/scout_return_meta_carries_t", func(): return _t_scout_return_meta_t())
 	runner.register_test("venture_char/scout_return_builder_is_pure_dispatch_consumes_once", func(): return _t_scout_return_pure_dispatch_consumes())
 	runner.register_test("venture_char/return_home_call_site_builds_scout_return", func(): return _t_return_home_scout_return())
+	runner.register_test("venture_char/return_home_failed_escape_message", func(): return _t_return_home_failed_message())
 	runner.register_test("venture_char/scout_return_builder_uses_static_party_reader", func(): return _t_scout_return_static_party_reader())
 	# D — stage.dismiss_overlay
 	runner.register_test("venture_char/dismiss_overlay_rebuilds_stage_explore", func(): return _t_dismiss_overlay())
@@ -985,6 +986,43 @@ static func _t_return_home_scout_return() -> Dictionary:
 
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }
+	return { "ok": true }
+
+
+## A failed escape roll publishes this exact message (Jeff's wording; do not edit it).
+static func _t_return_home_failed_message() -> Dictionary:
+	var env := _setup_explore_env("return_home_fail")
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var realm_seed := int(_realm(runtime.get_save_data(), "realm.01").get("seed", 0))
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var escape_threshold: int = maxi(0, 40 - int(directive.get("escape_bonus", 0)))
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return { "ok": false, "error": "test setup failed: no active stage" }
+	var emap_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = emap_v if emap_v is Dictionary else {}
+	var chosen_turn := -1
+	for candidate in range(0, 200):
+		var probe := CampaignSeed.get_rng_from(realm_seed, "stage.escape.%s.%d" % [flow_ctx.stage_id, candidate])
+		if probe.randi_range(0, 100) <= escape_threshold:
+			chosen_turn = candidate
+			break
+	if chosen_turn < 0:
+		return { "ok": false, "error": "test setup failed: no turn_count in 0..199 produced a failed escape roll" }
+	explore_map["turn_count"] = chosen_turn
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	var out: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
+	var data_v: Variant = out.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var res_v: Variant = data.get("return_home_result", {})
+	var res: Dictionary = res_v if res_v is Dictionary else {}
+	var expected := "It was not possible to escape at the moment. Move on, we can try again later."
+	if bool(res.get("success", true)) or str(res.get("message", "")) != expected:
+		return { "ok": false, "error": "failed escape result was %s" % str(res) }
 	return { "ok": true }
 
 

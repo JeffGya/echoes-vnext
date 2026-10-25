@@ -119,6 +119,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/charge_completion_after_death_pays_with_record", Callable(EconomyCharacterizationTests, "_t_charge_after_death"))
 	runner.register_test("econ_char/death_record_survives_return_home_and_replay_starts_empty", Callable(EconomyCharacterizationTests, "_t_death_record_lifetime"))
 	runner.register_test("econ_char/missing_rewards_key_logs_and_returns_safe_value", Callable(EconomyCharacterizationTests, "_t_missing_key_logs"))
+	runner.register_test("econ_char/contact_claimant_good_ase_is_20_and_missing_key_logs", Callable(EconomyCharacterizationTests, "_t_claimant_good_ase"))
 	runner.register_test("econ_char/balance_defeat_factor_is_one_quarter", Callable(EconomyCharacterizationTests, "_t_defeat_factor_config"))
 
 
@@ -343,6 +344,21 @@ static func _t_missing_key_logs() -> Dictionary:
 	RewardCalc.replay_factor(1, cfg, quiet, 5)
 	if not quiet.get_logs().is_empty():
 		mismatches.append("a complete config logged %s" % str(quiet.get_logs()))
+	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
+
+
+static func _t_claimant_good_ase() -> Dictionary:
+	var quiet := StructuredLogger.new()
+	var v := ContactController.claimant_good_ase(_rewards_cfg(), quiet, 7)
+	var mismatches: Array = []
+	if v != 20 or not quiet.get_logs().is_empty():
+		mismatches.append("shipped value %d (expected 20), logs %s" % [v, str(quiet.get_logs())])
+	var loud := StructuredLogger.new()
+	var missing := ContactController.claimant_good_ase({}, loud, 7)
+	var logs := loud.get_logs()
+	if missing != 0 or logs.size() != 1 or int(logs[0]["t"]) != 7 \
+			or str((logs[0]["data"] as Dictionary).get("key")) != "contact_claimant_good_ase":
+		mismatches.append("missing key paid %d, logs %s" % [missing, str(logs)])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 

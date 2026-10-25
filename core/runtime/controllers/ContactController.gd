@@ -151,6 +151,11 @@ var econ: EconomyService
 var logger: StructuredLogger
 
 
+## Ase for a good Claimant contact. A missing key logs and pays 0.
+static func claimant_good_ase(reward_cfg: Dictionary, log: StructuredLogger, t: int) -> int:
+	return int(RewardCalc.cfg_num(reward_cfg, "contact_claimant_good_ase", 0.0, log, t))
+
+
 func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _econ: EconomyService, _logger: StructuredLogger) -> void:
 	flow_ctx = _flow_ctx
 	config_service = _config_service
@@ -613,9 +618,8 @@ func apply_contact_outcome(
 
 		"claimant":
 			if outcome == "good":
-				# Small Ase reward
-				var _ase_reward := 20
-				econ.add_ase(_ase_reward, "contact.claimant.good", logger, t)
+				econ.add_ase(claimant_good_ase(ConfigService.get_rewards_cfg(config_service), logger, t),
+					"contact.claimant.good", logger, t)
 				_emotion_consequence_service().apply_morale_to_party(+5, "contact.claimant.good", t)
 			elif outcome == "partial":
 				_emotion_consequence_service().apply_morale_to_party(+3, "contact.claimant.partial", t)

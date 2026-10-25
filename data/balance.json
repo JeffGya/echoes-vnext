@@ -1592,7 +1592,9 @@
 				"C": 0.35,
 				"D": 0.15
 			},
-			"partial_intel_reward_factor": 0.12
+			"partial_intel_reward_factor": 0.12,
+			"_contact_claimant_good_comment": "Ase paid once for a good Claimant contact (V2-ECONOMY-004 5.15). Outside the realm scale and the replay factor.",
+			"contact_claimant_good_ase": 20
 		},
 		"grid": {
 			"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",
