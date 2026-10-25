@@ -114,3 +114,12 @@ Open for the UI: the return and retreat confirmation can say what is banked now 
 - D1: on a stage-ending card with the home sequence, the first-time ledger stays closed while the sequence runs. It opens when the sequence ends, when the player skips it by tap or key, or at once under reduced motion. `resolve.ledger.mark_seen` is sent when the ledger opens, once. A new snapshot mid-sequence drops the old wish with no emit. Cards with no home sequence open the ledger at once. After it opens, the screen scrolls only as far as needed to keep the "home N of M" line visible.
 - D-17 (PROPOSAL, pending Jeff's read): the pace rank-cause note ("The party's effort earned this rank") is not shown on a mid-stage win, because that card shows no rank letter and the note would have no anchor. It stays on the stage-ending card next to the Rank chip.
 - D3: the Pace UI tests now use the stage-ending card and assert `is_visible_in_tree()`, not the `visible` property.
+
+## D-18: placeholders replaced by real fields (UI, 2026-10-25)
+
+- Thread line: reads `data.thread_whole` (bool, combat victory card). It shows "The Thread is whole so far." only when true. False or missing hides it. The derivation from `actors` is deleted.
+- Story mark: reads `data.objective_overcome` ({ index, type, label }, present only when this fight overcame an objective). It shows "Found and overcome." plus the label from data. The index and the type are never shown.
+- Intel line: reads `data.intel_gained` (an int; the key exists only above 0). Hidden when missing or 0. No fight reveals a situation today, so it does not show in real play; fixtures prove it.
+- `echoes_alive` params: `lost` holds every death of the stage so far, and `alive` excludes them. The home sequence reads the params only. A lost name with no row in this fight (a death in an earlier fight) shows once in a note under the rows, and the ledger row drops its own note.
+- Still PROPOSAL placeholder copy (Jeff owns it): "Found and overcome." and the intel line text.
+- GAP for Jeff's copy: no wording exists for a broken Thread, so the Thread line is simply hidden when `thread_whole` is false.

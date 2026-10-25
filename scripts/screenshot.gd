@@ -108,6 +108,7 @@ func _fixtures() -> Dictionary:
 		"resolve_ledger_open_fight": [_combat(6, recover), _payout_repeat_defeat()],
 		"resolve_stage_end": [_combat(6, recover), _payout_stage_end(false), "skip_motion"],
 		"resolve_stage_end_first_view": [_combat(6, recover), _payout_stage_end(false), "freeze_motion"],
+		"resolve_stage_earlier_death": [_combat(6, recover), _payout_stage_earlier_death(), "skip_motion"],
 		"resolve_stage_home_lost": [_combat(6, recover), _payout_stage_end(true), "skip_motion"],
 		"resolve_stage_home_all": [_combat(6, recover), _payout_stage_all_home(), "skip_motion"],
 		"resolve_midstage_win_no_rows": [_combat(6, recover), _payout_midstage_win(), "skip_motion"],
@@ -269,11 +270,13 @@ func _payout_midstage_win() -> Dictionary:
 	return _payout_snap(data)
 
 
-## The same card after a shaken Echo. `intel_gained` is a hypothetical key: the backend has not added it.
+## The same card with every line present: a shaken Echo, an overcome objective, intel, a whole Thread.
 func _payout_midstage_event() -> Dictionary:
 	var snap := _payout_midstage_win()
 	snap["data"]["emotion_summary"][1]["direction"] = "fall"
 	snap["data"]["intel_gained"] = 1
+	snap["data"]["thread_whole"] = true
+	snap["data"]["objective_overcome"] = { "index": 1, "type": "recover", "label": "A lost keepsake is recovered." }
 	return snap
 
 
@@ -298,6 +301,15 @@ func _payout_stage_all_home() -> Dictionary:
 	var snap := _payout_stage_end(true)
 	var rows: Array = snap["data"]["stage_payout_rows"]
 	rows[2] = _row("Echoes home", 6, "echoes_alive", { "alive": 3, "started": 3, "lost": [], "cap": 10, "replay": false })
+	snap["data"]["echoes_survived"] = 3
+	return snap
+
+
+## Yaw died in an earlier fight: params.lost names him, no row of this fight carries him.
+func _payout_stage_earlier_death() -> Dictionary:
+	var snap := _payout_stage_end(true)
+	var rows: Array = snap["data"]["stage_payout_rows"]
+	rows[2] = _row("Echoes home", 6, "echoes_alive", { "alive": 3, "started": 4, "lost": ["Yaw"], "cap": 10, "replay": false })
 	snap["data"]["echoes_survived"] = 3
 	return snap
 

@@ -28,6 +28,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/midstage_card_has_no_ase_text_or_ledger", Callable(ResolvePayoutUITests, "_t_midstage_no_ase"))
 	runner.register_test("payout_ui/midstage_lines_appear_only_with_data", Callable(ResolvePayoutUITests, "_t_midstage_lines"))
 	runner.register_test("payout_ui/home_sequence_final_state_with_lost_name_once", Callable(ResolvePayoutUITests, "_t_home_final"))
+	runner.register_test("payout_ui/home_sequence_names_an_earlier_fight_death_once", Callable(ResolvePayoutUITests, "_t_home_earlier_death"))
+	runner.register_test("payout_ui/no_placeholder_derivation_remains", Callable(ResolvePayoutUITests, "_t_no_placeholder"))
 	runner.register_test("payout_ui/home_sequence_all_home_has_no_lost_line_or_label", Callable(ResolvePayoutUITests, "_t_home_all"))
 	runner.register_test("payout_ui/home_sequence_motion_skips_on_tap_and_never_blocks", Callable(ResolvePayoutUITests, "_t_home_motion_skip"))
 	runner.register_test("payout_ui/carried_ekwan_line_on_scout_return", Callable(ResolvePayoutUITests, "_t_carried_ekwan"))
@@ -140,9 +142,11 @@ static func _t_stage_end() -> Dictionary:
 	var stage_rows := _rows_in(screen, "%StageSection")
 	if stage_rows.size() != 4 or not screen.get_node("%StageGroup").visible:
 		return _fail(m, "stage group does not show the 4 stage rows")
-	if (stage_rows[2] as RewardEntryItem).note_label.text != "Kofi did not come home." \
-			or not (stage_rows[2] as RewardEntryItem).note_label.visible:
-		return _fail(m, "lost-name note missing: %s" % (stage_rows[2] as RewardEntryItem).note_label.text)
+	# The lost name shows once: this card has no emotion row for him, so the note under the rows names him.
+	screen.skip_motion()
+	var named := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not come home" in str(t))
+	if named != ["Kofi did not come home."]:
+		return _fail(m, "lost-name lines: %s" % str(named))
 	var carried: RewardEntryItem = stage_rows[3]
 	if carried.delta_label.text != "\u221212 Ase" or carried.entry_label.text != "Carried home":
 		return _fail(m, "carried row is %s / %s" % [carried.entry_label.text, carried.delta_label.text])
@@ -539,11 +543,9 @@ static func _summary(who: String, tag: String = "", direction: String = "steady"
 		"post_emotional_status": "grounded", "direction": direction, "tag": tag }
 
 
-## Mid-stage win: three Echoes in the party, all alive, plus an ally and a spirit that do not count.
+## Mid-stage win. thread_whole is on the combat victory card; each test sets or erases it.
 static func _midstage(extra: Dictionary = {}) -> Dictionary:
-	var data := { "ledger_seen": true, "echoes_survived": 3,
-		"actors": [_actor("Ama"), _actor("Kofi"), _actor("Esi"),
-			_actor("Yaw", "echo", { "is_ally": true }), _actor("Nana", "echo", { "is_spirit": true })],
+	var data := { "ledger_seen": true, "thread_whole": true,
 		"emotion_summary": [_summary("Ama"), _summary("Kofi"), _summary("Esi")] }
 	data.merge(extra, true)
 	return _snap([], data)
@@ -588,33 +590,58 @@ static func _t_midstage_lines() -> Dictionary:
 	var m := _mount()
 	var screen: ResolveScreen = m[1]
 	var change := screen.get_node("%ChangeLine") as Label
+	var objective := screen.get_node("%ObjectiveLine") as Label
 	var intel := screen.get_node("%IntelLine") as Label
 	var thread := screen.get_node("%ThreadLine") as Label
 	var err := ""
-	# No event, no intel field: only the Thread line shows.
+	# thread_whole true shows the line; false and a missing key hide it.
 	screen.set_snapshot(_midstage())
-	if change.visible or intel.visible or not thread.visible or thread.text != PayoutCausePresentation.THREAD_WHOLE:
-		err = "plain win: change=%s intel=%s thread=%s" % [change.visible, intel.visible, thread.visible]
-	# A shaken Echo gives the change line. intel_gained gives the intel line.
+	if not thread.visible or thread.text != PayoutCausePresentation.THREAD_WHOLE or change.visible or objective.visible or intel.visible:
+		err = "plain win: thread=%s change=%s objective=%s intel=%s" % [thread.visible, change.visible, objective.visible, intel.visible]
 	if err.is_empty():
-		screen.set_snapshot(_midstage({ "intel_gained": 2,
-			"emotion_summary": [_summary("Ama"), _summary("Kofi", "", "fall"), _summary("Esi")] }))
-		if change.text != "Kofi was shaken." or not intel.visible or intel.text != PayoutCausePresentation.INTEL_LEARNED:
-			err = "event win: change \"%s\", intel visible %s" % [change.text, intel.visible]
-	# Two Echoes held back: one line, both names.
+		screen.set_snapshot(_midstage({ "thread_whole": false }))
+		if thread.visible:
+			err = "thread_whole false must hide the Thread line"
+	if err.is_empty():
+		var snap := _midstage()
+		snap["data"].erase("thread_whole")
+		screen.set_snapshot(snap)
+		if thread.visible or (screen.get_node("%StoryLines") as Control).visible:
+			err = "a missing thread_whole must hide the Thread line"
+	# objective_overcome: the label shows, the index and the type never do.
+	if err.is_empty():
+		screen.set_snapshot(_midstage({ "objective_overcome": { "index": 7, "type": "fixture_type", "label": "A test label." } }))
+		if not objective.visible or objective.text != "Found and overcome. A test label.":
+			err = "objective line: \"%s\"" % objective.text
+		for t in _visible_texts(screen):
+			if "fixture_type" in str(t) or "7" in str(t):
+				err = "objective index or type shown: \"%s\"" % t
+	if err.is_empty():
+		screen.set_snapshot(_midstage())
+		if objective.visible:
+			err = "objective line shown with no objective_overcome"
+	# intel_gained: shown at 2; hidden at 0 and when absent.
+	if err.is_empty():
+		screen.set_snapshot(_midstage({ "intel_gained": 2 }))
+		if not intel.visible or intel.text != PayoutCausePresentation.INTEL_LEARNED:
+			err = "intel_gained 2: visible=%s" % intel.visible
+	if err.is_empty():
+		screen.set_snapshot(_midstage({ "intel_gained": 0 }))
+		if intel.visible:
+			err = "intel_gained 0 must hide the line"
+	# A shaken Echo gives the change line; two Echoes held back give one line with both names.
+	if err.is_empty():
+		screen.set_snapshot(_midstage({ "emotion_summary": [_summary("Ama"), _summary("Kofi", "", "fall"), _summary("Esi")] }))
+		if change.text != "Kofi was shaken.":
+			err = "event win: change \"%s\"" % change.text
 	if err.is_empty():
 		screen.set_snapshot(_midstage({ "emotion_summary": [_summary("Ama", "refused"), _summary("Kofi", "refused")] }))
 		if change.text != "Ama and Kofi held back.":
 			err = "two refused: \"%s\"" % change.text
-	# A fallen Echo: the Thread line is gone, and cannot come back with the same snapshot.
+	# A win with nothing at all shows no story lines.
 	if err.is_empty():
-		screen.set_snapshot(_midstage({ "echoes_survived": 2, "emotion_summary": [_summary("Ama"), _summary("Kofi", "ko")] }))
-		if thread.visible or change.text != "Kofi fell.":
-			err = "fallen Echo: thread visible %s, change \"%s\"" % [thread.visible, change.text]
-	# No party data: no Thread line (nothing is claimed).
-	if err.is_empty():
-		screen.set_snapshot(_snap([], { "ledger_seen": true, "echoes_survived": 3, "emotion_summary": [] }))
-		if thread.visible or change.visible or intel.visible or (screen.get_node("%StoryLines") as Control).visible:
+		screen.set_snapshot(_snap([], { "ledger_seen": true, "emotion_summary": [] }))
+		if (screen.get_node("%StoryLines") as Control).visible:
 			err = "a win without data shows story lines"
 	StopMarkMotion.reduced = before
 	if not err.is_empty():
@@ -998,3 +1025,51 @@ static func _t_ledger_new_snapshot() -> Dictionary:
 	if not err.is_empty():
 		return _fail(m, err)
 	return _pass(m)
+
+
+## params.lost holds every death of the stage. Kofi died in an EARLIER fight: no row of this fight
+## carries him, and the count still reads from params (4 started, 3 home).
+static func _t_home_earlier_death() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var snap := _stage_home(["Kofi"], 3, 4)
+	var summary: Array = []
+	for n in ["Ama", "Esi", "Yaw"]:
+		summary.append(_summary(n))
+	snap["data"]["emotion_summary"] = summary
+	snap["data"]["actors"] = []
+	screen.set_snapshot(snap)
+	var texts := _visible_texts(screen)
+	var count := _label(screen, "%HomeCountLabel").text
+	StopMarkMotion.reduced = before
+	if count != "home 3 of 4":
+		return _fail(m, "count is \"%s\"" % count)
+	var lost_lines := texts.filter(func(t: Variant) -> bool: return "did not come home" in str(t))
+	if lost_lines != ["Kofi did not come home."]:
+		return _fail(m, "lost lines: %s" % str(lost_lines))
+	var homes := texts.filter(func(t: Variant) -> bool: return str(t) == "home")
+	if homes.size() != 3:
+		return _fail(m, "expected 3 home marks, got %d" % homes.size())
+	# The same death named by a row of this fight shows once there, not twice.
+	StopMarkMotion.reduced = true
+	screen.set_snapshot(_stage_home(["Kofi"], 3, 4))
+	var again := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not come home" in str(t))
+	StopMarkMotion.reduced = before
+	if again != ["Kofi did not come home."]:
+		return _fail(m, "a matched name shows %d times" % again.size())
+	return _pass(m)
+
+
+## The Thread, objective and intel lines read real fields. No derivation from actors remains.
+static func _t_no_placeholder() -> Dictionary:
+	var code := FileAccess.get_file_as_string("res://ui/screens/venture/ResolveScreen.gd")
+	if code.is_empty():
+		return { "ok": false, "error": "cannot read ResolveScreen.gd" }
+	for needle in ["_thread_whole", "PLACEHOLDER", "hypothetical", "echoes_survived\", -1"]:
+		if needle in code:
+			return { "ok": false, "error": "ResolveScreen.gd still holds \"%s\"" % needle }
+	for field in ["thread_whole", "objective_overcome", "intel_gained"]:
+		if "\"%s\"" % field not in code:
+			return { "ok": false, "error": "ResolveScreen.gd does not read %s" % field }
+	return { "ok": true }
