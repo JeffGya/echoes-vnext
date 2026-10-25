@@ -57,13 +57,11 @@ All player-facing strings are placeholder. Copy is Jeff's. Agents propose, marke
 3. Gaps with no wording yet: a broken Thread (the Thread line is hidden when `thread_whole` is false); a repeat return home with nothing new to carry (follow-up 30); the skipped-objective display (follow-up 26, D-97); the fiction frame for the rising summon price (follow-up 21).
 4. Vocabulary Jeff uses: "earns", "found and overcome", "village", "home".
 
-## Open question for Jeff: failed-escape confirmation
+## Failed-escape copy: decided (D-103, steps 5.15 and 5.16)
 
-The orchestrator asked that this topic be recorded. No document in this folder or in `v2-payout-explanation/` states the question or the "+4 Ase" figure. The topic below is as named by the orchestrator: the failed-escape confirmation copy ("+4 Ase") and the `turn_count`-seeded escape roll. UNSOURCED: the exact question, and where "+4 Ase" appears. The orchestrator or Jeff must state them.
-
-- Fact from the code: `VentureController.handle_return_home` rolls the escape with the seed path `stage.escape.<stage_id>.<turn_count>`. `turn_count` rises only on an Advance (`StageExploreTurnService.advance_turn`).
-- Fact from the decisions: the Return button now opens a confirmation first, with `carry_home_preview` (D-102 D2; `v2-payout-explanation/decisions.md`). A failed escape shows "Blocked" with no carried figure. Continue sends `stage.dismiss_overlay`.
-- Status: not decided. Jeff decides. Do not change the roll or the copy before he answers.
+- Fact from the code: `VentureController.handle_return_home` rolls the escape with the seed path `stage.escape.<stage_id>.<turn_count>`. `turn_count` rises only on an Advance. A second try on the same turn gives the same result.
+- Jeff chose the wording. The confirmation panel shows: "Escaping might be more difficult than expected. It might not be possible." It has no subtitle. A failed escape shows the subtitle "No way out." and the body "It was not possible to escape at the moment. Move on, we can try again later."
+- The roll is unchanged. The panel shows no chance of success.
 
 ## Where to look
 
@@ -71,6 +69,6 @@ The orchestrator asked that this topic be recorded. No document in this folder o
 |---|---|
 | All decisions | `decisions.md` |
 | Follow-ups | `follow-ups.md` |
-| Last two builds | `phase5-12-build.md`, `phase5-13-build.md` (each has a RUN REQUEST) |
+| Last two builds | `phase5-12-build.md` to `phase5-16-build.md` (5.12 to 5.15 have a RUN REQUEST) |
 | UI side | `docs/stories/v2-payout-explanation/decisions.md` |
 | Defects | `docs/stories/v2-infra-003/defect-register.md` (D66, D83, D93 to D96) |
