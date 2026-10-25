@@ -21,7 +21,7 @@ const StageTerrainScript      := preload("res://core/realms/StageTerrain.gd")   
 # Flow path:
 #   flow.stage → cta.start → flow.stage_explore
 #   stage.advance_turn   → move party, reveal check, engage situation
-#   stage.return_home    → escape check → flow.stage_map (or return_failed flag)
+#   stage.return_home    → escape check → flow.stage_map (or return_home_result on the snapshot)
 #   stage.engage_situation (combat) → flow.encounter
 #   all objectives found → flow.complete_stage
 

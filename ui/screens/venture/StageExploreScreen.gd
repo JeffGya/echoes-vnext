@@ -609,10 +609,7 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		int(data.get("objectives_found", 0)),
 		int(data.get("objectives_total", 0)),
 	]
-	if data.get("return_failed", false):
-		_party_state_label.text = "Couldn't escape..."
-	else:
-		_party_state_label.text = str(data.get("party_state", "exploring")).capitalize()
+	_party_state_label.text = str(data.get("party_state", "exploring")).capitalize()
 
 	var adv_v: Variant   = actions.get("cta.advance_turn", {})
 	var adv: Dictionary  = adv_v if adv_v is Dictionary else {}

@@ -13,6 +13,7 @@ const Strings := preload("res://ui/components/CarriedHomePresentation.gd")
 @onready var _title: Label = %TitleLabel
 @onready var _subtitle: Label = %SubtitleLabel
 @onready var _body: Label = %BodyLabel
+@onready var _warning: Label = %WarningLabel
 @onready var _continue_button: Button = %ContinueButton
 @onready var _confirm_row: HBoxContainer = %ConfirmRow
 @onready var _confirm_button: Button = %ConfirmButton
@@ -41,6 +42,8 @@ func present(payload: Dictionary) -> void:
 		_action = action_v if action_v is Dictionary else {}
 		_subtitle.visible = false
 		_body.text = Strings.CONFIRM_QUESTION
+		_warning.text = Strings.CONFIRM_WARNING
+		_warning.visible = true
 		_confirm_button.text = Strings.CONFIRM_LABEL
 		_cancel_button.text = Strings.CANCEL_LABEL
 		_confirm_button.disabled = _action.is_empty()
@@ -53,7 +56,8 @@ func present(payload: Dictionary) -> void:
 	# Result mode: the escape failed. Nothing was carried, so no carried figure shows.
 	var result: Dictionary = payload.get("result", {})
 	_subtitle.visible = true
-	_subtitle.text = "Blocked"
+	_subtitle.text = Strings.FAILED_SUBTITLE
+	_warning.visible = false
 	_body.text = str(result.get("message", ""))
 	_continue_button.text = "Continue"
 	_action = { "type": "stage.dismiss_overlay" }

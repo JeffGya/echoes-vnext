@@ -911,6 +911,10 @@ static func _t_return_confirm_zero_and_failure() -> Dictionary:
 		if not panel.visible or carried.visible or not (panel.get_node("%PartyBlock") as Control).visible \
 				or not (panel.get_node("%WaitsLine") as Control).visible or (panel.get_node("%CostLine") as Label).text != CarriedStrings.RETURN_COST:
 			return _fail(m, "0/0 confirmation: panel=%s carried=%s" % [panel.visible, carried.visible])
+	# The confirmation has the warning under the question and no subtitle.
+	if (modal.get_node("%WarningLabel") as Label).text != CarriedStrings.CONFIRM_WARNING or not (modal.get_node("%WarningLabel") as Control).visible \
+			or (modal.get_node("%SubtitleLabel") as Control).visible:
+		return _fail(m, "confirmation warning or subtitle wrong")
 	# Each carried line shows only above 0.
 	modal.present(_confirm_payload({ "ase": 0, "ekwan": 3, "overcome": 1, "total": 2 }))
 	if not carried.visible or (panel.get_node("%AseLine") as Control).visible or (panel.get_node("%EkwanLine") as Label).text != "+3 Ekwan":
@@ -921,6 +925,9 @@ static func _t_return_confirm_zero_and_failure() -> Dictionary:
 	modal.present({ "result": { "success": false, "message": "The way is blocked." }, "carry": { "ase": 4, "ekwan": 1, "overcome": 1 }, "party": _party() })
 	if panel.visible or (modal.get_node("%ConfirmRow") as Control).visible or not (modal.get_node("%ContinueButton") as Control).visible:
 		return _fail(m, "failed-escape display changed")
+	if (modal.get_node("%SubtitleLabel") as Label).text != CarriedStrings.FAILED_SUBTITLE or not (modal.get_node("%SubtitleLabel") as Control).visible \
+			or (modal.get_node("%WarningLabel") as Control).visible:
+		return _fail(m, "failed-escape subtitle or warning wrong")
 	(modal.get_node("%ContinueButton") as Button).pressed.emit()
 	if actions != [{ "type": "stage.dismiss_overlay" }]:
 		return _fail(m, "Continue action changed: %s" % str(actions))
