@@ -354,6 +354,43 @@ static func _current_stage_objectives(flow_ctx_arg: FlowContext) -> Array:
 	return []
 
 
+## Display names of the party Echoes that died in the active stage's EARLIER fights, in order of
+## death. Old saves have no field and read empty. Names only: no ids reach the player.
+static func stage_lost_echo_names(flow_ctx_arg: FlowContext) -> Array:
+	var stored_v: Variant = FlowStageExploreStateScript._get_current_stage(flow_ctx_arg).get("lost_echo_names", [])
+	return (stored_v as Array).duplicate() if stored_v is Array else []
+
+
+## The ONE answer to "which Echoes died in this stage": the stored names plus the dead party Echoes
+## of `actors` (the fight just played), unique, in order of death. The Thread flag (D-50) and the
+## stipend row (D-81) both read it. The permadeath story (D-66) changes only this function.
+static func lost_echo_names_with(flow_ctx_arg: FlowContext, actors: Array) -> Array:
+	var names := stage_lost_echo_names(flow_ctx_arg)
+	for n_v in RewardCalc.echo_tally(actors)["lost"]:
+		if not names.has(n_v):
+			names.append(n_v)
+	return names
+
+
+## Writes this fight's dead party Echoes onto the stage record. Call once, where a fight ends:
+## a snapshot builder must not write (snapshot_purity), and the next fight rebuilds a dead Echo.
+func record_fight_deaths(t: int) -> void:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx == null:
+		return
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return
+	var names := lost_echo_names_with(flow_ctx, ectx.actors)
+	if names.size() == stage_lost_echo_names(flow_ctx).size():
+		return
+	stage["lost_echo_names"] = names
+	flow_ctx.request_save("stage.echo_lost")
+	logger.info(t, "stage.echo_lost", "Party Echoes died in this fight", {
+		"stage_id": flow_ctx.stage_id, "lost_count": names.size(),
+	})
+
+
 # V2-INFRA-003 Phase 8 (defect D77): claim the ONE defeat consolation of the situation that
 # produced the encounter now ending.
 #

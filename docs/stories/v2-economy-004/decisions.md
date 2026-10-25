@@ -733,3 +733,32 @@ Findings (not fixed): `handle_summon` spends Ase before checking `seed_root`; `e
 ## D-94 — Phase 5.9 verified: optional objectives are skippable; guide_spirit is required; no recorded value moved (2026-10-25)
 Rule (one function, `ObjectiveModel.stage_completable`): a stage completes when every REQUIRED objective is completed AND at least one non-boss objective is completed (keeps the D94 guard; the boss never counts). The explore gate and the Resolve gate agree. `data.stages.objective_types.guide_spirit.required` = true (D95 closed); the generator is untouched (a 40-seed test checks the generated flags equal the config). A skipped optional pays nothing (D-11). MEASURED: fingerprints 6/6 and 1/1; seek+baseline+roundtrip+maturity 74/74; `reward` 35/35; determinism 7/7; wider group 623/623; `balance.json` and `git status` unchanged by the runs.
 Not guarded: `VentureController.handle_complete_stage` trusts the offered action (a hand-sent `flow.complete_stage` is not re-validated): follow-up 25.
+
+## D-95 — Payout UI scope: all of Direction E, now (2026-10-25)
+
+**Answer (Jeff):** The payout UI session builds all of Direction E now: the ledger at the final rows; the mid-stage card (party and state, what the fight changed, the objective mark, intel gained, "the Thread is whole so far"); "carried home" only at the return or retreat decision with its comparator (only above 0); the "home N of M" row with the sequence (party first, each Echo marked home, count completes, quiet Ase figure; lost Echo named once, no minus); the retreat button disabled with its price. Copy stays placeholder until the ux-copy pass (D-84). No flame glow (D-71). The session resolves the merge conflicts in `AGENTS.md` and `scripts/test-shard-map.sh` (suite counts) from `scripts/check-shard-map.sh`, and does not push.
+
+## D-96 — Scope conflict resolved: all of Direction E in the payout UI session (2026-10-25)
+The payout UI session reported that Jeff had approved only the ledger update in its own chat; Jeff had chosen all of Direction E in the backend chat (D-95). Jeff confirmed (backend chat, 2026-10-25): ALL of Direction E in that session. The earlier limit is lifted. Order: the ledger first (running), then the mid-stage card, the carried-home confirmations, the "home N of M" sequence, the retreat button state, the skipped-objective display. Jeff plays the result before the PR.
+
+## D-97 — Skipped-objective display: later (2026-10-25)
+**Answer (Jeff):** Later, as a follow-up. Part A shows "N of M overcome" only; a skipped optional objective is simply not counted. Watch in play whether players understand it, then design the display. The boss stub is never shown as skipped. Follow-up 26.
+
+## D-98 — Card fields: no preference from Jeff; the recommended two are added (2026-10-25)
+**Answer (Jeff):** No preference on the three optional mid-stage card fields. **Default taken by the backend session (reversible by Jeff):** add the two recommended fields; do not add fight events.
+1. `intel_gained` (step 5.10, built first; key only when above 0).
+2. Step 5.11: `objective_overcome` ({index, type, label}; key only when this fight overcame an objective) and `thread_whole` (bool, computed in ONE place from this fight's deaths, D-50; the permadeath story later changes that one place).
+3. NOT added: fight events (rescue, refusal): events are not defined yet (follow-up 27).
+`thread_whole` is always present on the combat victory card, so the final-snapshot key list gains one key; the 14 FINAL fingerprint constants will move with that one named cause and a hash proof.
+
+## D-99 — intel_gained: keep the dormant seam; intel is a later story (2026-10-25)
+**Finding (step 5.10, READ-FROM-CODE):** no fight reveals a situation in the current code (writers of `revealed`: `SituationEngagementService`, `ContactController`, `FlowStageExploreState`, all before or outside combat). `data.intel_gained` is therefore absent in every real game today.
+**Answer (Jeff):** Keep it. Intel will be worked on in a later story. The seam stays: volatile `FlowContext.encounter_start_revealed_count` (not saved), set in `EncounterSetupService.setup`, read in `build_final_snapshot`, key written only above 0, kept by the replayed card. Follow-up 28: design how a fight reveals intel; then the mid-stage card's intel line lights up.
+
+## D-100 — Phase 5.10 verified: no recorded value moved (2026-10-25)
+`data.intel_gained` seam (key only above 0; dormant, D-99). MEASURED: fingerprints 6/6 and 1/1; seek+baseline+roundtrip+maturity 74/74; `reward` 35/35; determinism 7/7; wider group 625/625; `balance.json` and `git status` unchanged by the runs.
+
+## D-101 — Phase 5.11 re-recorded: thread_whole (2026-10-25)
+Steps built: stage death record `lost_echo_names` (written once at the end of each fight in the combat-over branch of `_end_round`; the snapshot builder stays pure), `data.thread_whole` (always on a combat victory card), `data.objective_overcome` {index, type, label} (only when this fight overcame an objective), and the stipend row `lost`/`alive` from the union of the stage record and the last fight (so an earlier-fight death is not home). One place changes with permadeath: `ActiveStageService.lost_echo_names_with`.
+MEASURED long run: `reward` 35/35, determinism 7/7, wider group 632/632, seek group: only the 7 seek drifts failed (baseline, roundtrip and maturity passed); 14 FINAL constants drifted, SAVE and ROUNDS held, `balance.json` and `git status` unchanged by the runs. Proof: removing the key `thread_whole` from `data_keys` of each of the 14 new payloads gives the old constant (14 of 14). Re-recorded.
+Limits: a retreat does not record deaths; the record matches by display name; the `FlowRuntime` call is covered by direct-call tests only.

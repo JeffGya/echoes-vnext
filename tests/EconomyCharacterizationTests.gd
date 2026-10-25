@@ -107,6 +107,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/carried_rows_clamp_and_sum", Callable(EconomyCharacterizationTests, "_t_carried_rows"))
 	runner.register_test("econ_char/carried_return_home_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_return_home"))
 	runner.register_test("econ_char/carried_retreat_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_retreat"))
+	runner.register_test("econ_char/intel_gained_absent_zero_present_count_absent_on_defeat", Callable(EconomyCharacterizationTests, "_t_intel_gained"))
+	runner.register_test("econ_char/intel_gained_replays_from_stored_result", Callable(EconomyCharacterizationTests, "_t_intel_gained_replay"))
+	runner.register_test("econ_char/death_record_carries_to_later_fight", Callable(EconomyCharacterizationTests, "_t_death_record"))
+	runner.register_test("econ_char/thread_whole_and_objective_overcome_keys", Callable(EconomyCharacterizationTests, "_t_thread_and_overcome"))
+	runner.register_test("econ_char/death_record_old_save_and_replay", Callable(EconomyCharacterizationTests, "_t_death_record_old_and_replay"))
 	runner.register_test("econ_char/ledger_seen_default_false_and_action_sets_it", Callable(EconomyCharacterizationTests, "_t_ledger_seen"))
 
 
@@ -1477,7 +1482,8 @@ static func _t_stage_preview() -> Dictionary:
 ## FlowEncounterState.build_final_snapshot. The fight itself is not played: the combat result is
 ## set directly, which is all build_final_snapshot reads. Stage 0 holds `objectives`; objective 0
 ## is the fought one, linked to situation "sit.econ".
-static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false) -> Dictionary:
+static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false,
+		revealed_during_fight: int = 0) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter("combat", tag)
 	if env.is_empty():
 		return {}
@@ -1489,8 +1495,15 @@ static func _final_card(tag: String, objectives: Array, victory: bool, kill_firs
 	stage["explore_map"] = {
 		"last_situation_id": "sit.econ",
 		"situations": [{ "id": "sit.econ", "resolved": false, "revealed": true,
-			"is_objective": true, "objective_index": 0 }],
+			"is_objective": true, "objective_index": 0 },
+			{ "id": "sit.h1", "resolved": false, "revealed": false },
+			{ "id": "sit.h2", "resolved": false, "revealed": false }],
 	}
+	# The fixture replaced the map after production setup, so record the start count again as setup does.
+	flow_ctx.encounter_start_revealed_count = ActiveStageService.count_revealed_situations(flow_ctx)
+	# Production code reveals nothing during a fight today; this stands in for a future reveal.
+	for i in range(revealed_during_fight):
+		stage["explore_map"]["situations"][1 + i]["revealed"] = true
 	ectx.combat_result = { "victory": victory, "reason": "all_enemies_defeated", "round_ended": 4 }
 	ectx.combat_state["combat_over"] = true
 	if kill_first_echo:
@@ -1962,3 +1975,182 @@ static func _t_carried_retreat() -> Dictionary:
 
 static func _carry_stage_of(flow_ctx: FlowContext) -> Dictionary:
 	return FlowStageExploreState._get_current_stage(flow_ctx)
+
+
+static func _t_intel_gained() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_req(0, "combat", false), ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)]
+
+	var none := _final_card("econ_char_intel_0", objs.duplicate(true), true)
+	if none.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var fc0: FlowContext = none["flow_ctx"]
+	if fc0.encounter_start_revealed_count < 0:
+		m.append("setup did not record the start count")
+	if (none["card"]["data"] as Dictionary).has("intel_gained"):
+		m.append("victory with no new reveal carries intel_gained")
+
+	for n in [1, 2]:
+		var env := _final_card("econ_char_intel_%d" % n, objs.duplicate(true), true, false, n)
+		if int(env["card"]["data"].get("intel_gained", -1)) != n:
+			m.append("%d reveals: intel_gained %s" % [n, str(env["card"]["data"].get("intel_gained"))])
+
+	var lost := _final_card("econ_char_intel_lost", objs.duplicate(true), false, false, 2)
+	if (lost["card"]["data"] as Dictionary).has("intel_gained"):
+		m.append("defeat card carries intel_gained")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+static func _t_intel_gained_replay() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_req(0, "combat", false), ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)]
+	var env := _final_card("econ_char_intel_replay", objs, true, false, 2)
+	var fc: FlowContext = env["flow_ctx"]
+	var card: Dictionary = env["card"]
+	PendingResultService.capture_or_consume(fc, card, 7)
+	var stored := PendingResultService.read(fc.save_data)
+	if int((stored.get("resolve_data", {}) as Dictionary).get("intel_gained", -1)) != 2:
+		m.append("stored result lost intel_gained")
+	var replay := PendingResultService.build_snapshot(fc, 8)
+	if int((replay.get("data", {}) as Dictionary).get("intel_gained", -1)) != 2:
+		m.append("replayed card lost intel_gained")
+	var zero := _final_card("econ_char_intel_replay0", objs.duplicate(true), true)
+	PendingResultService.capture_or_consume(zero["flow_ctx"], zero["card"], 7)
+	if (PendingResultService.build_snapshot(zero["flow_ctx"], 8)["data"] as Dictionary).has("intel_gained"):
+		m.append("replayed zero card gained an intel_gained key")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+# ---------------------------------------------------------------------------
+# Stage death record, thread_whole, objective_overcome (Phase 5.11: D-45, D-50, D-81, D-98)
+# ---------------------------------------------------------------------------
+
+static func _kill_echo(ectx: EncounterContext, nth: int) -> String:
+	var seen := 0
+	for a_v in ectx.actors:
+		if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "echo":
+			if seen == nth:
+				(a_v as Dictionary)["is_dead"] = true
+				return str((a_v as Dictionary).get("name", ""))
+			seen += 1
+	return ""
+
+
+static func _revive_all(ectx: EncounterContext) -> void:
+	for a_v in ectx.actors:
+		if a_v is Dictionary:
+			(a_v as Dictionary)["is_dead"] = false
+
+
+static func _t_death_record() -> Dictionary:
+	var m: Array = []
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var env := _final_card("econ_char_record", [_req(0, "combat", false), _req(1, "shrine", true), boss], true, true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+	var runtime: FlowRuntime = env["runtime"]
+	var first := str(env["dead_name"])
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+
+	# (i) the builder wrote nothing; the hook writes.
+	if stage.has("lost_echo_names"):
+		m.append("build_final_snapshot wrote lost_echo_names")
+	var card1: Dictionary = env["card"]["data"]
+	if bool(card1.get("thread_whole", true)):
+		m.append("fight 1 killed an Echo but thread_whole is true")
+	runtime._stage_explore_session_service().record_fight_deaths(7)
+	runtime._stage_explore_session_service().record_fight_deaths(7)
+	if str(stage.get("lost_echo_names", [])) != str([first]):
+		m.append("after fight 1 the record is %s, expected [%s] once" % [str(stage.get("lost_echo_names")), first])
+
+	# (a) fight 2 kills nobody: the record keeps the name, the card and the row use it.
+	_revive_all(ectx)
+	var card2: Dictionary = FlowEncounterState.build_final_snapshot(flow_ctx, 8)["data"]
+	if bool(card2.get("thread_whole", true)):
+		m.append("(a) fight 2 card: thread_whole true after a death in fight 1")
+	var row := _row_by_cause(card2.get("stage_payout_rows", []), "echoes_alive")
+	var p: Dictionary = row.get("params", {})
+	if int(p.get("alive", -1)) != 4 or int(p.get("started", -1)) != 5 or str(p.get("lost", [])) != str([first]) \
+			or int(row.get("delta", -1)) != 8:
+		m.append("(a) fight 2 row %s, expected 8 Ase, 4 of 5, lost [%s]" % [JSON.stringify(row), first])
+	# (g) preview == paid.
+	var before := int(runtime.get_save_data()["economy"]["ase"])
+	runtime.dispatch({ "type": "flow.complete_stage" })
+	var paid := int(runtime.get_save_data()["economy"]["ase"]) - before
+	if paid != int(card2.get("stage_payout_ase", -2)) or paid != 58:
+		m.append("(g) flow.complete_stage paid %d, card previewed %s, expected 58" % [paid, str(card2.get("stage_payout_ase"))])
+
+	# (d) names stay unique when the same Echo dies again, and keep the order of death.
+	# complete_stage cleared the encounter; restore it for the hook.
+	flow_ctx.encounter_ctx = ectx
+	_kill_echo(ectx, 0)
+	var second := _kill_echo(ectx, 1)
+	var svc := runtime._stage_explore_session_service()
+	svc.record_fight_deaths(9)
+	var want := [first, second]
+	if str(stage.get("lost_echo_names", [])) != str(want):
+		m.append("(d) record %s, expected %s" % [str(stage.get("lost_echo_names")), str(want)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+static func _t_thread_and_overcome() -> Dictionary:
+	var m: Array = []
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var objs: Array = [_req(0, "combat", false), _req(1, "shrine", false), boss]
+
+	# (b), (e) victory, nobody dead: thread_whole true; the fought objective is named from config.
+	var env := _final_card("econ_char_thread_b", objs.duplicate(true), true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var data: Dictionary = env["card"]["data"]
+	if data.get("thread_whole", null) != true:
+		m.append("(b) clean win: thread_whole %s, expected true" % str(data.get("thread_whole")))
+	var oo: Dictionary = data.get("objective_overcome", {}) if data.get("objective_overcome") is Dictionary else {}
+	if int(oo.get("index", -1)) != 0 or str(oo.get("type", "")) != "combat" or str(oo.get("label", "")) != "Clear" \
+			or oo.size() != 3:
+		m.append("(e) objective_overcome %s, expected {index 0, type combat, label Clear}" % JSON.stringify(oo))
+
+	# (e) no linked objective: the key is absent.
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	flow_ctx.active_encounter_objective_index = -1
+	if FlowEncounterState.build_final_snapshot(flow_ctx, 7)["data"].has("objective_overcome"):
+		m.append("(e) objective_overcome present with no linked objective")
+
+	# (f) a dead Echo in THIS fight alone makes thread_whole false.
+	var dead := _final_card("econ_char_thread_dead", objs.duplicate(true), true, true)
+	if (dead["card"]["data"] as Dictionary).get("thread_whole", null) != false:
+		m.append("(f) win with a death: thread_whole %s, expected false" % str((dead["card"]["data"] as Dictionary).get("thread_whole")))
+
+	# (e), (f) defeat: neither key.
+	var lost := _final_card("econ_char_thread_lost", objs.duplicate(true), false)
+	var ld: Dictionary = lost["card"]["data"]
+	if ld.has("thread_whole") or ld.has("objective_overcome"):
+		m.append("(f) defeat card carries thread_whole or objective_overcome: %s" % str(ld.keys()))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+static func _t_death_record_old_and_replay() -> Dictionary:
+	var m: Array = []
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var env := _final_card("econ_char_record_old", [_req(0, "combat", false), boss], true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var fc: FlowContext = env["flow_ctx"]
+	# (c) a stage without the field reads empty and nothing needs a migration.
+	if FlowStageExploreState._get_current_stage(fc).has("lost_echo_names") \
+			or not ActiveStageService.stage_lost_echo_names(fc).is_empty():
+		m.append("(c) a stage without the field does not read empty")
+	# (h) the replayed card keeps both keys.
+	var card: Dictionary = env["card"]
+	var data: Dictionary = card["data"]
+	if not data.has("thread_whole") or not data.has("objective_overcome"):
+		m.append("(h) fixture card lacks a key: %s" % str(data.keys()))
+	PendingResultService.capture_or_consume(fc, card, 7)
+	var replay: Dictionary = PendingResultService.build_snapshot(fc, 8)["data"]
+	if replay.get("thread_whole", null) != data.get("thread_whole") \
+			or JSON.stringify(replay.get("objective_overcome")) != JSON.stringify(data.get("objective_overcome")):
+		m.append("(h) replayed card %s / %s, stored %s / %s" % [str(replay.get("thread_whole")),
+			JSON.stringify(replay.get("objective_overcome")), str(data.get("thread_whole")), JSON.stringify(data.get("objective_overcome"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }

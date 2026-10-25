@@ -98,6 +98,10 @@ var dev_stop_short: String = ""
 # Reset to -1 on flow.select_stage and after objective is marked complete.
 var active_encounter_objective_index: int = -1
 
+# Revealed-situation count when the current encounter began; -1 when none is running. Volatile,
+# never saved. build_final_snapshot reads it to report `intel_gained`.
+var encounter_start_revealed_count: int = -1
+
 # V2-WEAVE-001: Threads crystallized from the most recently completed Realm (session-transient).
 # Populated by FlowRuntime._handle_complete_stage() on realm_complete.
 # Resets to [] on new game boot (FlowContext is freshly instantiated).

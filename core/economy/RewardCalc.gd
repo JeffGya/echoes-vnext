@@ -99,8 +99,9 @@ static func round_payout(amount: float) -> int:
 
 ## The party Echoes of a fight: `alive` (not dead), `started` (all of them) and `lost` (display
 ## names of the dead ones). Temporary allies and the guide spirit are not roster Echoes (D-45).
-## Downed and withdrawn Echoes count as home: only `is_dead` removes one.
-static func echo_tally(actors: Array) -> Dictionary:
+## Downed and withdrawn Echoes count as home: only `is_dead` removes one. `prior_lost` (names that
+## died in an earlier fight of the stage) also removes one from `alive`; `lost` stays this fight's dead.
+static func echo_tally(actors: Array, prior_lost: Array = []) -> Dictionary:
 	var alive := 0
 	var started := 0
 	var lost: Array = []
@@ -112,9 +113,10 @@ static func echo_tally(actors: Array) -> Dictionary:
 				or bool(a.get("is_spirit", false)):
 			continue
 		started += 1
+		var nm := str(a.get("name", ""))
 		if bool(a.get("is_dead", false)):
-			lost.append(str(a.get("name", "")))
-		else:
+			lost.append(nm)
+		elif not prior_lost.has(nm):
 			alive += 1
 	return { "alive": alive, "started": started, "lost": lost }
 

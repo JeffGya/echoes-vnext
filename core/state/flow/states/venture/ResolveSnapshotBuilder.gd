@@ -193,6 +193,24 @@ static func add_combat_seams(
 	data["combat_intro_line"]      = combat_intro_line
 
 
+## 14b — Situations a combat victory revealed during the fight. Written only when above 0, so a
+## card that revealed nothing keeps the key list it had before this block existed.
+static func add_intel_gained(data: Dictionary, gained: int) -> void:
+	if gained > 0:
+		data["intel_gained"] = gained
+
+
+## 14c — Whether no party Echo has died in the stage so far (D-50). Combat victory card only.
+static func add_thread_whole(data: Dictionary, whole: bool) -> void:
+	data["thread_whole"] = whole
+
+
+## 14d — The objective THIS fight overcame: { index, type, label }. Written only when one was.
+static func add_objective_overcome(data: Dictionary, overcome: Dictionary) -> void:
+	if not overcome.is_empty():
+		data["objective_overcome"] = overcome
+
+
 ## 14 — %ReasonLabel, "%d situation%s revealed". Producer C.
 static func add_scout_intel(data: Dictionary, intel_count: int) -> void:
 	data["intel_count"] = intel_count

@@ -667,10 +667,11 @@ static func _run_mode_fingerprint(
 # Ekwan re-record: fights pay no Ekwan, so `ekwan_awarded` (FINAL) and `economy.ekwan` (SAVE) go from 6 or 7 to 0 in every mode; ROUNDS held.
 # Rank and bonus re-record: no enemy Ase and no pace Ase (ase falls by 5 per kill and 1 for pace); key `pace_bonus_awarded` removed in pace modes; endure rank A -> S; base purify_shrine pace_state full -> partial. ROUNDS held; protect and guide_spirit held.
 # Stipend re-record: a won fight pays 0 Ase (the Echoes stipend is paid once per stage), so `ase_awarded` (FINAL) and `economy.ase` (SAVE) go from 50 to 0 in every mode; ROUNDS held.
+# Thread re-record: the final snapshot data gained the key `thread_whole` on every victory card; FINAL moves in every mode, SAVE and ROUNDS held.
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
 # Re-recorded: Directive stop cause. COMBAT_ROUNDS_HASH and COMBAT_SAVE_HASH moved; COMBAT_FINAL_HASH held.
 const COMBAT_ROUNDS_HASH := "15ad0156de8f96320453929010a15002fbf568b50e5006d5ea84c4d4073a66c3"
-const COMBAT_FINAL_HASH  := "9942fed9c9037327bf6b5e217fd3f668c87b8d837f1b476f22778fff007e304e"
+const COMBAT_FINAL_HASH  := "b151b90145a1f2f859423e5d6e51990316377a792fdd9c63a59b0f10205fe774"
 const COMBAT_SAVE_HASH   := "8a8db4a7ff94c93fb23ce44c3a7e20f3e1af2c7a984ec64a08aa82be136aba39"
 
 
@@ -752,7 +753,7 @@ static func test_combat() -> Dictionary:
 # Re-recorded: emotional-state pull and state steps in route scoring. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURIFY_SHRINE_ROUNDS_HASH moved; PURIFY_SHRINE_FINAL_HASH and PURIFY_SHRINE_SAVE_HASH held.
 const PURIFY_SHRINE_ROUNDS_HASH := "9bdc7074ef56462b6e8f1c81ef41a57c1ecacef763654e7c9874f76db2a69bf9"
-const PURIFY_SHRINE_FINAL_HASH  := "d06f4cc69f287a289a1dfe3a74443e4568e3e96e7681b0b949ffddf4efc38209"
+const PURIFY_SHRINE_FINAL_HASH  := "6093f5c01a19ec82acaf81b0b0d090b0512ed906f30873e18fb569102e879ddd"
 const PURIFY_SHRINE_SAVE_HASH   := "28bbceb1388c0580f17d9d9455d0487bb5e73ea17cb75ba87fe04112ac0ec219"
 
 static func test_purify_shrine() -> Dictionary:
@@ -775,7 +776,7 @@ static func test_purify_shrine() -> Dictionary:
 # Re-recorded: emotional-state pull and state steps in route scoring. RECOVER_ROUNDS_HASH and RECOVER_FINAL_HASH moved; RECOVER_SAVE_HASH held.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. RECOVER_ROUNDS_HASH moved; RECOVER_FINAL_HASH and RECOVER_SAVE_HASH held.
 const RECOVER_ROUNDS_HASH := "3b2cc514b1eb2aac8f9a5925971a2e00a0ad4cc81a419d8a2f28ab0582bb3c40"
-const RECOVER_FINAL_HASH  := "0d22299458fa565c52d60451263f49ce798b02dff823cfe3bae3fe455af3656b"
+const RECOVER_FINAL_HASH  := "867e08760b02b2b4fd67a76651e653c3351f2f004c08b539f303dac73f7c7a15"
 const RECOVER_SAVE_HASH   := "9fe055bb97376feb37db422eb595527dec0aa5e90751d08b509a440cc7456d51"
 
 static func test_recover() -> Dictionary:
@@ -798,7 +799,7 @@ static func test_recover() -> Dictionary:
 # Re-recorded: stop_short.enabled true. ROUNDS moved.
 # Re-recorded: emotional-state pull and state steps in route scoring. PROTECT_ROUNDS_HASH moved; PROTECT_FINAL_HASH and PROTECT_SAVE_HASH held.
 const PROTECT_ROUNDS_HASH := "5da870dce4f2880d0fe05107241d133a915bad8cc0fe24ac0adaaf2b970c98bc"
-const PROTECT_FINAL_HASH  := "a17fa996155125d57d2d64857c33077f0be940b58ffcdc76de7739c27c6a72e4"
+const PROTECT_FINAL_HASH  := "0b8ab57340ccbb86c30e6c98d6fbefa4e78d01e23887fcb77ec5832e7d55731e"
 const PROTECT_SAVE_HASH   := "9fe055bb97376feb37db422eb595527dec0aa5e90751d08b509a440cc7456d51"
 
 static func test_protect() -> Dictionary:
@@ -825,7 +826,7 @@ static func test_protect() -> Dictionary:
 # Re-recorded: emotional-state pull and state steps in route scoring. ENDURE_ROUNDS_HASH, ENDURE_FINAL_HASH and ENDURE_SAVE_HASH moved; none held.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. ENDURE_ROUNDS_HASH moved; ENDURE_FINAL_HASH and ENDURE_SAVE_HASH held.
 const ENDURE_ROUNDS_HASH := "7eb074ef162ab29d4c7241fabeba3b8968b6bb6091a45b9c416d5a95add1ca1a"
-const ENDURE_FINAL_HASH  := "e5311925390cd7033c387b76393cf04b011801d6cecde536d4f490436e10a196"
+const ENDURE_FINAL_HASH  := "a0d7eaabed1e0f9c73bcd0765e557dd79d585ad3446f0517179a20431b2055f6"
 const ENDURE_SAVE_HASH   := "28bbceb1388c0580f17d9d9455d0487bb5e73ea17cb75ba87fe04112ac0ec219"
 
 static func test_endure() -> Dictionary:
@@ -860,7 +861,7 @@ static func test_endure() -> Dictionary:
 # one field pair only (diffed field by field): the 25 kill XP goes from echo_0004 to echo_0003.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. PURSUE_ROUNDS_HASH and PURSUE_SAVE_HASH moved; PURSUE_FINAL_HASH held.
 const PURSUE_ROUNDS_HASH := "2588337c3eea9e49db0b0988dfea40f634452ce5f9b1c38b9907b32cb27d8d49"
-const PURSUE_FINAL_HASH  := "212c3b6ee74922bde93cdfdcaa340f003001895d72d20a8aaea0c469a1115674"
+const PURSUE_FINAL_HASH  := "a6975f63935c138acc6054695775198a1d9b658e5bda22ac08eac4746b816c12"
 const PURSUE_SAVE_HASH   := "8a8db4a7ff94c93fb23ce44c3a7e20f3e1af2c7a984ec64a08aa82be136aba39"
 
 static func test_pursue() -> Dictionary:
@@ -947,7 +948,7 @@ static func test_pursue() -> Dictionary:
 # Re-recorded: emotional-state pull and state steps in route scoring. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
 # Re-recorded: group A, status reading in action layer and style (curved afraid value), composure computed before the movement profile, and initiative and bark triggers on the status. GUIDE_SPIRIT_ROUNDS_HASH and GUIDE_SPIRIT_FINAL_HASH moved; GUIDE_SPIRIT_SAVE_HASH held.
 const GUIDE_SPIRIT_ROUNDS_HASH := "43b180d506f1524f13b76b375d123c8268e5ab7ce2afc21cf5e340635dde9432"
-const GUIDE_SPIRIT_FINAL_HASH  := "ac599319a9ded945492653107ce8b2b804171bcdd2cf54e06c0d70fa8caf3510"
+const GUIDE_SPIRIT_FINAL_HASH  := "dfe5ba054c622929b4e2c5d33645cb4ff29dddec0462bc2f57fbe8f345431948"
 const GUIDE_SPIRIT_SAVE_HASH   := "9fe055bb97376feb37db422eb595527dec0aa5e90751d08b509a440cc7456d51"
 
 static func test_guide_spirit() -> Dictionary:

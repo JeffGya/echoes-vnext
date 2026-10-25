@@ -28,7 +28,24 @@ func exit(ctx: RefCounted, t: int) -> void:
 	flow_ctx.encounter_ctx = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1
+	flow_ctx.encounter_start_revealed_count = -1
 
+
+
+## { index, type, label } of the objective the engaged situation carries, when the pre-snapshot
+## resolve completed it; {} otherwise. Label comes from data.stages.objective_types.
+static func _objective_overcome(flow_ctx: FlowContext, stage_objectives: Array) -> Dictionary:
+	var idx := flow_ctx.active_encounter_objective_index
+	if idx < 0 or idx >= stage_objectives.size() or not (stage_objectives[idx] is Dictionary):
+		return {}
+	var obj: Dictionary = stage_objectives[idx]
+	if not bool(obj.get("completed", false)):
+		return {}
+	var type := str(obj.get("type", ""))
+	var types_v: Variant = ConfigService.get_balance_data(flow_ctx.config_service).get("stages", {}).get("objective_types", {})
+	var entry_v: Variant = (types_v as Dictionary).get(type, {}) if types_v is Dictionary else {}
+	var label := str((entry_v as Dictionary).get("label", "")) if entry_v is Dictionary else ""
+	return { "index": idx, "type": type, "label": label }
 
 
 ## COMBAT-007: FinalCombatSnapshot builder — emits type "flow.resolve".
@@ -389,6 +406,12 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		if not _stage_preview.is_empty():
 			ResolveSnapshotBuilder.add_stage_payout(
 				_data, _stage_preview["rows"], int(_stage_preview["ase"]), int(_stage_preview["ekwan"]))
+	if victory and flow_ctx.encounter_start_revealed_count >= 0:
+		ResolveSnapshotBuilder.add_intel_gained(_data, maxi(0,
+			ActiveStageService.count_revealed_situations(flow_ctx) - flow_ctx.encounter_start_revealed_count))
+	if victory:
+		ResolveSnapshotBuilder.add_thread_whole(_data, ActiveStageService.lost_echo_names_with(flow_ctx, raw_actors).is_empty())
+		ResolveSnapshotBuilder.add_objective_overcome(_data, _objective_overcome(flow_ctx, stage_objectives))
 	ResolveSnapshotBuilder.add_ekwan(_data, int(reward_result.get("ekwan_awarded", 0)))
 	ResolveSnapshotBuilder.add_grade_rank(_data, str(reward_result.get("rank", "F")))
 	if _pace_mode and victory:

@@ -210,12 +210,14 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 
 
 ## The Echoes stipend input (D-43 to D-45, D-53). With a fight context, the last fight's party
-## Echoes are home or lost. Without one nobody fought, so the whole active party is home.
+## Echoes are home or lost; an Echo that died in an earlier fight of the stage is lost too (D-50). Without one nobody fought, so the whole active party is home.
 func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary) -> Dictionary:
 	var tally := { "alive": 0, "started": 0, "lost": [] }
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	if ectx != null:
-		tally = RewardCalc.echo_tally(ectx.actors)
+		var all_lost := ActiveStageService.lost_echo_names_with(flow_ctx, ectx.actors)
+		tally = RewardCalc.echo_tally(ectx.actors, all_lost)
+		tally["lost"] = all_lost
 	else:
 		var sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
 		var sanctum: Dictionary = sanctum_v if sanctum_v is Dictionary else {}
