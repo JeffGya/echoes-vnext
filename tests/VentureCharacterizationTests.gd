@@ -244,7 +244,7 @@ static func _rewards_cfg(runtime: FlowRuntime) -> Dictionary:
 ## The stage settlement now runs in this dispatch (StageSettlementService.settle(), called from
 ## VentureController.handle_complete_stage ahead of RealmService.advance_stage), and it does not
 ## care whether an encounter happened. So the three "untouched" assertions become "paid": the
-## stage's base objective weights + the realm-virtue bonus in Ase, the Ekwan of its completed objectives, and
+## stage's base objective weights in Ase, the Ekwan of its completed objectives, and
 ## xp_stage_clear_base of Storyweight per party echo. The exact figures are not hard-coded — the
 ## test asserts each moved in the right direction, which is what the defect was about.
 static func _t_complete_stage_no_encounter() -> Dictionary:

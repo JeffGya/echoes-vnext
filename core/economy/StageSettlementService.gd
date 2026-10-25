@@ -209,10 +209,10 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 	}
 
 
-## The Echoes stipend input (D-43 to D-45, D-53). With a fight context, the last fight's party
-## Echoes are home or lost; an Echo that died in an earlier fight of the stage is lost too (D-50). Without one nobody fought, so the whole active party is home.
+## The Echoes stipend input (D-43 to D-45, D-53). Both branches read the stage death record (D-50),
+## so the card preview equals the payout after a reload, when no fight context exists.
 func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary) -> Dictionary:
-	var tally := { "alive": 0, "started": 0, "lost": [] }
+	var tally: Dictionary
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	if ectx != null:
 		var all_lost := ActiveStageService.lost_echo_names_with(flow_ctx, ectx.actors)
@@ -225,10 +225,13 @@ func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary) -> Dictionary:
 		var ids: Array = ids_v if ids_v is Array else []
 		var roster_v: Variant = sanctum.get("roster", [])
 		var roster: Array = roster_v if roster_v is Array else []
+		var party: Array = []
 		for e_v in roster:
 			if e_v is Dictionary and ids.has(str((e_v as Dictionary).get("id", ""))):
-				tally["started"] += 1
-				tally["alive"] += 1
+				party.append({ "faction": "echo", "name": str((e_v as Dictionary).get("name", "")) })
+		var stage_lost := ActiveStageService.stage_lost_echo_names(flow_ctx)
+		tally = RewardCalc.echo_tally(party, stage_lost)
+		tally["lost"] = stage_lost
 	var replay := int(realm_model.get("run_count", 0)) > 0
 	tally["rate"] = int(reward_cfg.get("echo_home_ase", 0))
 	tally["cap"] = int(reward_cfg.get("echo_home_cap_replay" if replay else "echo_home_cap", 0))

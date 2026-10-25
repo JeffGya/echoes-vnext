@@ -113,6 +113,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/thread_whole_and_objective_overcome_keys", Callable(EconomyCharacterizationTests, "_t_thread_and_overcome"))
 	runner.register_test("econ_char/death_record_old_save_and_replay", Callable(EconomyCharacterizationTests, "_t_death_record_old_and_replay"))
 	runner.register_test("econ_char/ledger_seen_default_false_and_action_sets_it", Callable(EconomyCharacterizationTests, "_t_ledger_seen"))
+	runner.register_test("econ_char/stipend_reads_death_record_without_encounter", Callable(EconomyCharacterizationTests, "_t_stipend_record_no_encounter"))
+	runner.register_test("econ_char/reboot_after_death_pays_what_the_card_showed", Callable(EconomyCharacterizationTests, "_t_reboot_after_death"))
+	runner.register_test("econ_char/reboot_replayed_card_pays_what_it_showed", Callable(EconomyCharacterizationTests, "_t_reboot_replayed_card"))
+	runner.register_test("econ_char/charge_completion_after_death_pays_with_record", Callable(EconomyCharacterizationTests, "_t_charge_after_death"))
 
 
 # ---------------------------------------------------------------------------
@@ -2153,4 +2157,142 @@ static func _t_death_record_old_and_replay() -> Dictionary:
 			or JSON.stringify(replay.get("objective_overcome")) != JSON.stringify(data.get("objective_overcome")):
 		m.append("(h) replayed card %s / %s, stored %s / %s" % [str(replay.get("thread_whole")),
 			JSON.stringify(replay.get("objective_overcome")), str(data.get("thread_whole")), JSON.stringify(data.get("objective_overcome"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-50 and D-102 (D1): with no fight context the stipend reads the stage death record, and an
+## empty or missing record leaves the whole active party home.
+static func _t_stipend_record_no_encounter() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_obj(0, "combat", true)]
+	var ctx := _stage_ctx(_config(), objs)
+	var roster: Array = []
+	var ids: Array = []
+	for i in 3:
+		roster.append({ "id": "e%d" % i, "name": "Name e%d" % i })
+		ids.append("e%d" % i)
+	ctx.save_data["sanctum"] = { "roster": roster, "active_party_ids": ids }
+	var svc := StageSettlementService.new(ctx, ctx.config_service, null, null)
+	# (e) an old save has no field; (c) an empty record. Both leave everyone home.
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(ctx)
+	if stage.has("lost_echo_names"):
+		m.append("fixture stage already has the field")
+	var row := _stipend_row(svc.preview())
+	if int((row.get("params", {}) as Dictionary).get("alive", -1)) != 3 or int(row.get("delta", -1)) != 6:
+		m.append("(e) no field: row %s, expected 3 of 3, 6 Ase" % JSON.stringify(row))
+	stage["lost_echo_names"] = []
+	row = _stipend_row(svc.preview())
+	if int((row.get("params", {}) as Dictionary).get("alive", -1)) != 3 or int(row.get("delta", -1)) != 6:
+		m.append("(c) empty record: row %s, expected 3 of 3, 6 Ase" % JSON.stringify(row))
+	# A record naming one party Echo: that Echo is not home.
+	stage["lost_echo_names"] = ["Name e1"]
+	var pv := svc.preview()
+	row = _stipend_row(pv)
+	var p: Dictionary = row.get("params", {})
+	if int(p.get("alive", -1)) != 2 or int(p.get("started", -1)) != 3 or str(p.get("lost", [])) != str(["Name e1"]) \
+			or int(row.get("delta", -1)) != 4 or int(pv.get("ase", -1)) != 24:
+		m.append("record [Name e1]: row %s, ase %s, expected 2 of 3, 4 Ase, stage 24" % [JSON.stringify(row), str(pv.get("ase"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Fight 1 kills an Echo and writes the record; the game saves; a NEW runtime boots from the file.
+## Returns { runtime (rebooted), card, dead_name } or an empty dict.
+static func _death_then_reboot(tag: String, replay_card: bool) -> Dictionary:
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var env := _final_card(tag, [_req(0, "combat", false), _req(1, "shrine", true), boss], true, true)
+	if env.is_empty():
+		return {}
+	var runtime: FlowRuntime = env["runtime"]
+	var fc: FlowContext = env["flow_ctx"]
+	var ob: Dictionary = runtime.get_save_data()["onboarding"]
+	ob["chapter_one_complete"] = true
+	ob["chapter_one_step"] = OnboardingService.STEP_COMPLETE
+	ob["keeper_intro_complete"] = true
+	ob["keeper_intro_step"] = "complete"
+	runtime._stage_explore_session_service().record_fight_deaths(7)
+	if replay_card:
+		PendingResultService.capture_or_consume(fc, env["card"], 7)
+	SaveService.save_to_file(runtime.save_path, fc.save_data, _logger(), 7)
+	var rebooted := FlowRuntime.new(_logger(), ConfigService.new(), runtime.save_path)
+	rebooted.boot()
+	return { "runtime": rebooted, "card": env["card"], "dead_name": env["dead_name"] }
+
+
+## D1: after a quit and reload there is no fight context. The stage card said 4 of 5 home; the
+## payout must say the same.
+static func _t_reboot_after_death() -> Dictionary:
+	var m: Array = []
+	var r := _death_then_reboot("econ_char_reboot", false)
+	if r.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var rt: FlowRuntime = r["runtime"]
+	var dead := str(r["dead_name"])
+	var shown: Dictionary = r["card"]["data"]
+	# Without a pending card, flow.continue does not restore the stage ids; set them as the card replay does.
+	rt.flow_ctx.realm_id = "realm.01"
+	rt.flow_ctx.stage_id = "stage.0"
+	if rt.flow_ctx.encounter_ctx != null:
+		m.append("the rebooted context still has a fight context; the test proves nothing")
+	var pv := StageSettlementService.new(rt.flow_ctx, rt.config_service, null, null).preview()
+	var row := _stipend_row(pv)
+	var p: Dictionary = row.get("params", {})
+	if int(p.get("alive", -1)) != 4 or int(p.get("started", -1)) != 5 or str(p.get("lost", [])) != str([dead]):
+		m.append("reload preview row %s, expected 4 of 5, lost [%s]" % [JSON.stringify(row), dead])
+	var before := int(rt.get_save_data()["economy"]["ase"])
+	rt.dispatch({ "type": "flow.complete_stage" })
+	var paid := int(rt.get_save_data()["economy"]["ase"]) - before
+	if paid != int(pv.get("ase", -1)) or paid != int(shown.get("stage_payout_ase", -2)) or paid != 58:
+		m.append("paid %d, reload preview %s, card %s, expected all 58" % [paid, str(pv.get("ase")), str(shown.get("stage_payout_ase"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D1 on the replayed Resolve card: the card shown after the quit equals what its button pays.
+static func _t_reboot_replayed_card() -> Dictionary:
+	var m: Array = []
+	var r := _death_then_reboot("econ_char_reboot_card", true)
+	if r.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var rt: FlowRuntime = r["runtime"]
+	var dead := str(r["dead_name"])
+	var replayed: Dictionary = rt.dispatch({ "type": "flow.continue" })
+	var rd: Dictionary = replayed.get("data", {})
+	var act: Dictionary = (replayed.get("actions", {}) as Dictionary).get("cta.next_stage", {})
+	if act.is_empty():
+		return { "ok": false, "error": "replayed card has no cta.next_stage: type %s" % str(replayed.get("type")) }
+	var row := _row_by_cause(rd.get("stage_payout_rows", []), "echoes_alive")
+	var p: Dictionary = row.get("params", {})
+	if int(p.get("alive", -1)) != 4 or str(p.get("lost", [])) != str([dead]):
+		m.append("replayed row %s, expected 4 of 5, lost [%s]" % [JSON.stringify(row), dead])
+	var before := int(rt.get_save_data()["economy"]["ase"])
+	rt.dispatch(act)
+	var paid := int(rt.get_save_data()["economy"]["ase"]) - before
+	if paid != int(rd.get("stage_payout_ase", -2)) or paid != 58:
+		m.append("paid %d, replayed card %s, expected both 58" % [paid, str(rd.get("stage_payout_ase"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D1 on the contact path: a good charge contact completes the last required objective with no
+## fight context (ContactController calls mark_stage_objective_completed). An earlier death stays lost.
+static func _t_charge_after_death() -> Dictionary:
+	var m: Array = []
+	var r := _death_then_reboot("econ_char_charge", false)
+	if r.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var rt: FlowRuntime = r["runtime"]
+	var dead := str(r["dead_name"])
+	rt.flow_ctx.realm_id = "realm.01"
+	rt.flow_ctx.stage_id = "stage.0"
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(rt.flow_ctx)
+	var objs: Array = stage["objectives"]
+	(objs[0] as Dictionary)["completed"] = false
+	rt._stage_explore_session_service().mark_stage_objective_completed(0, 9)
+	var pv := StageSettlementService.new(rt.flow_ctx, rt.config_service, null, null).preview()
+	var p: Dictionary = _stipend_row(pv).get("params", {})
+	if rt.flow_ctx.encounter_ctx != null or int(p.get("alive", -1)) != 4 or str(p.get("lost", [])) != str([dead]):
+		m.append("charge path row %s, expected 4 of 5, lost [%s], no fight context" % [JSON.stringify(p), dead])
+	var before := int(rt.get_save_data()["economy"]["ase"])
+	rt.dispatch({ "type": "flow.complete_stage" })
+	var paid := int(rt.get_save_data()["economy"]["ase"]) - before
+	if paid != int(pv.get("ase", -1)):
+		m.append("paid %d, preview %s" % [paid, str(pv.get("ase"))])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
