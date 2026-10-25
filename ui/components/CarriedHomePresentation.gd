@@ -10,6 +10,9 @@ const ADVANCE_NOTE := "The rest is earned when the stage is finished."
 const STAGE_WAITS := "The stage waits."
 const WITH_PARTY := "With the party"
 const RETURN_COST := "Going home costs nothing."
+const CONFIRM_QUESTION := "Take the party home?"
+const CONFIRM_LABEL := "Go home"
+const CANCEL_LABEL := "Stay"
 const RETREAT_UNAFFORDABLE := "Not enough Ase"
 
 

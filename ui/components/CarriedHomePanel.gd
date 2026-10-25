@@ -22,7 +22,9 @@ const Strings := preload("res://ui/components/CarriedHomePresentation.gd")
 
 ## carry is { ase, ekwan, overcome, total }. party is [{ name, emotional_status }]. cost_text is ""
 ## when the decision has no cost line. `total` is never shown.
-func present(carry: Dictionary, party: Array, cost_text: String = "") -> void:
+## always_comparator is true on the return-home confirmation: the people, the stage-waits line and the
+## cost show even when nothing is carried. Only the carried lines stay tied to Ase or Ekwan above 0.
+func present(carry: Dictionary, party: Array, cost_text: String = "", always_comparator: bool = false) -> void:
 	_title.text = Strings.CARRIED
 	_advance_note.text = Strings.ADVANCE_NOTE
 	_party_header.text = Strings.WITH_PARTY
@@ -42,8 +44,8 @@ func present(carry: Dictionary, party: Array, cost_text: String = "") -> void:
 			if not line.is_empty():
 				lines.append(line)
 	_party_list.text = "\n".join(lines)
-	_party_block.visible = carried and not lines.is_empty()
-	_waits_line.visible = int(carry.get("overcome", 0)) > 0
+	_party_block.visible = (carried or always_comparator) and not lines.is_empty()
+	_waits_line.visible = always_comparator or int(carry.get("overcome", 0)) > 0
 	_cost_line.text = cost_text
 	_cost_line.visible = not cost_text.is_empty() and (carried or _waits_line.visible)
-	visible = _carried_block.visible or _waits_line.visible
+	visible = _carried_block.visible or _waits_line.visible or _party_block.visible
