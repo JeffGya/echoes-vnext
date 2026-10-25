@@ -93,7 +93,6 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# Economy (authoritative + hint)
 			"ase_balance": ase_balance,
 			"ase_rate_per_hour_hint": ase_rate_per_hour_hint,
-			"ase_cost_per_summon": next_uncalled, # Legacy key; the UI stops reading it later
 
 			# Village price (D-55, D-59): the price depends on how many Echoes live
 			"living_count": living,

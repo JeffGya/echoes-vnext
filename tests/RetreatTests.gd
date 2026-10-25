@@ -185,7 +185,9 @@ static func _retreat_at(tag: String, ase: int, success_pct: int) -> Dictionary:
 
 
 static func _t_price_from_config() -> Dictionary:
-	var cost: int = RetreatService.get_ase_cost(ConfigService.new())
+	var config := ConfigService.new()
+	config.load_balance()
+	var cost: int = RetreatService.get_ase_cost(config)
 	if cost != 10:
 		return { "ok": false, "error": "expected retreat price 10 from data.combat.retreat_ase_cost, got %d" % cost }
 	return { "ok": true }

@@ -395,7 +395,7 @@ static func _stage_index(stage_id: String) -> int:
 
 ## The seventh flow.resolve producer (docs/resolve-snapshot-block-spec.md names A–F).
 ##
-## It composes through ResolveSnapshotBuilder's SEVENTEEN-BLOCK LIBRARY, which needed no edit
+## It composes through ResolveSnapshotBuilder's block library, which needed no edit
 ## to accept it — the same claim the spec made for producers A and B (§5) and the same way it
 ## held. G is unusual only in that it does not know in advance which producer's card it is
 ## replaying, so it calls each block if and only if the stored payload carries that block's

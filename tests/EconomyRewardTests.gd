@@ -186,7 +186,7 @@ static func _t_defeat_payout() -> Dictionary:
 	logger.set_level("off")
 	# base = 30, scale 1.0, replay 1.0 (run_count=0), defeat total = round(30×0.25) = 8.
 	var result := svc.reward_encounter_complete(
-		false, 30, 1.0, 1.0, "F", true, logger, 0
+		false, 30, 1.0, 1.0, "F", true, logger, 0, 0.25
 	)
 	var expected := roundi(30.0 * 0.25 * 1.0)
 	if int(result.get("ase_awarded", -1)) != expected:
@@ -229,7 +229,7 @@ static func _t_economy_service_adds_ase() -> Dictionary:
 	logger.set_level("off")
 	# Encounter cadence: a won fight pays 0.
 	var enc := svc.reward_encounter_complete(
-		true, 30, 1.0, 1.0, "B", true, logger, 0
+		true, 30, 1.0, 1.0, "B", true, logger, 0, 0.25
 	)
 	if int(enc.get("ase_awarded", -1)) != 0:
 		return { "ok": false, "error": "Expected encounter ase_awarded=0, got %d" % enc.get("ase_awarded", -1) }
@@ -421,7 +421,7 @@ static func _t_pace_no_breakdown_row() -> Dictionary:
 	logger.set_level("off")
 	for victory in [true, false]:
 		var res := EconomyService.new(_make_save()).reward_encounter_complete(
-			victory, 60, 1.0, 1.0, "S", true, logger, 0)
+			victory, 60, 1.0, 1.0, "S", true, logger, 0, 0.25)
 		for row in res.get("breakdown", []):
 			if str(row.get("label", "")) == "Pace bonus" or str(row.get("cause", "")).begins_with("bonus_"):
 				return { "ok": false, "error": "victory=%s: pace row present: %s" % [victory, str(row)] }
@@ -867,7 +867,7 @@ static func _t_pace_escort_reward_protect_none() -> Dictionary:
 		if bool(r.get("pace_mode", false)) != c[2] or str(r.get("pace_state", "x")) != c[3]:
 			return { "ok": false, "error": "case %s: got %s" % [str(c), str(r)] }
 		var res := EconomyService.new(_make_save()).reward_encounter_complete(c[0], 60,
-			1.0, 1.0, str(r["rank"]), true, logger, 0)
+			1.0, 1.0, str(r["rank"]), true, logger, 0, 0.25)
 		for row in res.get("breakdown", []):
 			if str(row.get("label", "")) == "Pace bonus":
 				return { "ok": false, "error": "case %s: a Pace bonus row exists: %s" % [str(c), str(row)] }

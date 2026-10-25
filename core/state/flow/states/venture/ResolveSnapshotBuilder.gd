@@ -26,7 +26,7 @@ extends RefCounted
 ## Every block writes into the `data` Dictionary returned inside the skeleton (GDScript
 ## Dictionaries are passed by reference) and returns void.
 ##
-## SIXTEEN BLOCKS. Which producer emits which is the table in
+## The block library is the `add_*` functions below. Which producer emits which is the table in
 ## docs/resolve-snapshot-block-spec.md §4.3 — check it before removing a block that looks unused.
 
 

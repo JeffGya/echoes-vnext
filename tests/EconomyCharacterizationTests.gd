@@ -117,6 +117,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/reboot_after_death_pays_what_the_card_showed", Callable(EconomyCharacterizationTests, "_t_reboot_after_death"))
 	runner.register_test("econ_char/reboot_replayed_card_pays_what_it_showed", Callable(EconomyCharacterizationTests, "_t_reboot_replayed_card"))
 	runner.register_test("econ_char/charge_completion_after_death_pays_with_record", Callable(EconomyCharacterizationTests, "_t_charge_after_death"))
+	runner.register_test("econ_char/missing_rewards_key_logs_and_returns_safe_value", Callable(EconomyCharacterizationTests, "_t_missing_key_logs"))
+	runner.register_test("econ_char/balance_defeat_factor_is_one_quarter", Callable(EconomyCharacterizationTests, "_t_defeat_factor_config"))
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +176,7 @@ static func _encounter_pay(objectives: Array, victory: bool, run_count: int, fou
 		victory,
 		int(rd.get("consolation_base", 0)),
 		float(rd.get("realm_scale", 1.0)), float(rd.get("replay_factor", 1.0)),
-		str(rd.get("rank", "F")), true, _logger(), 1)
+		str(rd.get("rank", "F")), true, _logger(), 1, 0.25)
 	paid["base_reward"] = int(rd.get("base_reward", 0))
 	paid["balance_ase"] = int((save["economy"] as Dictionary)["ase"])
 	paid["balance_ekwan"] = int((save["economy"] as Dictionary)["ekwan"])
@@ -304,6 +306,40 @@ static func _stage_ctx(cfg: ConfigService, objs: Array, fought_index: int = -1) 
 	ctx.active_encounter_objective_index = fought_index
 	ctx.save_data = { "realms": { "realm.01": { "stages": [ { "index": 0, "objectives": objs } ] } } }
 	return ctx
+
+
+## Follow-up 31: no code default. A missing `data.rewards` key logs once per read and returns the
+## neutral value; a present key logs nothing.
+static func _t_missing_key_logs() -> Dictionary:
+	var mismatches: Array = []
+	var logger := StructuredLogger.new()
+	var order: Array = ["realm.01", "realm.02"]
+	if not is_equal_approx(RewardCalc.realm_scale("realm.02", order, {}, logger, 5), 1.0):
+		mismatches.append("realm_scale with no step is not 1.0")
+	if not is_equal_approx(RewardCalc.replay_factor(1, {}, logger, 5), 1.0):
+		mismatches.append("replay_factor with no key is not 1.0")
+	var logs := logger.get_logs()
+	if logs.size() != 2:
+		mismatches.append("expected 2 log lines, got %d" % logs.size())
+	else:
+		var e: Dictionary = logs[0]
+		if str(e["type"]) != "economy.reward.missing_config_key" or int(e["t"]) != 5 \
+				or str((e["data"] as Dictionary).get("key")) != "realm_scale_step":
+			mismatches.append("log line is %s" % str(e))
+	var quiet := StructuredLogger.new()
+	var cfg := _rewards_cfg()
+	RewardCalc.realm_scale("realm.02", order, cfg, quiet, 5)
+	RewardCalc.replay_factor(1, cfg, quiet, 5)
+	if not quiet.get_logs().is_empty():
+		mismatches.append("a complete config logged %s" % str(quiet.get_logs()))
+	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
+
+
+static func _t_defeat_factor_config() -> Dictionary:
+	var config := ConfigService.new()
+	config.load_balance()
+	var v: float = RewardCalc.cfg_num(ConfigService.get_rewards_cfg(config), "defeat_factor", -1.0)
+	return { "ok": is_equal_approx(v, 0.25), "error": "data.rewards.defeat_factor is %s, expected 0.25" % str(v) }
 
 
 ## D-07: a type with no key logs economy.reward.unknown_objective_type and counts 0. It never
@@ -1098,7 +1134,7 @@ static func _row_by_cause(breakdown: Array, cause: String) -> Dictionary:
 ## Pays one encounter straight through EconomyService with explicit inputs.
 static func _pay(victory: bool, replay: float, eligible: bool = true, scale: float = 1.0) -> Dictionary:
 	var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
-	return econ.reward_encounter_complete(victory, 10, scale, replay, "B", eligible, _logger(), 1)
+	return econ.reward_encounter_complete(victory, 10, scale, replay, "B", eligible, _logger(), 1, 0.25)
 
 
 static func _t_cause_encounter_rows() -> Dictionary:
@@ -1423,7 +1459,7 @@ static func _t_speed_pays_no_ase() -> Dictionary:
 			EncounterResolutionModes.COMBAT, _PAR, "", null, 0, 0)
 		var econ := EconomyService.new({ "economy": { "ase": 0, "ekwan": 0 } })
 		var res := econ.reward_encounter_complete(true, int(rd["consolation_base"]),
-			float(rd["realm_scale"]), float(rd["replay_factor"]), str(rd["rank"]), true, _logger(), 1)
+			float(rd["realm_scale"]), float(rd["replay_factor"]), str(rd["rank"]), true, _logger(), 1, 0.25)
 		paid.append(int(res["ase_awarded"]))
 		if not (res["breakdown"] as Array).is_empty():
 			m.append("round %d: expected no rows, got %s" % [r, JSON.stringify(res["breakdown"])])

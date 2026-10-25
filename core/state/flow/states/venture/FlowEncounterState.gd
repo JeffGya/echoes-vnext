@@ -188,7 +188,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 
 	# ECONOMY-004: Compute and pay reward
 	var run_count := int(realm_model.get("run_count", 0))
-	var payout_factors := ActiveStageService.get_payout_factors(flow_ctx, flow_ctx.config_service)
+	var payout_factors := ActiveStageService.get_payout_factors(flow_ctx, flow_ctx.config_service, flow_ctx.logger, t)
 	var reward_data: Dictionary = RewardCalc.compute(
 		victory,
 		stage_objectives,
@@ -224,7 +224,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		str(reward_data.get("rank", "F")),
 		_consolation_eligible,
 		flow_ctx.logger,
-		t
+		t,
+		RewardCalc.cfg_num(reward_cfg, "defeat_factor", 0.0, flow_ctx.logger, t) if not victory else 0.0
 	)
 
 	# Trigger save — the encounter payout (and, on a first defeat, the consolation stamp) are

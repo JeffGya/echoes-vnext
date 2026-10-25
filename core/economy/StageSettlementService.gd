@@ -199,8 +199,8 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 	return {
 		"base":           RewardCalc.base_reward(objectives, reward_cfg, log, t),
 		"realm_scale":    RewardCalc.realm_scale(flow_ctx.realm_id,
-			ConfigService.get_realm_order(config_service), reward_cfg),
-		"replay_factor":  RewardCalc.replay_factor(int(realm_model.get("run_count", 0)), reward_cfg),
+			ConfigService.get_realm_order(config_service), reward_cfg, log, t),
+		"replay_factor":  RewardCalc.replay_factor(int(realm_model.get("run_count", 0)), reward_cfg, log, t),
 		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
 		"echo_home":      _echo_home(realm_model, reward_cfg),
@@ -270,8 +270,8 @@ static func carry_plan(ctx: FlowContext, cfg_service: ConfigService, retention_m
 	plan["intel_count"] = ActiveStageService.count_revealed_situations(ctx)
 	if int(plan["intel_count"]) <= 0:
 		return plan
-	var pf := float(reward_cfg.get("partial_intel_reward_factor", 0.12))
-	var fx := ActiveStageService.get_payout_factors(ctx, cfg_service)
+	var pf := RewardCalc.cfg_num(reward_cfg, "partial_intel_reward_factor", 0.0, logger, t)
+	var fx := ActiveStageService.get_payout_factors(ctx, cfg_service, logger, t)
 	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"]) * pf
 	var ase_full := RewardCalc.round_payout(
 		float(RewardCalc.base_reward(objectives, reward_cfg, logger, t)) * k * retention_mul)

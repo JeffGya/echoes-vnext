@@ -57,8 +57,12 @@ static func grade_enabled(summoning_cfg: Dictionary, grade: String) -> bool:
 	return bool(table.get(grade, grade == "uncalled"))
 
 
+## A missing key is logged and means no cap: the highest table entry then sets the price.
 static func village_ceiling(summoning_cfg: Dictionary) -> int:
-	return int(summoning_cfg.get("village_ceiling", 14))
+	if not summoning_cfg.has("village_ceiling"):
+		push_error("SummonService: data.summoning.village_ceiling is missing; no ceiling applied")
+		return 1 << 30
+	return int(summoning_cfg["village_ceiling"])
 
 
 ## Prices of summon 1..count in one action: summon i pays for Echo (living + i + 1).

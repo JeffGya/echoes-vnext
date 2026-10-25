@@ -76,20 +76,38 @@ static func objective_counts(objectives: Array, reward_cfg: Dictionary) -> Dicti
 	return { "overcome": overcome, "total": total }
 
 
+## The one reader of a numeric `data.rewards` key. There is no code default: a missing key logs
+## `economy.reward.missing_config_key` through `logger` (`push_error` when none is given) and
+## returns `safe`, a neutral value (1.0 for a factor, 0.0 for a bonus), never a design number.
+static func cfg_num(reward_cfg: Dictionary, key: String, safe: float,
+		logger: StructuredLogger = null, t: int = 0) -> float:
+	var v: Variant = reward_cfg.get(key)
+	if typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT:
+		return float(v)
+	if logger != null:
+		logger.warn(t, "economy.reward.missing_config_key",
+			"data.rewards key is missing or not a number", { "key": key, "safe": safe })
+	else:
+		push_error("RewardCalc: data.rewards.%s is missing or not a number; using %s" % [key, safe])
+	return safe
+
+
 ## Realm scale on objective Ase and Ekwan (D-63): 1 + step x (position in `realm_order` - 1).
 ## A realm outside `realm_order` (the prologue) uses 1.0. The Echoes stipend is never scaled.
-static func realm_scale(realm_id: String, realm_order: Array, reward_cfg: Dictionary) -> float:
+static func realm_scale(realm_id: String, realm_order: Array, reward_cfg: Dictionary,
+		logger: StructuredLogger = null, t: int = 0) -> float:
 	var pos := realm_order.find(realm_id)
 	if pos < 0:
 		return 1.0
-	return 1.0 + float(reward_cfg.get("realm_scale_step", 0.25)) * float(pos)
+	return 1.0 + cfg_num(reward_cfg, "realm_scale_step", 0.0, logger, t) * float(pos)
 
 
 ## Replay factor on objective Ase and Ekwan (D-54): flat, 1.0 on a first run (`run_count` 0).
-static func replay_factor(run_count: int, reward_cfg: Dictionary) -> float:
+static func replay_factor(run_count: int, reward_cfg: Dictionary,
+		logger: StructuredLogger = null, t: int = 0) -> float:
 	if run_count <= 0:
 		return 1.0
-	return float(reward_cfg.get("replay_factor", 0.35))
+	return cfg_num(reward_cfg, "replay_factor", 1.0, logger, t)
 
 
 ## Rounds a payout amount. The epsilon keeps a true x.5 (30 x 0.35 = 10.5) from falling to x.4999.
@@ -153,11 +171,11 @@ static func compute(
 	var consolation_base := base_reward(objectives, reward_cfg, null, t, MODE_FOUGHT, fought_index)
 
 	var is_pace    := PaceService.is_pace_mode(resolution_mode, guide_mode) and par_rounds > 0.0
-	var full_ratio := float(reward_cfg.get("pace_full_ratio", 1.1))
-	var zero_ratio := float(reward_cfg.get("pace_zero_ratio", 1.6))
+	var full_ratio := cfg_num(reward_cfg, "pace_full_ratio", 1.0, logger, t) if is_pace else 1.0
+	var zero_ratio := cfg_num(reward_cfg, "pace_zero_ratio", 2.0, logger, t) if is_pace else 2.0
 	var fraction   := PaceService.bonus_fraction(round_ended, par_rounds, full_ratio, zero_ratio)
 
-	var replay := replay_factor(run_count, reward_cfg)
+	var replay := replay_factor(run_count, reward_cfg, logger, t)
 
 	# A no-pace mode has no speed to earn, so it takes the full pace points and is not capped.
 	# `rank_without_pace` is the grade with the pace points removed, for the rank-cause note.
@@ -168,10 +186,10 @@ static func compute(
 		var thresholds_v: Variant = reward_cfg.get("rank_thresholds", {})
 		var thresholds: Dictionary = thresholds_v if thresholds_v is Dictionary else {}
 		var pace_credit := fraction if is_pace else 1.0
-		rank = _compute_rank(rank_score(echoes_survived, total_echoes, pace_credit, reward_cfg),
-			thresholds, any_death)
-		rank_without_pace = _compute_rank(rank_score(echoes_survived, total_echoes, 0.0, reward_cfg),
-			thresholds, any_death) if is_pace else rank
+		rank = _compute_rank(rank_score(echoes_survived, total_echoes, pace_credit, reward_cfg, logger, t),
+			thresholds, any_death, logger, t)
+		rank_without_pace = _compute_rank(rank_score(echoes_survived, total_echoes, 0.0, reward_cfg, logger, t),
+			thresholds, any_death, logger, t) if is_pace else rank
 
 	return {
 		"base_reward":       base,
@@ -190,12 +208,12 @@ static func compute(
 ## The rank score of a win: win points + home points x (home / started) + pace points x pace_credit.
 ## Reads no Ase amount and no replay factor (D-74). pace_credit is the pace fraction (0 to 1).
 static func rank_score(echoes_survived: int, total_echoes: int, pace_credit: float,
-		reward_cfg: Dictionary) -> float:
+		reward_cfg: Dictionary, logger: StructuredLogger = null, t: int = 0) -> float:
 	var pts_v: Variant = reward_cfg.get("rank_points", {})
 	var pts: Dictionary = pts_v if pts_v is Dictionary else {}
 	var home_share := float(echoes_survived) / float(total_echoes) if total_echoes > 0 else 1.0
-	var score := float(pts.get("win", 0.4)) + float(pts.get("home", 0.4)) * home_share \
-		+ float(pts.get("pace", 0.2)) * pace_credit
+	var score := cfg_num(pts, "win", 0.0, logger, t) + cfg_num(pts, "home", 0.0, logger, t) * home_share \
+		+ cfg_num(pts, "pace", 0.0, logger, t) * pace_credit
 	return score
 
 
@@ -203,14 +221,15 @@ static func rank_score(echoes_survived: int, total_echoes: int, pace_credit: flo
 const DEATH_CAP_RANK := "A"
 
 
-static func _compute_rank(raw_score: float, thresholds: Dictionary, any_death: bool = false) -> String:
+static func _compute_rank(raw_score: float, thresholds: Dictionary, any_death: bool = false,
+		logger: StructuredLogger = null, t: int = 0) -> String:
 	# A score on a threshold must not be lost to float error (0.4 + 0.4 + 0.2 x 0.5 sums to 0.8999...).
 	var rank_score := raw_score + 0.000000001
-	var s_thresh := float(thresholds.get("S", 0.90))
-	var a_thresh := float(thresholds.get("A", 0.75))
-	var b_thresh := float(thresholds.get("B", 0.55))
-	var c_thresh := float(thresholds.get("C", 0.35))
-	var d_thresh := float(thresholds.get("D", 0.15))
+	var s_thresh := cfg_num(thresholds, "S", 2.0, logger, t)
+	var a_thresh := cfg_num(thresholds, "A", 2.0, logger, t)
+	var b_thresh := cfg_num(thresholds, "B", 2.0, logger, t)
+	var c_thresh := cfg_num(thresholds, "C", 2.0, logger, t)
+	var d_thresh := cfg_num(thresholds, "D", 2.0, logger, t)
 	if rank_score >= s_thresh and not any_death:
 		return "S"
 	if rank_score >= a_thresh:

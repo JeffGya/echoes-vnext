@@ -733,8 +733,8 @@ func _setup_pace(t: int) -> void:
 		ectx.actors, ectx.resolution_mode, ectx.objective_params, capacity_cfg)
 	ectx.pace_cfg = {
 		"par_rounds":      par,
-		"pace_full_ratio": float(reward_cfg.get("pace_full_ratio", 1.1)),
-		"pace_zero_ratio": float(reward_cfg.get("pace_zero_ratio", 1.6)),
+		"pace_full_ratio": RewardCalc.cfg_num(reward_cfg, "pace_full_ratio", 1.0, logger, t),
+		"pace_zero_ratio": RewardCalc.cfg_num(reward_cfg, "pace_zero_ratio", 2.0, logger, t),
 	}
 	if logger != null:
 		logger.info(t, "combat.pace.par", "Pace par set at fight start", {

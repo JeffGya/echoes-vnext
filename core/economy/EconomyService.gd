@@ -105,12 +105,13 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 ## Encounter-cadence payout. Paid at every combat end, once per encounter.
 ##
 ## victory:   a win pays 0 Ase and has no rows; a loss pays the
-##            `round(base × realm_scale × 0.25 × replay_factor)` consolation.
+##            `round(base × realm_scale × defeat_factor × replay_factor)` consolation.
 ## base_reward: the weight of the fought objective (`RewardCalc.consolation_base`). Never paid
 ##            here on a victory. Used for the defeat consolation.
 ## consolation_eligible: false on a repeat defeat of a situation that has already paid its
 ##            consolation. Ignored on a victory. When false the defeat branch pays nothing and
 ##            returns one delta-0 `repeat_defeat` row.
+## defeat_factor: `data.rewards.defeat_factor`, read by the caller (`RewardCalc.cfg_num`).
 ## Every row carries `cause` and `params` (see `_row`). A fight pays no Ekwan (D-28):
 ## `ekwan_awarded` stays in the result as 0 so the Resolve snapshot keeps its shape.
 ## Returns reward_result dict with ase_awarded, ekwan_awarded, rank, victory, breakdown.
@@ -122,7 +123,8 @@ func reward_encounter_complete(
 	rank: String,
 	consolation_eligible: bool,
 	logger: StructuredLogger,
-	t: int
+	t: int,
+	defeat_factor: float
 ) -> Dictionary:
 	var total: int
 	var breakdown: Array  # Array of {label: String, delta: int, currency: String}
@@ -133,8 +135,8 @@ func reward_encounter_complete(
 	elif consolation_eligible:
 		var scaled := float(base_reward) * realm_scale
 		var base_row := RewardCalc.round_payout(scaled)
-		var base_consolation := RewardCalc.round_payout(scaled * 0.25)
-		total = RewardCalc.round_payout(scaled * 0.25 * replay_factor)
+		var base_consolation := RewardCalc.round_payout(scaled * defeat_factor)
+		total = RewardCalc.round_payout(scaled * defeat_factor * replay_factor)
 		var replay_delta := total - base_consolation  # negative or 0
 
 		breakdown = []

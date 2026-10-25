@@ -1092,7 +1092,7 @@ static func test_purity_dispatch_preserves_pending_return_notification_until_san
 ## payloads. It follows the snapshot_purity/generic_double_build_is_stable idiom above, but
 ## needs no runtime env at all, which is exactly the point.
 ##
-## It exercises ALL SEVENTEEN blocks plus the base, including the eight only producers A
+## It exercises ALL the `add_*` blocks plus the base, including the eight only producers A
 ## (combat) and B (keeper trial) will call once they migrate in Phase 6. Phase 6 therefore
 ## inherits this guard without editing the builder.
 static func test_purity_resolve_builder_double_build_is_stable() -> Dictionary:

@@ -567,8 +567,8 @@ static func _t_snapshot_batch_fields() -> Dictionary:
 		return { "ok": false, "error": "200 Ase pays 70+85 = 155 but not 255: max 2, got %s" % str(d.get("batch_affordable_max")) }
 	if int(d.get("living_count", -1)) != 3 or int(d.get("village_ceiling", -1)) != 14:
 		return { "ok": false, "error": "living_count/village_ceiling wrong" }
-	if int(d.get("ase_cost_per_summon", -1)) != 70:
-		return { "ok": false, "error": "legacy key must equal the next uncalled price (70)" }
+	if d.has("ase_cost_per_summon"):
+		return { "ok": false, "error": "the unread legacy key ase_cost_per_summon must stay removed" }
 	if bool(d.get("summon_disabled", true)) or int(d.get("ase_short_by", -1)) != 0:
 		return { "ok": false, "error": "200 Ase pays Echo 4: not disabled, short by 0" }
 	return { "ok": true }

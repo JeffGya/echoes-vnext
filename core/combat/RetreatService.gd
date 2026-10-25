@@ -14,13 +14,13 @@ class_name RetreatService
 # ──────────────────────────────────────────
 
 ## The in-fight retreat price: data.combat.retreat_ase_cost. One reader for the snapshot and the
-## dispatch handler, so the two cannot disagree. A missing key is logged loudly and falls back to 10.
+## dispatch handler, so the two cannot disagree. A missing key is logged loudly and the retreat costs 0.
 static func get_ase_cost(config_service: ConfigService) -> int:
 	var bal: Dictionary = config_service.get_balance() if config_service != null else {}
 	var combat_cfg: Dictionary = bal.get("data", {}).get("combat", {})
 	if not combat_cfg.has("retreat_ase_cost"):
-		push_error("RetreatService: data.combat.retreat_ase_cost is missing; using 10")
-		return 10
+		push_error("RetreatService: data.combat.retreat_ase_cost is missing; retreat costs 0")
+		return 0
 	return int(combat_cfg["retreat_ase_cost"])
 
 
