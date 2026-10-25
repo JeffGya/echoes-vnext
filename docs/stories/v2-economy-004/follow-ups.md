@@ -12,7 +12,7 @@ Written in STE. One line per item: what, why, source decision. No Notion row exi
 | 6 | Result-moment sequence: party shown, each Echo marked "home", count completes, then the Ase figure; Sanctum consequence pass names survivors | Keeping Echoes alive must feel rewarding. | D-42, `phase5-echoes-alive-recheck.md` |
 | 7 | Summon price rises with roster size; the price lever regulates population size | Keeps balance as the house grows. Design is in `phase5-tuning-proposal.md`; build scope judged at the build plan. | D-55 |
 | 8 | Any non-Ase reward for survival (Standing, bond gain) | Canon names none. A new mechanic. | D-42 |
-| 9 | Repeat return-home partial payout has no stamp and can pay on each return | Exploit, smaller after D-14. | Phase 3b design check, B5 |
+| 9 | ~~Repeat return-home partial payout has no stamp~~ CLOSED by D-72 (advance with a carried record) | | D-72 |
 | 10 | Optional objectives become truly skippable (DECIDED, D-82; built as step 5.9) | Risk choice. | D-82 |
 | 11 | `guide_spirit` required: config flag changed to true (DECIDED, D-83; built in step 5.9) | Closes D95. | D-83 |
 | 12 | Boss encounter contract (D96) | The boss is a stub and pays 0. | D-02, D-10 |
@@ -32,3 +32,7 @@ Written in STE. One line per item: what, why, source decision. No Notion row exi
 | 26 | Display of skipped optional objectives on the stage-ending card (derive from objective entries: required false, completed false, type not boss); never show the boss stub as skipped | Jeff: later, after play (D-97). | D-82, D-97 |
 | 27 | Fight events on the Resolve card (rescue, refusal, other 'what the fight changed' stories): define the events first, then add a field | Jeff had no preference; not added in Part A. | D-98 |
 | 28 | Intel from fights: design how a won fight reveals situations or intel; the dormant `intel_gained` seam (step 5.10) then reports it and the mid-stage card's intel line lights up | No fight reveals a situation today. Jeff: a later story (D-99). | D-99 |
+| 29 | Remove the unread legacy snapshot key `ase_cost_per_summon` (`FlowSummonState.gd`) and its pin in `SanctumSummonTests.gd`; review the unread summon keys `summon_denied`, `ase_short_by`, `village_ceiling`, `batch_prices` | QA N4: no UI reads them. | D-102 |
+| 30 | A repeat return home with nothing new shows no explanation row | QA N3: needs a zero-by-rule reason or a sentence (copy is Jeff's). | D-102 |
+| 31 | Config defaults repeat design numbers in code (0.25, 0.35, 1.1, 1.6, 0.4/0.4/0.2, rank thresholds, 0.12, village_ceiling 14, retreat 10); read `data.rewards.defeat_factor` | QA N5: each value exists in two places. | D-102, follow-up 15 |
+| 32 | After the last required objective is won, the card offers only `flow.complete_stage`, so an optional objective can no longer be done; skipping is a real choice only before that fight | QA N7: old behavior; design question. | D-102 |
