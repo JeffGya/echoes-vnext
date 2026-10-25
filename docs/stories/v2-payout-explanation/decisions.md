@@ -123,3 +123,11 @@ Open for the UI: the return and retreat confirmation can say what is banked now 
 - `echoes_alive` params: `lost` holds every death of the stage so far, and `alive` excludes them. The home sequence reads the params only. A lost name with no row in this fight (a death in an earlier fight) shows once in a note under the rows, and the ledger row drops its own note.
 - Still PROPOSAL placeholder copy (Jeff owns it): "Found and overcome." and the intel line text.
 - GAP for Jeff's copy: no wording exists for a broken Thread, so the Thread line is simply hidden when `thread_whole` is false.
+
+## Return-home confirmation before the action (UI, 2026-10-25)
+
+- Defect: `ReturnHomeModal` showed the carried panel only for `result.success`, but the core writes `return_home_result` only on a FAILED escape (`VentureController.gd`, "Escape failed" branch). A success goes straight to the scout-return card. The panel never showed in production.
+- Fix (Jeff's choice): the Return button on `StageExploreScreen` opens the confirmation first and dispatches nothing. The panel shows `carry_home_preview` (each carried line only above 0) and the comparator (the party and its state, "The stage waits.", "Going home costs nothing."). With 0/0 or no preview it still opens, with the comparator only.
+- Only Confirm sends `stage.return_home`, once (a second press does nothing). Cancel and Esc dispatch nothing and close the panel. Both buttons are 56 px high. Focus starts on Cancel.
+- The failed-escape display is unchanged: "Blocked", no carried figure, Continue sends `stage.dismiss_overlay`.
+- PROPOSAL placeholder copy in `CarriedHomePresentation.gd`: "Take the party home?", "Go home", "Stay".

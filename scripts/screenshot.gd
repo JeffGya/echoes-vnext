@@ -117,6 +117,7 @@ func _fixtures() -> Dictionary:
 		"resolve_retreat_zero": [_combat(7, recover), _payout_retreat_zero()],
 		"carry_return_home": [_combat(6, recover), _return_home_modal({ "ase": 4, "ekwan": 2, "overcome": 1, "total": 3 })],
 		"carry_return_home_zero": [_combat(6, recover), _return_home_modal({ "ase": 0, "ekwan": 0, "overcome": 1, "total": 3 })],
+		"carry_return_home_failed": [_combat(6, recover), _return_home_modal({}, true)],
 		"carry_retreat": [_prebattle({ "carry_retreat_preview": { "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 } })],
 		"retreat_disabled_price": [_prebattle({ "retreat_affordable": false })],
 		"retreat_denied": [_prebattle({ "retreat_affordable": false,
@@ -335,11 +336,15 @@ func _payout_retreat_zero() -> Dictionary:
 	return _payout_snap(data)
 
 
-func _return_home_modal(carry: Dictionary) -> Dictionary:
+## The confirmation opens before the action. `failed` builds the failed-escape display instead.
+func _return_home_modal(carry: Dictionary, failed: bool = false) -> Dictionary:
+	var party := [{ "name": "Ama", "emotional_status": "grounded" }, { "name": "Kofi", "emotional_status": "uncertain" },
+		{ "name": "Esi", "emotional_status": "whole" }]
+	if failed:
+		return { "_modal": { "id": &"realm.return_home", "payload": {
+			"result": { "success": false, "message": "The way is blocked. The party cannot leave yet." } } } }
 	return { "_modal": { "id": &"realm.return_home", "payload": {
-		"result": { "success": true, "message": "The party slips away." }, "carry": carry,
-		"party": [{ "name": "Ama", "emotional_status": "grounded" }, { "name": "Kofi", "emotional_status": "uncertain" },
-			{ "name": "Esi", "emotional_status": "whole" }] } } }
+		"confirm": true, "action": { "type": "stage.return_home" }, "carry": carry, "party": party } } }
 
 
 ## A pre-combat snapshot: the shell shows the pre-battle modal with the retreat button.

@@ -37,7 +37,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/ledger_opens_at_once_on_skip_reduced_motion_or_no_sequence", Callable(ResolvePayoutUITests, "_t_ledger_at_once"))
 	runner.register_test("payout_ui/new_snapshot_mid_sequence_drops_old_emit", Callable(ResolvePayoutUITests, "_t_ledger_new_snapshot"))
 	runner.register_test("payout_ui/carried_line_absent_at_zero_present_with_comparator", Callable(ResolvePayoutUITests, "_t_carried_panel"))
-	runner.register_test("payout_ui/return_home_modal_carries_only_on_success", Callable(ResolvePayoutUITests, "_t_return_modal"))
+	runner.register_test("payout_ui/return_home_confirmation_opens_before_dispatch", Callable(ResolvePayoutUITests, "_t_return_confirm_before_dispatch"))
+	runner.register_test("payout_ui/return_home_confirm_once_cancel_and_esc_send_nothing", Callable(ResolvePayoutUITests, "_t_return_confirm_buttons"))
+	runner.register_test("payout_ui/return_home_confirmation_zero_carry_and_failed_escape", Callable(ResolvePayoutUITests, "_t_return_confirm_zero_and_failure"))
 	runner.register_test("payout_ui/retreat_button_price_affordable_and_denied", Callable(ResolvePayoutUITests, "_t_retreat_button"))
 	runner.register_test("payout_ui/carried_scenes_hold_no_amount_text", Callable(ResolvePayoutUITests, "_t_carried_no_amounts"))
 	runner.register_test("payout_ui/unknown_cause_shows_no_button", Callable(ResolvePayoutUITests, "_t_unknown_cause"))
@@ -830,25 +832,97 @@ static func _t_carried_panel() -> Dictionary:
 	return _pass(m)
 
 
-static func _t_return_modal() -> Dictionary:
+const RETURN_ACTION := { "type": "stage.return_home" }
+
+
+static func _confirm_payload(carry: Dictionary) -> Dictionary:
+	return { "confirm": true, "action": RETURN_ACTION.duplicate(), "carry": carry, "party": _party() }
+
+
+## The core writes return_home_result only on a FAILED escape. A success goes to the scout-return
+## card. The panel therefore opens before the action; the result display stays for the failure.
+static func _t_return_confirm_before_dispatch() -> Dictionary:
+	var screen := (load("res://ui/screens/venture/StageExploreScreen.tscn") as PackedScene).instantiate() as Control
+	var actions: Array = []
+	var modals: Array = []
+	screen.connect("action_requested", func(a: Dictionary) -> void: actions.append(a))
+	screen.connect("modal_requested", func(id: StringName, payload: Dictionary) -> void: modals.append([id, payload]))
+	screen.set("_cached_return_action", RETURN_ACTION.duplicate())
+	screen.set("_cached_carry_preview", { "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 })
+	screen.set("_cached_party_preview", _party())
+	screen.call("_on_return_pressed")
+	screen.free()
+	if not actions.is_empty():
+		return { "ok": false, "error": "the Return button dispatched before the confirmation" }
+	if modals.size() != 1 or modals[0][0] != &"realm.return_home" or not bool(modals[0][1].get("confirm", false)):
+		return { "ok": false, "error": "expected one confirmation request, got %s" % str(modals) }
+	var payload: Dictionary = modals[0][1]
+	if payload["action"] != RETURN_ACTION or payload["carry"].get("ase", 0) != 4 or (payload["party"] as Array).size() != 2:
+		return { "ok": false, "error": "confirmation payload wrong: %s" % str(payload) }
+	return { "ok": true }
+
+
+static func _t_return_confirm_buttons() -> Dictionary:
+	var m := _mount_scene(ReturnHomeScene)
+	var modal: ReturnHomeModal = m[1]
+	var actions: Array = []
+	var dismissed: Array = []
+	modal.action_requested.connect(func(a: Dictionary) -> void: actions.append(a))
+	modal.dismiss_requested.connect(func() -> void: dismissed.append(1))
+	var confirm := modal.get_node("%ConfirmButton") as Button
+	var cancel := modal.get_node("%CancelButton") as Button
+	modal.present(_confirm_payload({ "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 }))
+	if not actions.is_empty() or not (modal.get_node("%ConfirmRow") as Control).visible or (modal.get_node("%ContinueButton") as Control).visible:
+		return _fail(m, "the panel must open with Confirm and Cancel and no dispatch")
+	for b in [confirm, cancel]:
+		var size: Vector2 = (b as Button).get_combined_minimum_size()
+		if size.x < 48.0 or size.y < 48.0 or (b as Button).text.is_empty():
+			return _fail(m, "a confirm button is under 48x48 or has no text")
+	# Cancel sends nothing.
+	cancel.pressed.emit()
+	if not actions.is_empty() or dismissed.size() != 1:
+		return _fail(m, "Cancel: actions=%d dismissed=%d" % [actions.size(), dismissed.size()])
+	# Esc is Cancel.
+	modal.present(_confirm_payload({}))
+	var esc := InputEventAction.new()
+	esc.action = &"ui_cancel"
+	esc.pressed = true
+	modal._input(esc)
+	if not actions.is_empty() or dismissed.size() != 2:
+		return _fail(m, "Esc: actions=%d dismissed=%d" % [actions.size(), dismissed.size()])
+	# Confirm sends the action once; a second press does nothing.
+	modal.present(_confirm_payload({}))
+	confirm.pressed.emit()
+	confirm.pressed.emit()
+	if actions != [RETURN_ACTION] or not confirm.disabled:
+		return _fail(m, "Confirm: actions=%s" % str(actions))
+	return _pass(m)
+
+
+static func _t_return_confirm_zero_and_failure() -> Dictionary:
 	var m := _mount_scene(ReturnHomeScene)
 	var modal: ReturnHomeModal = m[1]
 	var panel := modal.get_node("%CarriedPanel") as Control
-	var carry := { "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 }
-	modal.present({ "result": { "success": true, "message": "x" }, "carry": carry, "party": _party() })
-	var shown: bool = panel.visible and (panel.get_node("%AseLine") as Label).text == "+4 Ase"
-	var cost: String = (panel.get_node("%CostLine") as Label).text
-	modal.present({ "result": { "success": false, "message": "x" }, "carry": carry, "party": _party() })
-	var hidden_on_block: bool = not panel.visible
-	var action: Dictionary = modal.get("_action")
-	modal.present({ "result": { "success": true, "message": "x" }, "carry": carry, "party": _party() })
-	var dispatched: Dictionary = modal.get("_action")
-	if not shown or cost != CarriedStrings.RETURN_COST:
-		return _fail(m, "carried panel missing on a successful return")
-	if not hidden_on_block or action != { "type": "stage.dismiss_overlay" }:
-		return _fail(m, "a blocked return must carry nothing and keep its action")
-	if dispatched != { "type": "stage.confirm_return_home" }:
-		return _fail(m, "the confirm action changed")
+	var carried := panel.get_node("%CarriedBlock") as Control
+	# 0/0 or no preview: the panel still opens with the comparator, and no carried line.
+	for carry in [{ "ase": 0, "ekwan": 0, "overcome": 0, "total": 2 }, {}]:
+		modal.present(_confirm_payload(carry))
+		if not panel.visible or carried.visible or not (panel.get_node("%PartyBlock") as Control).visible \
+				or not (panel.get_node("%WaitsLine") as Control).visible or (panel.get_node("%CostLine") as Label).text != CarriedStrings.RETURN_COST:
+			return _fail(m, "0/0 confirmation: panel=%s carried=%s" % [panel.visible, carried.visible])
+	# Each carried line shows only above 0.
+	modal.present(_confirm_payload({ "ase": 0, "ekwan": 3, "overcome": 1, "total": 2 }))
+	if not carried.visible or (panel.get_node("%AseLine") as Control).visible or (panel.get_node("%EkwanLine") as Label).text != "+3 Ekwan":
+		return _fail(m, "an Ekwan-only carry shows wrong lines")
+	# The failed-escape display is unchanged: no carried figure, Continue dismisses.
+	var actions: Array = []
+	modal.action_requested.connect(func(a: Dictionary) -> void: actions.append(a))
+	modal.present({ "result": { "success": false, "message": "The way is blocked." }, "carry": { "ase": 4, "ekwan": 1, "overcome": 1 }, "party": _party() })
+	if panel.visible or (modal.get_node("%ConfirmRow") as Control).visible or not (modal.get_node("%ContinueButton") as Control).visible:
+		return _fail(m, "failed-escape display changed")
+	(modal.get_node("%ContinueButton") as Button).pressed.emit()
+	if actions != [{ "type": "stage.dismiss_overlay" }]:
+		return _fail(m, "Continue action changed: %s" % str(actions))
 	return _pass(m)
 
 
