@@ -115,6 +115,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 		return {}
 
 	# --- the stage-cadence Ase/Ekwan ---------------------------------------
+	EarningsService.ensure_objective_rows(stage_ref, ConfigService.get_rewards_cfg(config_service), logger, t)
 	var plan := _plan(realm_model, stage_ref, stage_index, logger, t)
 	var base: int = plan["base"]
 	# The preview never logs this.
@@ -165,7 +166,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 ## What `settle()` would pay for the current stage, without paying it. Pure and read-only: no
 ## RNG, no save write, no log, no receipt. It reads the same `_plan()` and the same
 ## `EconomyService.stage_payout_rows()` that `settle()` pays from, so the two cannot drift.
-## Objectives settled at a return home are not in it (D-105).
+## Earnings settled at a return home are not in it (D-105).
 ## Returns { rows: Array, ase: int, ekwan: int } (rows are Ase only), or {} when the stage
 ## cannot be located or is already settled.
 func preview() -> Dictionary:
@@ -189,21 +190,21 @@ func preview() -> Dictionary:
 
 
 ## The inputs of the stage payout, shared by `settle()` and `preview()`. Pure apart from the
-## unknown-type log inside `RewardCalc.base_reward` (only when `log` is given). The base and Ekwan
-## sums skip objectives settled at a return home (D-105); the counts still include them.
+## unknown-type log inside `RewardCalc.realm_scale` and friends (only when `log` is given). The base and
+## Ekwan come from the unsettled earnings rows (D-105); the counts still include settled objectives.
 func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 		log: StructuredLogger, t: int) -> Dictionary:
 	var reward_cfg := ConfigService.get_rewards_cfg(config_service)
 	var objectives_v: Variant = stage_ref.get("objectives", [])
 	var objectives: Array = objectives_v if objectives_v is Array else []
-	var unsettled := RewardCalc.unsettled(objectives)
+	var packs := EarningsService.plan(stage_ref, reward_cfg)
 
 	return {
-		"base":           RewardCalc.base_reward(unsettled, reward_cfg, log, t),
+		"base":           int(packs["scaled_ase"]),
 		"realm_scale":    RewardCalc.realm_scale(flow_ctx.realm_id,
 			ConfigService.get_realm_order(config_service), reward_cfg, log, t),
 		"replay_factor":  RewardCalc.replay_factor(int(realm_model.get("run_count", 0)), reward_cfg, log, t),
-		"ekwan_base":     RewardCalc.stage_ekwan(unsettled, reward_cfg, log, t),
+		"ekwan_base":     int(packs["scaled_ekwan"]),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
 		"echo_home":      _echo_home(realm_model, reward_cfg, log, t),
 		"settled_ase":    maxi(0, int(stage_ref.get("settled_ase", 0))),
@@ -253,14 +254,14 @@ const OUTCOME_ALL := "all"
 const OUTCOME_NOTHING_NEW := "nothing_new"
 
 
-## What a return home would settle NOW: the objectives that are completed and not yet settled, at
-## the same scale and replay factor as the stage payout. Pure and read-only; no roll, no odds.
-## `ase`, `ekwan` = the gathered amount before the roll. `indexes` = the objectives it would mark.
+## What a return home would settle NOW: the unsettled earnings rows, at the same scale and replay
+## factor as the stage payout. Pure and read-only; no roll, no odds.
+## `ase`, `ekwan` = the gathered amount before the roll. `ids` = the rows it would mark.
 ## `nothing_new` = no gathered Ase or Ekwan (so the payer draws no roll).
-## Returns { ase, ekwan, overcome, total, indexes, nothing_new, settled_ase, settled_ekwan }.
+## Returns { ase, ekwan, overcome, total, ids, nothing_new, settled_ase, settled_ekwan }.
 static func settle_plan(ctx: FlowContext, cfg_service: ConfigService,
 		logger: StructuredLogger = null, t: int = 0) -> Dictionary:
-	var plan := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "indexes": [],
+	var plan := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "ids": [],
 		"nothing_new": true, "settled_ase": 0, "settled_ekwan": 0 }
 	if ctx.realm_id.is_empty() or ctx.stage_id.is_empty():
 		return plan
@@ -276,18 +277,12 @@ static func settle_plan(ctx: FlowContext, cfg_service: ConfigService,
 	plan["settled_ase"] = maxi(0, int(stage_ref.get("settled_ase", 0)))
 	plan["settled_ekwan"] = maxi(0, int(stage_ref.get("settled_ekwan", 0)))
 
-	var picked: Array = []
-	for i in objectives.size():
-		var obj: Dictionary = objectives[i] if objectives[i] is Dictionary else {}
-		if bool(obj.get("completed", false)) and not bool(obj.get("settled", false)):
-			picked.append(obj)
-			(plan["indexes"] as Array).append(i)
+	var packs := EarningsService.plan(stage_ref, reward_cfg)
+	plan["ids"] = packs["ids"]
 	var fx := ActiveStageService.get_payout_factors(ctx, cfg_service, logger, t)
 	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"])
-	plan["ase"] = RewardCalc.round_payout(
-		float(RewardCalc.base_reward(picked, reward_cfg, logger, t)) * k)
-	plan["ekwan"] = RewardCalc.round_payout(
-		float(RewardCalc.stage_ekwan(picked, reward_cfg, logger, t)) * k)
+	plan["ase"] = RewardCalc.round_payout(float(packs["scaled_ase"]) * k)
+	plan["ekwan"] = RewardCalc.round_payout(float(packs["scaled_ekwan"]) * k)
 	plan["nothing_new"] = int(plan["ase"]) <= 0 and int(plan["ekwan"]) <= 0
 	return plan
 
@@ -320,16 +315,19 @@ static func carry_table(reward_cfg: Dictionary, retention_mul: float,
 	return out
 
 
-## Settles the completed, unsettled objectives by ONE roll and pays the result through `econ`
+## Settles the unsettled earnings rows by ONE roll and pays the result through `econ`
 ## exactly once (D-104 to D-106). What the roll does not pay is lost. The roll stream is
 ## `stage.settle.<stage_id>.<run_count>.<settle_count>` and is drawn only when there is something new
-## to settle, so nothing new draws nothing and changes nothing. The `settled` mark on each objective is
+## to settle, so nothing new draws nothing and changes nothing. The `settled` mark on each row is
 ## the re-roll stamp: a cancel, a reload or a retry finds them marked. The caller requests the save and
 ## calls this only after the escape has succeeded.
 ## Returns { outcome, ase, ekwan, overcome, total, intel_count }; `outcome` is "none", "some", "all" or
 ## "nothing_new".
 static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_service: EconomyService,
 		retention_mul: float, reason: String, logger: StructuredLogger, t: int) -> Dictionary:
+	var live := _live_stage(ctx)
+	if not live.is_empty():
+		EarningsService.ensure_objective_rows(live, ConfigService.get_rewards_cfg(cfg_service), logger, t)
 	var plan := settle_plan(ctx, cfg_service, logger, t)
 	var result := { "outcome": OUTCOME_NOTHING_NEW, "ase": 0, "ekwan": 0,
 		"overcome": plan["overcome"], "total": plan["total"],
@@ -371,10 +369,7 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 	if ekwan > 0:
 		econ_service.add_ekwan(ekwan, reason, logger, t)
 
-	var objectives: Array = stage_ref["objectives"]
-	for i in plan["indexes"]:
-		(objectives[i] as Dictionary)["settled"] = true
-		(objectives[i] as Dictionary)["settled_share"] = roundi(share * 100.0)
+	EarningsService.mark_settled(stage_ref, plan["ids"], roundi(share * 100.0))
 	stage_ref["settled_ase"] = int(plan["settled_ase"]) + ase
 	stage_ref["settled_ekwan"] = int(plan["settled_ekwan"]) + ekwan
 	stage_ref["settle_count"] = settle_count + 1
@@ -382,7 +377,7 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 	logger.info(t, "economy.settle.leave", "Leave settled by one roll", {
 		"stage_id": ctx.stage_id, "settle_count": settle_count, "roll": int(roll),
 		"outcome": picked["outcome"], "share_pct": roundi(share * 100.0), "ase": ase, "ekwan": ekwan,
-		"marked_indexes": (plan["indexes"] as Array).duplicate(),
+		"marked_ids": (plan["ids"] as Array).duplicate(),
 	})
 	result["outcome"] = picked["outcome"]
 	result["ase"] = ase

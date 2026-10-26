@@ -1233,6 +1233,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						repaired = true
 						repaired_notes.append("realm.%s.stage.%s.settlement_receipt defaulted (V2-INFRA-003)" % [_realm_id, _stage_label])
 
+					if not _stage.has("earnings") or not (_stage["earnings"] is Array):
+						_stage["earnings"] = []
+						repaired = true
+						repaired_notes.append("realm.%s.stage.%s.earnings defaulted" % [_realm_id, _stage_label])
+
 					# V2-STAGE-002: objective completed + required fields
 					var _objs_repair_v: Variant = _stage.get("objectives", [])
 					if _objs_repair_v is Array:

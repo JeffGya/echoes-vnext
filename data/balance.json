@@ -1566,6 +1566,10 @@
 				"shrine": 6,
 				"boss": 0
 			},
+			"_encounter_weights_comment": "Base Ase per encounter kind, before the realm scale and the replay factor (D-115). fight = one won normal fight, for the whole party. Read through RewardCalc.cfg_num; not paid yet.",
+			"encounter_weights": {
+				"fight": 6
+			},
 			"_objective_count_excluded_comment": "Objective types left out of the 'overcome of total' count on the payout ledger. boss is a stub today; remove it from this list when the boss becomes a real objective. No payout effect.",
 			"objective_count_excluded_types": ["boss"],
 			"_echo_home_comment": "V2-ECONOMY-004 D-43/D-44/D-53: Echoes stipend, paid once per stage in the stage payout. Ase per Echo home at the stage end, capped; on a replay (run_count > 0) the cap is halved and the rate stays. Outside the replay factor and the realm scale.",

@@ -47,26 +47,22 @@ static func _sum_selected(objectives: Array, reward_cfg: Dictionary, table_key: 
 		var selected := (done and mode != MODE_FOUGHT) or (fought and mode != MODE_COMPLETED)
 		if not selected:
 			continue
-		var type := str(obj.get("type", ""))
-		if not weights.has(type):
-			if logger != null:
-				logger.warn(t, "economy.reward.unknown_objective_type",
-					"Objective type has no weight — counts 0", {
-						"type": type, "objective_index": i, "table": table_key })
-			continue
-		var w_v: Variant = weights[type]
-		base += int(w_v) if typeof(w_v) == TYPE_INT or typeof(w_v) == TYPE_FLOAT else 0
+		base += type_weight(str(obj.get("type", "")), i, weights, table_key, logger, t)
 	return base
 
 
-## The objectives not settled at a return home (D-105). The stage payer sums only these; a settled
-## objective was paid by the roll and pays nothing more.
-static func unsettled(objectives: Array) -> Array:
-	var out: Array = []
-	for obj_v in objectives:
-		if not (obj_v is Dictionary and bool((obj_v as Dictionary).get("settled", false))):
-			out.append(obj_v)
-	return out
+## The weight of one objective type in a weight table (`weights` is the table itself). A type with no
+## key logs `economy.reward.unknown_objective_type` through `logger` (when given) and counts 0.
+static func type_weight(type: String, objective_index: int, weights: Dictionary, table_key: String,
+		logger: StructuredLogger = null, t: int = 0) -> int:
+	if not weights.has(type):
+		if logger != null:
+			logger.warn(t, "economy.reward.unknown_objective_type",
+				"Objective type has no weight — counts 0", {
+					"type": type, "objective_index": objective_index, "table": table_key })
+		return 0
+	var w_v: Variant = weights[type]
+	return int(w_v) if typeof(w_v) == TYPE_INT or typeof(w_v) == TYPE_FLOAT else 0
 
 
 ## Counts for the ledger row "overcome of total". Types in `reward_cfg.objective_count_excluded_types`

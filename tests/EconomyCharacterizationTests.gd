@@ -115,6 +115,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/settle_replay_resets_marks", Callable(EconomyCharacterizationTests, "_t_settle_replay_resets_marks"))
 	runner.register_test("econ_char/settle_return_home_dispatch_word_outcome_no_odds", Callable(EconomyCharacterizationTests, "_t_settle_return_home_dispatch"))
 	runner.register_test("econ_char/settle_retreat_pays_nothing", Callable(EconomyCharacterizationTests, "_t_settle_retreat_pays_nothing"))
+	runner.register_test("econ_char/earnings_add_row_is_idempotent_by_id", Callable(EconomyCharacterizationTests, "_t_earnings_add_row"))
+	runner.register_test("econ_char/earnings_safety_net_writes_missing_row_and_logs", Callable(EconomyCharacterizationTests, "_t_earnings_safety_net"))
+	runner.register_test("econ_char/earnings_rows_survive_save_and_reload", Callable(EconomyCharacterizationTests, "_t_earnings_survive_reload"))
+	runner.register_test("econ_char/earnings_repair_defaults_and_new_stage_is_empty", Callable(EconomyCharacterizationTests, "_t_earnings_repair_default"))
+	runner.register_test("econ_char/earnings_every_completion_hook_writes_one_row", Callable(EconomyCharacterizationTests, "_t_earnings_hooks"))
 	runner.register_test("econ_char/intel_gained_absent_zero_present_count_absent_on_defeat", Callable(EconomyCharacterizationTests, "_t_intel_gained"))
 	runner.register_test("econ_char/intel_gained_replays_from_stored_result", Callable(EconomyCharacterizationTests, "_t_intel_gained_replay"))
 	runner.register_test("econ_char/death_record_carries_to_later_fight", Callable(EconomyCharacterizationTests, "_t_death_record"))
@@ -164,6 +169,22 @@ static func _logger() -> StructuredLogger:
 	var logger := StructuredLogger.new()
 	logger.set_level(StructuredLogger.LEVEL_OFF)
 	return logger
+
+
+## Writes the earnings row of every completed objective of `stage`, through the same writer the
+## production completion hooks call. A fixture that sets `completed` by hand needs this: without it
+## the settle-time safety net would write the rows, and the test would not show the hook path.
+static func _record_rows(stage: Dictionary, cfg: ConfigService, logger: StructuredLogger = null) -> void:
+	var objs: Array = stage.get("objectives", [])
+	for i in objs.size():
+		if bool((objs[i] as Dictionary).get("completed", false)):
+			EarningsService.record_objective(stage, i, ConfigService.get_rewards_cfg(cfg), logger)
+
+
+## Completes objective `i` the way the production hooks do: the flag, then the row.
+static func _complete(stage: Dictionary, i: int, cfg: ConfigService) -> void:
+	((stage["objectives"] as Array)[i] as Dictionary)["completed"] = true
+	EarningsService.record_objective(stage, i, ConfigService.get_rewards_cfg(cfg))
 
 
 static func _expected_base(type: String) -> int:
@@ -618,7 +639,7 @@ static func _t_removed_keys_absent() -> Dictionary:
 ## Pays one cell through the real settle() on a real booted runtime and returns the payout.
 static func _settle_cell(env: Dictionary, objectives: Array, stage_index: int, run_count: int, n: int,
 		preview_out: Dictionary = {}, realm_id: String = "realm.01",
-		settled_ase: int = 0, settled_ekwan: int = 0) -> Dictionary:
+		settled_ase: int = 0, settled_ekwan: int = 0, settled_objectives: Array = []) -> Dictionary:
 	var runtime: FlowRuntime = env["runtime"]
 	var save_data: Dictionary = runtime.get_save_data()
 	if realm_id != "realm.01" and not (save_data["realms"] as Dictionary).has(realm_id):
@@ -633,6 +654,10 @@ static func _settle_cell(env: Dictionary, objectives: Array, stage_index: int, r
 		stage = StageModel.make(stage_index, "combat", stage_index, [], {})
 		stages.append(stage)
 	stage["objectives"] = objectives
+	stage["earnings"] = []
+	_record_rows(stage, runtime.config_service, env["logger"])
+	for i in settled_objectives:
+		EarningsService.mark_settled(stage, [EarningsService.objective_id(stage, i)], 50)
 	stage["settlement_receipt"] = {}
 	stage.erase("settled_ase")
 	stage.erase("settled_ekwan")
@@ -1809,10 +1834,11 @@ static func _carry_ctx(realm_id: String, run_count: int, objs: Array, realm_seed
 	ctx.config_service = _config()
 	ctx.realm_id = realm_id
 	ctx.stage_id = "stage.0"
-	var stage := { "index": 0, "objectives": objs, "settlement_receipt": {},
+	var stage := { "index": 0, "objectives": objs, "earnings": [], "settlement_receipt": {},
 		"explore_map": { "situations": [{ "id": "s0", "revealed": true }] } }
 	var roster: Array = []
 	var ids: Array = []
+	_record_rows(stage, ctx.config_service)
 	for i in 5:
 		roster.append({ "id": "e%d" % i, "name": "Echo %d" % i })
 		ids.append("e%d" % i)
@@ -1871,8 +1897,8 @@ static func _t_settle_plan_gathered() -> Dictionary:
 		var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
 		if int(plan["ase"]) != int(c[2]) or int(plan["ekwan"]) != int(c[3]):
 			m.append("%s run %d: gathered %s/%s, expected %d/%d" % [c[0], c[1], plan["ase"], plan["ekwan"], c[2], c[3]])
-		if int(plan["overcome"]) != 3 or int(plan["total"]) != 3 or bool(plan["nothing_new"]) or (plan["indexes"] as Array).size() != 3:
-			m.append("%s run %d: plan %s, expected 3 of 3 (boss stub excluded), 3 indexes" % [c[0], c[1], str(plan)])
+		if int(plan["overcome"]) != 3 or int(plan["total"]) != 3 or bool(plan["nothing_new"]) or (plan["ids"] as Array).size() != 3:
+			m.append("%s run %d: plan %s, expected 3 of 3 (boss stub excluded), 3 row ids" % [c[0], c[1], str(plan)])
 		if JSON.stringify(ctx.save_data) != before:
 			m.append("%s run %d: settle_plan changed the save" % [c[0], c[1]])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
@@ -1963,8 +1989,8 @@ static func _t_settle_leave_logs() -> Dictionary:
 	var m: Array = []
 	if int(d.get("roll", -1)) != rolled or str(d.get("outcome", "")) != "some" or str(got["outcome"]) != "some":
 		m.append("log %s, expected roll %d and outcome some" % [str(d), rolled])
-	if (d.get("marked_indexes", []) as Array) != [0, 1] or int(d.get("ase", -1)) != int(got["ase"]):
-		m.append("log %s, expected marked_indexes [0, 1] and the paid Ase %s" % [str(d), str(got["ase"])])
+	if (d.get("marked_ids", []) as Array) != ["obj:0:0", "obj:0:1"] or int(d.get("ase", -1)) != int(got["ase"]):
+		m.append("log %s, expected marked_ids [obj:0:0, obj:0:1] and the paid Ase %s" % [str(d), str(got["ase"])])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
@@ -2016,12 +2042,16 @@ static func _t_settle_pays_once_and_marks() -> Dictionary:
 			m.append("%s: outcome %s paid %s/%s, expected %d/%d" % [c[0], got["outcome"], got["ase"], got["ekwan"], c[1], c[2]])
 		if int(bal["ase"]) != int(c[1]) or int(bal["ekwan"]) != int(c[2]):
 			m.append("%s: balance %s, expected paid once %d/%d" % [c[0], str(bal), c[1], c[2]])
-		for i in 3:
-			var o: Dictionary = st["objectives"][i]
-			if not bool(o.get("settled", false)) or int(o.get("settled_share", -1)) != int(c[3]):
-				m.append("%s: objective %d %s, expected settled with share %d" % [c[0], i, str(o), c[3]])
-		if bool((st["objectives"][3] as Dictionary).get("settled", false)):
-			m.append("%s: the boss stub was marked settled" % c[0])
+		var rows := EarningsService.rows_of(st)
+		if rows.size() != 3:
+			m.append("%s: %d earnings rows, expected 3 (the boss stub has none)" % [c[0], rows.size()])
+		for r_v in rows:
+			var r: Dictionary = r_v
+			if not bool(r.get("settled", false)) or int(r.get("settled_share", -1)) != int(c[3]):
+				m.append("%s: row %s, expected settled with share %d" % [c[0], str(r), c[3]])
+		for o_v in (st["objectives"] as Array):
+			if (o_v as Dictionary).has("settled") or (o_v as Dictionary).has("settled_share"):
+				m.append("%s: an objective dict carries a settle mark: %s" % [c[0], str(o_v)])
 		if int(st.get("settled_ase", -1)) != int(c[1]) or int(st.get("settled_ekwan", -1)) != int(c[2]) or int(st.get("settle_count", -1)) != 1:
 			m.append("%s: stage totals %s, expected %d/%d and count 1" % [c[0], str(st), c[1], c[2]])
 		if st.has("carried_ase") or st.has("carried_ekwan"):
@@ -2044,7 +2074,7 @@ static func _t_settle_nothing_new_changes_nothing() -> Dictionary:
 			[_obj(0, "shrine", true), _carry_boss()]]:
 		var ctx := _carry_ctx("realm.01", 0, objs.duplicate(true), _seed_for("all"))
 		if (objs[0] as Dictionary).get("type") == "shrine" and bool((objs[0] as Dictionary).get("completed")):
-			((_carry_stage(ctx)["objectives"] as Array)[0] as Dictionary)["settled"] = true
+			EarningsService.mark_settled(_carry_stage(ctx), ["obj:0:0"], 50)
 		var before := JSON.stringify(ctx.save_data)
 		var got := _leave(ctx)
 		if str(got["outcome"]) != "nothing_new" or int(got["ase"]) != 0 or int(got["ekwan"]) != 0:
@@ -2076,15 +2106,15 @@ static func _t_settle_reroll_blocked() -> Dictionary:
 		var retry := _leave(reloaded, 1.0, 10 + attempt)
 		if str(retry["outcome"]) != "nothing_new" or int(retry["ase"]) != 0:
 			m.append("retry %d after reload gave %s, expected nothing_new" % [attempt, str(retry)])
-	((_carry_stage(reloaded)["objectives"] as Array)[1] as Dictionary)["completed"] = true
+	_complete(_carry_stage(reloaded), 1, reloaded.config_service)
 	var later := _leave(reloaded, 1.0, 20)
 	var st := _carry_stage(reloaded)
-	var obj0: Dictionary = st["objectives"][0]
+	var row0: Dictionary = EarningsService.rows_of(st)[0]
 	if str(later["outcome"]) != _expected_outcome(0, 0, 1) or int(st.get("settle_count", -1)) != 2:
 		m.append("the later objective gave %s count %s, expected the count-1 stream (%s) and count 2" \
 			% [str(later), str(st.get("settle_count")), _expected_outcome(0, 0, 1)])
-	if int(obj0.get("settled_share", -1)) != 0 or int(reloaded.save_data["economy"]["ase"]) != int(later["ase"]):
-		m.append("the first objective's none result changed: %s balance %s" % [str(obj0), str(reloaded.save_data["economy"])])
+	if int(row0.get("settled_share", -1)) != 0 or int(reloaded.save_data["economy"]["ase"]) != int(later["ase"]):
+		m.append("the first row's none result changed: %s balance %s" % [str(row0), str(reloaded.save_data["economy"])])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
@@ -2139,13 +2169,10 @@ static func _t_settle_stage_end_pays_unsettled_only() -> Dictionary:
 	if not bool(env.get("ok", false)):
 		return env
 	var boss := ObjectiveModel.make(3, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
-	var settled := _obj(0, "combat", true)
-	settled["settled"] = true
-	settled["settled_share"] = 50
-	var objs: Array = [settled, _obj(1, "recover", true), _obj(2, "shrine", true), boss]
+	var objs: Array = [_obj(0, "combat", true), _obj(1, "recover", true), _obj(2, "shrine", true), boss]
 	var pv := {}
 	# Unsettled recover 24/5 + shrine 30/6 = 54 / 11, plus the one-Echo stipend (2). The combat 20/2 pays nothing.
-	var out := _settle_cell(env, objs, 0, 0, 1, pv, "realm.01", 10, 1)
+	var out := _settle_cell(env, objs, 0, 0, 1, pv, "realm.01", 10, 1, [0])
 	var base := _row_by_cause(out["breakdown"], "objectives_overcome")
 	var memo := _row_by_cause(out["breakdown"], "settled_on_leave")
 	var sum := 0
@@ -2212,9 +2239,10 @@ static func _t_settle_worked_example() -> Dictionary:
 		var got := StageSettlementService.settle_leave(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 1)
 		if str(got["outcome"]) != c[1]:
 			m.append("%d done %s: outcome %s" % [done, c[1], got["outcome"]])
-		for o_v in (_carry_stage(ctx)["objectives"] as Array):
-			if str((o_v as Dictionary).get("type")) != "boss":
-				(o_v as Dictionary)["completed"] = true
+		var live_objs: Array = _carry_stage(ctx)["objectives"]
+		for i in live_objs.size():
+			if str((live_objs[i] as Dictionary).get("type")) != "boss":
+				_complete(_carry_stage(ctx), i, ctx.config_service)
 		var end := StageSettlementService.new(ctx, ctx.config_service, econ, null).preview()
 		var total := int(got["ase"]) + int(end["ase"])
 		if total != int(c[2]):
@@ -2222,8 +2250,8 @@ static func _t_settle_worked_example() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## A replay builds the stage objectives fresh (RealmService.get_or_create -> RealmGenerator), so the
-## `settled` marks and the settled totals of the first run do not carry over. Checked on a real runtime.
+## A replay builds the stage objectives and the earnings rows fresh (RealmService.get_or_create ->
+## RealmGenerator), so the row marks and the settled totals of the first run do not carry over. Checked on a real runtime.
 static func _t_settle_replay_resets_marks() -> Dictionary:
 	var env := VentureCharacterizationTests._setup_stage_env("econ_char_settle_replay")
 	if not bool(env.get("ok", false)):
@@ -2237,10 +2265,9 @@ static func _t_settle_replay_resets_marks() -> Dictionary:
 		st["settled_ase"] = 7
 		st["settled_ekwan"] = 1
 		st["settle_count"] = 2
-		for o_v in (st["objectives"] as Array):
-			(o_v as Dictionary)["completed"] = true
-			(o_v as Dictionary)["settled"] = true
-			(o_v as Dictionary)["settled_share"] = 100
+		for i in (st["objectives"] as Array).size():
+			_complete(st, i, runtime.config_service)
+		EarningsService.mark_settled(st, EarningsService.rows_of(st).map(func(r): return r["id"]), 100)
 	realm["status"] = RealmModel.STATUS_COMPLETED
 	realm["is_completed"] = true
 	var fresh := RealmService.get_or_create("realm.01", runtime.flow_ctx, 9000)
@@ -2251,6 +2278,8 @@ static func _t_settle_replay_resets_marks() -> Dictionary:
 		var st: Dictionary = s_v
 		if st.has("settled_ase") or st.has("settled_ekwan") or st.has("settle_count"):
 			m.append("stage %s kept settled totals: %s" % [st.get("index"), JSON.stringify(st)])
+		if not (st.get("earnings") is Array) or not (st["earnings"] as Array).is_empty():
+			m.append("stage %s replay did not start with empty earnings: %s" % [st.get("index"), str(st.get("earnings"))])
 		for o_v in (st["objectives"] as Array):
 			seen += 1
 			var o: Dictionary = o_v
@@ -2729,4 +2758,176 @@ static func _t_charge_after_death() -> Dictionary:
 	var paid := int(rt.get_save_data()["economy"]["ase"]) - before
 	if paid != int(pv.get("ase", -1)):
 		m.append("paid %d, preview %s" % [paid, str(pv.get("ase"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+# ---------------------------------------------------------------------------
+# Earnings rows (the packs): objectives move onto rows
+# ---------------------------------------------------------------------------
+
+## Invariant: every completed objective with a non-zero weight has exactly one `obj:` row.
+static func _row_invariant(stage: Dictionary, tag: String, m: Array) -> void:
+	var rows := EarningsService.rows_of(stage)
+	var objs: Array = stage.get("objectives", [])
+	for i in objs.size():
+		var id := EarningsService.objective_id(stage, i)
+		var n := 0
+		for r_v in rows:
+			if str((r_v as Dictionary).get("id", "")) == id:
+				n += 1
+		var o: Dictionary = objs[i]
+		var expect := 1 if bool(o.get("completed", false)) and str(o.get("type", "")) != "boss" else 0
+		if n != expect:
+			m.append("%s: objective %d has %d rows, expected %d" % [tag, i, n, expect])
+
+
+## `add_row` writes once per id and refuses an empty id and a row that holds nothing.
+static func _t_earnings_add_row() -> Dictionary:
+	var m: Array = []
+	var stage := { "index": 0 }
+	var row := EarningsService.make_row("x:1", "objective", "combat", 20, 2)
+	if not EarningsService.add_row(stage, row):
+		m.append("first add returned false")
+	if EarningsService.add_row(stage, EarningsService.make_row("x:1", "objective", "combat", 99, 9)):
+		m.append("a second add with the same id returned true")
+	if EarningsService.add_row(stage, EarningsService.make_row("", "objective", "combat", 5, 0)):
+		m.append("a row with an empty id was written")
+	if EarningsService.add_row(stage, EarningsService.make_row("x:2", "objective", "boss", 0, 0)):
+		m.append("a row with 0 Ase and 0 Ekwan was written")
+	var rows := EarningsService.rows_of(stage)
+	if rows.size() != 1 or int((rows[0] as Dictionary)["ase"]) != 20:
+		m.append("rows %s, expected the first row only" % JSON.stringify(rows))
+	for k in ["id", "source", "kind", "ase", "ekwan", "scaled", "keep_on_defeat", "settled", "settled_share", "lost", "items"]:
+		if not (rows[0] as Dictionary).has(k):
+			m.append("row lacks key %s" % k)
+	if not ((rows[0] as Dictionary)["items"] as Array).is_empty():
+		m.append("items is not empty")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A completed objective with no row: the pure plan and preview already count it; the payers log
+## `economy.earnings.missing_row`, write the row once, and pay the same as a hooked objective.
+static func _t_earnings_safety_net() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, objs, _seed_for("all"))
+	var stage := _carry_stage(ctx)
+	stage["earnings"] = []
+	var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
+	if int(plan["ase"]) != 54 or int(plan["ekwan"]) != 11 or not EarningsService.rows_of(stage).is_empty():
+		m.append("pure plan %s with %d rows, expected 54/11 and no write" % [str(plan), EarningsService.rows_of(stage).size()])
+	var logger := StructuredLogger.new()
+	var got := StageSettlementService.settle_leave(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", logger, 4)
+	var hits := 0
+	for e in logger.get_logs():
+		if str(e["type"]) == "economy.earnings.missing_row":
+			hits += 1
+	if hits != 2:
+		m.append("%d missing_row logs, expected 2" % hits)
+	if EarningsService.rows_of(stage).size() != 2 or int(got["ase"]) != 54 or int(got["ekwan"]) != 11:
+		m.append("leave %s with %d rows, expected 54/11 and 2 rows" % [str(got), EarningsService.rows_of(stage).size()])
+	_row_invariant(stage, "after the leave", m)
+	logger = StructuredLogger.new()
+	StageSettlementService.settle_leave(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", logger, 5)
+	for e in logger.get_logs():
+		if str(e["type"]) == "economy.earnings.missing_row":
+			m.append("a second leave logged missing_row again")
+	if EarningsService.rows_of(stage).size() != 2:
+		m.append("a second leave changed the row count to %d" % EarningsService.rows_of(stage).size())
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Rows sit in the save: through JSON (ints become floats) the plan is unchanged and the marks hold.
+static func _t_earnings_survive_reload() -> Dictionary:
+	var m: Array = []
+	var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _obj(2, "protect", false), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, objs, _seed_for("some"))
+	var before := StageSettlementService.settle_plan(ctx, ctx.config_service)
+	var reloaded := _carry_ctx("realm.01", 0, [], 0)
+	reloaded.save_data = JSON.parse_string(JSON.stringify(ctx.save_data))
+	var after := StageSettlementService.settle_plan(reloaded, reloaded.config_service)
+	if int(after["ase"]) != int(before["ase"]) or int(after["ekwan"]) != int(before["ekwan"]) or str(after["ids"]) != str(before["ids"]):
+		m.append("plan after reload %s, before %s" % [str(after), str(before)])
+	var got := _leave(reloaded)
+	var rows := EarningsService.rows_of(_carry_stage(reloaded))
+	if rows.size() != 2 or not bool((rows[0] as Dictionary).get("settled", false)) or not bool((rows[1] as Dictionary).get("settled", false)):
+		m.append("rows after the leave %s, expected two settled rows" % JSON.stringify(rows))
+	var again := StageSettlementService.settle_plan(reloaded, reloaded.config_service)
+	var twice: Dictionary = JSON.parse_string(JSON.stringify(reloaded.save_data))
+	var reloaded2 := _carry_ctx("realm.01", 0, [], 0)
+	reloaded2.save_data = twice
+	if str(_leave(reloaded2)["outcome"]) != "nothing_new" or not bool(again["nothing_new"]) or str(got["outcome"]) == "nothing_new":
+		m.append("settled rows did not hold after a second reload")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A stage the repair pass finds without `earnings` gets `[]`; a populated list is kept; a new stage has `[]`.
+static func _t_earnings_repair_default() -> Dictionary:
+	var m: Array = []
+	var save := SaveBridgeTests._make_old_save_with_stage()
+	SaveService._apply_additive_defaults_and_repairs(save, SaveBridgeTests._make_logger(), 0)
+	var st := SaveBridgeTests._get_stage0(save)
+	if not (st.get("earnings") is Array) or not (st["earnings"] as Array).is_empty():
+		m.append("repair gave earnings %s, expected []" % str(st.get("earnings")))
+	st["earnings"] = [EarningsService.make_row("obj:0:0", "objective", "combat", 20, 2)]
+	SaveService._apply_additive_defaults_and_repairs(save, SaveBridgeTests._make_logger(), 1)
+	if (SaveBridgeTests._get_stage0(save)["earnings"] as Array).size() != 1:
+		m.append("repair overwrote a populated earnings list")
+	var made := StageModel.make(0, "combat", 1, [], {})
+	if not (made.get("earnings") is Array) or not (made["earnings"] as Array).is_empty():
+		m.append("StageModel.make gave earnings %s, expected []" % str(made.get("earnings")))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The three completion sites each write the row with no help from the safety net: (A)
+## mark_stage_objective_completed, (B) resolve_combat_situation_and_objective, (C) the combat-victory
+## branch of flow.complete_stage (run with the receipt already stamped, so settle() cannot write the row).
+static func _t_earnings_hooks() -> Dictionary:
+	var m: Array = []
+	# A: a good Charge contact.
+	var env := VentureCharacterizationTests._setup_stage_env("econ_char_earn_hook_a")
+	if not bool(env.get("ok", false)):
+		return env
+	var rt: FlowRuntime = env["runtime"]
+	rt.flow_ctx.realm_id = "realm.01"
+	rt.flow_ctx.stage_id = "stage.0"
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(rt.flow_ctx)
+	var kind := str((stage["objectives"][0] as Dictionary)["type"])
+	(stage["objectives"][0] as Dictionary)["completed"] = false
+	stage["earnings"] = []
+	rt._stage_explore_session_service().mark_stage_objective_completed(0, 9)
+	rt._stage_explore_session_service().mark_stage_objective_completed(0, 10)
+	var rows := EarningsService.rows_of(stage)
+	var cfg := ConfigService.get_rewards_cfg(rt.config_service)
+	if rows.size() != 1 or str((rows[0] as Dictionary)["id"]) != "obj:0:0" or str((rows[0] as Dictionary)["kind"]) != kind \
+			or int((rows[0] as Dictionary)["ase"]) != int(cfg["objective_weights"][kind]) \
+			or int((rows[0] as Dictionary)["ekwan"]) != int(cfg["objective_ekwan"][kind]) \
+			or not bool((rows[0] as Dictionary)["scaled"]) or bool((rows[0] as Dictionary)["settled"]):
+		m.append("A: rows %s, expected one unsettled scaled row for a %s objective" % [JSON.stringify(rows), kind])
+	_row_invariant(stage, "A", m)
+
+	# B: a combat victory (the fixture calls resolve_combat_situation_and_objective).
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var env_b := _final_card("econ_char_earn_hook_b", [_req(0, "combat", false), boss], true)
+	if env_b.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var stage_b: Dictionary = FlowStageExploreState._get_current_stage(env_b["flow_ctx"])
+	if EarningsService.rows_of(stage_b).size() != 1 or str((EarningsService.rows_of(stage_b)[0] as Dictionary)["id"]) != "obj:0:0" \
+			or int((EarningsService.rows_of(stage_b)[0] as Dictionary)["ase"]) != 20:
+		m.append("B: rows %s, expected one combat row of 20" % JSON.stringify(EarningsService.rows_of(stage_b)))
+	_row_invariant(stage_b, "B", m)
+
+	# C: complete_stage re-marks the objective; undo B's result, stamp the receipt, dispatch.
+	var env_c := _final_card("econ_char_earn_hook_c", [_req(0, "combat", false), boss], true)
+	var rt_c: FlowRuntime = env_c["runtime"]
+	var stage_c: Dictionary = FlowStageExploreState._get_current_stage(env_c["flow_ctx"])
+	(stage_c["objectives"][0] as Dictionary)["completed"] = false
+	stage_c["earnings"] = []
+	stage_c["settlement_receipt"] = { "version": 1, "result_id": "x", "settled": true, "outcome": "cleared", "settled_t": 1 }
+	for sit_v in (stage_c["explore_map"]["situations"] as Array):
+		(sit_v as Dictionary)["resolved"] = false
+	rt_c.dispatch({ "type": "flow.complete_stage" })
+	if EarningsService.rows_of(stage_c).size() != 1 or str((EarningsService.rows_of(stage_c)[0] as Dictionary)["id"]) != "obj:0:0":
+		m.append("C: rows %s, expected the complete_stage branch to write obj:0:0" % JSON.stringify(EarningsService.rows_of(stage_c)))
+	_row_invariant(stage_c, "C", m)
 	return { "ok": m.is_empty(), "error": "; ".join(m) }

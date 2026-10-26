@@ -625,6 +625,7 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 									var _vstage_objs: Array = _vstage_objs_v
 									if _vobj_idx < _vstage_objs.size() and _vstage_objs[_vobj_idx] is Dictionary:
 										_vstage_objs[_vobj_idx]["completed"] = true
+										EarningsService.record_objective(_vstage, _vobj_idx, ConfigService.get_rewards_cfg(config_service), logger, t)
 									_vstage["objectives"] = _vstage_objs
 						break
 				_vmap["situations"] = _vsits

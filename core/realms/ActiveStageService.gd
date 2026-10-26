@@ -638,6 +638,7 @@ func mark_stage_objective_completed(objective_index: int, t: int) -> void:
 	if objective_index < objs.size() and objs[objective_index] is Dictionary:
 		objs[objective_index]["completed"] = true
 		stage["objectives"] = objs
+		EarningsService.record_objective(stage, objective_index, ConfigService.get_rewards_cfg(config_service), logger, t)
 		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 		flow_ctx.request_save("stage.objective.completed")
 		logger.debug(t, "stage.objective.completed", "Stage objective marked completed", {
@@ -702,6 +703,7 @@ func resolve_combat_situation_and_objective(
 					var _vstage_objs: Array = _vstage_objs_v
 					if _vobj_idx < _vstage_objs.size() and _vstage_objs[_vobj_idx] is Dictionary:
 						_vstage_objs[_vobj_idx]["completed"] = true
+						EarningsService.record_objective(stage, _vobj_idx, ConfigService.get_rewards_cfg(config_service), logger, t)
 					stage["objectives"] = _vstage_objs
 		modified = true
 		matched_objective_index = int(_vs.get("objective_index", -1))

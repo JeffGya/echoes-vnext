@@ -42,6 +42,7 @@ static func make(index: int, type: String, seed: int, objectives: Array, explore
 		"seed":        seed,
 		"objectives":  objectives,
 		"explore_map": explore_map,
+		"earnings":    [],
 	}
 
 
