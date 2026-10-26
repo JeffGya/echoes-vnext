@@ -204,7 +204,7 @@ func _show_detail(entry: Dictionary) -> void:
 	if is_active and compliance_count > 0:
 		var cc_lbl := Label.new()
 		cc_lbl.name = "_dyn_compliance"
-		cc_lbl.text = "%d stage%s honored" % [compliance_count, "s" if compliance_count != 1 else ""]
+		cc_lbl.text = "%d path%s finished" % [compliance_count, "s" if compliance_count != 1 else ""]
 		cc_lbl.add_theme_font_size_override("font_size", 12)
 		cc_lbl.add_theme_color_override("font_color", Color("#C8A96E"))  # Akan Gold
 		# Insert after benefit_label
@@ -221,7 +221,7 @@ func _show_detail(entry: Dictionary) -> void:
 		if comp_count > 0:
 			var comp_lbl := Label.new()
 			comp_lbl.name = "ComplianceCountLabel"
-			comp_lbl.text = "%d stage%s honored" % [comp_count, "s" if comp_count != 1 else ""]
+			comp_lbl.text = "%d path%s finished" % [comp_count, "s" if comp_count != 1 else ""]
 			comp_lbl.add_theme_font_size_override("font_size", 12)
 			comp_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
 			discovered_content.add_child_below_node(benefit_label, comp_lbl)
