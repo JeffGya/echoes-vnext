@@ -821,3 +821,12 @@ Step 6.2 findings (phase6-2-build.md), Jeff's answers:
 1. **Retreat roll (fix):** the roll key `encounter.retreat.<id>.<t>` uses `t`, a dispatch counter that is not saved, so a reload can turn a failed retreat into a success. Key the roll on saved numbers instead (stage `turn_count` plus a saved attempt counter). Reload and retry give the same result. The `combat_baseline` retreat table moves once; attribute it. A failed try still costs 10 Ase and starts combat.
 2. **Passed normal fight returns:** a normal fight passed by a retreat is offered again later in the same visit (Tier 4 of `ActiveStageService.find_explore_target` re-offers it after the other targets, as for passed objectives). It is still not offered at once.
 Not decided (noted): the re-entered objective fight reuses the same `encounter_id` (same terrain and spawn cell); the vow stage-entry check re-runs after every `situation_result` card (pre-existing, not this story).
+
+## D-110 — Final QA of steps 6.1 to 6.3: decisions (2026-10-26)
+QA (`qa-verifier`, opus, HEAD 1495b30): the settlement core, no-leak, copy, UI boundary, dispatch count 78 and config claims hold; the worked example recomputes exactly. Jeff's decisions:
+- **F1:** when the party leaves with NO completed objective, the return card shows NO outcome line (only the existing row "Nothing overcome yet"). "Nothing was gathered since the last time." shows only when something was completed earlier and nothing is new.
+- **F2 (fix):** a retreat-passed normal fight must come back even when it is the only target left (`advance_turn` returns "no_target" before the turn counter moves, so `retreat_pass_turn` never becomes due).
+- **F3 + F4 (fix):** fix the stale comments; remove `retreat_tier_label`, `carry_retreat_preview` and the unused `partial_cause` parameter; fix `CONVENTIONS.md:1006` and `docs/integration-map.md:37`.
+- **F6 (fix):** log the settle roll, the outcome and the marks; a missing `carry_shares` key (or `carry_odds`) fails visibly and does not mark objectives settled.
+- **F7:** the older placeholders with "home", "stage" or "lost" are reworded after Jeff picks wording from proposals.
+- **F5:** not fixed (pre-existing; the success chance comes from the action dict). Noted as a follow-up.
