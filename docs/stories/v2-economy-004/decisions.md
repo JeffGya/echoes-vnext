@@ -777,3 +777,9 @@ QA (`qa-verifier`, opus, HEAD 9cfd2e4): claims 1, 3 and 4 hold; claim 2 partly (
 - **F6:** remove `stage.confirm_return_home` (no UI sender) and the unreachable `return_failed` message. Fix.
 - **F3 (ContactController literal 20, summon grade surcharge default):** not fixed; stays a follow-up.
 - **F5 (confirmation copy when the escape can fail):** Jeff's wording; open. Not fixed.
+
+## D-104 — Play test: early leave carries by a roll; a retreat goes back to the stage (2026-10-26)
+Play test (Jeff): summon screen, escape result and failed-escape display are as wanted. Two changes:
+1. **Early leave (return home and retreat) carries by a roll.** Outcomes: 0%, 50% or 100% of the gathered amount (completed objectives, same formula as D-72). **Odds (Jeff): 0% = 50, 50% = 30, 100% = 20.** Average carried share = 35%. Replaces the fixed 12% of D-72 rule 2. The advance rule stays: the final stage payout is reduced by what was carried, so nothing is paid twice. Reason (Jeff): Ase should not wait for the stage end when the party leaves early.
+2. **A successful combat retreat returns the party to the stage map**, not to the Sanctum. The retreat keeps the 10 Ase cost, the denial when short, and uses the same carry roll.
+Open for design (sr-game-designer, then Jeff): the roll stream and seed; what the confirmation panel shows when the figure is a roll; what the Resolve card shows for a 0% carry; what state the fight and the party keep after a retreat to the stage. Odds are config numbers (`data.rewards`), never hard-coded.
