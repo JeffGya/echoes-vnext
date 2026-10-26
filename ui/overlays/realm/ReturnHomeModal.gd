@@ -1,8 +1,8 @@
 class_name ReturnHomeModal
 extends Control
 
-## Two modes. Confirm mode (payload.confirm): opens BEFORE the action, shows what a return home
-## carries, and only Confirm sends the action, once. Result mode: the failed-escape display
+## Two modes. Confirm mode (payload.confirm): opens BEFORE the action, shows what the party has
+## gathered (no odds), and only Confirm sends the action, once. Result mode: the failed-escape display
 ## (the core writes return_home_result only when the escape fails).
 
 signal action_requested(action: Dictionary)
@@ -19,7 +19,9 @@ const Strings := preload("res://ui/components/CarriedHomePresentation.gd")
 @onready var _confirm_button: Button = %ConfirmButton
 @onready var _cancel_button: Button = %CancelButton
 @onready var _safe_frame: MarginContainer = %SafeFrame
-@onready var _carried: CarriedHomePanel = %CarriedPanel
+@onready var _gathered: Label = %GatheredLabel
+@onready var _risk: Label = %RiskLabel
+@onready var _keeps: Label = %KeepsLabel
 
 var _action: Dictionary = {}
 var _confirm_mode := false
@@ -34,7 +36,7 @@ func present(payload: Dictionary) -> void:
 	_apply_layout(payload)
 	_sent = false
 	_confirm_mode = bool(payload.get("confirm", false))
-	_title.text = "Return Home"
+	_title.text = Strings.CONFIRM_TITLE
 	_confirm_row.visible = _confirm_mode
 	_continue_button.visible = not _confirm_mode
 	if _confirm_mode:
@@ -47,13 +49,20 @@ func present(payload: Dictionary) -> void:
 		_confirm_button.text = Strings.CONFIRM_LABEL
 		_cancel_button.text = Strings.CANCEL_LABEL
 		_confirm_button.disabled = _action.is_empty()
+		# Nothing gathered (or nothing new) leaves the question, the escape line and the keeps line.
 		var carry_v: Variant = payload.get("carry", {})
-		var party_v: Variant = payload.get("party", [])
-		_carried.present(carry_v if carry_v is Dictionary else {}, party_v if party_v is Array else [],
-			Strings.RETURN_COST, true)
+		var carry: Dictionary = carry_v if carry_v is Dictionary else {}
+		var gathered := "" if bool(carry.get("nothing_new", false)) \
+			else Strings.gathered_line(int(carry.get("ase", 0)), int(carry.get("ekwan", 0)))
+		_gathered.text = gathered
+		_gathered.visible = not gathered.is_empty()
+		_risk.text = Strings.RISK_LINE
+		_risk.visible = not gathered.is_empty()
+		_keeps.text = Strings.KEEPS_LINE
+		_keeps.visible = true
 		_cancel_button.grab_focus()
 		return
-	# Result mode: the escape failed. Nothing was carried, so no carried figure shows.
+	# Result mode: the escape failed. Nothing was carried, so no gathered figure shows.
 	var result: Dictionary = payload.get("result", {})
 	_subtitle.visible = true
 	_subtitle.text = Strings.FAILED_SUBTITLE
@@ -61,7 +70,9 @@ func present(payload: Dictionary) -> void:
 	_body.text = str(result.get("message", ""))
 	_continue_button.text = "Continue"
 	_action = { "type": "stage.dismiss_overlay" }
-	_carried.visible = false
+	_gathered.visible = false
+	_risk.visible = false
+	_keeps.visible = false
 
 func _on_continue_pressed() -> void:
 	if _action.is_empty():

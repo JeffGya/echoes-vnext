@@ -379,7 +379,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(140, 56)
 layout_mode = 2
 theme_type_variation = &"ButtonGhost"
-text = "Return Home"
+text = "To the Sanctum"
 
 [node name="BeginButton" type="Button" parent="BottomHudRegion/ActionBar" unique_id=174936907]
 unique_name_in_owner = true

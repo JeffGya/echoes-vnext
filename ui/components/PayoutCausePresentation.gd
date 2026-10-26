@@ -13,22 +13,17 @@ const ROW_NAMES: Dictionary = {
 	"replay": "Replay",
 	"defeat_consolation": "Consolation",
 	"repeat_defeat": "Consolation",
-	"partial_retreat": "Carried home",
-	"partial_return_home": "Carried home",
-	"nothing_overcome_yet": "Carried home",
 	"objectives_overcome": "Objectives overcome",
 	"echoes_alive": "Echoes home",
-	"carried_advance": "Carried home",
+	"settled_on_leave": "Settled when you left",
 }
 
-## PROPOSAL placeholders, not approved copy: echoes_alive, carried_advance and the lost-names note
+## PROPOSAL placeholders, not approved copy: echoes_alive and the lost-names note
 ## (docs/stories/v2-payout-explanation/decisions.md). Jeff owns the wording. All copy stays in this table.
 const TEXT: Dictionary = {
 	"echoes_alive": "Each Echo that comes home earns Ase.",
-	"carried_advance": "Ase and Ekwan the party carried home earlier are taken off the stage payout, so nothing is earned twice.",
+	"settled_on_leave": "These were already taken when the party left earlier.",
 	"defeat_consolation": "The party lost, but the fight still earns a small part.",
-	"partial_retreat": "The party left early. It keeps a small part of what it overcame.",
-	"partial_return_home": "The party left early. It keeps a small part of what it overcame.",
 	"nothing_overcome_yet": "The party has not overcome anything yet. Nothing is earned.",
 	"repeat_defeat": "The party already earned the consolation for this. Another loss earns nothing.",
 }

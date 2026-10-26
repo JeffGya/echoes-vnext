@@ -39,6 +39,7 @@ const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd
 const EffectChipScene     := preload("res://ui/components/EffectChip.tscn")
 const PacePresentation    := preload("res://ui/components/PacePresentation.gd")
 const PayoutCausePresentation := preload("res://ui/components/PayoutCausePresentation.gd")
+const CarriedHomePresentation := preload("res://ui/components/CarriedHomePresentation.gd")
 
 # Seconds. Pacing from the approved motion mockup (stage-flow-motion.html, Direction E).
 @export var home_start_delay: float = 0.5
@@ -57,6 +58,8 @@ const LEDGER_SEEN_ACTION := { "type": "resolve.ledger.mark_seen" }
 
 @onready var _banner:            Label         = %BannerLabel
 @onready var _reason:            Label         = %ReasonLabel
+@onready var _outcome_line:      Label         = %OutcomeLine
+@onready var _header_separator:  HSeparator    = %HeaderSeparator
 @onready var _fight_strip:       VBoxContainer = %FightHeader
 @onready var _home_count:        Label         = %HomeCountLabel
 @onready var _emotion_header:    Label         = %EmotionHeader
@@ -122,6 +125,8 @@ var _has_result_key := false
 var _motion: Tween = null
 var _awaiting_seen := false
 var _motion_final: Callable = Callable()
+# The retreat card has no body: the card shrinks to its header and button.
+var _compact_card := false
 
 
 # ─────────────────────────────────────────────────────────────
@@ -138,6 +143,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	_result_key = key
 	_clear()
 	_render(data, snap.get("actions", {}))
+	_apply_profile_size()
 	_finish_ledger(data, same_result)
 
 func present(payload: Dictionary) -> void:
@@ -161,6 +167,10 @@ func _clear() -> void:
 	_sanctum_button.visible    = false
 	_next_stage_button.visible = false
 	_banner.remove_theme_color_override("font_color")
+	_outcome_line.visible = false
+	_compact_card = false
+	_body_viewport.visible = true
+	_header_separator.visible = true
 	_stop_motion()
 	_tooltip.hide_tooltip()
 	_fight_strip.visible = false
@@ -217,6 +227,9 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		_render_scout_return(data, actions)
 		return
 	# V2-STAGE-003: contact_result path — NPC conversation outcome
+	if run_type == "retreat_return":
+		_render_retreat_return(data, actions)
+		return
 	if run_type == "contact_result":
 		_render_contact_result(data, actions)
 		return
@@ -498,7 +511,9 @@ func _verdict_color(verdict: String) -> Color:
 ## The earnings line and the ledger rows. The total is the data total: ase_awarded plus the stage
 ## payout when the card carries one. Ekwan shows only on the card that carries stage_payout_ekwan.
 func _build_ledger(data: Dictionary) -> void:
-	var fight_rows := _net_consolation(_ase_rows(data.get("reward_breakdown", [])))
+	# The outcome line names a return; its settle_* row has no label of its own on the card.
+	var fight_rows := _net_consolation(_ase_rows(data.get("reward_breakdown", []))).filter(
+		func(row: Dictionary) -> bool: return not str(row.get("cause", "")).begins_with("settle_"))
 	var stage_rows := _ase_rows(data.get("stage_payout_rows", []))
 	var has_stage := not stage_rows.is_empty()
 	for row in fight_rows:
@@ -523,7 +538,8 @@ func _build_ledger(data: Dictionary) -> void:
 
 	var has_rows := not fight_rows.is_empty() or has_stage or ekwan > 0
 	# A fight win pays nothing and has no rows: the card then shows no earnings line and no ledger.
-	_summary_button.visible = has_rows
+	# A return home always shows its amounts, even +0, as a line with nothing to open.
+	_summary_button.visible = has_rows or data.has("settle_outcome")
 	_summary_button.disabled = not has_rows
 	_summary_hint.visible = has_rows
 	_chevron.visible = has_rows
@@ -888,6 +904,9 @@ func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
 
 	_next_stage_button.visible = false
 	_build_ledger(data)
+	var settle_text := CarriedHomePresentation.settle_line(str(data.get("settle_outcome", "")))
+	_outcome_line.text = settle_text
+	_outcome_line.visible = not settle_text.is_empty()
 
 	# Actor preview — show name + emotional state (no pre/post arc on scout return)
 	var actors_v: Variant = data.get("actors", [])
@@ -911,6 +930,26 @@ func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
 			_sanctum_action = act_v
 			_sanctum_button.text    = str(act_v.get("label", "Return to Sanctum"))
 			_sanctum_button.visible = true
+
+
+# ─────────────────────────────────────────────────────────────
+# Retreat card (D-106, D-107): words only, one button
+# ─────────────────────────────────────────────────────────────
+
+func _render_retreat_return(data: Dictionary, actions: Dictionary) -> void:
+	_banner.text = CarriedHomePresentation.RETREAT_TITLE
+	_banner.add_theme_color_override("font_color", Color("#315E6D"))
+	_reason.text = CarriedHomePresentation.RETREAT_BODY
+	_outcome_line.text = CarriedHomePresentation.retreat_line(bool(data.get("can_reenter", false)))
+	_outcome_line.visible = true
+	_body_viewport.visible = false
+	_header_separator.visible = false
+	_compact_card = true
+	var act_v: Variant = actions.get("cta.continue", {})
+	if act_v is Dictionary and not (act_v as Dictionary).is_empty():
+		_sanctum_action = act_v
+		_sanctum_button.text = str(act_v.get("label", ""))
+		_sanctum_button.visible = true
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1031,6 +1070,9 @@ func _apply_profile_size() -> void:
 	if _result_card == null or _body_viewport == null:
 		return
 	var profile: StringName = _layout.get("profile", &"compact")
+	if _compact_card:
+		_set_result_card_size(Vector2(600, 320))
+		return
 	match profile:
 		&"wide":
 			_set_result_card_size(Vector2(840, 700))

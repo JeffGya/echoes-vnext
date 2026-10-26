@@ -118,10 +118,17 @@ func _fixtures() -> Dictionary:
 		"resolve_midstage_event": [_combat(6, recover), _payout_midstage_event(), "skip_motion"],
 		"resolve_defeat_consolation": [_combat(7, recover), _payout_defeat()],
 		"resolve_retreat_zero": [_combat(7, recover), _payout_retreat_zero()],
-		"carry_return_home": [_combat(6, recover), _return_home_modal({ "ase": 4, "ekwan": 2, "overcome": 1, "total": 3 })],
-		"carry_return_home_zero": [_combat(6, recover), _return_home_modal({ "ase": 0, "ekwan": 0, "overcome": 1, "total": 3 })],
+		"carry_return_home": [_combat(6, recover), _return_home_modal({ "ase": 4, "ekwan": 2, "overcome": 1, "total": 3, "nothing_new": false })],
+		"carry_return_home_ase_only": [_combat(6, recover), _return_home_modal({ "ase": 4, "ekwan": 0, "overcome": 1, "total": 3, "nothing_new": false })],
+		"carry_return_home_nothing_new": [_combat(6, recover), _return_home_modal({ "ase": 0, "ekwan": 0, "overcome": 1, "total": 3, "nothing_new": true })],
 		"carry_return_home_failed": [_combat(6, recover), _return_home_modal({}, true)],
-		"carry_retreat": [_prebattle({ "carry_retreat_preview": { "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 } })],
+		"return_card_none": [_combat(6, recover), _return_card("none", 0, 0)],
+		"return_card_some": [_combat(6, recover), _return_card("some", 7, 2)],
+		"return_card_all": [_combat(6, recover), _return_card("all", 14, 4)],
+		"return_card_nothing_new": [_combat(6, recover), _return_card("nothing_new", 0, 0)],
+		"retreat_card_no_reenter": [_combat(6, recover), _retreat_card(false)],
+		"retreat_card_reenter": [_combat(6, recover), _retreat_card(true)],
+		"retreat_button": [_prebattle({})],
 		"retreat_disabled_price": [_prebattle({ "retreat_affordable": false })],
 		"retreat_denied": [_prebattle({ "retreat_affordable": false,
 			"retreat_denied": { "reason": "insufficient_ase", "ase_cost": 10, "ase_balance": 4 } })],
@@ -320,7 +327,7 @@ func _payout_stage_end(seen: bool) -> Dictionary:
 		_row("Base objectives", 90, "objectives_overcome", { "overcome": 2, "total": 3, "realm_scale": 1.0 }),
 		_row("Redo penalty", -58, "replay", { "factor": 0.35 }),
 		_row("Echoes home", 4, "echoes_alive", { "alive": 2, "started": 3, "lost": ["Kofi"], "cap": 10, "replay": true }),
-		_row("Carried home", -20, "carried_advance", { "carried_ase": 20, "carried_ekwan": 3 }),
+		_row("Settled when you left", 0, "settled_on_leave", { "settled_ase": 20, "settled_ekwan": 3 }),
 	]
 	snap["data"]["ledger_seen"] = seen
 	snap["data"]["echoes_survived"] = 2
@@ -362,7 +369,7 @@ func _payout_defeat() -> Dictionary:
 
 
 func _payout_retreat_zero() -> Dictionary:
-	var data := _payout_data(false, "", "F", [_row("Nothing carried home", 0, "nothing_overcome_yet")], false)
+	var data := _payout_data(false, "", "F", [_row("Nothing overcome yet", 0, "nothing_overcome_yet")], false)
 	data["run_type"] = "scout_return"
 	data["intel_count"] = 0
 	data["actors"] = _actors()
@@ -371,13 +378,30 @@ func _payout_retreat_zero() -> Dictionary:
 
 ## The confirmation opens before the action. `failed` builds the failed-escape display instead.
 func _return_home_modal(carry: Dictionary, failed: bool = false) -> Dictionary:
-	var party := [{ "name": "Ama", "emotional_status": "grounded" }, { "name": "Kofi", "emotional_status": "uncertain" },
-		{ "name": "Esi", "emotional_status": "whole" }]
 	if failed:
 		return { "_modal": { "id": &"realm.return_home", "payload": {
 			"result": { "success": false, "message": "It was not possible to escape at the moment. Move on, we can try again later." } } } }
 	return { "_modal": { "id": &"realm.return_home", "payload": {
-		"confirm": true, "action": { "type": "stage.return_home" }, "carry": carry, "party": party } } }
+		"confirm": true, "action": { "type": "stage.return_home" }, "carry": carry } } }
+
+
+## The card after a return: the outcome in words, then the amounts. The ledger row has no label here.
+func _return_card(outcome: String, ase: int, ekwan: int) -> Dictionary:
+	var data := _payout_data(false, "", "F", [_row("Settled when you left", ase, "settle_" + outcome)], true)
+	data["run_type"] = "scout_return"
+	data["intel_count"] = 2
+	data["settle_outcome"] = outcome
+	data["ase_awarded"] = ase
+	data["ekwan_awarded"] = ekwan
+	data["actors"] = _actors()
+	return _payout_snap(data)
+
+
+## The card after a combat retreat: words only and one button.
+func _retreat_card(can_reenter: bool) -> Dictionary:
+	return { "type": "flow.resolve", "meta": { "t": 1 }, "actions": { "cta.continue": {
+		"type": "stage.retreat_return", "label": "Leave", "slot": "cta.continue" } },
+		"data": { "run_type": "retreat_return", "surface": "retreat_return", "retreat_outcome": "pulled_back", "can_reenter": can_reenter } }
 
 
 ## A pre-combat snapshot: the shell shows the pre-battle modal with the retreat button.

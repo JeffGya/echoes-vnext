@@ -86,7 +86,6 @@ var _cached_stage_complete_action: Dictionary = {}
 var _cached_advance_action: Dictionary = {}
 var _cached_return_action:  Dictionary = {}
 var _cached_carry_preview:  Dictionary = {}
-var _cached_party_preview:  Array = []
 var _cached_overlay_action: Dictionary = {}
 var _cached_ignore_action:  Dictionary = {}
 
@@ -618,7 +617,6 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_cached_advance_action = { "type": "stage.advance_turn" }
 	_cached_return_action  = { "type": "stage.return_home" }
 	_cached_carry_preview  = _dict_or_empty(data.get("carry_home_preview", {}))
-	_cached_party_preview  = _array_or_empty(data.get("party_preview", []))
 
 	# Stage Complete button — shown when all required objectives are done.
 	var sc_v: Variant = actions.get("cta.proceed_to_stage_map", {})
@@ -1081,7 +1079,6 @@ func _on_return_pressed() -> void:
 		"confirm": true,
 		"action": _cached_return_action.duplicate(true),
 		"carry": _cached_carry_preview.duplicate(true),
-		"party": _cached_party_preview.duplicate(true),
 	})
 
 
@@ -1984,6 +1981,3 @@ func _party_bark_anchor() -> Vector2:
 func _dict_or_empty(v: Variant) -> Dictionary:
 	return (v as Dictionary).duplicate(true) if v is Dictionary else {}
 
-
-func _array_or_empty(v: Variant) -> Array:
-	return (v as Array).duplicate(true) if v is Array else []

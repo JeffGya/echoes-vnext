@@ -9,7 +9,6 @@ signal dismiss_requested
 @onready var _retreat_button: Button = %RetreatButton
 @onready var _enter_button: Button = %EnterCombatButton
 @onready var _safe_frame: MarginContainer = %SafeFrame
-@onready var _carried: CarriedHomePanel = %CarriedPanel
 @onready var _retreat_note: Label = %RetreatNoteLabel
 
 const Strings := preload("res://ui/components/CarriedHomePresentation.gd")
@@ -38,10 +37,6 @@ func present(payload: Dictionary) -> void:
 	_retreat_note.text = Strings.retreat_denied_line(int(denied.get("ase_cost", 0)), int(denied.get("ase_balance", 0))) \
 		if not denied.is_empty() else ""
 	_retreat_note.visible = not denied.is_empty()
-	# The retreat decision: what a successful retreat would carry home, with the party beside it.
-	var carry_v: Variant = payload.get("carry", {})
-	var party_v: Variant = payload.get("party", [])
-	_carried.present(carry_v if carry_v is Dictionary else {}, party_v if party_v is Array else [])
 
 func _on_enter_pressed() -> void:
 	if _enter_action.is_empty():

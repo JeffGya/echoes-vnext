@@ -1203,29 +1203,16 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	var ase_cost: int = int(data.get("retreat_ase_cost", 0))
 	if retreat_eligible and actions.has("cta.retreat"):
 		_pending_retreat_action = actions["cta.retreat"]
-		var tier_label: String  = str(data.get("retreat_tier_label", ""))
 		if not retreat_affordable:
 			# Disabled, and the reason is in the text as well as the state (not colour alone).
 			retreat_label = CarriedHomePresentation.retreat_label(ase_cost, CarriedHomePresentation.RETREAT_UNAFFORDABLE)
-		elif tier_label == "Guaranteed":
-			retreat_enabled = true
-			retreat_label = "Retreat (%d ase)\nEscape guaranteed" % ase_cost
 		else:
 			retreat_enabled = true
-			retreat_label = "Retreat (%d ase)\nChance of failure: %s" % [ase_cost, tier_label.to_lower()]
+			retreat_label = CarriedHomePresentation.retreat_label(ase_cost)
 	else:
 		_pending_retreat_action = {}
 
-	var carry_v: Variant = data.get("carry_retreat_preview", {})
 	var denied_v: Variant = data.get("retreat_denied", {})
-	var party: Array = []
-	var actors_v: Variant = data.get("actors", [])
-	if actors_v is Array:
-		for actor_v in (actors_v as Array):
-			if actor_v is Dictionary and str(actor_v.get("faction", "")) == "echo" \
-					and not bool(actor_v.get("is_ally", false)) and not bool(actor_v.get("is_spirit", false)):
-				party.append({ "name": str(actor_v.get("name", "")), "emotional_status": str(actor_v.get("emotional_status", "")) })
-
 	modal_requested.emit(&"realm.prebattle", {
 		"objective_label": objective_label,
 		"intro_line": intro_line,
@@ -1234,8 +1221,6 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 		"retreat_enabled": retreat_enabled,
 		"retreat_label": retreat_label,
 		"retreat_denied": (denied_v as Dictionary).duplicate(true) if denied_v is Dictionary else {},
-		"carry": (carry_v as Dictionary).duplicate(true) if carry_v is Dictionary else {},
-		"party": party,
 	})
 
 ## Maps objective type string to a player-facing label for the pre-battle modal.
