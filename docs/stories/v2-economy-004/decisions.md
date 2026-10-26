@@ -815,3 +815,9 @@ D-107 addendum 2 (Jeff, 2026-10-26): remove the row label on the return card (al
 
 ## D-108 — Play test E, G and H accepted; permadeath review noted (2026-10-26)
 Jeff accepted play test points E (deaths), G (rank and replay) and H (general) as they are. The death rules are revisited with permadeath. Per Jeff's instruction, a note was added at the end of the Notion page V2-INFRA-005 (339c3d1ede928151912df87557d5acb0): stage death record, name matching, retreat deaths, stipend after a reload. No other Notion page changed.
+
+## D-109 — Retreat roll uses saved numbers; a retreated normal fight comes back later (2026-10-26)
+Step 6.2 findings (phase6-2-build.md), Jeff's answers:
+1. **Retreat roll (fix):** the roll key `encounter.retreat.<id>.<t>` uses `t`, a dispatch counter that is not saved, so a reload can turn a failed retreat into a success. Key the roll on saved numbers instead (stage `turn_count` plus a saved attempt counter). Reload and retry give the same result. The `combat_baseline` retreat table moves once; attribute it. A failed try still costs 10 Ase and starts combat.
+2. **Passed normal fight returns:** a normal fight passed by a retreat is offered again later in the same visit (Tier 4 of `ActiveStageService.find_explore_target` re-offers it after the other targets, as for passed objectives). It is still not offered at once.
+Not decided (noted): the re-entered objective fight reuses the same `encounter_id` (same terrain and spawn cell); the vow stage-entry check re-runs after every `situation_result` card (pre-existing, not this story).
