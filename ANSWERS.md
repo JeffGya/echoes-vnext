@@ -93,6 +93,7 @@
 | 84 | ekwan-only-from-stage-objectives | Ekwan is paid only by completed stage objectives, per objective type. Fights pay none. Revisit when the GDD sets the Ekwan cadence. | 2026-10-20 |
 | 85 | permadeath-connection-points | Permadeath is not built in V2-ECONOMY-004. The reward code is written so the permadeath story changes only named places. | 2026-10-22 |
 | 86 | player-word-rules | Player-facing text never uses "home" (say "Sanctum" or another word) and never uses "stage" (say "path"). What an early exit does not carry is "lost". Applies to all player-facing text in the game, not one story. | 2026-10-26 |
+| 87 | path-earnings-are-packs | Everything earned on a path (Ase, Ekwan, later items) from any source is gathered in the packs. An early leave settles it by the roll. Finishing the path banks what is left. | 2026-10-26 |
 
 ---
 
@@ -872,6 +873,15 @@
 **Q:** Which words may player-facing text use for the Sanctum, a level and a reward that is not carried?
 **A:** Never "home": the Sanctum is a village or community, not a building, so say "Sanctum" or another word. Never "stage": "stage" is internal game language, so say "path". A reward that an early exit does not carry is "lost". The rules apply to ALL player-facing text in the game (buttons, labels, tooltips, headers, snapshot labels from the core), not only to one story. They do not apply to internal ids, keys, constants, file names or code comments. Story-voice lines (Keeper intro) are checked case by case with Jeff. New text must follow the rules; old text is reworded under follow-up 47.
 **Source:** Jeff, 2026-10-26 (V2-ECONOMY-004; decisions.md D-107, D-111, D-112)
+**Date:** 2026-10-26
+
+---
+
+## #87 — All earnings on a path are gathered, then settled or banked (2026-10-26)
+
+**Q:** When does the party receive what it earns on a path (objectives, encounters, other sources)?
+**A:** Everything earned on a path is gathered in the packs: currency (Ase, Ekwan) from objectives, from encounters and from any other source, and later also items found in encounters or on the path. The party receives it in one of two ways. (1) Early leave: the seeded roll settles the packs (nothing, some or everything, D-104 to D-106); what the roll does not carry is lost. (2) Finishing the path: the packs are banked in full, minus what an earlier leave already settled. A new earning source must add to the packs and must not pay directly into the balance. Build the packs as one list of earnings by source, so a new source adds a row and no new payout path.
+**Source:** Jeff, 2026-10-26 (V2-ECONOMY-004; decisions.md D-104 to D-106, D-113, D-114)
 **Date:** 2026-10-26
 
 ---
