@@ -790,3 +790,13 @@ D-104 addendum (Jeff, 2026-10-26): the Resolve card does NOT show the percentage
 **Answer (Jeff):** an early leave settles the gathered objectives at once. What the roll (D-104) does not carry is LOST. It is not paid later when the stage is cleared. This reverses D-72 rule 2 (advance) for the share the roll drops; the "no double pay" rule stays.
 Model to design (sr-game-designer, then Jeff): the objectives completed at the moment of leaving are SETTLED by the roll (0%, 50% or 100% of their value, paid now). A settled objective pays nothing more at the stage end. Objectives completed after the leave pay normally at the stage end. The stipend and the other stage-end rows are unchanged. Leave-then-return therefore pays at most what the roll gave for the settled objectives, plus the later ones.
 Copy follows: the "still yours when the stage is done" lines in the D-104 design file are void. Player-facing wording is Jeff's.
+
+## D-106 — Early leave and retreat: final rules (2026-10-26)
+Source: `phase6-early-leave-design.md` (sr-game-designer) and Jeff's answers.
+1. **Return home settles by the roll** (D-104 odds 50/30/20, D-105 real loss). One roll covers Ase and Ekwan. Scout: better odds, never above 100% (non-zero weights x1.5, renormalised; about 40/36/24). The weights are a tuning number; mid-game-designer authors the final weights.
+2. **A combat retreat does NOT settle** (reopens and replaces D-104 item 2 for the retreat). It is a step back inside the same visit: nothing is paid or lost by the roll. The 10 Ase cost stays and the denial when short stays (D-79).
+3. **A retreat returns the party to the stage map, shown on a short card with a "Back to the stage" button.** It uses ONE turn. Re-entry: a normal fight is marked passed (no instant re-entry); an objective fight can be entered again at once.
+4. **The confirmation panel shows the gathered Ase and Ekwan amount, no odds.** Jeff's escape line stays.
+5. **Settlement model (design file pick A):** per-objective `settled` mark and `settled_share`; stage `settled_ase`, `settled_ekwan`, `settle_count`; `carried_ase`/`carried_ekwan` removed (clean break, saves disposable); stage end pays only unsettled completed objectives plus the stipend; roll stream `stage.settle.<stage_id>.<run_count>.<settle_count>` drawn only after the escape succeeds.
+6. **The Resolve card never shows a percentage or odds.** It names the outcome in words: nothing, some, everything. The player-facing wording is Jeff's: proposals only.
+Open (BLOCKED in the design file, for the build to check): whether a replay rebuilds the objective dicts so `settled` marks reset; whether the retreat roll key `t` repeats after a reload; the retreat objective-fight rule needs the objective type on the situation.
