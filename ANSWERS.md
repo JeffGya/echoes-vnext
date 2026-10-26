@@ -92,6 +92,7 @@
 | 83 | tunables-live-in-config | Tunable values live in `data/balance.json`, not hard-coded in `core/` or `ui/`, unless there is a documented reason (for example a contract floor that code and contract must share). Applies to new work and to code a story touches | 2026-10-11 |
 | 84 | ekwan-only-from-stage-objectives | Ekwan is paid only by completed stage objectives, per objective type. Fights pay none. Revisit when the GDD sets the Ekwan cadence. | 2026-10-20 |
 | 85 | permadeath-connection-points | Permadeath is not built in V2-ECONOMY-004. The reward code is written so the permadeath story changes only named places. | 2026-10-22 |
+| 86 | player-word-rules | Player-facing text never uses "home" (say "Sanctum" or another word) and never uses "stage" (say "path"). What an early exit does not carry is "lost". Applies to all player-facing text in the game, not one story. | 2026-10-26 |
 
 ---
 
@@ -863,5 +864,14 @@
 **A:** No. Jeff chose to build the reward system so it connects to permadeath later. The permadeath story changes these places: `ActiveStageService.lost_echo_names_with` (the stage death record), `SummonService.living_count` (the summon price counts living Echoes), and the `echo_id = roster.size() + 1` scheme in three places (ids repeat once Echoes leave the roster). A note is on Notion story V2-INFRA-005.
 **Source:** Jeff, 2026-10-22 (V2-ECONOMY-004; decisions.md D-66, D-67, D-81, D-92, D-101)
 **Date:** 2026-10-22
+
+---
+
+## #86 — Player word rules: no "home", no "stage" (2026-10-26)
+
+**Q:** Which words may player-facing text use for the Sanctum, a level and a reward that is not carried?
+**A:** Never "home": the Sanctum is a village or community, not a building, so say "Sanctum" or another word. Never "stage": "stage" is internal game language, so say "path". A reward that an early exit does not carry is "lost". The rules apply to ALL player-facing text in the game (buttons, labels, tooltips, headers, snapshot labels from the core), not only to one story. They do not apply to internal ids, keys, constants, file names or code comments. Story-voice lines (Keeper intro) are checked case by case with Jeff. New text must follow the rules; old text is reworded under follow-up 47.
+**Source:** Jeff, 2026-10-26 (V2-ECONOMY-004; decisions.md D-107, D-111, D-112)
+**Date:** 2026-10-26
 
 ---
