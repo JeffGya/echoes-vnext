@@ -39,7 +39,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("retreat/card_has_no_percent_or_odds",             Callable(RetreatTests, "_t_card_no_percent_or_odds"))
 	runner.register_test("retreat/failed_or_denied_changes_no_stage_state", Callable(RetreatTests, "_t_failed_or_denied_no_stage_change"))
 	runner.register_test("retreat/forced_retreat_still_ends_at_sanctum",    Callable(RetreatTests, "_t_forced_retreat_unchanged"))
-	runner.register_test("retreat/roll_tick_is_not_saved",                  Callable(RetreatTests, "_t_roll_tick_not_saved"))
+	runner.register_test("retreat/roll_same_after_reload",                  Callable(RetreatTests, "_t_roll_same_after_reload"))
+	runner.register_test("retreat/roll_ignores_tick",                       Callable(RetreatTests, "_t_roll_ignores_tick"))
+	runner.register_test("retreat/attempt_count_saved_and_keys_differ",     Callable(RetreatTests, "_t_attempt_count_saved_and_keys_differ"))
+	runner.register_test("retreat/retreat_passed_fight_returns_later",      Callable(RetreatTests, "_t_retreat_passed_fight_returns_later"))
+	runner.register_test("retreat/retreat_marks_pass_turn",                 Callable(RetreatTests, "_t_retreat_marks_pass_turn"))
 	runner.register_test("retreat/failed_retreat_spend_survives_reload",    Callable(RetreatTests, "_t_failed_spend_survives_reload"))
 
 
@@ -282,7 +286,7 @@ static func _t_return_home_free() -> Dictionary:
 
 ## Engages the first situation of stage.0 (as production does: last_situation_id and the objective
 ## index), then retreats. `objective` true = the fight belongs to an objective (index >= 0).
-static func _engaged_retreat(tag: String, objective: bool, success_pct: int = 100, ase: int = 50) -> Dictionary:
+static func _engaged_retreat(tag: String, objective: bool, success_pct: int = 100, ase: int = 50, pad: int = 0) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, tag)
 	if env.is_empty():
 		return { "ok": false, "error": "setup failed for %s" % tag }
@@ -297,9 +301,12 @@ static func _engaged_retreat(tag: String, objective: bool, success_pct: int = 10
 	emap["locked"] = true
 	flow_ctx.active_encounter_objective_index = 0 if objective else -1
 	flow_ctx.save_data["economy"]["ase"] = ase
+	for _i in range(pad):
+		(env["runtime"] as FlowRuntime).dispatch({ "type": "debug.seed.show" })
+	var encounter_id: String = flow_ctx.encounter_ctx.encounter_id
 	var card: Dictionary = (env["runtime"] as FlowRuntime).dispatch(
 		{ "type": "encounter.retreat", "success_pct": success_pct })
-	return { "ok": true, "env": env, "runtime": env["runtime"], "flow_ctx": flow_ctx, "card": card, "sit_id": str(sit["id"]) }
+	return { "ok": true, "encounter_id": encounter_id, "env": env, "runtime": env["runtime"], "flow_ctx": flow_ctx, "card": card, "sit_id": str(sit["id"]) }
 
 
 static func _explore_map_of(flow_ctx: FlowContext) -> Dictionary:
@@ -451,23 +458,137 @@ static func _t_forced_retreat_unchanged() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## D-106 item 7 (finding). The retreat roll is keyed "encounter.retreat.<id>.<t>". t is the dispatch
-## counter, and boot() restarts it at 0, so a reload changes t. This pins that fact.
-static func _t_roll_tick_not_saved() -> Dictionary:
-	var r: Dictionary = _engaged_retreat("rt_tick", false, 0, 50)
-	if not bool(r.get("ok", false)):
-		return r
-	var runtime: FlowRuntime = r["runtime"]
-	for _i in range(30):
-		runtime.dispatch({ "type": "debug.noop" })
-	var tick_before: int = runtime.flow_ctx.sim_tick
-	var again := FlowRuntime.new(StructuredLogger.new(), ConfigService.new(), runtime.save_path)
-	again.boot()
+## D-109. The roll key is built from saved numbers only: run_count, stage turn_count and the saved
+## attempt counter. It replaces the dispatch counter t, which boot() restarts at 0 (the old test here
+## pinned that a reload changes t; that fact no longer reaches the roll). The key is rebuilt from a
+## REAL reload of the save, and the roll it gives must equal the live roll, at two different ticks.
+static func _t_roll_same_after_reload() -> Dictionary:
 	var m: Array = []
-	if again.flow_ctx.sim_tick >= tick_before:
-		m.append("expected a reload to restart the tick: before %d, after %d" % [tick_before, again.flow_ctx.sim_tick])
-	if JSON.stringify(again.get_save_data()).contains("sim_tick"):
-		m.append("the save holds a tick")
+	for pad in [0, 7]:
+		var r: Dictionary = _engaged_retreat("rt_key_%d" % pad, false, 50, 50, pad)
+		if not bool(r.get("ok", false)):
+			return r
+		var live_success: bool = (r["flow_ctx"] as FlowContext).encounter_ctx == null
+		var again := FlowRuntime.new(StructuredLogger.new(), ConfigService.new(), (r["runtime"] as FlowRuntime).save_path)
+		again.boot()
+		var stage := FlowStageExploreState._get_current_stage(again.flow_ctx)
+		var attempts := int(stage.get("retreat_attempts", -1))
+		var turn := int(stage.get("explore_map", {}).get("turn_count", -1)) - (1 if live_success else 0)
+		var run_count := int(RealmService.get_active(again.flow_ctx).get("run_count", 0))
+		var key := "encounter.retreat.%s.%d.%d.%d" % [r["encounter_id"], run_count, turn, attempts - 1]
+		var expected: bool = bool(RetreatService.roll_retreat(50, again.flow_ctx.campaign_seed.get_rng(key)).get("success", false))
+		if attempts != 1 or expected != live_success:
+			m.append("pad %d: attempts=%d, live success=%s, success rebuilt from the reloaded save=%s" % [pad, attempts, live_success, expected])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The same saved state gives the same outcome at different ticks (the old key made this differ).
+static func _t_roll_ignores_tick() -> Dictionary:
+	var seen: Dictionary = {}
+	for pad in [0, 1, 2, 3, 11]:
+		var r: Dictionary = _engaged_retreat("rt_same", false, 50, 50, pad)
+		if not bool(r.get("ok", false)):
+			return r
+		seen[(r["flow_ctx"] as FlowContext).encounter_ctx == null] = true
+	return { "ok": seen.size() == 1, "error": "the retreat outcome changed with the tick: %s" % str(seen.keys()) }
+
+
+## Every attempt, won or lost, is counted on the stage record and saved; a denied one is not.
+## A later attempt has a different key, so it draws from a different stream.
+static func _t_attempt_count_saved_and_keys_differ() -> Dictionary:
+	var m: Array = []
+	for pct in [0, 100]:
+		var r: Dictionary = _engaged_retreat("rt_att_%d" % pct, false, pct, 50)
+		if not bool(r.get("ok", false)):
+			return r
+		var again := FlowRuntime.new(StructuredLogger.new(), ConfigService.new(), (r["runtime"] as FlowRuntime).save_path)
+		again.boot()
+		var n := int(FlowStageExploreState._get_current_stage(again.flow_ctx).get("retreat_attempts", -1))
+		if n != 1:
+			m.append("pct %d: expected retreat_attempts 1 on disk after one attempt, got %d" % [pct, n])
+	var denied: Dictionary = _engaged_retreat("rt_att_denied", false, 100, 5)
+	if not bool(denied.get("ok", false)):
+		return denied
+	if int(FlowStageExploreState._get_current_stage(denied["flow_ctx"]).get("retreat_attempts", 0)) != 0:
+		m.append("a denied retreat counted as an attempt")
+	var r2: Dictionary = _engaged_retreat("rt_att_keys", false, 0, 50)
+	var ctx: FlowContext = r2["flow_ctx"]
+	var k1 := ActiveStageService.next_retreat_roll_key(ctx, "e")
+	var k2 := ActiveStageService.next_retreat_roll_key(ctx, "e")
+	if k1 == k2 or int(FlowStageExploreState._get_current_stage(ctx).get("retreat_attempts", 0)) != 3:
+		m.append("expected two different keys and 3 attempts counted, got '%s' '%s'" % [k1, k2])
+	# Different keys give independent streams: the first draws must not all be equal.
+	var draws: Dictionary = {}
+	for i in range(16):
+		draws[ctx.campaign_seed.get_rng("encounter.retreat.e.0.3.%d" % i).randi_range(0, 99)] = true
+	if draws.size() < 2:
+		m.append("16 attempt keys gave one draw: the attempt number does not change the stream")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-109: Tier 4 re-offers a normal fight passed by a retreat, on a later turn, after other targets.
+## A fight passed by stage.ignore_situation (no retreat_pass_turn) is never re-offered.
+static func _t_retreat_passed_fight_returns_later() -> Dictionary:
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var ctx := FlowContext.new()
+	ctx.realm_id = "realm.01"
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var session := ActiveStageService.new(ctx, cs, logger)
+	var directive: Dictionary = ConfigService.get_directives_cfg(cs).get("directive.scout_carefully", {})
+	var walkable: Dictionary = {}
+	var explored: Dictionary = {}
+	for c in 6:
+		for rw in 3:
+			walkable["%d,%d" % [c, rw]] = true
+			explored["%d,%d" % [c, rw]] = true
+	var m: Array = []
+	var cases := [
+		["retreat, same turn", { "retreat_pass_turn": 4 }, 4, false],
+		["retreat, later turn", { "retreat_pass_turn": 4 }, 5, true],
+		["ignore (no marker), later turn", {}, 9, false],
+	]
+	for c in cases:
+		var fight: Dictionary = SituationModel.make("fight", SituationModel.TYPE_NPC, 4, 1, 900, false)
+		fight["revealed"] = true
+		fight["passed"] = true
+		for k in (c[1] as Dictionary):
+			fight[k] = c[1][k]
+		var em := { "situations": [fight], "party_pos": { "col": 0, "row": 1 }, "turn_count": c[2] }
+		var pick := session.find_explore_target(em, directive, walkable, explored, { "index": 0 })
+		if (str(pick.get("id", "")) == "fight") != bool(c[3]):
+			m.append("%s: expected offered=%s, got %s" % [c[0], c[3], str(pick.get("id", "<none>"))])
+	# After the other targets: an unvisited situation and an open frontier both come first.
+	var fight2: Dictionary = SituationModel.make("fight", SituationModel.TYPE_NPC, 4, 1, 900, false)
+	fight2["revealed"] = true
+	fight2["passed"] = true
+	fight2["retreat_pass_turn"] = 1
+	var other: Dictionary = SituationModel.make("other", SituationModel.TYPE_NPC, 2, 1, 901, false)
+	other["revealed"] = true
+	var em2 := { "situations": [fight2, other], "party_pos": { "col": 0, "row": 1 }, "turn_count": 9 }
+	if str(session.find_explore_target(em2, directive, walkable, explored, { "index": 0 }).get("id", "")) != "other":
+		m.append("an unvisited situation must come before the retreated fight")
+	var open_walk := walkable.duplicate()
+	open_walk["6,1"] = true
+	var em3 := { "situations": [fight2], "party_pos": { "col": 0, "row": 1 }, "turn_count": 9 }
+	if not bool(session.find_explore_target(em3, directive, open_walk, explored, { "index": 0 }).get("is_frontier", false)):
+		m.append("an open frontier must come before the retreated fight")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The retreat itself writes the marker for a normal fight only, with the turn it ended on.
+static func _t_retreat_marks_pass_turn() -> Dictionary:
+	var m: Array = []
+	for objective in [false, true]:
+		var r: Dictionary = _engaged_retreat("rt_mark_%s" % str(objective), objective)
+		if not bool(r.get("ok", false)):
+			return r
+		var sit := _sit_of(r["flow_ctx"], str(r["sit_id"]))
+		if objective and sit.has("retreat_pass_turn"):
+			m.append("objective fight got a pass turn")
+		if not objective and int(sit.get("retreat_pass_turn", -1)) != 4:
+			m.append("normal fight: expected retreat_pass_turn 4, got %s" % str(sit.get("retreat_pass_turn", "<none>")))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 

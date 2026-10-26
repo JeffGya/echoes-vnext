@@ -115,8 +115,8 @@ static func register(runner) -> void:
 	# C — save flush count + reason per combat dispatch
 	runner.register_test("combat_baseline/flush_reasons_per_combat_dispatch", func(): return _t_flush_reasons())
 	runner.register_test("combat_baseline/no_combat_dispatch_ever_flushes_twice", func(): return _t_flush_never_exceeds_one())
-	# D — encounter.retreat randomness is tick-bound
-	runner.register_test("combat_baseline/retreat_roll_is_tick_bound", func(): return _t_retreat_tick_bound())
+	# D — encounter.retreat randomness is independent of the dispatch tick
+	runner.register_test("combat_baseline/retreat_roll_is_tick_independent", func(): return _t_retreat_tick_independent())
 	runner.register_test("combat_baseline/retreat_uses_seeded_branch_not_fallback", func(): return _t_retreat_branch())
 	# E — the two dormant actions
 	runner.register_test("combat_baseline/dormant_encounter_advance", func(): return _t_encounter_advance())
@@ -673,32 +673,28 @@ static func _t_flush_never_exceeds_one() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# D — encounter.retreat randomness is tick-bound
+# D — encounter.retreat randomness is independent of the dispatch tick
 # ---------------------------------------------------------------------------
 #
-# FlowRuntime._handle_encounter_retreat (:1013–:1017):
-#     if flow_ctx.campaign_seed != null:
-#         rng = flow_ctx.campaign_seed.get_rng("encounter.retreat." + encounter_id + "." + str(t))
-#     else:
-#         rng.seed = hash("encounter.retreat." + encounter_id + str(t))
+# The roll key is "encounter.retreat.<id>.<run_count>.<turn_count>.<attempt>" (D-109,
+# ActiveStageService.next_retreat_roll_key). All three numbers are saved, so one saved state gives
+# one roll at any dispatch tick.
 #
-# CHARACTERIZATION — current behaviour, not necessarily correct. Two findings pinned, neither
-# fixed:
-#   D-1 The seed path contains the dispatch tick, so the retreat outcome for one encounter is a
-#       function of how many dispatches happened first. Any Phase 6 change to the dispatch count
-#       on the way into an encounter re-rolls every retreat in the game. The pairs below make
-#       that visible instead of silent.
-#   D-2 The fallback branch (:1017) builds a DIFFERENT string from the primary path — no dot
-#       before the tick ("...stage.0.cb_retreat3" vs "...stage.0.cb_retreat.3"). Two seed
-#       namespaces for one concept. It is also unreachable in normal play, because boot()
-#       always populates flow_ctx.campaign_seed; the test below forces it to prove which branch
-#       production actually takes.
+# RE-RECORDED, V2-ECONOMY-004 step 6.2b (D-109). The old key was "encounter.retreat.<id>.<t>",
+# where t is the unsaved dispatch tick. Old table: pad 0 and 1 were flow.resolve/true, pad 2 and 3
+# were flow.encounter/false. New table: all four rows are flow.resolve/true. One cause: the key no
+# longer contains the tick. The ticks (7 to 10) are unchanged.
+#
+# CHARACTERIZATION — current behaviour, not necessarily correct: the null-seed fallback branch
+# in FlowRuntime builds a different seed string from the primary path. It is unreachable in
+# normal play, because boot() always populates flow_ctx.campaign_seed; _t_retreat_branch forces
+# it to prove which branch production takes.
 
 const RETREAT_TICK_OUTCOMES: Array = [
 	{ "pad": 0, "snapshot_type": "flow.resolve",   "success": true,  "tick": 7 },
 	{ "pad": 1, "snapshot_type": "flow.resolve",   "success": true,  "tick": 8 },
-	{ "pad": 2, "snapshot_type": "flow.encounter", "success": false, "tick": 9 },
-	{ "pad": 3, "snapshot_type": "flow.encounter", "success": false, "tick": 10 },
+	{ "pad": 2, "snapshot_type": "flow.resolve",   "success": true,  "tick": 9 },
+	{ "pad": 3, "snapshot_type": "flow.resolve",   "success": true,  "tick": 10 },
 ]
 const RETREAT_FALLBACK_OUTCOME: Dictionary = { "snapshot_type": "flow.resolve", "success": true }
 
@@ -741,7 +737,7 @@ static func _retreat_probe(tag: String, padding_dispatches: int, null_seed: bool
 	}
 
 
-static func _t_retreat_tick_bound() -> Dictionary:
+static func _t_retreat_tick_independent() -> Dictionary:
 	var observed: Array = []
 	for pad in [0, 1, 2, 3]:
 		var p: Dictionary = _retreat_probe("cb_retreat_pad%d" % pad, pad, false)
@@ -756,17 +752,17 @@ static func _t_retreat_tick_bound() -> Dictionary:
 		return { "ok": false, "error": "no recorded retreat baseline — constant is empty (see CB_RECORD output)" }
 
 	if JSON.stringify(observed) != JSON.stringify(RETREAT_TICK_OUTCOMES):
-		return { "ok": false, "error": "retreat tick/outcome table changed — a dispatch was added or removed on the way into the encounter, or the roll moved:\n  expected=%s\n  actual  =%s" \
+		return { "ok": false, "error": "retreat tick/outcome table changed — the roll or the saved state it reads moved:\n  expected=%s\n  actual  =%s" \
 			% [JSON.stringify(RETREAT_TICK_OUTCOMES), JSON.stringify(observed)] }
 
-	# The point of the table: the tick is part of the seed, so at least one padding offset must
-	# produce a different outcome from another. If they were all equal, the tick would be
-	# decorative and this whole section would be pinning nothing.
-	var successes: Dictionary = {}
+	# The proof of tick independence: the ticks differ across rows, so every row must have the
+	# same outcome. Different outcomes mean the tick is back in the roll key.
+	var outcomes: Dictionary = {}
 	for row_v in RETREAT_TICK_OUTCOMES:
-		successes[bool((row_v as Dictionary).get("success", false))] = true
-	if successes.size() < 2:
-		return { "ok": false, "error": "every padding offset produced the same retreat outcome — the recorded table cannot demonstrate tick-binding (table=%s)" % JSON.stringify(RETREAT_TICK_OUTCOMES) }
+		var row: Dictionary = row_v
+		outcomes["%s|%s" % [bool(row.get("success", false)), str(row.get("snapshot_type", ""))]] = true
+	if outcomes.size() != 1:
+		return { "ok": false, "error": "padding offsets produced different retreat outcomes — the roll depends on the dispatch tick again (table=%s)" % JSON.stringify(RETREAT_TICK_OUTCOMES) }
 	return { "ok": true }
 
 

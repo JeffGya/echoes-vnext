@@ -1189,12 +1189,15 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	# Spend Ase (always, win or lose).
 	econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
 
-	# Seeded roll for determinism.
+	# D-109: the key uses saved numbers only (not t), so a reload and retry rolls the same.
+	# The attempt is counted and saved in this dispatch, before the roll.
+	var roll_key: String = ActiveStageService.next_retreat_roll_key(flow_ctx, encounter_id)
+	_mark_save_requested("encounter.retreat.attempt")
 	var rng := RandomNumberGenerator.new()
 	if flow_ctx.campaign_seed != null:
-		rng = flow_ctx.campaign_seed.get_rng("encounter.retreat." + encounter_id + "." + str(t))
+		rng = flow_ctx.campaign_seed.get_rng(roll_key)
 	else:
-		rng.seed = hash("encounter.retreat." + encounter_id + "." + str(t))
+		rng.seed = hash(roll_key)
 
 	var roll_result: Dictionary = RetreatService.roll_retreat(success_pct, rng)
 	var success: bool = bool(roll_result.get("success", false))

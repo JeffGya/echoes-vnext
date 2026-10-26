@@ -453,6 +453,9 @@ func stage_movement_salt(stage: Dictionary) -> String:
 #             If no objective exists either, returns {} (nothing left; party parks).
 #
 # No directive ID may be named here. All behaviour comes from reading directive fields.
+#
+# D-109: a normal fight passed by a retreat carries `retreat_pass_turn` and is re-offered in Tier 4
+# too, but only on a later turn than the retreat. stage.ignore_situation sets no such field.
 func find_explore_target(
 	explore_map: Dictionary,
 	directive: Dictionary,
@@ -530,8 +533,8 @@ func find_explore_target(
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
 			continue
-		if not bool(sit.get("is_objective", false)):
-			continue  # only objectives are re-offered (non-objective passed nodes stay skipped)
+		if not bool(sit.get("is_objective", false)) and not _retreat_passed_due(sit, explore_map):
+			continue  # other passed non-objective nodes stay skipped
 		if not bool(sit.get("revealed", false)):
 			continue  # still fog — cannot target
 		tier4_candidates.append(sit)
@@ -550,6 +553,25 @@ func find_explore_target(
 # ────────────────────────────────────────────────────────────────────────────
 # Objective / situation resolution (mutates save_data, requests a save)
 # ────────────────────────────────────────────────────────────────────────────
+
+static func _retreat_passed_due(sit: Dictionary, explore_map: Dictionary) -> bool:
+	return sit.has("retreat_pass_turn") \
+		and int(explore_map.get("turn_count", 0)) > int(sit["retreat_pass_turn"])
+
+
+## D-109: the roll key of the next combat retreat, built from saved numbers only. Counts the attempt on
+## the stage record before the roll; the caller must request a save in the same dispatch.
+static func next_retreat_roll_key(flow_ctx_arg: FlowContext, encounter_id: String) -> String:
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
+	var map_v: Variant = stage.get("explore_map", {})
+	var turn := int((map_v as Dictionary).get("turn_count", 0)) if map_v is Dictionary else 0
+	var attempt := int(stage.get("retreat_attempts", 0))
+	if not stage.is_empty():
+		stage["retreat_attempts"] = attempt + 1
+		FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)
+	var run_count := int(RealmService.get_active(flow_ctx_arg).get("run_count", 0))
+	return "encounter.retreat.%s.%d.%d.%d" % [encounter_id, run_count, turn, attempt]
+
 
 ## D-106: a successful combat retreat costs one turn and returns the party to the path.
 ## A normal fight is marked passed, as stage.ignore_situation does (never offered again).
@@ -574,6 +596,7 @@ static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int
 			out["can_reenter"] = true
 		else:
 			(s_v as Dictionary)["passed"] = true
+			(s_v as Dictionary)["retreat_pass_turn"] = int(explore_map["turn_count"])
 		break
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)
