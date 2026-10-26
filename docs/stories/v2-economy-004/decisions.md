@@ -785,3 +785,8 @@ Play test (Jeff): summon screen, escape result and failed-escape display are as 
 Open for design (sr-game-designer, then Jeff): the roll stream and seed; what the confirmation panel shows when the figure is a roll; what the Resolve card shows for a 0% carry; what state the fight and the party keep after a retreat to the stage. Odds are config numbers (`data.rewards`), never hard-coded.
 
 D-104 addendum (Jeff, 2026-10-26): the Resolve card does NOT show the percentage or the odds; they are not for the player to see. The card shows only the outcome in words: the party managed to take nothing, some, or everything back to the Sanctum. (Orchestrator's reading of "nothing less or everything": nothing / less / everything. The middle outcome is the 50% roll. Jeff to confirm the reading.)
+
+## D-105 — The part the roll does not carry is lost for good (2026-10-26)
+**Answer (Jeff):** an early leave settles the gathered objectives at once. What the roll (D-104) does not carry is LOST. It is not paid later when the stage is cleared. This reverses D-72 rule 2 (advance) for the share the roll drops; the "no double pay" rule stays.
+Model to design (sr-game-designer, then Jeff): the objectives completed at the moment of leaving are SETTLED by the roll (0%, 50% or 100% of their value, paid now). A settled objective pays nothing more at the stage end. Objectives completed after the leave pay normally at the stage end. The stipend and the other stage-end rows are unchanged. Leave-then-return therefore pays at most what the roll gave for the settled objectives, plus the later ones.
+Copy follows: the "still yours when the stage is done" lines in the D-104 design file are void. Player-facing wording is Jeff's.

@@ -78,50 +78,58 @@ Other directive points:
 - Ekwan now shares the shifted odds, because it uses the same roll. Before, Scout did not raise Ekwan. This is a small gain and it is a visible change. Jeff can reject it by rolling Ekwan separately; that costs a second draw and a second result on the card. Not recommended.
 - The party stance bend of `escape_bonus` stays on the escape roll only.
 
-## 3. What the confirmation panel can show
+## 3. What the confirmation panel can show (revised: Jeff's rule, no percent for the player)
 
-Rule: the UI never computes. Core builds `carry_home_preview` (it already exists in the stage-explore snapshot) and the retreat panel gets the same block. The block lists the outcomes. The UI draws rows.
+Rule from Jeff: the player never sees a percentage or the odds. The UI never computes. Core builds `carry_home_preview`; the UI draws it.
 
-| Option | Shows | Honest? | Readable? |
+Answer to "can odds or a range show at all?":
+- **Odds: no.** "Half the time" or "3 in 10" is a percentage in other words. Under this rule it must not show, in numbers or in words.
+- **A range of amounts: yes.** An amount is not a percentage. The panel may show the gathered figure and say that some, all or none of it can come home.
+- **The outcome amounts: allowed**, if shown without odds. But three amounts side by side invite the player to work out the odds. Not recommended.
+
+| Option | Shows | Honest? | Verdict |
 |---|---|---|---|
-| A (pick) | Three rows from core: for each outcome, the Ase and Ekwan figure and the odds in tenths, plus one line saying the rest is paid at the stage end. | Yes. Every number is exact and all outcomes appear. | Yes. 3 rows, no formula. |
-| B | "Up to 74 Ase" | Half honest. It hides that half the time the figure is 0. Reject. | Yes |
-| C | A range "0 to 74" | Honest, but the player cannot tell likely from unlikely. | Yes |
+| A (pick) | The gathered figure (from core) and one plain line: you may take all, some or none of it home. One line: the rest is paid when the stage is done. | Yes. It names all three outcomes and hides only the odds. | Pick. |
+| B | "Up to 74 Ase" only | Half honest. It hides that "none" is the most likely result. Reject. | |
+| C | Three amount rows without odds (0 / 37 / 74) | Honest, and exact. The player can guess the odds from the order. | Second choice. |
 
-Pick A. Block shape (PROPOSED, names are for the mechanics developer):
-`carry_home_preview = { gathered_new, rolled_before, outcomes: [ {share_pct, ase, ekwan, odds_in_ten} ... ], nothing_new: bool }`.
-The Scout shift is already applied by core, so the UI shows 4 / 3.6 / 2.4 in tenths? No. Round the Scout odds for display in core to whole tenths (4 / 4 / 2) and use the exact weights for the draw. Display rounding is a core job. Flag for `mechanics-developer`: the displayed odds and the drawn odds must come from one function.
-When `nothing_new` is true the panel shows no roll rows: only "Nothing new to carry".
+Block (PROPOSED shape): `carry_home_preview = { gathered_new, rolled_before, nothing_new: bool, ase_max, ekwan_max }`. No odds field. The UI shows `ase_max` as the gathered figure. Core does all the arithmetic.
+Honesty limit: with no odds on screen the player cannot weigh the choice. The line "none" must be present so the player is not misled. Jeff's existing line stays as it is: "Escaping might be more difficult than expected. It might not be possible."
 
 PROPOSAL copy (marked):
 - Title: "Leave now?"
 - Intro: "You have 74 Ase gathered here."
-- Rows: "Half the time, nothing comes with you." / "Three times in ten, half: 37." / "Two times in ten, all of it: 74."
-- Line under the rows: "Whatever you do not carry is still yours when the stage is done."
+- Roll line: "You might take all of it home, some of it, or none."
+- Under it: "Whatever you leave behind is still yours when the stage is done."
+- Existing line (Jeff, unchanged): "Escaping might be more difficult than expected. It might not be possible."
 - Nothing new: "Nothing new to carry. You already tried for this."
 - Retreat adds: "Pulling back costs 10 Ase. You go back to the stage, not home."
 - Retreat when short: keep the existing denial reason.
 
-Show odds as words with the tenths ("Half the time") rather than percent. That fits the voice and still gives the player the real chance. The panel shows "carried so far" only if more than 0.
+## 4. Resolve card (return home) and the retreat result (revised)
 
-## 4. Resolve card (return home) and the retreat result
+Rule from Jeff: no percent and no odds on the card. The card says what happened in words. Ase and Ekwan amounts may show as amounts.
+ASSUMED reading: "some" is the 50% outcome. The card never says "half" because that is a fraction. It says "some".
 
-Cases. All use the label "Carried home" so the ledger matches the final payout row of the same name. New cause keys (for the mechanics developer): `carry_none`, `carry_half`, `carry_all`, `carry_nothing_new`. The existing `nothing_overcome_yet` stays for "no objective done".
+Three outcomes plus two guard cases. Label on every row: "Carried home" (the same label as the final payout row). New cause keys (for `mechanics-developer`): `carry_none`, `carry_some`, `carry_all`, `carry_nothing_new`. The existing `nothing_overcome_yet` stays.
 
-| Case | Ledger row | PROPOSAL cause text |
+| Outcome | Ledger row | PROPOSAL cause text |
 |---|---|---|
-| 100% | "Carried home +74 Ase" (and Ekwan row if above 0) | "Everything you gathered came home with you. The stage is still waiting." |
-| 50% | "Carried home +37 Ase" | "Half of it came home. You get the rest when the stage is done." |
-| 0% | "Carried home +0 Ase" (a row, not a missing row) | "Nothing came home this time. It is still yours when the stage is done." |
-| Nothing new | one row, delta 0 | "You already tried for this. Nothing new to carry." |
-| Nothing overcome | existing row | existing text, copy pass later (D-84) |
+| Took everything | "Carried home +74 Ase" (plus an Ekwan row if above 0) | "They got everything out. The stage is still waiting." |
+| Took some | "Carried home +37 Ase" | "They got some of it out. The rest is yours when the stage is done." |
+| Took nothing | "Carried home +0 Ase" (a row, never a missing row) | "They got nothing out this time. It is still yours when the stage is done." |
+| Nothing new | one row, delta 0 | "They already tried for this. Nothing new to carry." |
+| Nothing overcome | existing row | existing text (copy pass later, D-84) |
 
 Rules for the card:
-- A 0% result always shows a row with a figure. A missing row looks like a bug.
-- The card does not show the odds or the roll. It shows what happened.
-- If the stage is never finished, the card line "You get the rest when the stage is done" is still true. It does not promise a return.
-- The retreat has no Resolve card by default now (it returns to the stage). Options: (A, pick) a short result card with the same ledger and one button "Back to the stage"; (B) an overlay on the stage map like the failed-escape overlay. A shows the money with the weight it deserves. B is lighter. `ui-ux-designer` decides the layout after Jeff picks.
-- Copy for the Ekwan row follows D-72 rule 3. Same cause keys.
+- The ledger row never contains "%", "half", "odds" or a fraction. `params` may hold the share for tests, but the UI must not print it.
+- A "took nothing" result always shows a row with a figure so it does not look like a bug.
+- The card says "to the Sanctum" only on a return home. On a retreat the card says the party is back at the stage (see below).
+- The cause lines are true if the stage is never finished: they promise "when the stage is done", not a return.
+- Retreat display: the retreat now goes back to the stage, so no Sanctum card. Options: (A, pick) a short result card, same ledger, one button "Back to the stage"; (B) an overlay on the stage map. `ui-ux-designer` decides layout after Jeff picks.
+  PROPOSAL retreat variants of the cause text: replace "out" lines with the same words; the heading is "Pulled back" and the button is "Back to the stage".
+- Ekwan rows follow the same cause keys (D-72 rule 3).
+- Test impact: the card tests must assert that no row text matches a percent sign or the words "half", "odds", "chance".
 
 ## 5. Retreat back to the stage: what state is kept
 
@@ -184,7 +192,7 @@ Tension to tell Jeff plainly: because the carry is an advance, a 0% roll does no
 | `ANSWERS.md` recruit roll: "no re-roll" | The carry design follows it. |
 | D-25 (no mid-stage preview) and D-65 (running tally) | The confirmation panel shows gathered Ase at the moment of leaving. This is a small mid-stage figure. Jeff should confirm that it does not reverse D-25. D-102 already allowed `carry_home_preview` before the action. |
 
-Doc defects found (not fixed): the comment on `StageSettlementService.carry_plan` and `VentureController.gd:405` talk about "12%". They become stale when this builds. The build step must update them and `partial_intel_reward_factor`.
+Doc defects found (not fixed): the comments on `StageSettlementService.carry_plan` and `VentureController.handle_return_home` talk about "12%". They become stale when this builds. The build step must update them and `partial_intel_reward_factor`.
 
 ## Recommended build order (for Jeff to scope; not scope here)
 
@@ -210,3 +218,6 @@ BLOCKED: Is a retreat a turn (turn counter +1)? | CHECKED: `turn_count` incremen
 BLOCKED: Measured size of the bank-before-a-hard-fight hedge. | CHECKED: arithmetic only, from `balance.json`. | NEED: a probe of leave cycles on a real stage (RUN REQUEST by the builder; the main chat runs it).
 BLOCKED: Does the Scout directive text promise a number (the "intel retention" con/pro lines)? | CHECKED: `balance.json:20-40` shows the keys and the cons list, not a retention line. | NEED: `mid-game-designer` to check the directive card text before option A or C.
 BLOCKED: Do the displayed odds (whole tenths) and the drawn odds (exact weights) match for Scout 40/36/24? | CHECKED: arithmetic only. | NEED: Jeff or `mid-game-designer` to choose Scout weights that give whole tenths (for example a bonus that yields 40/40/20), or accept rounded display.
+
+ASSUMED: "Some" in Jeff's rule means the 50% outcome. The card says "some", never "half". | WHY: Jeff named three outcomes: nothing, some, everything. | WRONG IF: Jeff means a different share, or wants the odds table to change.
+ASSUMED: The rule "no percentage for the player" also bars odds in words ("half the time") on the confirmation panel, not only on the Resolve card. | WHY: the coordinator message says the percentage is not for the player to see. | WRONG IF: Jeff allows odds in words on the panel (then the first draft of section 3, three rows with odds in tenths, comes back as an option).
