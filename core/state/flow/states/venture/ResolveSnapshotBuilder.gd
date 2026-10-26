@@ -216,6 +216,12 @@ static func add_scout_intel(data: Dictionary, intel_count: int) -> void:
 	data["intel_count"] = intel_count
 
 
+## 14e — The word for what a return home settled: "none", "some", "all" or "nothing_new". Producer C
+## on a return home only. A word, never a share: the player sees no percent and no odds.
+static func add_settle_outcome(data: Dictionary, outcome: String) -> void:
+	data["settle_outcome"] = outcome
+
+
 ## 15 — Banner text + banner colour + %ReasonLabel on the contact renderer. Producer D.
 static func add_contact_outcome(
 		data: Dictionary,

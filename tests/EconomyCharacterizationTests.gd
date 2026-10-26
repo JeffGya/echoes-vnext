@@ -99,14 +99,20 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/stipend_replay_cap", Callable(EconomyCharacterizationTests, "_t_stipend_replay"))
 	runner.register_test("econ_char/stipend_dead_echo_and_no_encounter", Callable(EconomyCharacterizationTests, "_t_stipend_dead_and_none"))
 	runner.register_test("econ_char/stipend_dead_echo_on_real_card", Callable(EconomyCharacterizationTests, "_t_stipend_real_card"))
-	runner.register_test("econ_char/carried_first_return_by_realm_and_run", Callable(EconomyCharacterizationTests, "_t_carried_first"))
-	runner.register_test("econ_char/carried_repeat_and_increment", Callable(EconomyCharacterizationTests, "_t_carried_increment"))
-	runner.register_test("econ_char/carried_scout_bonus_before_subtraction", Callable(EconomyCharacterizationTests, "_t_carried_scout"))
-	runner.register_test("econ_char/carried_nothing_overcome_and_old_save", Callable(EconomyCharacterizationTests, "_t_carried_zero_and_old"))
-	runner.register_test("econ_char/carried_stage_end_pays_full_minus_carried", Callable(EconomyCharacterizationTests, "_t_carried_settle"))
-	runner.register_test("econ_char/carried_rows_clamp_and_sum", Callable(EconomyCharacterizationTests, "_t_carried_rows"))
-	runner.register_test("econ_char/carried_return_home_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_return_home"))
-	runner.register_test("econ_char/carried_retreat_preview_equals_action", Callable(EconomyCharacterizationTests, "_t_carried_retreat"))
+	runner.register_test("econ_char/settle_plan_gathered_by_realm_and_run", Callable(EconomyCharacterizationTests, "_t_settle_plan_gathered"))
+	runner.register_test("econ_char/settle_odds_come_from_config_and_scout_shifts_them", Callable(EconomyCharacterizationTests, "_t_settle_odds_from_config"))
+	runner.register_test("econ_char/settle_roll_seeded_distribution", Callable(EconomyCharacterizationTests, "_t_settle_roll_seeded_distribution"))
+	runner.register_test("econ_char/settle_pays_once_and_marks", Callable(EconomyCharacterizationTests, "_t_settle_pays_once_and_marks"))
+	runner.register_test("econ_char/settle_nothing_new_changes_nothing", Callable(EconomyCharacterizationTests, "_t_settle_nothing_new_changes_nothing"))
+	runner.register_test("econ_char/settle_reroll_blocked_by_cancel_reload_retry", Callable(EconomyCharacterizationTests, "_t_settle_reroll_blocked"))
+	runner.register_test("econ_char/settle_scout_never_pays_over_the_gathered_amount", Callable(EconomyCharacterizationTests, "_t_settle_scout_never_over_100"))
+	runner.register_test("econ_char/settle_defeat_keeps_what_the_leave_paid", Callable(EconomyCharacterizationTests, "_t_settle_defeat_keeps_paid"))
+	runner.register_test("econ_char/settle_stage_end_pays_unsettled_only", Callable(EconomyCharacterizationTests, "_t_settle_stage_end_pays_unsettled_only"))
+	runner.register_test("econ_char/settle_rows_memo_not_negative", Callable(EconomyCharacterizationTests, "_t_settle_rows_memo"))
+	runner.register_test("econ_char/settle_worked_example_74", Callable(EconomyCharacterizationTests, "_t_settle_worked_example"))
+	runner.register_test("econ_char/settle_replay_resets_marks", Callable(EconomyCharacterizationTests, "_t_settle_replay_resets_marks"))
+	runner.register_test("econ_char/settle_return_home_dispatch_word_outcome_no_odds", Callable(EconomyCharacterizationTests, "_t_settle_return_home_dispatch"))
+	runner.register_test("econ_char/settle_retreat_pays_nothing", Callable(EconomyCharacterizationTests, "_t_settle_retreat_pays_nothing"))
 	runner.register_test("econ_char/intel_gained_absent_zero_present_count_absent_on_defeat", Callable(EconomyCharacterizationTests, "_t_intel_gained"))
 	runner.register_test("econ_char/intel_gained_replays_from_stored_result", Callable(EconomyCharacterizationTests, "_t_intel_gained_replay"))
 	runner.register_test("econ_char/death_record_carries_to_later_fight", Callable(EconomyCharacterizationTests, "_t_death_record"))
@@ -280,23 +286,22 @@ static func _t_multi_objective() -> Dictionary:
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-## The retreat and return-home partial payouts are roundi(completed base x 0.12). The base comes
-## from ActiveStageService.get_stage_base_reward, the same sum the stage payer uses. Every
-## pre-boss objective here is completed.
+## REWRITTEN (D-104 to D-106): the 12% partial factor is gone. The amount a return home gathers is
+## the completed stage base itself (`settle_plan`); the roll then pays 0%, 50% or 100% of it.
+## The base is the same sum the stage payer uses. Every pre-boss objective here is completed.
 static func _t_partial_payout() -> Dictionary:
 	var cfg := _config()
-	var factor := float(ConfigService.get_rewards_cfg(cfg).get("partial_intel_reward_factor", 0.12))
 	var mismatches: Array = []
-	for c in [[["combat"], 20, 2], [["guide_spirit"], 32, 4], [["combat", "shrine"], 50, 6], [["pursue"], 16, 2]]:
+	for c in [[["combat"], 20, 2], [["guide_spirit"], 32, 3], [["combat", "shrine"], 50, 8], [["pursue"], 16, 2]]:
 		var objs: Array = []
 		for k in range((c[0] as Array).size()):
 			objs.append(_obj(k, c[0][k], true))
 		objs.append(ObjectiveModel.make(objs.size(), ObjectiveModel.TYPE_BOSS, 2, {}, false, false))
 		var ctx := _stage_ctx(cfg, objs)
 		var base := ActiveStageService.get_stage_base_reward(ctx, cfg)
-		var partial := roundi(float(base) * factor)
-		if base != int(c[1]) or partial != int(c[2]):
-			mismatches.append("%s: base %d partial %d, expected %d / %d" % [str(c[0]), base, partial, int(c[1]), int(c[2])])
+		var plan := StageSettlementService.settle_plan(ctx, cfg)
+		if base != int(c[1]) or int(plan["ase"]) != int(c[1]) or int(plan["ekwan"]) != int(c[2]):
+			mismatches.append("%s: base %d gathered %s/%s, expected %d / %d" % [str(c[0]), base, plan["ase"], plan["ekwan"], int(c[1]), int(c[2])])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
@@ -553,26 +558,22 @@ static func _t_consolation_scaled() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## The retreat and return-home partials read the stage base through ActiveStageService, then the
-## realm factors: a replay never carries home more than the first run (the advance rule is step 5.8).
+## REWRITTEN (D-104 to D-106): the gathered amount of a return home follows the realm scale and the replay
+## factor, with no 12% factor. A replay never gathers more than the first run.
 static func _t_partial_factors() -> Dictionary:
 	var m: Array = []
 	var cfg := _config()
-	var rewards := ConfigService.get_rewards_cfg(cfg)
-	var pf := float(rewards.get("partial_intel_reward_factor", 0.12))
 	var boss := ObjectiveModel.make(1, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
-	# [realm, run_count, expected partial of a completed shrine (30)]
-	for c in [["realm.01", 0, 4], ["realm.01", 1, 1], ["realm.02", 0, 5], ["realm.02", 1, 2]]:
+	# [realm, run_count, gathered Ase of a completed shrine (30)]: 30; 30 x 0.35 = 10.5 -> 11; 37.5 -> 38; 13.125 -> 13.
+	for c in [["realm.01", 0, 30], ["realm.01", 1, 11], ["realm.02", 0, 38], ["realm.02", 1, 13]]:
 		var ctx := _stage_ctx(cfg, [_obj(0, "shrine", true), boss.duplicate(true)])
 		var stage_realm: Dictionary = ctx.save_data["realms"]["realm.01"]
 		stage_realm["run_count"] = c[1]
 		ctx.save_data["realms"][c[0]] = stage_realm
 		ctx.realm_id = c[0]
-		var f := ActiveStageService.get_payout_factors(ctx, cfg)
-		var partial := RewardCalc.round_payout(float(ActiveStageService.get_stage_base_reward(ctx, cfg)) \
-			* float(f["realm_scale"]) * float(f["replay_factor"]) * pf)
-		if partial != int(c[2]):
-			m.append("%s run %d: partial %d, expected %d" % [c[0], c[1], partial, int(c[2])])
+		var gathered := int(StageSettlementService.settle_plan(ctx, cfg)["ase"])
+		if gathered != c[2]:
+			m.append("%s run %d: gathered %d, expected %d" % [c[0], c[1], gathered, c[2]])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
@@ -615,7 +616,7 @@ static func _t_removed_keys_absent() -> Dictionary:
 ## Pays one cell through the real settle() on a real booted runtime and returns the payout.
 static func _settle_cell(env: Dictionary, objectives: Array, stage_index: int, run_count: int, n: int,
 		preview_out: Dictionary = {}, realm_id: String = "realm.01",
-		carried_ase: int = 0, carried_ekwan: int = 0) -> Dictionary:
+		settled_ase: int = 0, settled_ekwan: int = 0) -> Dictionary:
 	var runtime: FlowRuntime = env["runtime"]
 	var save_data: Dictionary = runtime.get_save_data()
 	if realm_id != "realm.01" and not (save_data["realms"] as Dictionary).has(realm_id):
@@ -631,11 +632,11 @@ static func _settle_cell(env: Dictionary, objectives: Array, stage_index: int, r
 		stages.append(stage)
 	stage["objectives"] = objectives
 	stage["settlement_receipt"] = {}
-	stage.erase("carried_ase")
-	stage.erase("carried_ekwan")
-	if carried_ase > 0 or carried_ekwan > 0:
-		stage["carried_ase"] = carried_ase
-		stage["carried_ekwan"] = carried_ekwan
+	stage.erase("settled_ase")
+	stage.erase("settled_ekwan")
+	if settled_ase > 0 or settled_ekwan > 0:
+		stage["settled_ase"] = settled_ase
+		stage["settled_ekwan"] = settled_ekwan
 	realm["run_count"] = run_count
 	realm["run_index"] = 0
 	var economy: Dictionary = save_data["economy"]
@@ -1110,21 +1111,22 @@ static func _t_first_defeat() -> Dictionary:
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
-## (e) Retreat and return-home partials: roundi(completed base x 0.12), 0 before any completion.
-## The Scout intel_retention_bonus multiplies that base, so it multiplies 0.
+## (e) REWRITTEN (D-104 to D-106): what a return home gathers is the completed weights (no 12% factor), and
+## nothing before any completion (`nothing_new`, so the payer draws no roll).
 static func _t_partials_completed() -> Dictionary:
 	var cfg := _config()
-	var factor := float(ConfigService.get_rewards_cfg(cfg).get("partial_intel_reward_factor", 0.12))
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var mismatches: Array = []
 	var before := _stage_ctx(cfg, [_obj(0, "guide_spirit", false), _obj(1, "combat", false), boss], 0)
 	var base := ActiveStageService.get_stage_base_reward(before, cfg)
-	if base != 0 or roundi(float(base) * factor * 1.5) != 0:
-		mismatches.append("before any completion: base %d, expected 0" % base)
+	var plan := StageSettlementService.settle_plan(before, cfg)
+	if base != 0 or int(plan["ase"]) != 0 or not bool(plan["nothing_new"]):
+		mismatches.append("before any completion: base %d plan %s, expected 0 and nothing_new" % [base, str(plan)])
 	var after := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], 1)
 	base = ActiveStageService.get_stage_base_reward(after, cfg)
-	if base != 32 or roundi(float(base) * factor) != 4:
-		mismatches.append("after one completion: base %d partial %d, expected 32 / 4" % [base, roundi(float(base) * factor)])
+	plan = StageSettlementService.settle_plan(after, cfg)
+	if base != 32 or int(plan["ase"]) != 32 or int(plan["ekwan"]) != 3 or bool(plan["nothing_new"]):
+		mismatches.append("after one completion: base %d plan %s, expected 32 / 32 / 3" % [base, str(plan)])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
 
 
@@ -1236,16 +1238,20 @@ static func _t_cause_scout_rows() -> Dictionary:
 	var m: Array = []
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var done: Array = [_obj(0, "combat", true), _obj(1, "shrine", false), boss]
-	var home: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(_scout_ctx(done, 3), 1)["data"]["reward_breakdown"]
+	# REWRITTEN (D-105/D-106): the return-home row is named by the settle outcome (`settle_some`), not the
+	# old fixed `partial_return_home` cause. A retreat settles nothing, so it has no row until step 6.2.
+	var ctx_home := _scout_ctx(done, 3)
+	ctx_home.pending_scout_return_settle_outcome = "some"
+	var home: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(ctx_home, 1)["data"]["reward_breakdown"]
 	var retreat: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
-		_scout_ctx(done, 3), 1, "scout_return", "partial_retreat")["data"]["reward_breakdown"]
-	if home.size() != 1 or str((home[0] as Dictionary).get("cause", "")) != "partial_return_home" \
+		_scout_ctx(done, 0), 1, "scout_return", "partial_retreat")["data"]["reward_breakdown"]
+	if home.size() != 1 or str((home[0] as Dictionary).get("cause", "")) != "settle_some" \
 			or int(((home[0] as Dictionary).get("params", {}) as Dictionary).get("overcome", -1)) != 1 \
 			or int(((home[0] as Dictionary).get("params", {}) as Dictionary).get("total", -1)) != 2 \
 			or int((home[0] as Dictionary).get("delta", -1)) != 3:
 		m.append("return-home row: %s" % JSON.stringify(home))
-	if retreat.size() != 1 or str((retreat[0] as Dictionary).get("cause", "")) != "partial_retreat":
-		m.append("retreat row: %s" % JSON.stringify(retreat))
+	if not retreat.is_empty():
+		m.append("retreat row (a retreat settles nothing): %s" % JSON.stringify(retreat))
 	var none: Array = [_obj(0, "combat", false), boss.duplicate(true)]
 	var zero: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
 		_scout_ctx(none, 0), 1, "scout_return", "partial_retreat")["data"]["reward_breakdown"]
@@ -1788,24 +1794,26 @@ static func _t_stipend_real_card() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# D-72: carried home is an advance on the stage payout (step 5.8)
+# D-104 to D-106: a return home settles by one roll (step 6.1)
 # ---------------------------------------------------------------------------
 
-## A pure context: one stage, objectives as given, one revealed situation (the intel gate), the
-## realm's run_count, and what the stage already carried.
-static func _carry_ctx(realm_id: String, run_count: int, objs: Array, carried_ase: int = 0,
-		carried_ekwan: int = 0, revealed: bool = true) -> FlowContext:
+## A pure context: one stage, objectives as given, one revealed situation, five party Echoes (so the
+## stage-end stipend is the 10 Ase cap), the realm's run_count and seed.
+static func _carry_ctx(realm_id: String, run_count: int, objs: Array, realm_seed: int = 0) -> FlowContext:
 	var ctx := FlowContext.new()
 	ctx.config_service = _config()
 	ctx.realm_id = realm_id
 	ctx.stage_id = "stage.0"
 	var stage := { "index": 0, "objectives": objs, "settlement_receipt": {},
-		"explore_map": { "situations": [{ "id": "s0", "revealed": revealed }] } }
-	if carried_ase > 0 or carried_ekwan > 0:
-		stage["carried_ase"] = carried_ase
-		stage["carried_ekwan"] = carried_ekwan
+		"explore_map": { "situations": [{ "id": "s0", "revealed": true }] } }
+	var roster: Array = []
+	var ids: Array = []
+	for i in 5:
+		roster.append({ "id": "e%d" % i, "name": "Echo %d" % i })
+		ids.append("e%d" % i)
 	ctx.save_data = { "economy": { "ase": 0, "ekwan": 0 },
-		"realms": { realm_id: { "run_count": run_count, "stages": [stage] } } }
+		"sanctum": { "roster": roster, "active_party_ids": ids },
+		"realms": { realm_id: { "run_count": run_count, "seed": realm_seed, "stages": [stage] } } }
 	return ctx
 
 
@@ -1821,153 +1829,396 @@ static func _carry_boss() -> Dictionary:
 	return ObjectiveModel.make(9, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 
 
-## First return: 12% of the completed Ase and Ekwan with the scale and the replay factor, one
-## rounding on each sum. Shrine 30/6 + recover 24/5 + protect 24/3 = Ase 78, Ekwan 14.
-## [realm, run_count, Ase, Ekwan]: 78 x 1.0 x 0.12 = 9.36; 97.5 x 0.12 = 11.7; 27.3 x 0.12 = 3.28;
-## 34.125 x 0.12 = 4.1. Ekwan: 1.68, 2.1, 0.59, 0.74.
-static func _t_carried_first() -> Dictionary:
+static func _leave(ctx: FlowContext, mul: float = 1.0, t: int = 1) -> Dictionary:
+	return StageSettlementService.settle_leave(ctx, ctx.config_service, _carry_econ(ctx), mul, "test", _logger(), t)
+
+
+## The outcome the stream `stage.settle.<stage_id>.<run>.<count>` gives for a seed. Written out
+## here on purpose: it pins the stream name and the 0..99 draw against the table.
+static func _expected_outcome(realm_seed: int, run_count: int, settle_count: int, mul: float = 1.0) -> String:
+	var roll := CampaignSeed.get_rng_from(realm_seed,
+		"stage.settle.stage.0.%d.%d" % [run_count, settle_count]).randi_range(0, 99)
+	var cum := 0.0
+	for row in StageSettlementService.carry_table(_rewards_cfg(), mul):
+		cum += float(row["pct"])
+		if float(roll) < cum:
+			return str(row["outcome"])
+	return "all"
+
+
+## The first seed from 0 whose first roll gives `outcome`.
+static func _seed_for(outcome: String, mul: float = 1.0, run_count: int = 0, settle_count: int = 0) -> int:
+	for s in range(0, 5000):
+		if _expected_outcome(s, run_count, settle_count, mul) == outcome:
+			return s
+	return -1
+
+
+## Gathered amount: no 12% factor, no subtraction (the old `carry_plan`). Shrine 30/6 + recover 24/5 +
+## protect 24/3 = Ase 78, Ekwan 14, one rounding on each sum, with the realm scale and replay factor.
+## [realm, run_count, Ase, Ekwan]: 78; 97.5 -> 98; 27.3 -> 27; 34.125 -> 34. Ekwan 14; 17.5 -> 18; 4.9 -> 5; 6.125 -> 6.
+static func _t_settle_plan_gathered() -> Dictionary:
 	var m: Array = []
-	for c in [["realm.01", 0, 9, 2], ["realm.02", 0, 12, 2], ["realm.01", 1, 3, 1], ["realm.02", 1, 4, 1]]:
+	for c in [["realm.01", 0, 78, 14], ["realm.02", 0, 98, 18], ["realm.01", 1, 27, 5], ["realm.02", 1, 34, 6]]:
 		var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _obj(2, "protect", true), _carry_boss()]
 		var ctx := _carry_ctx(c[0], c[1], objs)
-		var got := StageSettlementService.carry_home(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", _logger(), 1)
+		var before := JSON.stringify(ctx.save_data)
+		var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
+		if int(plan["ase"]) != int(c[2]) or int(plan["ekwan"]) != int(c[3]):
+			m.append("%s run %d: gathered %s/%s, expected %d/%d" % [c[0], c[1], plan["ase"], plan["ekwan"], c[2], c[3]])
+		if int(plan["overcome"]) != 3 or int(plan["total"]) != 3 or bool(plan["nothing_new"]) or (plan["indexes"] as Array).size() != 3:
+			m.append("%s run %d: plan %s, expected 3 of 3 (boss stub excluded), 3 indexes" % [c[0], c[1], str(plan)])
+		if JSON.stringify(ctx.save_data) != before:
+			m.append("%s run %d: settle_plan changed the save" % [c[0], c[1]])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The odds come from `data.rewards.carry_odds` and `carry_shares`. 50/30/20 is the shipped table.
+## Scout multiplies the weights of the outcomes that pay something by 1.5 and renormalises:
+## 50 / 45 / 30 -> 40 / 36 / 24. A table with other numbers changes the result: nothing is hard-coded.
+static func _t_settle_odds_from_config() -> Dictionary:
+	var m: Array = []
+	var cfg := _rewards_cfg()
+	var plain := StageSettlementService.carry_table(cfg, 1.0)
+	var scout := StageSettlementService.carry_table(cfg, 1.5)
+	var want_plain := [50.0, 30.0, 20.0]
+	var want_scout := [40.0, 36.0, 24.0]
+	var want_share := [0.0, 0.5, 1.0]
+	if plain.size() != 3 or scout.size() != 3:
+		return { "ok": false, "error": "carry_table sizes %d / %d, expected 3" % [plain.size(), scout.size()] }
+	for i in 3:
+		if absf(float(plain[i]["pct"]) - want_plain[i]) > 0.0001 or absf(float(scout[i]["pct"]) - want_scout[i]) > 0.0001:
+			m.append("row %d: plain %s scout %s, expected %s / %s" % [i, plain[i]["pct"], scout[i]["pct"], want_plain[i], want_scout[i]])
+		if absf(float(plain[i]["share"]) - want_share[i]) > 0.0001 or float(scout[i]["share"]) > 1.0:
+			m.append("row %d: share %s, expected %s and never above 1" % [i, plain[i]["share"], want_share[i]])
+	var other := cfg.duplicate(true)
+	other["carry_odds"] = { "none": 0, "some": 0, "all": 10 }
+	other["carry_shares"] = { "none": 0.0, "some": 0.5, "all": 1.0 }
+	var t_all := StageSettlementService.carry_table(other, 1.5)
+	if absf(float(t_all[2]["pct"]) - 100.0) > 0.0001:
+		m.append("odds 0/0/10 gave %s, expected 100 for 'all'" % str(t_all))
+	var broken := cfg.duplicate(true)
+	broken.erase("carry_odds")
+	if not StageSettlementService.carry_table(broken, 1.0, _logger()).is_empty():
+		m.append("a missing carry_odds must give an empty table")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Over 600 seeds the shipped table lands near 50 / 30 / 20 (and Scout near 40 / 36 / 24), the same seed always
+## gives the same answer, and Scout never turns a paying roll into a loss: a roll that pays for a plain
+## party also pays for a Scout party, and Scout loses less often.
+static func _t_settle_roll_seeded_distribution() -> Dictionary:
+	var m: Array = []
+	var plain := { "none": 0, "some": 0, "all": 0 }
+	var scout := { "none": 0, "some": 0, "all": 0 }
+	var n := 600
+	for s in n:
+		var a := _expected_outcome(s, 0, 0, 1.0)
+		var b := _expected_outcome(s, 0, 0, 1.5)
+		if a != _expected_outcome(s, 0, 0, 1.0):
+			m.append("seed %d is not repeatable" % s)
+			break
+		plain[a] += 1
+		scout[b] += 1
+		if a != "none" and b == "none":
+			m.append("seed %d pays plain (%s) but not for Scout" % [s, a])
+			break
+	for k in ["none", "some", "all"]:
+		var wp: float = {"none": 0.5, "some": 0.3, "all": 0.2}[k]
+		var ws: float = {"none": 0.4, "some": 0.36, "all": 0.24}[k]
+		if absf(float(plain[k]) / n - wp) > 0.07 or absf(float(scout[k]) / n - ws) > 0.07:
+			m.append("%s: plain %d scout %d of %d, expected near %s / %s" % [k, plain[k], scout[k], n, wp, ws])
+	if int(scout["none"]) >= int(plain["none"]):
+		m.append("Scout lost as often as plain: %d vs %d" % [scout["none"], plain["none"]])
+	# The real payer lands on the same outcome the stream gives.
+	for want in ["none", "some", "all"]:
+		var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _obj(2, "protect", true), _carry_boss()]
+		var ctx := _carry_ctx("realm.01", 0, objs, _seed_for(want))
+		var got := _leave(ctx)
+		if str(got["outcome"]) != want:
+			m.append("settle_leave gave %s, the stream gives %s" % [got["outcome"], want])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## One roll pays Ase and Ekwan once through the economy, marks every settled objective, writes the
+## running totals, and a second leave with nothing new changes nothing.
+## Shrine 30/6 + recover 24/5 + protect 24/3 = 78 / 14. All: 78 / 14. Some: 39 / 7. None: 0 / 0.
+static func _t_settle_pays_once_and_marks() -> Dictionary:
+	var m: Array = []
+	for c in [["all", 78, 14, 100], ["some", 39, 7, 50], ["none", 0, 0, 0]]:
+		var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _obj(2, "protect", true), _carry_boss()]
+		var ctx := _carry_ctx("realm.01", 0, objs, _seed_for(c[0]))
+		var got := _leave(ctx)
 		var st := _carry_stage(ctx)
 		var bal := ctx.save_data["economy"] as Dictionary
-		if int(got["ase"]) != int(c[2]) or int(got["ekwan"]) != int(c[3]):
-			m.append("%s run %d: carried %s/%s, expected %d/%d" % [c[0], c[1], got["ase"], got["ekwan"], c[2], c[3]])
-		if int(st.get("carried_ase", -1)) != int(c[2]) or int(st.get("carried_ekwan", -1)) != int(c[3]) \
-				or int(bal["ase"]) != int(c[2]) or int(bal["ekwan"]) != int(c[3]):
-			m.append("%s run %d: stage %s balance %s" % [c[0], c[1], str(st), str(bal)])
-		if int(got["overcome"]) != 3 or int(got["total"]) != 3:
-			m.append("%s run %d: overcome %s of %s, expected 3 of 3 (boss stub excluded)" % [c[0], c[1], got["overcome"], got["total"]])
+		if str(got["outcome"]) != c[0] or int(got["ase"]) != int(c[1]) or int(got["ekwan"]) != int(c[2]):
+			m.append("%s: outcome %s paid %s/%s, expected %d/%d" % [c[0], got["outcome"], got["ase"], got["ekwan"], c[1], c[2]])
+		if int(bal["ase"]) != int(c[1]) or int(bal["ekwan"]) != int(c[2]):
+			m.append("%s: balance %s, expected paid once %d/%d" % [c[0], str(bal), c[1], c[2]])
+		for i in 3:
+			var o: Dictionary = st["objectives"][i]
+			if not bool(o.get("settled", false)) or int(o.get("settled_share", -1)) != int(c[3]):
+				m.append("%s: objective %d %s, expected settled with share %d" % [c[0], i, str(o), c[3]])
+		if bool((st["objectives"][3] as Dictionary).get("settled", false)):
+			m.append("%s: the boss stub was marked settled" % c[0])
+		if int(st.get("settled_ase", -1)) != int(c[1]) or int(st.get("settled_ekwan", -1)) != int(c[2]) or int(st.get("settle_count", -1)) != 1:
+			m.append("%s: stage totals %s, expected %d/%d and count 1" % [c[0], str(st), c[1], c[2]])
+		if st.has("carried_ase") or st.has("carried_ekwan"):
+			m.append("%s: the removed carried_* fields were written" % c[0])
+		var again := _leave(ctx, 1.0, 2)
+		if str(again["outcome"]) != "nothing_new" or int(again["ase"]) != 0 or int(bal["ase"]) != int(c[1]) \
+				or int(st.get("settle_count", -1)) != 1:
+			m.append("%s: a second leave gave %s, balance %s, count %s" % [c[0], str(again), str(bal), str(st.get("settle_count"))])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## A second return with no new objective carries 0 (B5 closed). A new objective carries only the
-## increment. Shrine alone: 30 x 0.12 = 3.6 -> 4 Ase, 0.72 -> 1 Ekwan. Shrine + recover: 54 x 0.12 =
-## 6.48 -> 6 Ase (2 more), 11 x 0.12 = 1.32 -> 1 Ekwan (0 more).
-static func _t_carried_increment() -> Dictionary:
+## Nothing new draws nothing and changes nothing: no completed objective, only the boss stub, and an
+## objective already settled. The roll stream is rebuilt from the stage state each time, so "no draw"
+## shows as "no state change": no mark, no settle_count, no payment.
+static func _t_settle_nothing_new_changes_nothing() -> Dictionary:
+	var m: Array = []
+	for objs in [
+			[_obj(0, "shrine", false), _carry_boss()],
+			[_carry_boss()],
+			[_obj(0, "shrine", true), _carry_boss()]]:
+		var ctx := _carry_ctx("realm.01", 0, objs.duplicate(true), _seed_for("all"))
+		if (objs[0] as Dictionary).get("type") == "shrine" and bool((objs[0] as Dictionary).get("completed")):
+			((_carry_stage(ctx)["objectives"] as Array)[0] as Dictionary)["settled"] = true
+		var before := JSON.stringify(ctx.save_data)
+		var got := _leave(ctx)
+		if str(got["outcome"]) != "nothing_new" or int(got["ase"]) != 0 or int(got["ekwan"]) != 0:
+			m.append("%s: %s, expected nothing_new 0/0" % [JSON.stringify(objs), str(got)])
+		if JSON.stringify(ctx.save_data) != before:
+			m.append("%s: the save changed" % JSON.stringify(objs))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Cancel, reload and retry cannot re-roll. A cancel never reaches the payer (the plan is pure). After a
+## reload (the save through JSON, so ints become floats) the marks hold and the leave is nothing_new. A
+## retry on the same stage state finds the same marks. Only an objective completed later is rolled, on the
+## next stream (count 1).
+static func _t_settle_reroll_blocked() -> Dictionary:
 	var m: Array = []
 	var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", false), _carry_boss()]
-	var ctx := _carry_ctx("realm.01", 0, objs)
-	var econ := _carry_econ(ctx)
-	var a := StageSettlementService.carry_home(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 1)
-	var b := StageSettlementService.carry_home(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 2)
-	if int(a["ase"]) != 4 or int(a["ekwan"]) != 1 or int(b["ase"]) != 0 or int(b["ekwan"]) != 0:
-		m.append("first %s/%s, repeat %s/%s, expected 4/1 then 0/0" % [a["ase"], a["ekwan"], b["ase"], b["ekwan"]])
-	((_carry_stage(ctx)["objectives"] as Array)[1] as Dictionary)["completed"] = true
-	var c := StageSettlementService.carry_home(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 3)
-	var st := _carry_stage(ctx)
-	if int(c["ase"]) != 2 or int(c["ekwan"]) != 0 or int(st["carried_ase"]) != 6 or int(st["carried_ekwan"]) != 1:
-		m.append("increment %s/%s, stage %s, expected 2/0 and 6/1" % [c["ase"], c["ekwan"], str(st)])
-	var bal := ctx.save_data["economy"] as Dictionary
-	if int(bal["ase"]) != 6 or int(bal["ekwan"]) != 1:
-		m.append("balance %s, expected 6/1" % str(bal))
+	var ctx := _carry_ctx("realm.01", 0, objs, _seed_for("none", 1.0, 0, 0))
+	var before_cancel := JSON.stringify(ctx.save_data)
+	StageSettlementService.settle_plan(ctx, ctx.config_service)
+	StageSettlementService.settle_plan(ctx, ctx.config_service)
+	if JSON.stringify(ctx.save_data) != before_cancel:
+		m.append("a plan (the cancelled panel) changed the save")
+	var first := _leave(ctx)
+	if str(first["outcome"]) != "none":
+		return { "ok": false, "error": "setup: expected a none roll, got %s" % str(first) }
+	var reloaded := _carry_ctx("realm.01", 0, [], 0)
+	reloaded.save_data = JSON.parse_string(JSON.stringify(ctx.save_data))
+	for attempt in 3:
+		var retry := _leave(reloaded, 1.0, 10 + attempt)
+		if str(retry["outcome"]) != "nothing_new" or int(retry["ase"]) != 0:
+			m.append("retry %d after reload gave %s, expected nothing_new" % [attempt, str(retry)])
+	((_carry_stage(reloaded)["objectives"] as Array)[1] as Dictionary)["completed"] = true
+	var later := _leave(reloaded, 1.0, 20)
+	var st := _carry_stage(reloaded)
+	var obj0: Dictionary = st["objectives"][0]
+	if str(later["outcome"]) != _expected_outcome(0, 0, 1) or int(st.get("settle_count", -1)) != 2:
+		m.append("the later objective gave %s count %s, expected the count-1 stream (%s) and count 2" \
+			% [str(later), str(st.get("settle_count")), _expected_outcome(0, 0, 1)])
+	if int(obj0.get("settled_share", -1)) != 0 or int(reloaded.save_data["economy"]["ase"]) != int(later["ase"]):
+		m.append("the first objective's none result changed: %s balance %s" % [str(obj0), str(reloaded.save_data["economy"])])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## The Scout multiplier applies to the 12% BEFORE the carried amount is subtracted, to Ase only.
-## Shrine, realm.01 run 0: 30 x 0.12 x 1.5 = 5.4 -> 5 Ase; Ekwan 0.72 -> 1 (no multiplier).
-## After a plain 4: the Scout return carries 5 - 4 = 1.
-static func _t_carried_scout() -> Dictionary:
+## Scout raises the odds, never the amount: a Scout party that rolls "all" gets 100% of the gathered amount,
+## not 150%. Same seed, same stream; Scout turns some seeds from none into a payout.
+static func _t_settle_scout_never_over_100() -> Dictionary:
 	var m: Array = []
-	var objs: Array = [_obj(0, "shrine", true), _carry_boss()]
-	var ctx := _carry_ctx("realm.01", 0, objs)
-	var econ := _carry_econ(ctx)
+	var s_all := _seed_for("all", 1.5)
+	var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, objs, s_all)
 	var scout := { "intel_retention": true, "intel_retention_bonus": 1.5 }
 	var mul := StageSettlementService.retention_mul(scout)
 	if mul != 1.5 or StageSettlementService.retention_mul({ "intel_retention": false, "intel_retention_bonus": 1.5 }) != 1.0 \
 			or StageSettlementService.retention_mul({}) != 1.0:
 		m.append("retention_mul wrong: %s" % str(mul))
-	var a := StageSettlementService.carry_home(ctx, ctx.config_service, econ, mul, "test", _logger(), 1)
-	if int(a["ase"]) != 5 or int(a["ekwan"]) != 1 or int(_carry_stage(ctx)["carried_ase"]) != 5:
-		m.append("scout first return %s/%s stage %s, expected 5/1 and carried 5" % [a["ase"], a["ekwan"], str(_carry_stage(ctx))])
-	var plain := _carry_ctx("realm.01", 0, objs.duplicate(true), 4, 1)
-	var b := StageSettlementService.carry_home(plain, plain.config_service, _carry_econ(plain), mul, "test", _logger(), 2)
-	if int(b["ase"]) != 1 or int(b["ekwan"]) != 0 or int(_carry_stage(plain)["carried_ase"]) != 5:
-		m.append("scout after a plain 4: %s/%s stage %s, expected 1/0 and carried 5" % [b["ase"], b["ekwan"], str(_carry_stage(plain))])
+	var got := _leave(ctx, mul)
+	if str(got["outcome"]) != "all" or int(got["ase"]) != 54 or int(got["ekwan"]) != 11:
+		m.append("Scout 'all' paid %s, expected all 54/11 (never above the gathered 54/11)" % str(got))
+	var flip := -1
+	for s in range(0, 5000):
+		if _expected_outcome(s, 0, 0, 1.0) == "none" and _expected_outcome(s, 0, 0, 1.5) != "none":
+			flip = s
+			break
+	if flip < 0:
+		m.append("no seed turns none into a payout for Scout")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## Nothing overcome carries 0 and writes nothing; no revealed situation carries 0; a stage
-## without the fields (an old save) reads 0 and pays like before.
-static func _t_carried_zero_and_old() -> Dictionary:
+## Nothing overcome writes nothing; a defeat keeps what the leave paid; the stage-end preview keeps
+## the memo row, not a negative row.
+static func _t_settle_defeat_keeps_paid() -> Dictionary:
 	var m: Array = []
-	var none: Array = [_obj(0, "shrine", false), _carry_boss()]
-	var ctx := _carry_ctx("realm.01", 0, none)
-	var got := StageSettlementService.carry_home(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", _logger(), 1)
-	var st := _carry_stage(ctx)
-	if int(got["ase"]) != 0 or int(got["ekwan"]) != 0 or st.has("carried_ase") or st.has("carried_ekwan"):
-		m.append("nothing overcome: %s, stage %s" % [str(got), str(st)])
-	var blind := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], 0, 0, false)
-	var g2 := StageSettlementService.carry_plan(blind, blind.config_service)
-	if int(g2["ase"]) != 0 or int(g2["ekwan"]) != 0:
-		m.append("no revealed situation carried %s" % str(g2))
-	var old := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()])
-	var svc := StageSettlementService.new(old, old.config_service, null, null)
-	var pre := svc.preview()
-	if int(pre.get("ase", -1)) != 30 or int(pre.get("ekwan", -1)) != 6 or not _row_by_cause(pre["rows"], "carried_advance").is_empty():
-		m.append("old save preview %s, expected 30/6 and no carried_advance row" % str(pre))
+	var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", false), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, objs, _seed_for("all"))
+	var econ := _carry_econ(ctx)
+	var got := StageSettlementService.settle_leave(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 1)
+	var svc := StageSettlementService.new(ctx, ctx.config_service, econ, _logger())
+	var lost := svc.settle(false, 2)
+	var bal := ctx.save_data["economy"] as Dictionary
+	if not lost.is_empty() or int(bal["ase"]) != int(got["ase"]) or int(got["ase"]) != 30 or int(bal["ekwan"]) != 6:
+		m.append("defeat: settle returned %s, balance %s, expected {} and the leave's 30/6 kept" % [str(lost), str(bal)])
+	if _carry_stage(ctx).has("settlement_receipt") and bool((_carry_stage(ctx)["settlement_receipt"] as Dictionary).get("settled", false)):
+		m.append("a defeat stamped the stage receipt")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## The real settle path: the stage pays the full amount MINUS what was carried, the preview shows
-## the same net, the rows add up, and the receipt stays exactly-once.
-static func _t_carried_settle() -> Dictionary:
+## The stage end pays only the unsettled completed objectives plus the stipend, and shows a memo row.
+## A settled objective pays nothing more. Preview (pure) and settle agree on a real runtime.
+static func _t_settle_stage_end_pays_unsettled_only() -> Dictionary:
 	var m: Array = []
-	var env := VentureCharacterizationTests._setup_stage_env("econ_char_carried_settle")
+	var env := VentureCharacterizationTests._setup_stage_env("econ_char_settle_stage_end")
 	if not bool(env.get("ok", false)):
 		return env
-	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
-	var objs: Array = [_obj(0, "combat", true), _obj(1, "shrine", true), boss]
+	var boss := ObjectiveModel.make(3, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var settled := _obj(0, "combat", true)
+	settled["settled"] = true
+	settled["settled_share"] = 50
+	var objs: Array = [settled, _obj(1, "recover", true), _obj(2, "shrine", true), boss]
 	var pv := {}
-	# Full amount: 50 + 2 stipend = 52 Ase, 8 Ekwan. Carried 6 / 1 (12% of 50 and of 8).
-	var out := _settle_cell(env, objs, 0, 0, 1, pv, "realm.01", 6, 1)
-	var row := _row_by_cause(out["breakdown"], "carried_advance")
+	# Unsettled recover 24/5 + shrine 30/6 = 54 / 11, plus the one-Echo stipend (2). The combat 20/2 pays nothing.
+	var out := _settle_cell(env, objs, 0, 0, 1, pv, "realm.01", 10, 1)
+	var base := _row_by_cause(out["breakdown"], "objectives_overcome")
+	var memo := _row_by_cause(out["breakdown"], "settled_on_leave")
 	var sum := 0
 	for r_v in out["breakdown"]:
 		sum += int((r_v as Dictionary).get("delta", 0))
-	if int(out.get("ase_awarded", -1)) != 46 or int(out.get("ekwan_awarded", -1)) != 7:
-		m.append("paid %s/%s, expected 46/7" % [out.get("ase_awarded"), out.get("ekwan_awarded")])
-	if int(row.get("delta", 0)) != -6 or int((row.get("params", {}) as Dictionary).get("carried_ase", -1)) != 6 \
-			or int((row.get("params", {}) as Dictionary).get("carried_ekwan", -1)) != 1:
-		m.append("carried_advance row %s" % JSON.stringify(row))
+	if int(out.get("ase_awarded", -1)) != 54 + _ONE_ECHO_STIPEND or int(out.get("ekwan_awarded", -1)) != 11:
+		m.append("paid %s/%s, expected 56/11" % [out.get("ase_awarded"), out.get("ekwan_awarded")])
+	if int(base.get("delta", -1)) != 54 or int((base.get("params", {}) as Dictionary).get("overcome", -1)) != 3 \
+			or int((base.get("params", {}) as Dictionary).get("total", -1)) != 3:
+		m.append("base row %s, expected 54 and 3 of 3 (all completed still count)" % JSON.stringify(base))
+	if int(memo.get("delta", -1)) != 0 or int((memo.get("params", {}) as Dictionary).get("settled_ase", -1)) != 10 \
+			or int((memo.get("params", {}) as Dictionary).get("settled_ekwan", -1)) != 1:
+		m.append("memo row %s, expected delta 0 with settled 10/1" % JSON.stringify(memo))
+	if not _row_by_cause(out["breakdown"], "carried_advance").is_empty():
+		m.append("the removed carried_advance row is back")
 	if sum != int(out.get("ase_awarded", -1)):
 		m.append("rows sum to %d, paid %s" % [sum, out.get("ase_awarded")])
 	var first: Dictionary = pv.get("first", {})
-	if int(first.get("ase", -1)) != 46 or int(first.get("ekwan", -1)) != 7 or not bool(pv.get("pure", false)):
-		m.append("preview %s pure=%s, expected 46/7" % [str(first.get("ase")) + "/" + str(first.get("ekwan")), str(pv.get("pure"))])
-	var again := StageSettlementService.new((env["runtime"] as FlowRuntime).flow_ctx,
-		(env["runtime"] as FlowRuntime).config_service, EconomyService.new((env["runtime"] as FlowRuntime).get_save_data()),
+	if int(first.get("ase", -1)) != 56 or int(first.get("ekwan", -1)) != 11 or not bool(pv.get("pure", false)):
+		m.append("preview %s/%s pure=%s, expected 56/11" % [first.get("ase"), first.get("ekwan"), pv.get("pure")])
+	var rt: FlowRuntime = env["runtime"]
+	var again := StageSettlementService.new(rt.flow_ctx, rt.config_service, EconomyService.new(rt.get_save_data()),
 		env["logger"]).settle(true, 6000)
 	if not again.is_empty():
 		m.append("second settle paid again: %s" % str(again))
-	# Without a carried amount there is no row and the full amount is paid.
-	var plain := _settle_cell(env, objs, 0, 0, 2)
-	if int(plain.get("ase_awarded", -1)) != 52 or int(plain.get("ekwan_awarded", -1)) != 8 \
-			or not _row_by_cause(plain["breakdown"], "carried_advance").is_empty():
-		m.append("no carry: paid %s/%s, expected 52/8 and no row" % [plain.get("ase_awarded"), plain.get("ekwan_awarded")])
+	# No settled objective and no settled totals: no memo row.
+	var plain := _settle_cell(env, [_obj(0, "combat", true), _obj(1, "shrine", true), boss], 0, 0, 2)
+	if int(plain.get("ase_awarded", -1)) != 50 + _ONE_ECHO_STIPEND or int(plain.get("ekwan_awarded", -1)) != 8 \
+			or not _row_by_cause(plain["breakdown"], "settled_on_leave").is_empty():
+		m.append("no leave: paid %s/%s, expected 52/8 and no memo row" % [plain.get("ase_awarded"), plain.get("ekwan_awarded")])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## The pure producer: never below 0, and the row delta stays inside the gross amount.
-static func _t_carried_rows() -> Dictionary:
+## The pure row producer: the settled amounts change no total, only add the memo row (delta 0).
+static func _t_settle_rows_memo() -> Dictionary:
 	var m: Array = []
 	var echo := { "alive": 1, "started": 1, "lost": [], "rate": 2, "cap": 10, "replay": false }
 	var r := EconomyService.stage_payout_rows(30, 1.0, 1.0, {}, 6, echo, 100, 100)
-	var row := _row_by_cause(r["breakdown"], "carried_advance")
-	if int(r["ase"]) != 0 or int(r["ekwan"]) != 0 or int(row.get("delta", 0)) != -32:
-		m.append("oversize carry: %s" % JSON.stringify(r))
+	var memo := _row_by_cause(r["breakdown"], "settled_on_leave")
+	if int(r["ase"]) != 32 or int(r["ekwan"]) != 6 or int(memo.get("delta", -1)) != 0:
+		m.append("settled 100/100: %s, expected totals 32 / 6 and a memo row with delta 0" % JSON.stringify(r))
+	for row_v in r["breakdown"]:
+		if int((row_v as Dictionary).get("delta", 0)) < 0:
+			m.append("negative row %s" % JSON.stringify(row_v))
 	var z := EconomyService.stage_payout_rows(30, 1.0, 1.0, {}, 6, echo, 0, 0)
-	if not _row_by_cause(z["breakdown"], "carried_advance").is_empty() or int(z["ase"]) != 32 or int(z["ekwan"]) != 6:
-		m.append("zero carry: %s" % JSON.stringify(z))
+	if not _row_by_cause(z["breakdown"], "settled_on_leave").is_empty() or int(z["ase"]) != 32:
+		m.append("zero settled: %s, expected no memo row" % JSON.stringify(z))
+	var ekwan_only := EconomyService.stage_payout_rows(30, 1.0, 1.0, {}, 6, echo, 0, 3)
+	if _row_by_cause(ekwan_only["breakdown"], "settled_on_leave").is_empty():
+		m.append("Ekwan-only settle must still show the memo row")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## Real return-home dispatch. The explore snapshot previews what the action then pays, and the
-## preview after the return shows 0 more.
-static func _t_carried_return_home() -> Dictionary:
-	var env := VentureCharacterizationTests._setup_explore_env("econ_char_carried_home")
+## Design worked example: objectives combat 20, recover 24, shrine 30 (G = 74), stipend 10 (five Echoes home).
+## Leave after 1 done, then finish: none 64, some 74, all 84 in total. Leave after 2 done: none 40 + 0 = 40,
+## some 62, all 84. The total is the leave payment plus the stage-end preview.
+static func _t_settle_worked_example() -> Dictionary:
+	var m: Array = []
+	for c in [[1, "none", 64], [1, "some", 74], [1, "all", 84], [2, "none", 40], [2, "some", 62], [2, "all", 84]]:
+		var done := int(c[0])
+		var objs: Array = [_obj(0, "combat", done >= 1), _obj(1, "recover", done >= 2), _obj(2, "shrine", false), _carry_boss()]
+		var ctx := _carry_ctx("realm.01", 0, objs, _seed_for(c[1]))
+		var econ := _carry_econ(ctx)
+		var got := StageSettlementService.settle_leave(ctx, ctx.config_service, econ, 1.0, "test", _logger(), 1)
+		if str(got["outcome"]) != c[1]:
+			m.append("%d done %s: outcome %s" % [done, c[1], got["outcome"]])
+		for o_v in (_carry_stage(ctx)["objectives"] as Array):
+			if str((o_v as Dictionary).get("type")) != "boss":
+				(o_v as Dictionary)["completed"] = true
+		var end := StageSettlementService.new(ctx, ctx.config_service, econ, null).preview()
+		var total := int(got["ase"]) + int(end["ase"])
+		if total != int(c[2]):
+			m.append("%d done %s: %d at the leave + %d at the end = %d, expected %d" % [done, c[1], got["ase"], end["ase"], total, c[2]])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A replay builds the stage objectives fresh (RealmService.get_or_create -> RealmGenerator), so the
+## `settled` marks and the settled totals of the first run do not carry over. Checked on a real runtime.
+static func _t_settle_replay_resets_marks() -> Dictionary:
+	var env := VentureCharacterizationTests._setup_stage_env("econ_char_settle_replay")
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var runtime: FlowRuntime = env["runtime"]
+	var save_data: Dictionary = runtime.get_save_data()
+	var realm: Dictionary = VentureCharacterizationTests._realm(save_data, "realm.01")
+	for s_v in (realm["stages"] as Array):
+		var st: Dictionary = s_v
+		st["settled_ase"] = 7
+		st["settled_ekwan"] = 1
+		st["settle_count"] = 2
+		for o_v in (st["objectives"] as Array):
+			(o_v as Dictionary)["completed"] = true
+			(o_v as Dictionary)["settled"] = true
+			(o_v as Dictionary)["settled_share"] = 100
+	realm["status"] = RealmModel.STATUS_COMPLETED
+	realm["is_completed"] = true
+	var fresh := RealmService.get_or_create("realm.01", runtime.flow_ctx, 9000)
+	if int(fresh.get("run_count", -1)) != 1:
+		return { "ok": false, "error": "setup: replay run_count %s, expected 1" % str(fresh.get("run_count")) }
+	var seen := 0
+	for s_v in (fresh["stages"] as Array):
+		var st: Dictionary = s_v
+		if st.has("settled_ase") or st.has("settled_ekwan") or st.has("settle_count"):
+			m.append("stage %s kept settled totals: %s" % [st.get("index"), JSON.stringify(st)])
+		for o_v in (st["objectives"] as Array):
+			seen += 1
+			var o: Dictionary = o_v
+			if bool(o.get("settled", false)) or o.has("settled_share") or bool(o.get("completed", false)):
+				m.append("replay objective kept a mark: %s" % JSON.stringify(o))
+	if seen == 0:
+		m.append("the replay has no objectives to check")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Keys that would show a share or odds. None may appear in any snapshot key.
+const _FORBIDDEN_KEYS := ["settled_share", "carry_odds", "carry_shares", "share", "odds", "pct", "percent", "chance"]
+
+static func _forbidden_in(node: Variant, path: String, found: Array) -> void:
+	if node is Dictionary:
+		for k in (node as Dictionary):
+			if _FORBIDDEN_KEYS.has(str(k)):
+				found.append("%s.%s" % [path, str(k)])
+			_forbidden_in((node as Dictionary)[k], path + "." + str(k), found)
+	elif node is Array:
+		for i in (node as Array).size():
+			_forbidden_in((node as Array)[i], "%s[%d]" % [path, i], found)
+
+
+## Real return-home dispatch. The explore snapshot previews the gathered amount (no odds); the action
+## pays what the stream rolls; the Resolve card names the outcome as a word with the amounts paid now and
+## holds no percent and no odds; the preview after the return says nothing new.
+static func _t_settle_return_home_dispatch() -> Dictionary:
+	var env := VentureCharacterizationTests._setup_explore_env("econ_char_settle_home")
 	if not bool(env.get("ok", false)):
 		return env
 	var m: Array = []
@@ -1980,7 +2231,8 @@ static func _t_carried_return_home() -> Dictionary:
 	if sits.is_empty():
 		return { "ok": false, "error": "test setup failed: the stage has no situation" }
 	(sits[0] as Dictionary)["revealed"] = true
-	var realm_seed := int(VentureCharacterizationTests._realm(runtime.get_save_data(), "realm.01").get("seed", 0))
+	var realm := VentureCharacterizationTests._realm(runtime.get_save_data(), "realm.01")
+	var realm_seed := int(realm.get("seed", 0))
 	var directive: Dictionary = runtime.directive_service.get_active_directive()
 	var threshold: int = maxi(0, 40 - int(directive.get("escape_bonus", 0)))
 	var turn := -1
@@ -1993,28 +2245,48 @@ static func _t_carried_return_home() -> Dictionary:
 	emap["turn_count"] = turn
 	runtime.get_save_data()["economy"]["ase"] = 0
 	runtime.get_save_data()["economy"]["ekwan"] = 0
-	var pre: Dictionary = StageExploreSnapshotBuilder.build(flow_ctx, 50)["data"]["carry_home_preview"]
+	var mul := StageSettlementService.retention_mul(directive)
+	var want := _expected_outcome(realm_seed, int(realm.get("run_count", 0)), 0, mul)
+	var share: float = {"none": 0.0, "some": 0.5, "all": 1.0}[want]
+	var snap_pre: Dictionary = StageExploreSnapshotBuilder.build(flow_ctx, 50)
+	var pre: Dictionary = snap_pre["data"]["carry_home_preview"]
+	var bad: Array = []
+	_forbidden_in(snap_pre, "explore", bad)
+	if int(pre["ase"]) != 54 or int(pre["ekwan"]) != 11 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2 \
+			or bool(pre["nothing_new"]) or pre.size() != 5:
+		m.append("preview %s, expected the gathered 54/11, 2 of 2, nothing_new false and no other key" % str(pre))
 	var out: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
 	var data: Dictionary = out.get("data", {})
 	var econ: Dictionary = runtime.get_save_data()["economy"]
-	if int(pre["ase"]) <= 0 or int(pre["ekwan"]) <= 0 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2:
-		m.append("preview %s, expected Ase and Ekwan above 0, 2 of 2" % str(pre))
-	if int(data.get("ase_awarded", -1)) != int(pre["ase"]) or int(data.get("ekwan_awarded", -1)) != int(pre["ekwan"]) \
-			or int(econ["ase"]) != int(pre["ase"]) or int(econ["ekwan"]) != int(pre["ekwan"]):
-		m.append("action paid card %s/%s balance %s/%s, preview %s" % [data.get("ase_awarded"), data.get("ekwan_awarded"),
-			econ["ase"], econ["ekwan"], str(pre)])
-	var row := _row_by_cause(data.get("reward_breakdown", []), "partial_return_home")
-	if int((row.get("params", {}) as Dictionary).get("carried_before", -1)) != 0:
-		m.append("partial row %s lacks carried_before 0" % JSON.stringify(row))
+	var want_ase := RewardCalc.round_payout(54.0 * share)
+	var want_ekwan := RewardCalc.round_payout(11.0 * share)
+	if str(data.get("settle_outcome", "")) != want:
+		m.append("card outcome %s, the stream gives %s" % [str(data.get("settle_outcome")), want])
+	if int(data.get("ase_awarded", -1)) != want_ase or int(data.get("ekwan_awarded", -1)) != want_ekwan \
+			or int(econ["ase"]) != want_ase or int(econ["ekwan"]) != want_ekwan:
+		m.append("card %s/%s balance %s/%s, expected %d/%d" % [data.get("ase_awarded"), data.get("ekwan_awarded"),
+			econ["ase"], econ["ekwan"], want_ase, want_ekwan])
+	var row := _row_by_cause(data.get("reward_breakdown", []), "settle_" + want)
+	if row.is_empty() or int(row.get("delta", -1)) != want_ase:
+		m.append("no settle_%s row with delta %d: %s" % [want, want_ase, JSON.stringify(data.get("reward_breakdown"))])
+	_forbidden_in(out, "resolve", bad)
+	for r_v in data.get("reward_breakdown", []):
+		var text := JSON.stringify(r_v).to_lower()
+		for word in ["%", "half", "odds", "chance", "percent"]:
+			if text.contains(word):
+				m.append("ledger row holds '%s': %s" % [word, text])
+	if not bad.is_empty():
+		m.append("snapshot keys that show a share or odds: %s" % str(bad))
 	var after: Dictionary = StageExploreSnapshotBuilder.build(flow_ctx, 51)["data"]["carry_home_preview"]
-	if int(after["ase"]) != 0 or int(after["ekwan"]) != 0:
-		m.append("preview after the return %s, expected 0/0" % str(after))
+	if int(after["ase"]) != 0 or int(after["ekwan"]) != 0 or not bool(after["nothing_new"]):
+		m.append("preview after the return %s, expected 0/0 and nothing_new" % str(after))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## Real retreat dispatch (roll forced to success). Same equality for the pre-combat preview.
-static func _t_carried_retreat() -> Dictionary:
-	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "econ_char_carried_retreat")
+## D-106: a successful combat retreat does NOT settle. It costs 10 Ase, pays nothing, marks nothing, and
+## the pre-combat preview carries no amount. (Step 6.2 reworks the rest of the retreat.)
+static func _t_settle_retreat_pays_nothing() -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "econ_char_settle_retreat")
 	if env.is_empty():
 		return { "ok": false, "error": "harness did not build an encounter" }
 	var m: Array = []
@@ -2029,19 +2301,18 @@ static func _t_carried_retreat() -> Dictionary:
 		{ "type": "encounter.retreat", "ase_cost": 999, "success_pct": 100 })
 	var data: Dictionary = out.get("data", {})
 	var econ: Dictionary = flow_ctx.save_data["economy"]
-	if int(pre["ase"]) <= 0 or int(pre["ekwan"]) <= 0 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2:
-		m.append("preview %s, expected Ase and Ekwan above 0, 2 of 2" % str(pre))
-	if int(data.get("ase_awarded", -1)) != int(pre["ase"]) or int(data.get("ekwan_awarded", -1)) != int(pre["ekwan"]) \
-			or int(econ["ase"]) != 50 - 10 + int(pre["ase"]) or int(econ["ekwan"]) != int(pre["ekwan"]):
-		m.append("retreat paid card %s/%s balance %s/%s, preview %s" % [data.get("ase_awarded"), data.get("ekwan_awarded"),
-			econ["ase"], econ["ekwan"], str(pre)])
-	if int(_carry_stage_of(flow_ctx).get("carried_ase", -1)) != int(pre["ase"]):
-		m.append("stage carried_ase %s, expected %d" % [str(_carry_stage_of(flow_ctx).get("carried_ase")), int(pre["ase"])])
+	var st := FlowStageExploreState._get_current_stage(flow_ctx)
+	if int(pre["ase"]) != 0 or int(pre["ekwan"]) != 0 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2:
+		m.append("preview %s, expected 0/0 and 2 of 2" % str(pre))
+	if int(data.get("ase_awarded", -1)) != 0 or int(data.get("ekwan_awarded", -1)) != 0 \
+			or int(econ["ase"]) != 40 or int(econ["ekwan"]) != 0:
+		m.append("retreat paid card %s/%s balance %s/%s, expected 0/0 and 40/0 (10 Ase cost)" % [data.get("ase_awarded"),
+			data.get("ekwan_awarded"), econ["ase"], econ["ekwan"]])
+	if st.has("settle_count") or st.has("settled_ase") or bool((st["objectives"][0] as Dictionary).get("settled", false)):
+		m.append("a retreat settled: %s" % JSON.stringify(st))
+	if data.has("settle_outcome"):
+		m.append("a retreat card carries settle_outcome")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
-
-
-static func _carry_stage_of(flow_ctx: FlowContext) -> Dictionary:
-	return FlowStageExploreState._get_current_stage(flow_ctx)
 
 
 static func _t_intel_gained() -> Dictionary:

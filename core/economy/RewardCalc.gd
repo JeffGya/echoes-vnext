@@ -59,6 +59,16 @@ static func _sum_selected(objectives: Array, reward_cfg: Dictionary, table_key: 
 	return base
 
 
+## The objectives not settled at a return home (D-105). The stage payer sums only these; a settled
+## objective was paid by the roll and pays nothing more.
+static func unsettled(objectives: Array) -> Array:
+	var out: Array = []
+	for obj_v in objectives:
+		if not (obj_v is Dictionary and bool((obj_v as Dictionary).get("settled", false))):
+			out.append(obj_v)
+	return out
+
+
 ## Counts for the ledger row "overcome of total". Types in `reward_cfg.objective_count_excluded_types`
 ## (the boss stub) are in neither number. Display only: it never changes a payout.
 static func objective_counts(objectives: Array, reward_cfg: Dictionary) -> Dictionary:

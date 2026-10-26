@@ -316,7 +316,7 @@ func _situation_resolve_outcome(verdict: Dictionary, t: int) -> FlowActionOutcom
 
 ## stage.return_home — party attempts to leave before completing all objectives.
 ## Escape check: seeded roll > (stages.escape_base_threshold - bent escape bonus) = success.
-## Success → party_state = "escaped", partial intel Ase, transition to the scout-return card.
+## Success → party_state = "escaped", the settle roll pays, transition to the scout-return card.
 ## Failure → return_home_result overlay on the explore snapshot.
 ##
 ## DETERMINISM: the turn_count READ below is the counterpart of the increment inside
@@ -360,13 +360,13 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 		FlowStageExploreState._write_stage_back(flow_ctx, stage)
 		flow_ctx.request_save("stage.escaped")
 
-		# D-72: the partial is an advance on the stage payout; one helper shared with the retreat.
-		# The Scout `intel_retention_bonus` multiplies the 12% before what was carried is subtracted.
-		var _carry := StageSettlementService.carry_home(flow_ctx, config_service, econ,
-			StageSettlementService.retention_mul(directive), "return_home_intel_partial", logger, t)
-		flow_ctx.pending_scout_return_ase         = _carry["ase"]
-		flow_ctx.pending_scout_return_ekwan       = _carry["ekwan"]
-		flow_ctx.pending_scout_return_intel_count = _carry["intel_count"]
+		# D-104 to D-106: one roll settles the completed objectives not yet settled; the rest is lost.
+		var _settle := StageSettlementService.settle_leave(flow_ctx, config_service, econ,
+			StageSettlementService.retention_mul(directive), "return_home_settle", logger, t)
+		flow_ctx.pending_scout_return_ase            = _settle["ase"]
+		flow_ctx.pending_scout_return_ekwan          = _settle["ekwan"]
+		flow_ctx.pending_scout_return_intel_count    = _settle["intel_count"]
+		flow_ctx.pending_scout_return_settle_outcome = _settle["outcome"]
 
 		_emotion_consequence_service().apply_sanctum_emotion_tick(t)
 		var _outcome := FlowActionOutcome.snapshot_outcome_no_refresh(

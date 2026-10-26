@@ -601,29 +601,6 @@ static func _setup_retreat_env(tag: String, starting_ase: int, revealed_count: i
 	}
 
 
-## Expected intel-partial award, computed the same way the handler does (:1116–:1117):
-## roundi(stage_base_reward * rewards.partial_intel_reward_factor).
-static func _expected_intel_partial(runtime: FlowRuntime, intel_count: int) -> int:
-	if intel_count <= 0:
-		return 0
-	var rewards := _rewards_cfg(runtime)
-	var factor := float(rewards.get("partial_intel_reward_factor", 0.12))
-	var weights_v: Variant = rewards.get("objective_weights", {})
-	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
-	var realm := _realm(runtime.get_save_data(), "realm.01")
-	var stages_v: Variant = realm.get("stages", [])
-	var stages: Array = stages_v if stages_v is Array else []
-	# Independent of RewardCalc.base_reward: the partial base is the weights of COMPLETED objectives (D-14).
-	var base := 0
-	if stages.size() > 0 and stages[0] is Dictionary:
-		var objs_v: Variant = (stages[0] as Dictionary).get("objectives", [])
-		var objs: Array = objs_v if objs_v is Array else []
-		for obj_v in objs:
-			if obj_v is Dictionary and bool((obj_v as Dictionary).get("completed", false)):
-				base += int(weights.get(str((obj_v as Dictionary).get("type", "")), 0))
-	return roundi(float(base) * factor)
-
-
 static func _t_retreat_success() -> Dictionary:
 	var env := _setup_retreat_env("retreat_success", 500, 3)
 	if not bool(env.get("ok", false)):
@@ -634,7 +611,8 @@ static func _t_retreat_success() -> Dictionary:
 	var save_data: Dictionary = runtime.get_save_data()
 
 	var ase_before := int(_economy(save_data).get("ase", -1))
-	var expected_award := _expected_intel_partial(runtime, intel_count)
+	# REWRITTEN (D-106): a successful retreat settles nothing, so the Ase change is the cost alone.
+	var expected_award := 0
 	var ase_cost := RetreatService.get_ase_cost(runtime.config_service)
 
 	logger.clear()
@@ -649,10 +627,8 @@ static func _t_retreat_success() -> Dictionary:
 	var mismatches: Array = []
 	if intel_count <= 0:
 		mismatches.append("test setup failed: expected at least one revealed situation, got %d" % intel_count)
-	if expected_award <= 0:
-		mismatches.append("test setup failed: expected a positive intel partial award, got %d" % expected_award)
 	if ase_after != ase_before - ase_cost + expected_award:
-		mismatches.append("expected Ase %d - %d(cost) + %d(intel partial) = %d, got %d" \
+		mismatches.append("expected Ase %d - %d(cost) + %d(retreat pays nothing) = %d, got %d" \
 			% [ase_before, ase_cost, expected_award, ase_before - ase_cost + expected_award, ase_after])
 	if runtime.flow_ctx.encounter_ctx != null:
 		mismatches.append("expected encounter_ctx nulled on a successful retreat")
@@ -675,7 +651,7 @@ static func _t_retreat_snapshot() -> Dictionary:
 		return env
 	var runtime: FlowRuntime = env["runtime"]
 	var intel_count: int = env["intel_count"]
-	var expected_award := _expected_intel_partial(runtime, intel_count)
+	var expected_award := 0  # REWRITTEN (D-106): a retreat settles nothing
 
 	var out: Dictionary = runtime.dispatch({
 		"type":        "encounter.retreat",

@@ -182,11 +182,11 @@ func settle_stage_complete(
 	objective_counts: Dictionary = {},
 	ekwan_base: int = 0,
 	echo_home: Dictionary = {},
-	carried_ase: int = 0,
-	carried_ekwan: int = 0
+	settled_ase: int = 0,
+	settled_ekwan: int = 0
 ) -> Dictionary:
 	var rows := stage_payout_rows(base_reward, realm_scale, replay_factor, objective_counts, ekwan_base,
-		echo_home, carried_ase, carried_ekwan)
+		echo_home, settled_ase, settled_ekwan)
 	var total: int = rows["ase"]
 	var breakdown: Array = rows["breakdown"]
 
@@ -213,12 +213,14 @@ func settle_stage_complete(
 ## `mini(alive * rate, cap)`, outside the realm scale and the replay factor (D-53; the replay halves
 ## its cap instead). It adds an `echoes_alive` row whenever `started` > 0, even at 0 Ase, so the
 ## card can show who was lost.
-## `carried_ase`, `carried_ekwan`: what a retreat or return home already paid from this stage (D-72). Both
-## totals are net of it, never below 0. A `carried_advance` row carries the Ase part, only when it is above 0.
+## `base_reward` and `ekwan_base` cover only the objectives NOT settled at a return home (D-105);
+## `objective_counts` still counts every completed one. `settled_ase`, `settled_ekwan`: what the leave
+## already paid. They change no total; a zero-delta `settled_on_leave` memo row shows them, only when
+## either is above 0.
 ## Pure. Returns { breakdown: Array, ase: int, ekwan: int }.
 static func stage_payout_rows(base_reward: int, realm_scale: float, replay_factor: float,
 		objective_counts: Dictionary = {}, ekwan_base: int = 0,
-		echo_home: Dictionary = {}, carried_ase: int = 0, carried_ekwan: int = 0) -> Dictionary:
+		echo_home: Dictionary = {}, settled_ase: int = 0, settled_ekwan: int = 0) -> Dictionary:
 	var scaled := float(base_reward) * realm_scale
 	var base_row := RewardCalc.round_payout(scaled)
 	var objective_ase := RewardCalc.round_payout(scaled * replay_factor)
@@ -241,16 +243,14 @@ static func stage_payout_rows(base_reward: int, realm_scale: float, replay_facto
 			"alive": alive, "started": started, "lost": (echo_home.get("lost", []) as Array).duplicate(),
 			"cap": cap, "replay": bool(echo_home.get("replay", false)),
 		}))
-	var gross := objective_ase + stipend
-	var advance := mini(maxi(carried_ase, 0), gross)
-	if carried_ase > 0:
-		breakdown.append(_row("Carried home", -advance, "carried_advance",
-			{ "carried_ase": carried_ase, "carried_ekwan": carried_ekwan }))
+	if settled_ase > 0 or settled_ekwan > 0:
+		breakdown.append(_row("Settled when you left", 0, "settled_on_leave",
+			{ "settled_ase": settled_ase, "settled_ekwan": settled_ekwan }))
 	var ekwan_gross := RewardCalc.round_payout(float(ekwan_base) * realm_scale * replay_factor)
 	return {
 		"breakdown": breakdown,
-		"ase": gross - advance,
-		"ekwan": maxi(0, ekwan_gross - carried_ekwan),
+		"ase": objective_ase + stipend,
+		"ekwan": ekwan_gross,
 	}
 
 

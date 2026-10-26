@@ -143,7 +143,8 @@ var session_broken_vow_effect: Dictionary = {}
 var pending_awakening_banner: bool = false         # true once after Ase Flame awakens
 var pending_scout_return_ase: int = 0              # partial Ase earned on retreat/return_home
 var pending_scout_return_intel_count: int = 0      # situations revealed on retreat/return_home
-var pending_scout_return_ekwan: int = 0            # partial Ekwan carried on retreat/return_home
+var pending_scout_return_ekwan: int = 0            # Ekwan settled on return_home
+var pending_scout_return_settle_outcome: String = ""  # "none"|"some"|"all"|"nothing_new" after a return home; "" otherwise
 
 # V2-INFRA-003: single choke point for requesting a save. Sets save_request and, when a
 # reason is given, accumulates it into save_request_reason (pipe-joined) so multiple

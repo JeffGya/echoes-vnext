@@ -60,17 +60,18 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_t
 	var _ase   := flow_ctx_arg.pending_scout_return_ase
 	var _ekwan := flow_ctx_arg.pending_scout_return_ekwan
 	var _intel := flow_ctx_arg.pending_scout_return_intel_count
+	var _settle := flow_ctx_arg.pending_scout_return_settle_outcome
 	var breakdown: Array = []
-	# A forced retreat pays nothing by design, so it gets no row. A paid or zero partial gets a
-	# cause; a zero partial with nothing overcome says why (`nothing_overcome_yet`).
+	# A forced retreat pays nothing by design, so it gets no row. A return home names its outcome in
+	# a row (`settle_<outcome>`, never a share). Nothing overcome says why (`nothing_overcome_yet`).
 	if run_type != "forced_retreat":
 		var _counts := ActiveStageService.get_objective_counts(flow_ctx_arg, flow_ctx_arg.config_service)
-		if _ase > 0:
-			# The pending Ase was already added to the stage's carried_ase, so subtract it back.
-			var _params := _counts.duplicate()
-			_params["carried_before"] = maxi(0, ActiveStageService.get_carried(flow_ctx_arg)["ase"] - _ase)
-			breakdown.append({ "label": "Scout return", "delta": _ase, "currency": "ase",
-				"cause": partial_cause, "params": _params })
+		if _settle in ["none", "some", "all"]:
+			breakdown.append({ "label": "Settled when you left", "delta": _ase, "currency": "ase",
+				"cause": "settle_" + _settle, "params": _counts.duplicate() })
+		elif _settle == "nothing_new" and int(_counts.get("overcome", 0)) > 0:
+			breakdown.append({ "label": "Settled when you left", "delta": 0, "currency": "ase",
+				"cause": "settle_nothing_new", "params": _counts.duplicate() })
 		elif int(_counts.get("overcome", 0)) == 0:
 			breakdown.append({ "label": "Nothing overcome yet", "delta": 0, "currency": "ase",
 				"cause": "nothing_overcome_yet", "params": { "partial": partial_cause,
@@ -129,6 +130,8 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_t
 	ResolveSnapshotBuilder.add_ekwan(_data, _ekwan)
 	ResolveSnapshotBuilder.add_ledger_seen(_data, SaveSchema.ledger_seen(flow_ctx_arg.save_data))
 	ResolveSnapshotBuilder.add_scout_intel(_data, _intel)
+	if not _settle.is_empty():
+		ResolveSnapshotBuilder.add_settle_outcome(_data, _settle)
 	ResolveSnapshotBuilder.add_actors(_data, actor_preview)
 	ResolveSnapshotBuilder.add_victory_flag(_data, false)
 	ResolveSnapshotBuilder.add_grade_rank(_data, "")

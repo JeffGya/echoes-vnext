@@ -126,7 +126,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 	var payout: Dictionary = econ.settle_stage_complete(
 		base, plan["realm_scale"], plan["replay_factor"], logger, t,
 		plan["counts"], plan["ekwan_base"], plan["echo_home"],
-		plan["carried_ase"], plan["carried_ekwan"]
+		plan["settled_ase"], plan["settled_ekwan"]
 	)
 	flow_ctx.request_save("stage.reward")
 
@@ -165,7 +165,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 ## What `settle()` would pay for the current stage, without paying it. Pure and read-only: no
 ## RNG, no save write, no log, no receipt. It reads the same `_plan()` and the same
 ## `EconomyService.stage_payout_rows()` that `settle()` pays from, so the two cannot drift.
-## Ase and Ekwan are NET of what a return home or retreat already carried (D-72).
+## Objectives settled at a return home are not in it (D-105).
 ## Returns { rows: Array, ase: int, ekwan: int } (rows are Ase only), or {} when the stage
 ## cannot be located or is already settled.
 func preview() -> Dictionary:
@@ -184,28 +184,30 @@ func preview() -> Dictionary:
 	var plan := _plan(realm_model, stage_ref, stage_index, null, 0)
 	var rows := EconomyService.stage_payout_rows(
 		plan["base"], plan["realm_scale"], plan["replay_factor"], plan["counts"],
-		plan["ekwan_base"], plan["echo_home"], plan["carried_ase"], plan["carried_ekwan"])
+		plan["ekwan_base"], plan["echo_home"], plan["settled_ase"], plan["settled_ekwan"])
 	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
 
 
 ## The inputs of the stage payout, shared by `settle()` and `preview()`. Pure apart from the
-## unknown-type log inside `RewardCalc.base_reward` (only when `log` is given).
+## unknown-type log inside `RewardCalc.base_reward` (only when `log` is given). The base and Ekwan
+## sums skip objectives settled at a return home (D-105); the counts still include them.
 func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 		log: StructuredLogger, t: int) -> Dictionary:
 	var reward_cfg := ConfigService.get_rewards_cfg(config_service)
 	var objectives_v: Variant = stage_ref.get("objectives", [])
 	var objectives: Array = objectives_v if objectives_v is Array else []
+	var unsettled := RewardCalc.unsettled(objectives)
 
 	return {
-		"base":           RewardCalc.base_reward(objectives, reward_cfg, log, t),
+		"base":           RewardCalc.base_reward(unsettled, reward_cfg, log, t),
 		"realm_scale":    RewardCalc.realm_scale(flow_ctx.realm_id,
 			ConfigService.get_realm_order(config_service), reward_cfg, log, t),
 		"replay_factor":  RewardCalc.replay_factor(int(realm_model.get("run_count", 0)), reward_cfg, log, t),
-		"ekwan_base":     RewardCalc.stage_ekwan(objectives, reward_cfg, log, t),
+		"ekwan_base":     RewardCalc.stage_ekwan(unsettled, reward_cfg, log, t),
 		"counts":         RewardCalc.objective_counts(objectives, reward_cfg),
 		"echo_home":      _echo_home(realm_model, reward_cfg, log, t),
-		"carried_ase":    maxi(0, int(stage_ref.get("carried_ase", 0))),
-		"carried_ekwan":  maxi(0, int(stage_ref.get("carried_ekwan", 0))),
+		"settled_ase":    maxi(0, int(stage_ref.get("settled_ase", 0))),
+		"settled_ekwan":  maxi(0, int(stage_ref.get("settled_ekwan", 0))),
 	}
 
 
@@ -242,20 +244,24 @@ func _echo_home(realm_model: Dictionary, reward_cfg: Dictionary,
 
 
 # ---------------------------------------------------------------------------
-# Carried home: the advance on the stage payout (D-72)
+# Settle on leaving (D-104 to D-106)
 # ---------------------------------------------------------------------------
 
-## What a retreat or return home carries NOW. Pure and read-only. The ONE formula for both payers
-## and for the `carry_*_preview` snapshot fields, so they cannot drift.
-## Amount = round(completed stage amount x realm_scale x replay_factor x partial_intel_reward_factor
-## [x retention_mul, Ase only]) minus what the stage already carried, never below 0. The retention
-## multiplier applies BEFORE the subtraction. The intel gate (no revealed situation, no partial)
-## is the rule the payers had before D-72.
-## Returns { ase, ekwan, overcome, total, intel_count, carried_ase_before, carried_ekwan_before }.
-static func carry_plan(ctx: FlowContext, cfg_service: ConfigService, retention_mul: float = 1.0,
+const OUTCOME_NONE := "none"
+const OUTCOME_SOME := "some"
+const OUTCOME_ALL := "all"
+const OUTCOME_NOTHING_NEW := "nothing_new"
+
+
+## What a return home would settle NOW: the objectives that are completed and not yet settled, at
+## the same scale and replay factor as the stage payout. Pure and read-only; no roll, no odds.
+## `ase`, `ekwan` = the gathered amount before the roll. `indexes` = the objectives it would mark.
+## `nothing_new` = no gathered Ase or Ekwan (so the payer draws no roll).
+## Returns { ase, ekwan, overcome, total, indexes, nothing_new, settled_ase, settled_ekwan }.
+static func settle_plan(ctx: FlowContext, cfg_service: ConfigService,
 		logger: StructuredLogger = null, t: int = 0) -> Dictionary:
-	var plan := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "intel_count": 0,
-		"carried_ase_before": 0, "carried_ekwan_before": 0 }
+	var plan := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "indexes": [],
+		"nothing_new": true, "settled_ase": 0, "settled_ekwan": 0 }
 	if ctx.realm_id.is_empty() or ctx.stage_id.is_empty():
 		return plan
 	var stage_ref := _live_stage(ctx)
@@ -267,42 +273,111 @@ static func carry_plan(ctx: FlowContext, cfg_service: ConfigService, retention_m
 	var counts := RewardCalc.objective_counts(objectives, reward_cfg)
 	plan["overcome"] = int(counts.get("overcome", 0))
 	plan["total"] = int(counts.get("total", 0))
-	plan["carried_ase_before"] = maxi(0, int(stage_ref.get("carried_ase", 0)))
-	plan["carried_ekwan_before"] = maxi(0, int(stage_ref.get("carried_ekwan", 0)))
-	plan["intel_count"] = ActiveStageService.count_revealed_situations(ctx)
-	if int(plan["intel_count"]) <= 0:
-		return plan
-	var pf := RewardCalc.cfg_num(reward_cfg, "partial_intel_reward_factor", 0.0, logger, t)
+	plan["settled_ase"] = maxi(0, int(stage_ref.get("settled_ase", 0)))
+	plan["settled_ekwan"] = maxi(0, int(stage_ref.get("settled_ekwan", 0)))
+
+	var picked: Array = []
+	for i in objectives.size():
+		var obj: Dictionary = objectives[i] if objectives[i] is Dictionary else {}
+		if bool(obj.get("completed", false)) and not bool(obj.get("settled", false)):
+			picked.append(obj)
+			(plan["indexes"] as Array).append(i)
 	var fx := ActiveStageService.get_payout_factors(ctx, cfg_service, logger, t)
-	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"]) * pf
-	var ase_full := RewardCalc.round_payout(
-		float(RewardCalc.base_reward(objectives, reward_cfg, logger, t)) * k * retention_mul)
-	var ekwan_full := RewardCalc.round_payout(
-		float(RewardCalc.stage_ekwan(objectives, reward_cfg, logger, t)) * k)
-	plan["ase"] = maxi(0, ase_full - int(plan["carried_ase_before"]))
-	plan["ekwan"] = maxi(0, ekwan_full - int(plan["carried_ekwan_before"]))
+	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"])
+	plan["ase"] = RewardCalc.round_payout(
+		float(RewardCalc.base_reward(picked, reward_cfg, logger, t)) * k)
+	plan["ekwan"] = RewardCalc.round_payout(
+		float(RewardCalc.stage_ekwan(picked, reward_cfg, logger, t)) * k)
+	plan["nothing_new"] = int(plan["ase"]) <= 0 and int(plan["ekwan"]) <= 0
 	return plan
 
 
-## Pays `carry_plan` through `econ` and adds the amounts to the stage's `carried_ase` and
-## `carried_ekwan`. Both payers (retreat and return home) call only this. The caller requests the save.
-static func carry_home(ctx: FlowContext, cfg_service: ConfigService, econ_service: EconomyService,
+## The roll table from `data.rewards.carry_odds` and `carry_shares`: [{ outcome, share, pct }] in
+## config order, `pct` summing to 100. `retention_mul` (Scout) multiplies the weight of every outcome
+## whose share is above 0; the renormalisation keeps every share at or below 100%. Returns [] when
+## the config is missing or has no weight, and logs it.
+static func carry_table(reward_cfg: Dictionary, retention_mul: float,
+		logger: StructuredLogger = null, t: int = 0) -> Array:
+	var odds_v: Variant = reward_cfg.get("carry_odds", {})
+	var shares_v: Variant = reward_cfg.get("carry_shares", {})
+	var odds: Dictionary = odds_v if odds_v is Dictionary else {}
+	var shares: Dictionary = shares_v if shares_v is Dictionary else {}
+	var rows: Array = []
+	var total := 0.0
+	for key in [OUTCOME_NONE, OUTCOME_SOME, OUTCOME_ALL]:
+		var w := RewardCalc.cfg_num(odds, key, 0.0, logger, t)
+		var share := clampf(RewardCalc.cfg_num(shares, key, 0.0, logger, t), 0.0, 1.0)
+		if share > 0.0:
+			w *= maxf(retention_mul, 0.0)
+		w = maxf(w, 0.0)
+		rows.append({ "outcome": key, "share": share, "weight": w })
+		total += w
+	if total <= 0.0:
+		return []
+	var out: Array = []
+	for r in rows:
+		out.append({ "outcome": r["outcome"], "share": r["share"], "pct": float(r["weight"]) / total * 100.0 })
+	return out
+
+
+## Settles the completed, unsettled objectives by ONE roll and pays the result through `econ`
+## exactly once (D-104 to D-106). What the roll does not pay is lost. The roll stream is
+## `stage.settle.<stage_id>.<run_count>.<settle_count>` and is drawn only when there is something new
+## to settle, so nothing new draws nothing and changes nothing. The `settled` mark on each objective is
+## the re-roll stamp: a cancel, a reload or a retry finds them marked. The caller requests the save and
+## calls this only after the escape has succeeded.
+## Returns { outcome, ase, ekwan, overcome, total, intel_count }; `outcome` is "none", "some", "all" or
+## "nothing_new".
+static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_service: EconomyService,
 		retention_mul: float, reason: String, logger: StructuredLogger, t: int) -> Dictionary:
-	var plan := carry_plan(ctx, cfg_service, retention_mul, logger, t)
-	var ase: int = plan["ase"]
-	var ekwan: int = plan["ekwan"]
+	var plan := settle_plan(ctx, cfg_service, logger, t)
+	var result := { "outcome": OUTCOME_NOTHING_NEW, "ase": 0, "ekwan": 0,
+		"overcome": plan["overcome"], "total": plan["total"],
+		"intel_count": ActiveStageService.count_revealed_situations(ctx) }
+	if bool(plan["nothing_new"]):
+		return result
+	var table := carry_table(ConfigService.get_rewards_cfg(cfg_service), retention_mul, logger, t)
+	var realm_model: Dictionary = RealmService.get_active(ctx)
+	var stage_ref := _live_stage(ctx)
+	if table.is_empty() or realm_model.is_empty() or stage_ref.is_empty():
+		return result
+
+	var settle_count := maxi(0, int(stage_ref.get("settle_count", 0)))
+	var rng := CampaignSeed.get_rng_from(int(realm_model.get("seed", 0)),
+		"stage.settle.%s.%d.%d" % [ctx.stage_id, int(realm_model.get("run_count", 0)), settle_count])
+	var roll := float(rng.randi_range(0, 99))
+	var picked: Dictionary = table[table.size() - 1]
+	var cum := 0.0
+	for row in table:
+		cum += float(row["pct"])
+		if roll < cum:
+			picked = row
+			break
+
+	var share: float = picked["share"]
+	var ase := RewardCalc.round_payout(float(plan["ase"]) * share)
+	var ekwan := RewardCalc.round_payout(float(plan["ekwan"]) * share)
 	if ase > 0:
 		econ_service.add_ase(ase, reason, logger, t)
 	if ekwan > 0:
 		econ_service.add_ekwan(ekwan, reason, logger, t)
-	if ase > 0 or ekwan > 0:
-		var stage_ref := _live_stage(ctx)
-		stage_ref["carried_ase"] = int(plan["carried_ase_before"]) + ase
-		stage_ref["carried_ekwan"] = int(plan["carried_ekwan_before"]) + ekwan
-	return plan
+
+	var objectives: Array = stage_ref["objectives"]
+	for i in plan["indexes"]:
+		(objectives[i] as Dictionary)["settled"] = true
+		(objectives[i] as Dictionary)["settled_share"] = roundi(share * 100.0)
+	stage_ref["settled_ase"] = int(plan["settled_ase"]) + ase
+	stage_ref["settled_ekwan"] = int(plan["settled_ekwan"]) + ekwan
+	stage_ref["settle_count"] = settle_count + 1
+
+	result["outcome"] = picked["outcome"]
+	result["ase"] = ase
+	result["ekwan"] = ekwan
+	return result
 
 
-## The `intel_retention_bonus` of a directive, or 1.0 when it does not retain intel.
+## The `intel_retention_bonus` of a directive, or 1.0 when it does not retain intel. In the roll it
+## multiplies the weights of the outcomes that pay something (`carry_table`), never the amount.
 static func retention_mul(directive: Dictionary) -> float:
 	if bool(directive.get("intel_retention", false)):
 		return float(directive.get("intel_retention_bonus", 1.0))

@@ -743,6 +743,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 		flow_ctx.pending_scout_return_ase         = 0
 		flow_ctx.pending_scout_return_ekwan       = 0
 		flow_ctx.pending_scout_return_intel_count = 0
+		flow_ctx.pending_scout_return_settle_outcome = ""
 
 	# V2-INFRA-003 Phase 3 (slice C): consume _bark_line here, exactly once, AFTER the snapshot
 	# that surfaced it (flow.encounter / flow.keeper_trial / flow.resolve, built by
@@ -1203,12 +1204,11 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	})
 
 	if success:
-		# D-72: the partial is an advance on the stage payout; one helper shared with return home.
-		var _carry := StageSettlementService.carry_home(flow_ctx, config_service, econ, 1.0,
-			"retreat_intel_partial", logger, t)
-		flow_ctx.pending_scout_return_ase         = _carry["ase"]
-		flow_ctx.pending_scout_return_ekwan       = _carry["ekwan"]
-		flow_ctx.pending_scout_return_intel_count = _carry["intel_count"]
+		# D-106: a retreat does not settle. Step 6.2 reworks the rest of this path.
+		flow_ctx.pending_scout_return_ase            = 0
+		flow_ctx.pending_scout_return_ekwan          = 0
+		flow_ctx.pending_scout_return_intel_count    = ActiveStageService.count_revealed_situations(flow_ctx)
+		flow_ctx.pending_scout_return_settle_outcome = ""
 
 		# Clear encounter context — no emotion drift on retreat.
 		# FIX (P4 review bug 2): retreat-success also skipped ally-field teardown — clear
@@ -1266,6 +1266,7 @@ func _resolve_forced_retreat(t: int) -> void:
 	flow_ctx.pending_scout_return_ase         = 0
 	flow_ctx.pending_scout_return_ekwan       = 0
 	flow_ctx.pending_scout_return_intel_count = 0
+	flow_ctx.pending_scout_return_settle_outcome = ""
 	_mark_save_requested("combat.no_progress_forced_retreat")
 
 	flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(

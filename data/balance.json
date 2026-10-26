@@ -1592,7 +1592,17 @@
 				"C": 0.35,
 				"D": 0.15
 			},
-			"partial_intel_reward_factor": 0.12,
+			"_carry_odds_comment": "V2-ECONOMY-004 D-104/D-105/D-106: a return home settles the completed, unsettled objectives by ONE roll. carry_odds are weights (not percents); carry_shares is the share of the gathered amount each outcome pays; what the roll does not pay is lost. The Scout directive multiplies the weights of outcomes whose share is above 0, then the weights are renormalised. Never shown to the player.",
+			"carry_odds": {
+				"none": 50,
+				"some": 30,
+				"all": 20
+			},
+			"carry_shares": {
+				"none": 0.0,
+				"some": 0.5,
+				"all": 1.0
+			},
 			"_contact_claimant_good_comment": "Ase paid once for a good Claimant contact (V2-ECONOMY-004 5.15). Outside the realm scale and the replay factor.",
 			"contact_claimant_good_ase": 20
 		},

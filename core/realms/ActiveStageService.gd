@@ -330,19 +330,6 @@ static func get_objective_counts(flow_ctx_arg: FlowContext, config_service_arg: 
 		ConfigService.get_rewards_cfg(config_service_arg))
 
 
-# What the active stage already carried home (D-72): { ase, ekwan }, 0 when the fields are absent.
-static func get_carried(flow_ctx_arg: FlowContext) -> Dictionary:
-	var _stage_idx := int(flow_ctx_arg.stage_id.replace("stage.", ""))
-	var _realm_v: Variant = flow_ctx_arg.save_data.get("realms", {}).get(flow_ctx_arg.realm_id, {})
-	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
-	var _stages_v: Variant = _realm.get("stages", [])
-	var _stages: Array = _stages_v if _stages_v is Array else []
-	if _stage_idx >= 0 and _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
-		var _st: Dictionary = _stages[_stage_idx]
-		return { "ase": maxi(0, int(_st.get("carried_ase", 0))), "ekwan": maxi(0, int(_st.get("carried_ekwan", 0))) }
-	return { "ase": 0, "ekwan": 0 }
-
-
 static func _current_stage_objectives(flow_ctx_arg: FlowContext) -> Array:
 	var _stage_idx := int(flow_ctx_arg.stage_id.replace("stage.", ""))
 	var _realm_v: Variant = flow_ctx_arg.save_data.get("realms", {}).get(flow_ctx_arg.realm_id, {})

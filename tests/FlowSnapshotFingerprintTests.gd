@@ -332,7 +332,9 @@ static func test_sanctum_fingerprint() -> Dictionary:
 # V2-DIRECTIVE-002 play fix: commitment_depth (D-60); the old hash is 16239869...afee.
 # RE-RECORDED, V2-ECONOMY-004 step 5.8: one new key, data.carry_home_preview. Attributed by removing
 # the key: the old hash b4c2a6e7...19d9 came back. Nothing else in the payload moved.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "1728e1febb438887f1f78514bc1f1ca82a73626d603ac228190949a2a9e1df7e"
+# RE-RECORDED, V2-ECONOMY-004 step 6.1: one new key, data.carry_home_preview.nothing_new (D-106). Attributed
+# by removing the key: the old hash 1728e1fe...df7e came back (2 of 2 passed). Nothing else moved.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "5515ca86c12db802212657908e247060f137b881ff3092b2f7925658a90b5440"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")
