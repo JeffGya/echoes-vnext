@@ -505,7 +505,7 @@ static func _build_resolve_actions(victory: bool, objectives_remaining: int = 0)
 			}
 			actions["cta.next_stage"] = {
 				"type":  "flow.complete_stage",
-				"label": "Next Stage",
+				"label": "Continue",
 				"slot":  "cta.next_stage",
 			}
 		else:

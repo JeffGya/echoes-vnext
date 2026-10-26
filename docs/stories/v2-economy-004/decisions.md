@@ -830,3 +830,7 @@ QA (`qa-verifier`, opus, HEAD 1495b30): the settlement core, no-leak, copy, UI b
 - **F6 (fix):** log the settle roll, the outcome and the marks; a missing `carry_shares` key (or `carry_odds`) fails visibly and does not mark objectives settled.
 - **F7:** the older placeholders with "home", "stage" or "lost" are reworded after Jeff picks wording from proposals.
 - **F5:** not fixed (pre-existing; the success chance comes from the action dict). Noted as a follow-up.
+
+## D-111 — Older player strings reworded (Jeff's picks, 2026-10-26)
+Source: `phase6-ux-copy-older-strings.md`. Use EXACTLY. "Path" is the player word for a stage (Jeff's picks use it).
+1. Echoes row label: `Echoes safe` · 2. its tooltip: `Each Echo that stays alive earns Ase.` · 3. Echo tag: `alive` · 4. dead Echo line: `%s did not make it back.` · 5. replay tooltip: `The party has been here before. All of it earns less.` · 6. intel line: `The party learned something new about the path.` · 7. ledger count: `%d path(s) finished` (singular `path`, plural `paths`, as the old `stage%s honored` did) · 8. ledger group header (static node): `This path` · 9. next button: `Continue` (core label in `EncounterSnapshotBuilder.gd:508` changed by the orchestrator; the UI default and scene text change in step 6.5) · 10. defeat tooltip (Jeff's own words): `This one was lost, but we still earn a small part.`
