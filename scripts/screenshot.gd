@@ -132,6 +132,9 @@ func _fixtures() -> Dictionary:
 		"retreat_disabled_price": [_prebattle({ "retreat_affordable": false })],
 		"retreat_denied": [_prebattle({ "retreat_affordable": false,
 			"retreat_denied": { "reason": "insufficient_ase", "ase_cost": 10, "ase_balance": 4 } })],
+		"resolve_tooltip_replay": [_combat(6, recover), _payout_stage_end(false), "skip_motion", "focus_cause:1"],
+		"resolve_defeat_tooltip": [_combat(7, recover), _payout_defeat(), "focus_cause:0"],
+		"return_card_empty_leave": [_combat(6, recover), _return_card_empty_leave()],
 		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(false), "skip_motion", "focus_cause:2"],
 		"summon_price_rising":   [_summon({})],
 		"summon_price_flat":     [_summon({ "living_count": 14, "price_flat": true, "batch_affordable_max": 1,
@@ -334,7 +337,7 @@ func _payout_stage_end(seen: bool) -> Dictionary:
 	snap["data"]["stage_payout_rows"] = stage_rows
 	snap["data"]["stage_payout_ase"] = 16
 	snap["data"]["stage_payout_ekwan"] = 4
-	snap["actions"]["cta.next_stage"] = { "type": "flow.complete_stage", "slot": "cta.next_stage", "label": "Complete Stage" }
+	snap["actions"]["cta.next_stage"] = { "type": "flow.complete_stage", "slot": "cta.next_stage", "label": "Continue" }
 	return snap
 
 
@@ -397,6 +400,13 @@ func _return_card(outcome: String, ase: int, ekwan: int) -> Dictionary:
 	return _payout_snap(data)
 
 
+## Left with nothing completed: the core still sends settle_outcome "nothing_new"; the card shows the row only.
+func _return_card_empty_leave() -> Dictionary:
+	var snap := _return_card("nothing_new", 0, 0)
+	snap["data"]["reward_breakdown"] = [_row("Nothing overcome yet", 0, "nothing_overcome_yet", { "overcome": 0, "total": 3 })]
+	return snap
+
+
 ## The card after a combat retreat: words only and one button.
 func _retreat_card(can_reenter: bool) -> Dictionary:
 	return { "type": "flow.resolve", "meta": { "t": 1 }, "actions": { "cta.continue": {
@@ -414,7 +424,6 @@ func _prebattle(extra: Dictionary) -> Dictionary:
 	snap["data"]["actors"] = actors
 	snap["data"]["round_phase"] = "pre_combat"
 	snap["data"]["retreat_eligible"] = true
-	snap["data"]["retreat_tier_label"] = "Risky"
 	snap["data"]["retreat_ase_cost"] = 10
 	snap["data"]["retreat_affordable"] = true
 	snap["data"].merge(extra, true)

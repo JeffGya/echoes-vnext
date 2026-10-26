@@ -226,10 +226,10 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	if run_type == "scout_return" or run_type == "forced_retreat":
 		_render_scout_return(data, actions)
 		return
-	# V2-STAGE-003: contact_result path — NPC conversation outcome
 	if run_type == "retreat_return":
 		_render_retreat_return(data, actions)
 		return
+	# V2-STAGE-003: contact_result path — NPC conversation outcome
 	if run_type == "contact_result":
 		_render_contact_result(data, actions)
 		return
@@ -339,7 +339,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 		var act_v: Variant = actions["cta.next_stage"]
 		if act_v is Dictionary:
 			_next_stage_action         = act_v
-			_next_stage_button.text    = str(act_v.get("label", "Next Stage"))
+			_next_stage_button.text    = str(act_v.get("label", "Continue"))
 			_next_stage_button.visible = true
 
 
@@ -713,7 +713,7 @@ func _build_home(home: Dictionary) -> void:
 		_motion_final = Callable()
 		return
 	for st in plan:
-		(st["tag"] as Label).text = PayoutCausePresentation.HOME_TAG
+		(st["tag"] as Label).text = PayoutCausePresentation.ALIVE_TAG
 		if not st["lost"]:
 			(st["tag"] as Label).visible = true
 			(st["tag"] as Label).modulate.a = 0.0
@@ -904,7 +904,10 @@ func _render_scout_return(data: Dictionary, actions: Dictionary) -> void:
 
 	_next_stage_button.visible = false
 	_build_ledger(data)
-	var settle_text := CarriedHomePresentation.settle_line(str(data.get("settle_outcome", "")))
+	# D-110 F1: a leave with nothing completed shows only the "Nothing overcome yet" row, no outcome line.
+	var nothing_completed := _ase_rows(data.get("reward_breakdown", [])).any(
+		func(row: Dictionary) -> bool: return str(row.get("cause", "")) == "nothing_overcome_yet")
+	var settle_text := "" if nothing_completed else CarriedHomePresentation.settle_line(str(data.get("settle_outcome", "")))
 	_outcome_line.text = settle_text
 	_outcome_line.visible = not settle_text.is_empty()
 
@@ -1017,7 +1020,7 @@ func _build_vow_section(data: Dictionary) -> void:
 		var count := int(vow.get("compliance_count", 0))
 		if count > 0:
 			var count_lbl := Label.new()
-			count_lbl.text = "%d stage%s honored" % [count, "s" if count != 1 else ""]
+			count_lbl.text = "%d path%s finished" % [count, "s" if count != 1 else ""]
 			count_lbl.add_theme_color_override("font_color", Color("#A8865A"))  # Warm Brass
 			_vow_list.add_child(count_lbl)
 	elif event == "break":

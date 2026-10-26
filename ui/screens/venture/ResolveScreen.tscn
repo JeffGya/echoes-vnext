@@ -317,7 +317,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"RealmWarmMeta"
 theme_override_font_sizes/font_size = 13
-text = "Stage"
+text = "This path"
 [node name="StageSection" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/Ledger/StageGroup"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -389,7 +389,7 @@ visible = false
 layout_mode = 2
 theme_type_variation = &"PayoutChipValue"
 theme_override_font_sizes/font_size = 14
-text = "home"
+text = ""
 horizontal_alignment = 2
 
 [node name="EmotionSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent/EmotionSection"]
@@ -527,7 +527,7 @@ layout_mode = 2
 custom_minimum_size = Vector2(160, 56)
 size_flags_horizontal = 3
 theme_type_variation = &"RealmModalPrimaryButton"
-text = "Next Stage"
+text = "Continue"
 
 [node name="CauseTooltip" parent="." instance=ExtResource("5_tooltip")]
 unique_name_in_owner = true

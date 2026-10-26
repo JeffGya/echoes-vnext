@@ -859,7 +859,7 @@ static func _t_resolve_modal_geometry_compact_and_wide() -> Dictionary:
 			},
 			"actions": {
 				"cta.continue": { "type": "flow.go_state", "label": "To Sanctum" },
-				"cta.next_stage": { "type": "flow.go_state", "label": "Next Stage" },
+				"cta.next_stage": { "type": "flow.go_state", "label": "Continue" },
 			},
 		},
 	})

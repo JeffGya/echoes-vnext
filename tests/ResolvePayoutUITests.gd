@@ -40,6 +40,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/no_percent_home_or_stage_in_these_surfaces", Callable(ResolvePayoutUITests, "_t_surface_words"))
 	runner.register_test("payout_ui/removed_strings_and_fields_are_gone_from_ui", Callable(ResolvePayoutUITests, "_t_removed_gone"))
 	runner.register_test("payout_ui/return_card_outcome_line_and_amounts", Callable(ResolvePayoutUITests, "_t_return_card"))
+	runner.register_test("payout_ui/return_card_empty_leave_has_no_outcome_line", Callable(ResolvePayoutUITests, "_t_return_card_empty_leave"))
+	runner.register_test("payout_ui/older_strings_no_home_stage_or_percent", Callable(ResolvePayoutUITests, "_t_older_strings"))
 	runner.register_test("payout_ui/retreat_card_renders_and_button_sends_retreat_return", Callable(ResolvePayoutUITests, "_t_retreat_card"))
 	runner.register_test("payout_ui/retreat_card_through_real_shell_and_host", Callable(ResolvePayoutUITests, "_t_retreat_real_host"))
 	runner.register_test("payout_ui/return_home_confirmation_opens_before_dispatch", Callable(ResolvePayoutUITests, "_t_return_confirm_before_dispatch"))
@@ -152,8 +154,8 @@ static func _t_stage_end() -> Dictionary:
 		return _fail(m, "stage group does not show the 4 stage rows")
 	# The lost name shows once: this card has no emotion row for him, so the note under the rows names him.
 	screen.skip_motion()
-	var named := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not come home" in str(t))
-	if named != ["Kofi did not come home."]:
+	var named := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not make it back" in str(t))
+	if named != ["Kofi did not make it back."]:
 		return _fail(m, "lost-name lines: %s" % str(named))
 	# The memo row changes no total: zero delta, the exact label, and no carried_advance row any more.
 	var memo: RewardEntryItem = stage_rows[3]
@@ -228,9 +230,9 @@ static func _t_replay_and_bonus() -> Dictionary:
 	if "Replay" in _names(shown):
 		return _fail(m, "Replay row present without a replay cause")
 	var home: RewardEntryItem = shown[1]
-	if home.entry_label.text != "Echoes home" or home.delta_label.text != "+0 Ase" or not home.cause_button.visible:
+	if home.entry_label.text != "Echoes safe" or home.delta_label.text != "+0 Ase" or not home.cause_button.visible:
 		return _fail(m, "echoes row %s %s" % [home.entry_label.text, home.delta_label.text])
-	if home.note_label.text != "Ama and Kofi did not come home.":
+	if home.note_label.text != "Ama and Kofi did not make it back.":
 		return _fail(m, "lost names note: %s" % home.note_label.text)
 	if not home.delta_label.get_theme_color("font_color").is_equal_approx(home.color_zero) \
 			or not home.entry_label.get_theme_color("font_color").is_equal_approx(home.color_zero):
@@ -280,9 +282,9 @@ static func _t_buttons() -> Dictionary:
 ## The approved wording, written out here on purpose: a changed sentence must fail this test.
 static func _t_wording() -> Dictionary:
 	var want := {
-		"echoes_alive": "Each Echo that comes home earns Ase.",
+		"echoes_alive": "Each Echo that stays alive earns Ase.",
 		"settled_on_leave": "These were already taken when the party left earlier.",
-		"defeat_consolation": "The party lost, but the fight still earns a small part.",
+		"defeat_consolation": "This one was lost, but we still earn a small part.",
 		"nothing_overcome_yet": "The party has not overcome anything yet. Nothing is earned.",
 		"repeat_defeat": "The party already earned the consolation for this. Another loss earns nothing.",
 	}
@@ -293,13 +295,13 @@ static func _t_wording() -> Dictionary:
 	var replay_stage := PayoutCausePresentation.tooltip("replay", {}, "stage")
 	if replay_fight != "The party has been here before. It earns less.":
 		return { "ok": false, "error": "replay (fight): \"%s\"" % replay_fight }
-	if replay_stage != "The party has been here before. The whole stage earns less Ase and Ekwan.":
+	if replay_stage != "The party has been here before. All of it earns less.":
 		return { "ok": false, "error": "replay (stage): \"%s\"" % replay_stage }
 	var objectives := PayoutCausePresentation.tooltip("objectives_overcome", { "overcome": 4, "total": 7 })
 	if objectives != "Only objectives the party found and overcame earn Ase. 4 of 7 so far.":
 		return { "ok": false, "error": "objectives: \"%s\"" % objectives }
 	var names := { "replay": "Replay", "defeat_consolation": "Consolation", "objectives_overcome": "Objectives overcome",
-		"echoes_alive": "Echoes home", "settled_on_leave": "Settled when you left" }
+		"echoes_alive": "Echoes safe", "settled_on_leave": "Settled when you left" }
 	for cause in names:
 		if PayoutCausePresentation.row_name(cause, "x") != names[cause]:
 			return { "ok": false, "error": "row name of %s" % cause }
@@ -307,7 +309,7 @@ static func _t_wording() -> Dictionary:
 	for cause in ["enemies_defeated", "realm_virtue", "bonus_earned", "bonus_missed", "carried_advance", "partial_retreat", "partial_return_home"]:
 		if PayoutCausePresentation.has_cause(cause) or PayoutCausePresentation.row_name(cause, "Label") != "Label":
 			return { "ok": false, "error": "%s still has an entry" % cause }
-	if PayoutCausePresentation.row_note("echoes_alive", { "lost": ["Ama", "Kofi", "Esi"] }) != "Ama, Kofi and Esi did not come home.":
+	if PayoutCausePresentation.row_note("echoes_alive", { "lost": ["Ama", "Kofi", "Esi"] }) != "Ama, Kofi and Esi did not make it back.":
 		return { "ok": false, "error": "three lost names note" }
 	if PayoutCausePresentation.row_note("echoes_alive", { "lost": [] }) != "":
 		return { "ok": false, "error": "a note shows with no lost Echo" }
@@ -682,12 +684,12 @@ static func _t_home_final() -> Dictionary:
 	StopMarkMotion.reduced = before
 	if running:
 		return _fail(m, "reduced motion must not start a sequence")
-	if not count.visible or count.text != "home 3 of 4":
+	if not count.visible or count.text != "alive 3 of 4":
 		return _fail(m, "count is \"%s\"" % count.text)
-	var lost_lines := texts.filter(func(t: Variant) -> bool: return "did not come home" in str(t))
-	if lost_lines != ["Kofi did not come home."]:
+	var lost_lines := texts.filter(func(t: Variant) -> bool: return "did not make it back" in str(t))
+	if lost_lines != ["Kofi did not make it back."]:
 		return _fail(m, "lost name lines: %s" % str(lost_lines))
-	var homes := texts.filter(func(t: Variant) -> bool: return str(t) == "home")
+	var homes := texts.filter(func(t: Variant) -> bool: return str(t) == "alive")
 	if homes.size() != 3:
 		return _fail(m, "expected 3 home marks, got %d" % homes.size())
 	if (screen.get_node("%EchoesChip") as Control).visible:
@@ -705,10 +707,10 @@ static func _t_home_all() -> Dictionary:
 	screen.set_snapshot(_stage_home([], 4, 4))
 	var texts := _visible_texts(screen)
 	StopMarkMotion.reduced = before
-	if _label(screen, "%HomeCountLabel").text != "home 4 of 4":
+	if _label(screen, "%HomeCountLabel").text != "alive 4 of 4":
 		return _fail(m, "count is \"%s\"" % _label(screen, "%HomeCountLabel").text)
 	for t in texts:
-		if "did not come home" in str(t) or "perfect" in str(t).to_lower() or "flawless" in str(t).to_lower():
+		if "did not make it back" in str(t) or "perfect" in str(t).to_lower() or "flawless" in str(t).to_lower():
 			return _fail(m, "all-home card shows \"%s\"" % t)
 	return _pass(m)
 
@@ -721,7 +723,7 @@ static func _t_home_motion_skip() -> Dictionary:
 	var err := ""
 	var count := _label(screen, "%HomeCountLabel")
 	var ase := _label(screen, "%AseTotalLabel")
-	if not screen.is_motion_running() or count.text != "home 0 of 4" or ase.modulate.a != 0.0:
+	if not screen.is_motion_running() or count.text != "alive 0 of 4" or ase.modulate.a != 0.0:
 		err = "motion start: running=%s count=%s ase alpha=%s" % [screen.is_motion_running(), count.text, ase.modulate.a]
 	# The footer stays usable while the motion runs.
 	if err.is_empty():
@@ -735,11 +737,11 @@ static func _t_home_motion_skip() -> Dictionary:
 		tap.button_index = MOUSE_BUTTON_LEFT
 		tap.pressed = true
 		screen._input(tap)
-		if screen.is_motion_running() or count.text != "home 3 of 4" or ase.modulate.a != 1.0:
+		if screen.is_motion_running() or count.text != "alive 3 of 4" or ase.modulate.a != 1.0:
 			err = "a tap did not reach the final state: count=%s alpha=%s" % [count.text, ase.modulate.a]
 	if err.is_empty():
-		var lost_lines := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not come home" in str(t))
-		if lost_lines != ["Kofi did not come home."]:
+		var lost_lines := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not make it back" in str(t))
+		if lost_lines != ["Kofi did not make it back."]:
 			err = "lost lines after skip: %s" % str(lost_lines)
 	# A new snapshot ends the old motion.
 	if err.is_empty():
@@ -933,6 +935,78 @@ static func _t_surface_words() -> Dictionary:
 	return { "ok": true }
 
 
+## The older strings of the payout cards (D-111). Excluded: constant and node NAMES, causes and other
+## ids, the SCOPE_* ids, strings in other scenes, the vow header texts, and the core labels (a row
+## label is replaced by row_name for every listed cause). `%s` and `%d` are removed before the scan.
+static func _t_older_strings() -> Dictionary:
+	var texts: Array = []
+	var consts: Dictionary = (PayoutCausePresentation as Script).get_script_constant_map()
+	for key in consts:
+		if str(key).begins_with("SCOPE_"):
+			continue
+		var v: Variant = consts[key]
+		if v is String:
+			texts.append(v)
+		elif v is Dictionary:
+			texts.append_array((v as Dictionary).values())
+		elif v is Array:
+			for entry in (v as Array):
+				if entry is Array:
+					texts.append_array((entry as Array).slice(1))
+	texts.append(PayoutCausePresentation.home_count(2, 3))
+	texts.append(PayoutCausePresentation.lost_line("Kofi"))
+	texts.append(PayoutCausePresentation.tooltip("replay", {}, "stage"))
+	var bad := _first_old_word(texts.map(func(t: Variant) -> String: return str(t).replace("%s", "").replace("%d", "")))
+	if not bad.is_empty():
+		return { "ok": false, "error": "PayoutCausePresentation: " + bad }
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var shown: Array = []
+	var cards: Array = [
+		_stage_home(["Kofi"], 3, 4),
+		_snap([_row("Base objectives", 13, "defeat_consolation", { "part": "base" })], { "ledger_seen": true }, false),
+		_midstage({ "intel_gained": 2 }),
+		_snap([], { "ledger_seen": true, "stage_payout_rows": [_row("Redo penalty", -4, "replay", { "factor": 0.9 })],
+			"stage_payout_ase": 5, "vow_outcome": { "event": "compliant", "compliance_count": 3 } }),
+		_snap([], { "ledger_seen": true, "stage_payout_rows": [_row("Redo penalty", -4, "replay", { "factor": 0.9 })],
+			"stage_payout_ase": 5, "vow_outcome": { "event": "compliant", "compliance_count": 1 } }),
+	]
+	var before := _set_reduced(true)
+	for card in cards:
+		screen.set_snapshot(card)
+		screen.skip_motion()
+		shown.append_array(_visible_texts(screen))
+	var empty := _scout_card("nothing_new", 0, 0)
+	empty["data"]["reward_breakdown"] = [_row("Nothing overcome yet", 0, "nothing_overcome_yet", { "overcome": 0, "total": 3 })]
+	screen.set_snapshot(empty)
+	shown.append_array(_visible_texts(screen))
+	StopMarkMotion.reduced = before
+	# Tooltips of every row cause that these cards carry.
+	for cause in ["echoes_alive", "defeat_consolation", "nothing_overcome_yet", "replay"]:
+		shown.append(PayoutCausePresentation.tooltip(cause, {}, "stage"))
+	bad = _first_old_word(shown)
+	# Static texts of the scene, unfiltered: a placeholder that is never overwritten still reaches the player.
+	for path in ["res://ui/screens/venture/ResolveScreen.tscn", "res://ui/components/EmotionEntryItem.tscn"]:
+		for line in FileAccess.get_file_as_string(path).split("\n"):
+			if line.begins_with("text = "):
+				shown.append(line.trim_prefix("text = ").trim_prefix("\"").trim_suffix("\""))
+	m[0].free()
+	if bad.is_empty():
+		bad = _first_old_word(shown)
+	if not bad.is_empty():
+		return { "ok": false, "error": "resolve cards: " + bad }
+	return { "ok": true }
+
+
+static func _first_old_word(texts: Array) -> String:
+	for t in texts:
+		var low := str(t).to_lower()
+		for word in ["home", "stage", "%"]:
+			if word in low:
+				return "\"%s\" holds \"%s\"" % [str(t), word]
+	return ""
+
+
 static func _t_removed_gone() -> Dictionary:
 	var needles := ["Going home costs nothing", "The rest is earned when the stage", "The stage waits", "Carried home",
 		"Return Home", "Go home", "Escape guaranteed", "Chance of failure", "carry_retreat_preview", "carried_advance",
@@ -978,6 +1052,25 @@ static func _t_return_card() -> Dictionary:
 	screen.set_snapshot(_scout_card("", 0, 0))
 	if outcome_line.visible:
 		return _fail(m, "an outcome line shows without settle_outcome")
+	return _pass(m)
+
+
+## D-110 F1: a leave with nothing completed shows only the "Nothing overcome yet" row, even though the
+## core still sends settle_outcome "nothing_new". The line returns once something was completed earlier.
+static func _t_return_card_empty_leave() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var outcome_line := screen.get_node("%OutcomeLine") as Label
+	var empty := _scout_card("nothing_new", 0, 0)
+	empty["data"]["reward_breakdown"] = [_row("Nothing overcome yet", 0, "nothing_overcome_yet", { "overcome": 0, "total": 3 })]
+	screen.set_snapshot(empty)
+	if outcome_line.visible or not outcome_line.text.is_empty():
+		return _fail(m, "empty leave shows the line \"%s\"" % outcome_line.text)
+	if _names(_rows_in(screen, "%BreakdownSection")) != ["Nothing overcome yet"]:
+		return _fail(m, "empty leave rows: %s" % str(_names(_rows_in(screen, "%BreakdownSection"))))
+	screen.set_snapshot(_scout_card("nothing_new", 0, 0))
+	if not outcome_line.visible or outcome_line.text != "Nothing was gathered since the last time.":
+		return _fail(m, "nothing new after an earlier completion: \"%s\"" % outcome_line.text)
 	return _pass(m)
 
 
@@ -1156,7 +1249,7 @@ static func _prebattle_payload(data_extra: Dictionary) -> Dictionary:
 	combat.set("_objective_label", combat.get_node("ObjectiveLabel"))
 	var data := { "round_phase": "pre_combat", "board_cols": 2, "board_rows": 2,
 		"actors": [_actor("Ama"), _actor("Kofi")], "objective_state": { "type": EncounterResolutionModes.COMBAT },
-		"retreat_eligible": true, "retreat_tier_label": "Risky", "retreat_ase_cost": 13, "retreat_affordable": true }
+		"retreat_eligible": true, "retreat_ase_cost": 13, "retreat_affordable": true }
 	data.merge(data_extra, true)
 	combat.call("_show_prebattle_panel", data, {
 		"cta.combat_init": { "type": "combat.init", "slot": "cta.combat_init" },
@@ -1190,7 +1283,7 @@ static func _t_retreat_button() -> Dictionary:
 	if not note.visible or note.text != "Retreating takes 13 Ase. The party has 4." or "lost" in note.text.to_lower():
 		return _fail(m, "denied line: %s" % note.text)
 	# No odds line, no carry preview: the payload holds neither.
-	payload = _prebattle_payload({ "retreat_tier_label": "Guaranteed", "carry_retreat_preview": { "ase": 6, "ekwan": 2, "overcome": 1, "total": 2 } })
+	payload = _prebattle_payload({})
 	modal.present(payload)
 	if payload.has("carry") or payload.has("party") or button.text != "Retreat (13 Ase)" or "\n" in button.text:
 		return _fail(m, "retreat button shows more than the price: %s" % button.text)
@@ -1334,20 +1427,20 @@ static func _t_home_earlier_death() -> Dictionary:
 	var texts := _visible_texts(screen)
 	var count := _label(screen, "%HomeCountLabel").text
 	StopMarkMotion.reduced = before
-	if count != "home 3 of 4":
+	if count != "alive 3 of 4":
 		return _fail(m, "count is \"%s\"" % count)
-	var lost_lines := texts.filter(func(t: Variant) -> bool: return "did not come home" in str(t))
-	if lost_lines != ["Kofi did not come home."]:
+	var lost_lines := texts.filter(func(t: Variant) -> bool: return "did not make it back" in str(t))
+	if lost_lines != ["Kofi did not make it back."]:
 		return _fail(m, "lost lines: %s" % str(lost_lines))
-	var homes := texts.filter(func(t: Variant) -> bool: return str(t) == "home")
+	var homes := texts.filter(func(t: Variant) -> bool: return str(t) == "alive")
 	if homes.size() != 3:
 		return _fail(m, "expected 3 home marks, got %d" % homes.size())
 	# The same death named by a row of this fight shows once there, not twice.
 	StopMarkMotion.reduced = true
 	screen.set_snapshot(_stage_home(["Kofi"], 3, 4))
-	var again := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not come home" in str(t))
+	var again := _visible_texts(screen).filter(func(t: Variant) -> bool: return "did not make it back" in str(t))
 	StopMarkMotion.reduced = before
-	if again != ["Kofi did not come home."]:
+	if again != ["Kofi did not make it back."]:
 		return _fail(m, "a matched name shows %d times" % again.size())
 	return _pass(m)
 

@@ -14,22 +14,22 @@ const ROW_NAMES: Dictionary = {
 	"defeat_consolation": "Consolation",
 	"repeat_defeat": "Consolation",
 	"objectives_overcome": "Objectives overcome",
-	"echoes_alive": "Echoes home",
+	"echoes_alive": "Echoes safe",
 	"settled_on_leave": "Settled when you left",
 }
 
 ## PROPOSAL placeholders, not approved copy: echoes_alive and the lost-names note
 ## (docs/stories/v2-payout-explanation/decisions.md). Jeff owns the wording. All copy stays in this table.
 const TEXT: Dictionary = {
-	"echoes_alive": "Each Echo that comes home earns Ase.",
+	"echoes_alive": "Each Echo that stays alive earns Ase.",
 	"settled_on_leave": "These were already taken when the party left earlier.",
-	"defeat_consolation": "The party lost, but the fight still earns a small part.",
+	"defeat_consolation": "This one was lost, but we still earn a small part.",
 	"nothing_overcome_yet": "The party has not overcome anything yet. Nothing is earned.",
 	"repeat_defeat": "The party already earned the consolation for this. Another loss earns nothing.",
 }
 
 const REPLAY_FIGHT := "The party has been here before. It earns less."
-const REPLAY_STAGE := "The party has been here before. The whole stage earns less Ase and Ekwan."
+const REPLAY_STAGE := "The party has been here before. All of it earns less."
 const OBJECTIVES := "Only objectives the party found and overcame earn Ase."
 
 
@@ -71,9 +71,9 @@ static func row_note(cause: String, params: Dictionary) -> String:
 
 ## PROPOSAL placeholders for the Direction E cards (docs/stories/v2-payout-explanation/decisions.md).
 ## Jeff owns the wording. Every string below is a placeholder, not approved copy.
-const HOME_TAG := "home"
+const ALIVE_TAG := "alive"
 const THREAD_WHOLE := "The Thread is whole so far."
-const INTEL_LEARNED := "Something new is known about the stage."
+const INTEL_LEARNED := "The party learned something new about the path."
 const OBJECTIVE_MARK := "Found and overcome."
 ## One line about what the fight changed. Only for a real event in emotion_summary; first match wins.
 ## [name(s), singular form, plural form] by emotion_summary tag or direction.
@@ -91,7 +91,7 @@ static func objective_line(label: String) -> String:
 
 
 static func lost_line(who: String) -> String:
-	return "%s did not come home." % who
+	return "%s did not make it back." % who
 
 
 static func lost_line_many(names: Array) -> String:
@@ -99,7 +99,7 @@ static func lost_line_many(names: Array) -> String:
 
 
 static func home_count(alive: int, started: int) -> String:
-	return "%s %d of %d" % [HOME_TAG, alive, started]
+	return "%s %d of %d" % [ALIVE_TAG, alive, started]
 
 
 static func _join_names(names: Array) -> String:
