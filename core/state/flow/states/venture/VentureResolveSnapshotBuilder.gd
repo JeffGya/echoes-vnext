@@ -37,10 +37,28 @@ extends RefCounted
 ## a service whose constructor can write (in particular never SanctumService.new()).
 
 
+## Producer H — the card after a successful combat retreat (D-106). It carries words and a flag
+## only: no amount, no percent, no odds. `can_reenter` is true for an objective fight. Its action
+## returns the party to the path.
+static func build_retreat_return_snapshot(can_reenter: bool, t: int) -> Dictionary:
+	var _actions: Dictionary = {
+		"cta.continue": {
+			"type":  "stage.retreat_return",
+			"label": "Leave",
+			"slot":  "cta.continue",
+		}
+	}
+	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, "retreat_return")
+	var _data: Dictionary = _snap["data"]
+	_data["surface"]         = "retreat_return"
+	_data["retreat_outcome"] = "pulled_back"
+	_data["can_reenter"]     = can_reenter
+	return _snap
+
+
 ## Producer C — the scout-return / withdrawal resolve card.
 ## Moved verbatim from FlowRuntime._build_scout_return_snapshot(). It has THREE callers in
-## different domains: VentureController.handle_return_home() (successful escape),
-## FlowRuntime._handle_encounter_retreat() (successful retreat) and
+## different domains: VentureController.handle_return_home() (successful escape) and
 ## FlowRuntime._resolve_forced_retreat() (V2-COMBAT-003, a no-progress stalemate — same shape,
 ## zero payout, its own run_type). Per core/AGENTS.md a helper used by two or more domains needs
 ## one owner, and a producer that READS FlowContext cannot live on ResolveSnapshotBuilder — that

@@ -551,6 +551,40 @@ func find_explore_target(
 # Objective / situation resolution (mutates save_data, requests a save)
 # ────────────────────────────────────────────────────────────────────────────
 
+## D-106: a successful combat retreat costs one turn and returns the party to the path.
+## A normal fight is marked passed, as stage.ignore_situation does (never offered again).
+## An objective fight (objective_index >= 0) stays open: FlowStageExploreState offers it again on entry.
+## Caller reads objective_index before the encounter state exits. Returns { situation_id, can_reenter }.
+static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int, t: int) -> Dictionary:
+	var out := { "situation_id": "", "can_reenter": false }
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
+	var map_v: Variant = stage.get("explore_map", {})
+	if not (map_v is Dictionary) or (map_v as Dictionary).is_empty():
+		return out
+	var explore_map: Dictionary = map_v
+	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
+	var sit_id := str(explore_map.get("last_situation_id", ""))
+	var sits_v: Variant = explore_map.get("situations", [])
+	for s_v in (sits_v if sits_v is Array else []):
+		if not (s_v is Dictionary) or str((s_v as Dictionary).get("id", "")) != sit_id or sit_id.is_empty():
+			continue
+		out["situation_id"] = sit_id
+		if objective_index >= 0:
+			explore_map["retreat_reoffer_id"] = sit_id
+			out["can_reenter"] = true
+		else:
+			(s_v as Dictionary)["passed"] = true
+		break
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)
+	if flow_ctx_arg.logger != null:
+		flow_ctx_arg.logger.debug(t, "stage.retreat_return", "Retreat costs a turn; party goes back to the path", {
+			"stage_id": flow_ctx_arg.stage_id, "situation_id": sit_id,
+			"can_reenter": out["can_reenter"], "turn_count": int(explore_map["turn_count"]),
+		})
+	return out
+
+
 # V2-STAGE-002: Mark stage.objectives[objective_index].completed = true in save_data.
 # Called after a good charge contact; combat victory marks it in resolve_combat_situation_and_objective.
 func mark_stage_objective_completed(objective_index: int, t: int) -> void:

@@ -2304,10 +2304,11 @@ static func _t_settle_retreat_pays_nothing() -> Dictionary:
 	var st := FlowStageExploreState._get_current_stage(flow_ctx)
 	if int(pre["ase"]) != 0 or int(pre["ekwan"]) != 0 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2:
 		m.append("preview %s, expected 0/0 and 2 of 2" % str(pre))
-	if int(data.get("ase_awarded", -1)) != 0 or int(data.get("ekwan_awarded", -1)) != 0 \
-			or int(econ["ase"]) != 40 or int(econ["ekwan"]) != 0:
-		m.append("retreat paid card %s/%s balance %s/%s, expected 0/0 and 40/0 (10 Ase cost)" % [data.get("ase_awarded"),
-			data.get("ekwan_awarded"), econ["ase"], econ["ekwan"]])
+	# REWRITTEN (6.2): the retreat card is the pulled-back card (D-106). It carries no amount at all,
+	# so "paid nothing" is now the balance alone, plus the absence of any amount key on the card.
+	if data.has("ase_awarded") or data.has("ekwan_awarded") or int(econ["ase"]) != 40 or int(econ["ekwan"]) != 0:
+		m.append("retreat card %s balance %s/%s, expected no amount keys and 40/0 (10 Ase cost)" % [
+			JSON.stringify(data), econ["ase"], econ["ekwan"]])
 	if st.has("settle_count") or st.has("settled_ase") or bool((st["objectives"][0] as Dictionary).get("settled", false)):
 		m.append("a retreat settled: %s" % JSON.stringify(st))
 	if data.has("settle_outcome"):

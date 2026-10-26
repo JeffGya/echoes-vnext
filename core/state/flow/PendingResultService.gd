@@ -82,10 +82,10 @@ const OUTCOME_WITHDRAWAL: String = "withdrawal"
 ## path creates. Writing a value nothing sets would be an invention.
 const STATUS_PENDING_RESOLVE: String = "pending_resolve"
 
-## `run_type` of the two resolve cards that are MID-STAGE incidents, not run outcomes. A
-## contact conversation and an in-explore situation both return the player straight to
-## flow.stage_explore and neither ends a venture, so neither writes a durable result.
-const _NON_OUTCOME_RUN_TYPES: Array = ["contact_result", "situation_result"]
+## `run_type` of the resolve cards that are MID-STAGE incidents, not run outcomes. A
+## contact conversation, an in-explore situation and a pulled-back retreat all return the player straight to
+## flow.stage_explore and none ends a venture, so none writes a durable result.
+const _NON_OUTCOME_RUN_TYPES: Array = ["contact_result", "situation_result", "retreat_return"]
 
 ## `run_type` of the withdrawal card (producer C).
 const _RUN_TYPE_SCOUT_RETURN: String = "scout_return"

@@ -1069,12 +1069,13 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `actor.read_field` | **Seer skill** (seers_sight). Condition: `_read_field_cooldown == 0`. Writes `_seers_blessing` to allies in radius → +10 next guard/protect_ally. Streak cap: 3 consecutive uses; 1-round cooldown after cap. |
 | | `actor.reveal` | **Seer skill** (seers_reveal). Once-per-combat. Condition: enemy not yet attacked this combat. Sets `revealed_by_seer` → +15 all Echo attack scores vs target for 3 rounds. |
 | | | *Calling skill action types defined in `/docs/calling-reference.md`* |
-| **encounter** | `encounter.retreat` | attempts retreat; spends Ase regardless of roll outcome |
+| **encounter** | `encounter.retreat` | attempts retreat; spends Ase regardless of roll outcome; on success: +1 turn, normal fight marked passed, shows the `retreat_return` card |
 | | `encounter.complete` | signals encounter done; Flow routes to resolve |
 | | `encounter.advance` | advances encounter phase (`to: String`) |
 | **stage** | `stage.advance_turn` | moves party, reveal check, parks at next situation |
 | | `stage.engage_situation` | routes by type: async → ENCOUNTER; in_explore → resolve or choice (V2-STAGE-004) |
 | | `stage.ignore_situation` | dismisses engagement popup; party stays; next turn skips this pos |
+| | `stage.retreat_return` | action of the `retreat_return` card; back to `flow.stage_explore`; an objective fight is offered again at once (D-106) |
 | | `stage.return_home` | escape roll; success → resolve (scout return); fail → `data.return_home_result` |
 | | `stage.calling_action` | calling-qualified bonus explore action (V2-STAGE-002) |
 | | `stage.consult_echoes` | payload: `{ echo_ids: Array }`. Selects ≤3 echoes to hear per contact turn (V2-STAGE-003) |

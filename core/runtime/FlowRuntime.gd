@@ -635,6 +635,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"stage.ignore_situation":  # V2-STAGE-002: clear pending without resolving
 				_apply_action_outcome(_venture_controller().handle_ignore_situation(action, t), t)
+
+			"stage.retreat_return":  # D-106: the pulled-back card's action, back to the path
+				_apply_action_outcome(_venture_controller().handle_retreat_return(action, t), t)
 	
 			# ---- Stage Exploration V2-STAGE-003: NPC Contact conversation ----
 			# V2-INFRA-003 Phase 5 Slice C: routed to ContactController. The controller reports
@@ -1159,7 +1162,7 @@ func _apply_action_outcome(outcome: FlowActionOutcome, t: int) -> void:
 ## UI-004: Player attempts retreat before round 1.
 ## Gate (speed) and tier (agi) were computed at snapshot time and baked into the action dict.
 ## Ase is spent regardless of roll outcome. A balance below the price refuses the action (D-79).
-## Success → clear encounter, go to Sanctum. Failure → start combat immediately.
+## Success → clear encounter, show the pulled-back card (its action returns to the path). Failure → start combat immediately.
 func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		logger.debug(t, "encounter.retreat.no_op", "Retreat: no active encounter context", {})
@@ -1204,11 +1207,10 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	})
 
 	if success:
-		# D-106: a retreat does not settle. Step 6.2 reworks the rest of this path.
-		flow_ctx.pending_scout_return_ase            = 0
-		flow_ctx.pending_scout_return_ekwan          = 0
-		flow_ctx.pending_scout_return_intel_count    = ActiveStageService.count_revealed_situations(flow_ctx)
-		flow_ctx.pending_scout_return_settle_outcome = ""
+		# D-106: a retreat settles nothing. It costs one turn and puts the party back on the path.
+		# The objective index must be read before the transition: FlowEncounterState.exit() resets it.
+		var _rt_back: Dictionary = ActiveStageService.apply_retreat_return(
+			flow_ctx, flow_ctx.active_encounter_objective_index, t)
 
 		# Clear encounter context — no emotion drift on retreat.
 		# FIX (P4 review bug 2): retreat-success also skipped ally-field teardown — clear
@@ -1221,11 +1223,9 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		# V2-SANCTUM-001: withdrawal — apply emotion modifiers + vow release before resolve.
 		_emotion_consequence_service().apply_run_emotion_modifiers("withdrawal", t)
 		_vow_consequence_service().check_vow_release_condition(t)
-		# V2-INFRA-003 Phase 5 Slice D: producer C moved to ActiveStageService
-		# (two callers, two domains — see that file's header). Same pure function.
-		flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
-			flow_ctx, t, "scout_return", "partial_retreat")
-		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.scout_return")
+		flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_retreat_return_snapshot(
+			bool(_rt_back.get("can_reenter", false)), t)
+		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.pulled_back")
 	else:
 		logger.info(t, "encounter.retreat.failed", "Retreat failed — combat begins", {
 			"encounter_id": encounter_id,

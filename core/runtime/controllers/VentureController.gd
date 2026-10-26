@@ -15,8 +15,8 @@
 #   - No UI or scene-tree reference.
 #   - Reached through FlowRuntime._venture_controller(), a per-call factory.
 #
-# Owns 10 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
-# flow.complete_stage, stage.return_home, stage.ignore_situation, directive.select,
+# Owns 11 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
+# flow.complete_stage, stage.return_home, stage.ignore_situation, stage.retreat_return, directive.select,
 # stage.dismiss_overlay, flow.select_realm, and — added in Phase 6
 # Slice 6F — flow.select_stage.
 #
@@ -431,6 +431,15 @@ func handle_ignore_situation(_action: Dictionary, t: int) -> FlowActionOutcome:
 	})
 
 	return FlowActionOutcome.snapshot_outcome(StageExploreSnapshotBuilder.build(flow_ctx, t))
+
+
+## stage.retreat_return — the pulled-back card's action (D-106). Goes back to the path. It is not a
+## go_state, so the vow stage-entry check does not run a second time for the same visit.
+func handle_retreat_return(_action: Dictionary, _t: int) -> FlowActionOutcome:
+	var data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	if not (data_v is Dictionary) or str((data_v as Dictionary).get("run_type", "")) != "retreat_return":
+		return FlowActionOutcome.handled_outcome()
+	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE_EXPLORE, "stage.retreat_return")
 
 
 ## stage.dismiss_overlay — rebuild the explore snapshot from save_data so overlay data
