@@ -1,7 +1,7 @@
 # V2-ECONOMY-004 Part A — handoff
 
-Written in STE. Source for every line: `decisions.md` (D-01 to D-102), the `phase*-build.md` files, `follow-ups.md` and `plan.md` in this folder.
-State on 2026-10-25: built through step 5.13 on branch `claude/v2-economy-004-material-split-24c3be` (HEAD `9cfd2e4`). Combined-tree QA is done (D-102). The work is not merged. Jeff plays the result before the PR (D-96). Nothing is pushed (D-87).
+Written in STE. Source for every line: `decisions.md` (D-01 to D-111), the `phase*-build.md` files, `follow-ups.md` and `plan.md` in this folder.
+State on 2026-10-26: built through Phase 6 (steps 6.1 to 6.5) on branch `claude/v2-economy-004-material-split-24c3be` (HEAD `8a6a008`). Combined-tree QA of Part A is done (D-102, D-103). QA of steps 6.1 to 6.3 is done (D-110). No QA record exists yet for steps 6.4 and 6.5. The work is not merged. Jeff plays the result before the PR (D-96). Nothing is pushed (D-87).
 
 ## What was built
 
@@ -28,10 +28,16 @@ State on 2026-10-25: built through step 5.13 on branch `claude/v2-economy-004-ma
 | 5.11 | Stage death record `lost_echo_names`; `data.thread_whole`; `data.objective_overcome` | D-98, D-101 | `phase5-11-build.md` |
 | 5.12 | Fix D1: the stipend reads the stage death record after a quit and reload | D-102 | `phase5-12-build.md` |
 | 5.13 | Config is the only source of economy numbers (`RewardCalc.cfg_num`; `defeat_factor` read from config; stale comments fixed; follow-ups 15, 16, 17, 29, 31 closed) | D-102 | `phase5-13-build.md` |
+| 6.1 | Early leave settles by one roll (`carry_odds` 50/30/20, `carry_shares` 0/0.5/1.0, Scout shifts the odds); the unrolled share is lost; per-objective `settled`; stage `settled_ase`, `settled_ekwan`, `settle_count`; `carry_plan`/`carry_home` became `settle_plan`/`settle_leave`; `carried_ase`, `carried_ekwan`, `partial_intel_reward_factor` and the `carried_advance` row removed; `carry_home_preview` gets `nothing_new`; `settle_outcome` on the return card (b70c69e) | D-104 to D-106 | `phase6-1-build.md`, `phase6-early-leave-design.md` |
+| 6.2 | A successful combat retreat settles nothing, costs 10 Ase and one turn, and returns the party to the path on the `retreat_return` card; new action `stage.retreat_return` (guard count 78); a normal fight is marked passed, an objective fight is offered again at once (aa3325e) | D-106 | `phase6-2-build.md` |
+| 6.2b | Retreat roll key uses saved numbers (`run_count`, `turn_count`, saved `retreat_attempts`); a retreated normal fight returns on a later turn (`retreat_pass_turn`); `combat_baseline` retreat table re-recorded (dbc3407) | D-109 | `phase6-2b-build.md` |
+| 6.3 | UI for early leave and the retreat card with Jeff's copy: confirmation panel, return-card outcome line, retreat card, ledger memo cause `settled_on_leave`, `Retreat (10 Ase)` button; `CarriedHomePanel` deleted (1495b30) | D-107 | `phase6-3-build.md` |
+| 6.4 | Fixes from QA: a retreat-passed fight returns when it is the only target (`has_retreat_pass_waiting`); settle roll logged (`economy.settle.leave`); bad `carry_odds` or `carry_shares` fails visibly (`economy.settle.config_error`); removed `retreat_tier_label`, `carry_retreat_preview`, `partial_cause`; stale comments fixed (3c50074) | D-110 | `phase6-4-build.md` |
+| 6.5 | UI: no outcome line on an empty leave; older strings reworded; UI leftovers cleaned (893de79, 4732054). The vow and sanctum screens read `path(s) finished` (8a6a008) | D-110, D-111 | `phase6-5-build.md` |
 
 The UI session (`payout-explain-ui`, `docs/stories/v2-payout-explanation/`) built Direction E on the same branch, including the return-home confirmation before the action (D-102 D2). Its record is in that folder.
 
-Docs updated in this pass: `docs/MEMORY.md`, `docs/integration-map.md`, `CONVENTIONS.md` (snapshot rows and the Economy and Summoning sections), the defect register (`docs/stories/v2-infra-003/defect-register.md`, rows D66, D83, D94, D95, D96), `ANSWERS.md` (#84, #85).
+Docs updated in the Part A pass: `docs/MEMORY.md`, `docs/integration-map.md`, `CONVENTIONS.md` (snapshot rows and the Economy and Summoning sections), the defect register (`docs/stories/v2-infra-003/defect-register.md`, rows D66, D83, D94, D95, D96), `ANSWERS.md` (#84, #85). The Phase 6 documents pass updated `docs/MEMORY.md`, `docs/integration-map.md`, `CONVENTIONS.md` and `follow-ups.md` (items 33 to 46).
 
 ## What is NOT built
 
@@ -45,17 +51,32 @@ Docs updated in this pass: `docs/MEMORY.md`, `docs/integration-map.md`, `CONVENT
 | Boss encounter | The boss is a stub. It pays 0 and stays out of the objectives total. A future boss story must restore the weights on purpose. | D-02, D-10, D-23 |
 | Called and Chosen summon grades | Locked by config. The summon snapshot has no selection slot for an enabled Called or Chosen card. | D-85, follow-up 24 |
 | Part B (item-cost shape) | Waits for V2-ITEM-001 (separate story, separate chat). | D-01, follow-ups 18, 19 |
-| Follow-ups 1 to 32 | Noted, not built. Jeff decides owner and order. Open ones include: more Directives (1), rank and Thread redesign (2), pre-entry reward estimate (4), summon-screen leftovers (29 part, the four unread summon keys), empty repeat-return explanation (30), optional objective after the last required win (32). Closed in Part A: 9, 10, 11, 15, 16, 17, 29 (legacy key), 31. | `follow-ups.md` |
+| Follow-ups 1 to 46 | Noted, not built. Jeff decides owner and order. Open ones include: more Directives (1), rank and Thread redesign (2), pre-entry reward estimate (4), summon-screen leftovers (29 part, the four unread summon keys), empty repeat-return explanation (30), optional objective after the last required win (32). Closed in Part A: 9, 10, 11, 15, 16, 17, 29 (legacy key), 31. Phase 6 adds 33 to 46 (retreat success chance from the action dict, vow stage-entry re-run, back button with a modal, bank-before-gamble probe, and others). | `follow-ups.md` |
+| Phase 6 QA | Steps 6.4 and 6.5 have no final QA record. | `decisions.md` D-110 covers 6.1 to 6.3 only |
+| Phase 6 retreat limits | The forced retreat still ends at the Sanctum (follow-up 46). A retreat does not record deaths. A re-entered objective fight reuses the same `encounter_id` (follow-up 36). | `phase6-2-build.md` findings 1 to 3 |
 | Notion changes | Notion dependency fix for ECONOMY-004 and ECONOMY-003 is not made. Notes exist only on V2-INFRA-005, V2-PROG-012 and V2-PROG-016. | D-01, D-67, D-77 |
 
-## What the player-facing copy still needs (Jeff's)
+## Player-facing copy (Jeff's)
 
-All player-facing strings are placeholder. Copy is Jeff's. Agents propose, marked PROPOSAL, and stop (D-84).
+Copy is Jeff's. Agents propose, marked PROPOSAL, and stop (D-84).
 
-1. One ux-copy pass after the row set is final (D-84). It covers: tooltips, "home N of M", the carried-home line, the stage-waits line, the summon-price reason, the mid-stage card lines, the rank marks, and the retreat-denied reason.
-2. Placeholder strings in use: "Echoes home", "Redo penalty", "Repeat defeat", "Nothing overcome yet", "Found and overcome.", the intel line, "Take the party home?", "Go home", "Stay", and the summon picks A1, B1, C1, P1, D1 (D-85).
-3. Gaps with no wording yet: a broken Thread (the Thread line is hidden when `thread_whole` is false); a repeat return home with nothing new to carry (follow-up 30); the skipped-objective display (follow-up 26, D-97); the fiction frame for the rising summon price (follow-up 21).
-4. Vocabulary Jeff uses: "earns", "found and overcome", "village", "home".
+**Chosen by Jeff and built:**
+
+| Surface | Source | Strings |
+|---|---|---|
+| Return confirmation, return card, retreat card, ledger memo cause | D-107 and its two addenda | `Return to the Sanctum`, `Take the party back to the Sanctum?`, `To the Sanctum`, `Stay`, `In their packs: <Ase> Ase and <Ekwan> Ekwan.`, `Not all of it will survive the escape. What cannot be carried will be lost.`, `The path still waits.`, `Everything got out`, `Some of it got out`, `Nothing got out.`, `Nothing was gathered since the last time.`, `These were already taken when the party left earlier.`, `Pulled back`, `Withdrawing. Back to the path.`, `Leave`, `It's not smart to re-enter this quickly.`, `Our task is not done. This story is not over yet.`. The retreat button shows `Retreat (10 Ase)` only. The memo row label `Settled when you left` stays. The escape lines of D-103 stay. |
+| Older strings with "home" or "stage" | D-111 | `Echoes safe`, `Each Echo that stays alive earns Ase.`, `alive`, `%s did not make it back.`, `The party has been here before. All of it earns less.`, `The party learned something new about the path.`, `%d path(s) finished`, `This path`, `Continue`, `This one was lost, but we still earn a small part.` |
+| Vow and Sanctum screens | Commit 8a6a008 (marked as Jeff's change) | `%d path(s) finished` in `VowScreen.gd` and `SanctumScreen.gd`. UNSOURCED: no decision number records this pick. |
+
+**Still placeholders (agent wording, not chosen by Jeff):**
+
+1. The summon picks A1, B1, C1, P1, D1 (D-85) and the summon-price reason line.
+2. Older Part A strings that the Phase 6 scan did not cover: `Redo penalty`, `Repeat defeat`, `Nothing overcome yet`, `Found and overcome.` (UNSOURCED: whether each still exists; the 6.5 scan checked only "home", "stage" and "%").
+3. The retreat button disabled second line `Not enough Ase` (assumption in `phase6-3-build.md`).
+4. Return-card banner `Scout Return`, `N situations revealed`, and the button defaults `Return to Sanctum` and `To Sanctum` (follow-up 43).
+5. The Echoes header count `alive 2 of 3` (follow-up 44).
+6. Gaps with no wording yet: a broken Thread (the Thread line is hidden when `thread_whole` is false); a repeat return home with nothing new and nothing earlier (D-110 F1 shows only the row `Nothing overcome yet`); the skipped-objective display (follow-up 26, D-97); the fiction frame for the rising summon price (follow-up 21).
+7. Vocabulary Jeff uses: "earns", "found and overcome", "village", "Sanctum", "path", "lost". Jeff's word rules: no "home" and no "stage" in player text (D-107).
 
 ## Failed-escape copy: decided (D-103, steps 5.15 and 5.16)
 
@@ -69,6 +90,6 @@ All player-facing strings are placeholder. Copy is Jeff's. Agents propose, marke
 |---|---|
 | All decisions | `decisions.md` |
 | Follow-ups | `follow-ups.md` |
-| Last two builds | `phase5-12-build.md` to `phase5-16-build.md` (5.12 to 5.15 have a RUN REQUEST) |
+| Last builds | `phase5-12-build.md` to `phase5-16-build.md`, `phase6-1-build.md` to `phase6-5-build.md` |
 | UI side | `docs/stories/v2-payout-explanation/decisions.md` |
 | Defects | `docs/stories/v2-infra-003/defect-register.md` (D66, D83, D93 to D96) |
