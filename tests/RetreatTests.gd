@@ -43,6 +43,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("retreat/roll_ignores_tick",                       Callable(RetreatTests, "_t_roll_ignores_tick"))
 	runner.register_test("retreat/attempt_count_saved_and_keys_differ",     Callable(RetreatTests, "_t_attempt_count_saved_and_keys_differ"))
 	runner.register_test("retreat/retreat_passed_fight_returns_later",      Callable(RetreatTests, "_t_retreat_passed_fight_returns_later"))
+	runner.register_test("retreat/retreat_passed_fight_only_target",        Callable(RetreatTests, "_t_retreat_passed_fight_only_target"))
 	runner.register_test("retreat/retreat_marks_pass_turn",                 Callable(RetreatTests, "_t_retreat_marks_pass_turn"))
 	runner.register_test("retreat/failed_retreat_spend_survives_reload",    Callable(RetreatTests, "_t_failed_spend_survives_reload"))
 
@@ -577,6 +578,46 @@ static func _t_retreat_passed_fight_returns_later() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
+## F2 (QA probe): the map is fully explored and one retreat-passed normal fight is the only target left.
+## The counter must still move while the party is parked, so the fight is offered on a later Advance,
+## never on the retreat turn itself.
+static func _t_retreat_passed_fight_only_target() -> Dictionary:
+	var env := VentureCharacterizationTests._setup_explore_env("rt_only_target")
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	var emap: Dictionary = stage["explore_map"]
+	var sits: Array = emap.get("situations", [])
+	if sits.is_empty():
+		return { "ok": false, "error": "test setup failed: the stage has no situation" }
+	var explored: Dictionary = {}
+	for key_v in ActiveStageService.explore_walkable(emap).keys():
+		explored[str(key_v)] = true
+	emap["explored_cells"] = explored
+	for i in range(sits.size()):
+		(sits[i] as Dictionary)["resolved"] = i != 0
+	var fight: Dictionary = sits[0]
+	fight["revealed"] = true
+	fight["passed"] = true
+	fight["is_objective"] = false
+	emap["turn_count"] = 0
+	fight["retreat_pass_turn"] = 0
+	emap["pending_situation_id"] = ""
+	var m: Array = []
+	runtime.dispatch({ "type": "stage.advance_turn" })
+	var em := _explore_map_of(flow_ctx)
+	if int(em.get("turn_count", -1)) != 1 or str(em.get("pending_situation_id", "")) + str(em.get("target_situation_id", "")) != "":
+		m.append("retreat turn parked: expected turn 1 and no target, got turn %s" % str(em.get("turn_count")))
+	runtime.dispatch({ "type": "stage.advance_turn" })
+	em = _explore_map_of(flow_ctx)
+	var heading := str(em.get("pending_situation_id", "")) + str(em.get("target_situation_id", ""))
+	if heading != str(fight["id"]):
+		m.append("later turn: expected the party to go for the fight '%s', got '%s' (turn %s)" % [str(fight["id"]), heading, str(em.get("turn_count"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
 ## The retreat itself writes the marker for a normal fight only, with the turn it ended on.
 static func _t_retreat_marks_pass_turn() -> Dictionary:
 	var m: Array = []
@@ -592,8 +633,8 @@ static func _t_retreat_marks_pass_turn() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## The cost of that: a re-roll after a reload is possible, but the failed attempt's 10 Ase is already
-## on disk, so every re-roll is paid.
+## A failed attempt's 10 Ase and its attempt count are already on disk after a reload, so a retry is paid
+## and rolls the next attempt key.
 static func _t_failed_spend_survives_reload() -> Dictionary:
 	var r: Dictionary = _engaged_retreat("rt_reload", false, 0, 50)
 	if not bool(r.get("ok", false)):

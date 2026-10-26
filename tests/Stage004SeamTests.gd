@@ -1547,7 +1547,6 @@ static func _t_prebattle_modal_route_and_resolve_structure() -> Dictionary:
 			"objective_state": { "type": EncounterResolutionModes.COMBAT },
 			"combat_intro_line": "Claimant test line",
 			"retreat_eligible": true,
-			"retreat_tier_label": "Risky",
 			"retreat_ase_cost": 7,
 		},
 		{

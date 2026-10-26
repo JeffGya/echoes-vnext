@@ -141,8 +141,8 @@ var session_broken_vow_effect: Dictionary = {}
 
 # V2-ECONOMY-001: transient economy cadence flags (never persisted to save)
 var pending_awakening_banner: bool = false         # true once after Ase Flame awakens
-var pending_scout_return_ase: int = 0              # partial Ase earned on retreat/return_home
-var pending_scout_return_intel_count: int = 0      # situations revealed on retreat/return_home
+var pending_scout_return_ase: int = 0              # Ase paid by the settle roll on return_home
+var pending_scout_return_intel_count: int = 0      # situations revealed on return_home
 var pending_scout_return_ekwan: int = 0            # Ekwan settled on return_home
 var pending_scout_return_settle_outcome: String = ""  # "none"|"some"|"all"|"nothing_new" after a return home; "" otherwise
 

@@ -223,7 +223,7 @@ static func _t_objective_state_shape() -> Dictionary:
 # Test 6: field_count_is_nonzero
 # Setup: round snapshot + final snapshot via minimal contexts.
 # Expected: data.size() > 0 for both (confirms LOG_SNAPSHOT_EMITTED would log field_count > 0).
-# Also checks round snapshot has more fields than final (round carries board + initiative data).
+# No count comparison between round and final (see the rewrite note in the body).
 static func _t_field_count_is_nonzero() -> Dictionary:
 	var round_ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
 	var final_ctx: FlowContext = CombatSnapshotTests._make_combat_over_ctx()
@@ -239,26 +239,28 @@ static func _t_field_count_is_nonzero() -> Dictionary:
 	if final_field_count <= 0:
 		return { "ok": false, "error": "final_snapshot field_count must be > 0, got: %d" % final_field_count }
 
-	# Round snapshot carries at least as many fields as final (board_cols, initiative, etc.).
-	# V2-COMBAT-001 added emotion delta fields to final, equalising counts — use >= not >.
-	if round_field_count < final_field_count:
-		return { "ok": false, "error": "round_snapshot should not have fewer fields than final (%d vs %d)" % [round_field_count, final_field_count] }
-
+	# REWRITTEN (6.4, D-110): the old check "round has at least as many fields as final" compared two
+	# unrelated key counts (equal at 25 until retreat_tier_label and carry_retreat_preview were removed from
+	# round). It guarded no contract; the test's purpose is field_count > 0, checked above.
 	return { "ok": true }
 
 
 # Test 7 (UI-004): pre_combat_has_retreat_fields
 # Setup: minimal pre_combat FlowContext (no config_service → defaults apply).
 # Expected: build_round_snapshot returns data with retreat_eligible, retreat_ase_cost,
-#           retreat_tier_label, retreat_success_pct keys.
+#           retreat_success_pct keys, and NOT the removed retreat_tier_label / carry_retreat_preview.
 static func _t_pre_combat_has_retreat_fields() -> Dictionary:
 	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
 	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
 	var data: Dictionary = snap.get("data", {})
 
-	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_affordable", "retreat_tier_label", "retreat_success_pct"]:
+	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_affordable", "retreat_success_pct"]:
 		if not data.has(key):
 			return { "ok": false, "error": "pre_combat data missing UI-004 key: '%s'" % key }
+	# REWRITTEN (6.4, D-110): retreat_tier_label is removed (no reader), so its presence is no longer required.
+	for key in ["retreat_tier_label", "carry_retreat_preview"]:
+		if data.has(key):
+			return { "ok": false, "error": "pre_combat data still carries the removed key '%s'" % key }
 
 	return { "ok": true }
 

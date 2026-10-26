@@ -57,24 +57,22 @@ static func build_retreat_return_snapshot(can_reenter: bool, t: int) -> Dictiona
 
 
 ## Producer C — the scout-return / withdrawal resolve card.
-## Moved verbatim from FlowRuntime._build_scout_return_snapshot(). It has THREE callers in
+## Moved verbatim from FlowRuntime._build_scout_return_snapshot(). It has TWO callers in
 ## different domains: VentureController.handle_return_home() (successful escape) and
 ## FlowRuntime._resolve_forced_retreat() (V2-COMBAT-003, a no-progress stalemate — same shape,
-## zero payout, its own run_type). Per core/AGENTS.md a helper used by two or more domains needs
+## zero payout, its own run_type). A combat retreat uses build_retreat_return_snapshot instead. Per core/AGENTS.md a helper used by two or more domains needs
 ## one owner, and a producer that READS FlowContext cannot live on ResolveSnapshotBuilder — that
 ## builder's purity contract takes no FlowContext at all. It is the "party withdrew from the
 ## stage" card, so it belongs to this stage-session service, static with an explicit flow_ctx
 ## parameter exactly like count_revealed_situations() and get_stage_base_reward() above.
 ##
-## `run_type` defaults to "scout_return" so the two pre-existing callers are byte-identical.
-## FlowRuntime._resolve_forced_retreat() passes "forced_retreat" — a distinct banner surface
+## `run_type` defaults to "scout_return". FlowRuntime._resolve_forced_retreat() passes "forced_retreat" — a distinct banner surface
 ## and a distinct PendingResultService run_type — so a stalemate the simulation could not
 ## resolve is never shown, logged, or recorded as a retreat the player chose. Callers still
 ## control every payout by what they leave in pending_scout_return_ase/_intel_count BEFORE
 ## calling this — this producer only reads and clears neither.
 ## Pure: two calls with the same arguments return byte-identical payloads.
-static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_type: String = "scout_return",
-		partial_cause: String = "partial_return_home") -> Dictionary:
+static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_type: String = "scout_return") -> Dictionary:
 	var _ase   := flow_ctx_arg.pending_scout_return_ase
 	var _ekwan := flow_ctx_arg.pending_scout_return_ekwan
 	var _intel := flow_ctx_arg.pending_scout_return_intel_count
@@ -92,7 +90,7 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_t
 				"cause": "settle_nothing_new", "params": _counts.duplicate() })
 		elif int(_counts.get("overcome", 0)) == 0:
 			breakdown.append({ "label": "Nothing overcome yet", "delta": 0, "currency": "ase",
-				"cause": "nothing_overcome_yet", "params": { "partial": partial_cause,
+				"cause": "nothing_overcome_yet", "params": {
 				"overcome": 0, "total": int(_counts.get("total", 0)) } })
 
 	var actor_preview: Array = []

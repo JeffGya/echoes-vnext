@@ -739,8 +739,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 	# have nothing to do with scouting. A combat resolve must never zero an Ase/intel value the
 	# player has not yet been shown. Do NOT "simplify" this to the type check alone.
 	#
-	# The two SETTERS — encounter.retreat and stage.return_home, both of which then build the
-	# scout-return snapshot in the same dispatch — are unchanged and stay where they are.
+	# The one SETTER — stage.return_home (VentureController), which then builds the scout-return
+	# snapshot in the same dispatch — is unchanged and stays where it is. A combat retreat sets none of these.
 	if str(out.get("type", "")) == FlowStateIds.RESOLVE \
 			and str((out.get("data", {}) as Dictionary).get("run_type", "")) == "scout_return":
 		flow_ctx.pending_scout_return_ase         = 0

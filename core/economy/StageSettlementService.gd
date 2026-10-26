@@ -336,7 +336,16 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 		"intel_count": ActiveStageService.count_revealed_situations(ctx) }
 	if bool(plan["nothing_new"]):
 		return result
-	var table := carry_table(ConfigService.get_rewards_cfg(cfg_service), retention_mul, logger, t)
+	var reward_cfg := ConfigService.get_rewards_cfg(cfg_service)
+	# A missing `carry_shares` would still build a table (every share 0) and mark objectives settled
+	# with nothing paid, so the parent keys are checked first. Nothing is marked or paid on failure.
+	var bad_key := _invalid_carry_key(reward_cfg)
+	if not bad_key.is_empty():
+		logger.warn(t, "economy.settle.config_error", "data.rewards parent key is missing or invalid; nothing settled", {
+			"parent_key": "data.rewards." + bad_key, "stage_id": ctx.stage_id,
+		})
+		return result
+	var table := carry_table(reward_cfg, retention_mul, logger, t)
 	var realm_model: Dictionary = RealmService.get_active(ctx)
 	var stage_ref := _live_stage(ctx)
 	if table.is_empty() or realm_model.is_empty() or stage_ref.is_empty():
@@ -370,10 +379,29 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 	stage_ref["settled_ekwan"] = int(plan["settled_ekwan"]) + ekwan
 	stage_ref["settle_count"] = settle_count + 1
 
+	logger.info(t, "economy.settle.leave", "Leave settled by one roll", {
+		"stage_id": ctx.stage_id, "settle_count": settle_count, "roll": int(roll),
+		"outcome": picked["outcome"], "share_pct": roundi(share * 100.0), "ase": ase, "ekwan": ekwan,
+		"marked_indexes": (plan["indexes"] as Array).duplicate(),
+	})
 	result["outcome"] = picked["outcome"]
 	result["ase"] = ase
 	result["ekwan"] = ekwan
 	return result
+
+
+## The first of `carry_odds` / `carry_shares` that is not a Dictionary holding a number for each outcome,
+## or "".
+static func _invalid_carry_key(reward_cfg: Dictionary) -> String:
+	for parent in ["carry_odds", "carry_shares"]:
+		var v: Variant = reward_cfg.get(parent)
+		if not (v is Dictionary):
+			return parent
+		for outcome in [OUTCOME_NONE, OUTCOME_SOME, OUTCOME_ALL]:
+			var n: Variant = (v as Dictionary).get(outcome)
+			if typeof(n) != TYPE_INT and typeof(n) != TYPE_FLOAT:
+				return parent
+	return ""
 
 
 ## The `intel_retention_bonus` of a directive, or 1.0 when it does not retain intel. In the roll it

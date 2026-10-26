@@ -194,6 +194,13 @@ func advance_turn(directive_service: DirectiveService, t: int) -> String:
 	var target := _session.find_explore_target(explore_map, directive, walkable, explored_cells, stage, bend, start_region)
 
 	if target.is_empty():
+		# A retreat-passed fight only becomes due on a later turn. With no other target the counter
+		# would never move, so the party spends this turn parked.
+		if ActiveStageService.has_retreat_pass_waiting(explore_map):
+			explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
+			stage["explore_map"] = explore_map
+			FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+			flow_ctx.request_save("stage.advance_turn.parked")
 		# All walkable cells explored and no discovered unresolved situations — nothing left.
 		logger.debug(t, "stage.advance.no_target", "advance_turn: no target found (all explored, all resolved)", {})
 		return "no_target"

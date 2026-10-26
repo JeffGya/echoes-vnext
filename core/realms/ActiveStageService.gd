@@ -448,9 +448,10 @@ func stage_movement_salt(stage: Dictionary) -> String:
 #             Returns synthetic { "id": "", "pos": <cell>, "is_frontier": true }.
 #   Tier 4 — FRONTIER EXHAUSTED (select_frontier returned {}, i.e. no reachable frontier):
 #             Re-offer the nearest unresolved OBJECTIVE including passed ones — so the stage
-#             remains completable when all optional nodes were skipped.
-#             Non-objective passed nodes are NEVER re-offered (player dismissed them on purpose).
-#             If no objective exists either, returns {} (nothing left; party parks).
+#             remains completable when all optional nodes were skipped. A normal fight passed by a
+#             retreat (`retreat_pass_turn`) is re-offered here on a later turn (D-109).
+#             Other passed non-objective nodes are NEVER re-offered (player dismissed them on purpose).
+#             If nothing qualifies, returns {} (nothing left; party parks).
 #
 # No directive ID may be named here. All behaviour comes from reading directive fields.
 #
@@ -485,7 +486,7 @@ func find_explore_target(
 		if not bool(sit.get("revealed", false)):
 			continue  # undiscovered — fog; not targetable
 		if bool(sit.get("passed", false)):
-			continue  # player skipped it; objectives return in Tier 4, others never
+			continue  # player skipped it; objectives and retreat-passed fights return in Tier 4
 		pool_candidates.append(sit)
 	var best_sit := StagePartyMovementAdapterScript.select_objective_target(
 		pool_candidates, dist_from_party, target_pref, category_map, slack_config, bend
@@ -527,14 +528,14 @@ func find_explore_target(
 	# ---- Tier 4: frontier exhausted — re-offer nearest unresolved OBJECTIVE (including passed) ----
 	# The whole reachable map is explored. If the player had previously passed an objective,
 	# the stage cannot be completed until they engage it — re-offer it here so the stage stays
-	# completable. Non-objective passed nodes are NOT re-offered.
+	# completable. Only retreat-passed fights (when due) return besides objectives.
 	var tier4_candidates: Array = []
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
 			continue
 		if not bool(sit.get("is_objective", false)) and not _retreat_passed_due(sit, explore_map):
-			continue  # other passed non-objective nodes stay skipped
+			continue  # ignored or not-yet-due non-objective nodes stay skipped
 		if not bool(sit.get("revealed", false)):
 			continue  # still fog — cannot target
 		tier4_candidates.append(sit)
@@ -559,6 +560,19 @@ static func _retreat_passed_due(sit: Dictionary, explore_map: Dictionary) -> boo
 		and int(explore_map.get("turn_count", 0)) > int(sit["retreat_pass_turn"])
 
 
+## True when an unresolved, revealed fight passed by a retreat is waiting for a later turn.
+## advance_turn uses it to let the turn counter move while the party has no other target.
+static func has_retreat_pass_waiting(explore_map: Dictionary) -> bool:
+	var sits_v: Variant = explore_map.get("situations", [])
+	for sit_v in (sits_v if sits_v is Array else []):
+		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+		if bool(sit.get("resolved", false)) or not bool(sit.get("revealed", false)):
+			continue
+		if sit.has("retreat_pass_turn") and not _retreat_passed_due(sit, explore_map):
+			return true
+	return false
+
+
 ## D-109: the roll key of the next combat retreat, built from saved numbers only. Counts the attempt on
 ## the stage record before the roll; the caller must request a save in the same dispatch.
 static func next_retreat_roll_key(flow_ctx_arg: FlowContext, encounter_id: String) -> String:
@@ -574,7 +588,8 @@ static func next_retreat_roll_key(flow_ctx_arg: FlowContext, encounter_id: Strin
 
 
 ## D-106: a successful combat retreat costs one turn and returns the party to the path.
-## A normal fight is marked passed, as stage.ignore_situation does (never offered again).
+## A normal fight is marked passed, as stage.ignore_situation does, and gets `retreat_pass_turn` so Tier 4
+## of find_explore_target offers it again on a later turn (ignore_situation sets no marker: never again).
 ## An objective fight (objective_index >= 0) stays open: FlowStageExploreState offers it again on entry.
 ## Caller reads objective_index before the encounter state exits. Returns { situation_id, can_reenter }.
 static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int, t: int) -> Dictionary:

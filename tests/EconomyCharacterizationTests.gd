@@ -100,6 +100,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/stipend_dead_echo_and_no_encounter", Callable(EconomyCharacterizationTests, "_t_stipend_dead_and_none"))
 	runner.register_test("econ_char/stipend_dead_echo_on_real_card", Callable(EconomyCharacterizationTests, "_t_stipend_real_card"))
 	runner.register_test("econ_char/settle_plan_gathered_by_realm_and_run", Callable(EconomyCharacterizationTests, "_t_settle_plan_gathered"))
+	runner.register_test("econ_char/settle_leave_logs_roll_outcome_and_marks", Callable(EconomyCharacterizationTests, "_t_settle_leave_logs"))
+	runner.register_test("econ_char/settle_leave_fails_visibly_on_bad_carry_config", Callable(EconomyCharacterizationTests, "_t_settle_leave_bad_carry_config"))
 	runner.register_test("econ_char/settle_odds_come_from_config_and_scout_shifts_them", Callable(EconomyCharacterizationTests, "_t_settle_odds_from_config"))
 	runner.register_test("econ_char/settle_roll_seeded_distribution", Callable(EconomyCharacterizationTests, "_t_settle_roll_seeded_distribution"))
 	runner.register_test("econ_char/settle_pays_once_and_marks", Callable(EconomyCharacterizationTests, "_t_settle_pays_once_and_marks"))
@@ -1239,12 +1241,14 @@ static func _t_cause_scout_rows() -> Dictionary:
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var done: Array = [_obj(0, "combat", true), _obj(1, "shrine", false), boss]
 	# REWRITTEN (D-105/D-106): the return-home row is named by the settle outcome (`settle_some`), not the
-	# old fixed `partial_return_home` cause. A retreat settles nothing, so it has no row until step 6.2.
+	# old fixed `partial_return_home` cause. A retreat settles nothing, so it has no row.
+	# REWRITTEN (6.4): the unused `partial_cause` argument is gone from the builder, so the zero row no
+	# longer carries params.partial (it was "partial_retreat", read by no one); the row keeps overcome/total.
 	var ctx_home := _scout_ctx(done, 3)
 	ctx_home.pending_scout_return_settle_outcome = "some"
 	var home: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(ctx_home, 1)["data"]["reward_breakdown"]
 	var retreat: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
-		_scout_ctx(done, 0), 1, "scout_return", "partial_retreat")["data"]["reward_breakdown"]
+		_scout_ctx(done, 0), 1)["data"]["reward_breakdown"]
 	if home.size() != 1 or str((home[0] as Dictionary).get("cause", "")) != "settle_some" \
 			or int(((home[0] as Dictionary).get("params", {}) as Dictionary).get("overcome", -1)) != 1 \
 			or int(((home[0] as Dictionary).get("params", {}) as Dictionary).get("total", -1)) != 2 \
@@ -1254,10 +1258,11 @@ static func _t_cause_scout_rows() -> Dictionary:
 		m.append("retreat row (a retreat settles nothing): %s" % JSON.stringify(retreat))
 	var none: Array = [_obj(0, "combat", false), boss.duplicate(true)]
 	var zero: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
-		_scout_ctx(none, 0), 1, "scout_return", "partial_retreat")["data"]["reward_breakdown"]
+		_scout_ctx(none, 0), 1)["data"]["reward_breakdown"]
 	if zero.size() != 1 or str((zero[0] as Dictionary).get("cause", "")) != "nothing_overcome_yet" \
 			or int((zero[0] as Dictionary).get("delta", -1)) != 0 \
-			or str(((zero[0] as Dictionary).get("params", {}) as Dictionary).get("partial", "")) != "partial_retreat":
+			or ((zero[0] as Dictionary).get("params", {}) as Dictionary).has("partial") \
+			or int(((zero[0] as Dictionary).get("params", {}) as Dictionary).get("total", -1)) != 1:
 		m.append("zero partial row: %s" % JSON.stringify(zero))
 	var forced: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
 		_scout_ctx(none, 0), 1, "forced_retreat")["data"]["reward_breakdown"]
@@ -1940,6 +1945,62 @@ static func _t_settle_roll_seeded_distribution() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
+## F6: the leave logs the roll number, the outcome and the marked objective indexes (a log may hold the
+## roll; a snapshot may not).
+static func _t_settle_leave_logs() -> Dictionary:
+	var objs: Array = [_obj(0, "shrine", true), _obj(1, "recover", true), _carry_boss()]
+	var ctx := _carry_ctx("realm.01", 0, objs, _seed_for("some"))
+	var logger := StructuredLogger.new()
+	var got := StageSettlementService.settle_leave(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", logger, 7)
+	var rolled := int(CampaignSeed.get_rng_from(_seed_for("some"), "stage.settle.stage.0.0.0").randi_range(0, 99))
+	var hits: Array = []
+	for e in logger.get_logs():
+		if str(e["type"]) == "economy.settle.leave":
+			hits.append(e)
+	if hits.size() != 1:
+		return { "ok": false, "error": "expected one economy.settle.leave log, got %d" % hits.size() }
+	var d: Dictionary = hits[0]["data"]
+	var m: Array = []
+	if int(d.get("roll", -1)) != rolled or str(d.get("outcome", "")) != "some" or str(got["outcome"]) != "some":
+		m.append("log %s, expected roll %d and outcome some" % [str(d), rolled])
+	if (d.get("marked_indexes", []) as Array) != [0, 1] or int(d.get("ase", -1)) != int(got["ase"]):
+		m.append("log %s, expected marked_indexes [0, 1] and the paid Ase %s" % [str(d), str(got["ase"])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## F6: a missing or invalid `carry_odds` or `carry_shares` fails visibly. The log names the parent key; the
+## result is nothing_new; no objective is marked and nothing is paid, so the gathered amount stays for a
+## later leave. (A missing carry_shares used to build a table of zero shares and mark everything settled.)
+static func _t_settle_leave_bad_carry_config() -> Dictionary:
+	var m: Array = []
+	for c in [["carry_shares", "erase"], ["carry_odds", "erase"], ["carry_shares", "partial"], ["carry_odds", "text"]]:
+		var objs: Array = [_obj(0, "shrine", true), _carry_boss()]
+		var ctx := _carry_ctx("realm.01", 0, objs, _seed_for("all"))
+		var rewards: Dictionary = ctx.config_service._balance["data"]["rewards"]
+		match str(c[1]):
+			"erase": rewards.erase(c[0])
+			"partial": (rewards[c[0]] as Dictionary).erase("some")
+			"text": rewards[c[0]] = "50/30/20"
+		var logger := StructuredLogger.new()
+		var got := StageSettlementService.settle_leave(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", logger, 3)
+		var st := _carry_stage(ctx)
+		var bal := ctx.save_data["economy"] as Dictionary
+		var named := false
+		for e in logger.get_logs():
+			if str(e["type"]) == "economy.settle.config_error" and str((e["data"] as Dictionary).get("parent_key", "")).ends_with(str(c[0])):
+				named = true
+		if str(got["outcome"]) != "nothing_new" or int(got["ase"]) != 0 or int(got["ekwan"]) != 0:
+			m.append("%s %s: result %s, expected nothing_new 0/0" % [c[0], c[1], str(got)])
+		if bool((st["objectives"][0] as Dictionary).get("settled", false)) or int(st.get("settle_count", 0)) != 0 \
+				or int(st.get("settled_ase", 0)) != 0:
+			m.append("%s %s: the objective was marked settled or totals moved: %s" % [c[0], c[1], str(st)])
+		if int(bal["ase"]) != 0 or int(bal["ekwan"]) != 0:
+			m.append("%s %s: paid %s, expected nothing" % [c[0], c[1], str(bal)])
+		if not named:
+			m.append("%s %s: no economy.settle.config_error log naming the parent key" % [c[0], c[1]])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
 ## One roll pays Ase and Ekwan once through the economy, marks every settled objective, writes the
 ## running totals, and a second leave with nothing new changes nothing.
 ## Shrine 30/6 + recover 24/5 + protect 24/3 = 78 / 14. All: 78 / 14. Some: 39 / 7. None: 0 / 0.
@@ -2284,7 +2345,7 @@ static func _t_settle_return_home_dispatch() -> Dictionary:
 
 
 ## D-106: a successful combat retreat does NOT settle. It costs 10 Ase, pays nothing, marks nothing, and
-## the pre-combat preview carries no amount. (Step 6.2 reworks the rest of the retreat.)
+## the pre-combat snapshot carries no retreat preview at all (`carry_retreat_preview` is removed).
 static func _t_settle_retreat_pays_nothing() -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "econ_char_settle_retreat")
 	if env.is_empty():
@@ -2296,14 +2357,17 @@ static func _t_settle_retreat_pays_nothing() -> Dictionary:
 	stage["explore_map"] = { "situations": [{ "id": "sit.econ", "resolved": false, "revealed": true }] }
 	flow_ctx.save_data["economy"]["ase"] = 50
 	flow_ctx.save_data["economy"]["ekwan"] = 0
-	var pre: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 1)["data"]["carry_retreat_preview"]
+	var pre_data: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 1)["data"]
 	var out: Dictionary = (env["runtime"] as FlowRuntime).dispatch(
 		{ "type": "encounter.retreat", "ase_cost": 999, "success_pct": 100 })
 	var data: Dictionary = out.get("data", {})
 	var econ: Dictionary = flow_ctx.save_data["economy"]
 	var st := FlowStageExploreState._get_current_stage(flow_ctx)
-	if int(pre["ase"]) != 0 or int(pre["ekwan"]) != 0 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2:
-		m.append("preview %s, expected 0/0 and 2 of 2" % str(pre))
+	# REWRITTEN (6.4, D-110): the old check read carry_retreat_preview (always 0/0 since D-106, no reader).
+	# The field is removed; the pre-combat data must not carry it or the old tier label.
+	for gone in ["carry_retreat_preview", "retreat_tier_label"]:
+		if pre_data.has(gone):
+			m.append("pre-combat data still carries the removed key '%s'" % gone)
 	# REWRITTEN (6.2): the retreat card is the pulled-back card (D-106). It carries no amount at all,
 	# so "paid nothing" is now the balance alone, plus the absence of any amount key on the card.
 	if data.has("ase_awarded") or data.has("ekwan_awarded") or int(econ["ase"]) != 40 or int(econ["ekwan"]) != 0:

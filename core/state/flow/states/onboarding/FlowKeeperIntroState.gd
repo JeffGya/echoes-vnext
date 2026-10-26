@@ -65,7 +65,6 @@ static func build_trial_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		"retreat_eligible": false,
 		"retreat_ase_cost": 0,
 		"retreat_affordable": false,
-		"retreat_tier_label": "",
 		"retreat_success_pct": 0,
 		"tutorial_line": "The trial is forming.",
 	}

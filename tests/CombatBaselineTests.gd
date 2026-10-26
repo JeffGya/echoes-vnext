@@ -686,9 +686,9 @@ static func _t_flush_never_exceeds_one() -> Dictionary:
 # longer contains the tick. The ticks (7 to 10) are unchanged.
 #
 # CHARACTERIZATION — current behaviour, not necessarily correct: the null-seed fallback branch
-# in FlowRuntime builds a different seed string from the primary path. It is unreachable in
-# normal play, because boot() always populates flow_ctx.campaign_seed; _t_retreat_branch forces
-# it to prove which branch production takes.
+# in FlowRuntime seeds an RNG with hash(<the same roll key>) instead of campaign_seed.get_rng(<key>),
+# so it draws from a different stream. It is unreachable in normal play, because boot() always
+# populates flow_ctx.campaign_seed; _t_retreat_branch forces it to prove which branch production takes.
 
 const RETREAT_TICK_OUTCOMES: Array = [
 	{ "pad": 0, "snapshot_type": "flow.resolve",   "success": true,  "tick": 7 },
@@ -726,7 +726,7 @@ static func _retreat_probe(tag: String, padding_dispatches: int, null_seed: bool
 		"ase_cost":    0,
 		"success_pct": RETREAT_SUCCESS_PCT,
 	})
-	# Success clears the encounter and publishes the scout-return resolve snapshot; failure
+	# Success clears the encounter and publishes the retreat-return resolve card; failure
 	# falls through to _handle_combat_init and leaves the context in place.
 	var success: bool = flow_ctx.encounter_ctx == null
 	return {
@@ -775,10 +775,10 @@ static func _t_retreat_branch() -> Dictionary:
 	if flow_ctx.campaign_seed == null:
 		return { "ok": false, "error": "campaign_seed was null after boot() — the primary seeded branch would not be the one production takes" }
 
-	# CHARACTERIZATION — current behaviour, not necessarily correct: the fallback at
-	# FlowRuntime.gd:1017 hashes a string WITHOUT the dot separator, a different seed namespace
-	# from the primary path one line above. Forced here purely to prove it is reachable code
-	# with an observable, deterministic outcome — not to endorse it.
+	# CHARACTERIZATION — current behaviour, not necessarily correct: the null-seed fallback in
+	# _handle_encounter_retreat uses hash(roll_key), a different stream from campaign_seed.get_rng(roll_key).
+	# Forced here purely to prove it is reachable code with an observable, deterministic outcome —
+	# not to endorse it.
 	var p: Dictionary = _retreat_probe("cb_retreat_fallback", 0, true)
 	if not bool(p.get("ok", false)):
 		return p
