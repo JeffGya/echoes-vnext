@@ -55,6 +55,16 @@ Scope risk: an Echo decision model touches Echo behavior, vectors and Calling da
 ## D-13 — The packs have their own small capacity (Jeff, 2026-10-27)
 The party carries a limited number of item slots on the path (a config number, not set yet). Echoes choose which finds fill them. The Sanctum cap (D-05) still applies when items arrive.
 
+## D-14 — Choice moment and the keeper's swap (Jeff, 2026-10-27)
+The Echoes choose at pickup, after each encounter (D-12).
+The keeper has one swap per path: take one item the Echoes left, and drop one they took. The Sanctum discard (D-11) stays as the way to free house room.
+ASSUMED (not yet confirmed): the packs still go through the early-leave roll (D-03) and the path-end bank, as ANSWERS #87 says. The Echo choice happens before the roll.
+
+## D-15 — Scope of the Echo choice (Jeff, 2026-10-27)
+This story builds: the packs capacity (D-13), the pickup decision point (a selection seam), the one keeper swap, and a simple seeded rule in which Standing sets how well the party picks.
+Calling, vectors and emotion are reserved inputs. They are not used yet.
+A follow-up story builds the full Echo decision model. It needs a new Notion row (Jeff's yes first).
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
