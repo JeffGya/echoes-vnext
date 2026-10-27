@@ -38,6 +38,22 @@ content_margin_right = 8.0
 content_margin_bottom = 8.0
 bg_color = Color(0, 0, 0, 0.6)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_stall_line"]
+content_margin_left = 12.0
+content_margin_top = 6.0
+content_margin_right = 12.0
+content_margin_bottom = 6.0
+bg_color = Color(0.05, 0.05, 0.08, 0.88)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.47843137, 0.70980394, 0.78431374, 0.75)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_objective_banner"]
 content_margin_left = 12.0
 content_margin_top = 8.0
@@ -146,6 +162,30 @@ theme_override_colors/font_color = Color(0.9607843, 0.94509804, 0.90588236, 1)
 theme_override_colors/font_outline_color = Color(0.05, 0.05, 0.08, 1)
 theme_override_constants/outline_size = 4
 horizontal_alignment = 1
+
+[node name="StallPanel" type="PanelContainer" parent="." unique_id=400000098]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -172.0
+offset_top = 140.0
+offset_right = 172.0
+offset_bottom = 176.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_stall_line")
+
+[node name="StallLabel" type="Label" parent="StallPanel" unique_id=400000099]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.47843137, 0.70980394, 0.78431374, 1)
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="ObjectiveLabel" type="Label" parent="." unique_id=100000005]
 layout_mode = 1

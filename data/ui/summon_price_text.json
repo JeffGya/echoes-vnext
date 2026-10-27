@@ -1,0 +1,20 @@
+{
+	"_status": "PLACEHOLDER (V2-ECONOMY-004, D-84): one ux-copy pass for all player-facing text happens after the row set is final; Jeff edits this one file. Keys that start with an underscore are notes, not text. {n} in a value is replaced by a number from the snapshot. Rules: say 'village', never 'house'; never mention a death; never say 'cheaper' or 'discount'; no id in any text.",
+	"price_card": {
+		"living_line": "{n} living in the village",
+		"next_label": "Next Echo",
+		"after_label": "The one after",
+		"price": "{n} Ase",
+		"reason_rising": "One more life costs more to hold.",
+		"reason_flat": "The price stops rising here."
+	},
+	"summon": {
+		"count_label": "Summons",
+		"max_button": "Max",
+		"short_line": "Need {n} more Ase"
+	},
+	"grade": {
+		"label": "Grade",
+		"locked_hint": "Not open yet"
+	}
+}

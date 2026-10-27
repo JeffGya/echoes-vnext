@@ -28,7 +28,24 @@ func exit(ctx: RefCounted, t: int) -> void:
 	flow_ctx.encounter_ctx = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1
+	flow_ctx.encounter_start_revealed_count = -1
 
+
+
+## { index, type, label } of the objective the engaged situation carries, when the pre-snapshot
+## resolve completed it; {} otherwise. Label comes from data.stages.objective_types.
+static func _objective_overcome(flow_ctx: FlowContext, stage_objectives: Array) -> Dictionary:
+	var idx := flow_ctx.active_encounter_objective_index
+	if idx < 0 or idx >= stage_objectives.size() or not (stage_objectives[idx] is Dictionary):
+		return {}
+	var obj: Dictionary = stage_objectives[idx]
+	if not bool(obj.get("completed", false)):
+		return {}
+	var type := str(obj.get("type", ""))
+	var types_v: Variant = ConfigService.get_balance_data(flow_ctx.config_service).get("stages", {}).get("objective_types", {})
+	var entry_v: Variant = (types_v as Dictionary).get(type, {}) if types_v is Dictionary else {}
+	var label := str((entry_v as Dictionary).get("label", "")) if entry_v is Dictionary else ""
+	return { "index": idx, "type": type, "label": label }
 
 
 ## COMBAT-007: FinalCombatSnapshot builder — emits type "flow.resolve".
@@ -111,13 +128,11 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# UI-005: pre-compute summary counts so ResolveScreen reads clean fields.
 	var enemies_defeated: int = 0
 	var echoes_survived: int  = 0
-	var total_enemies: int    = 0
 	var total_echoes: int     = 0
 	for a in projected_actors:
 		var faction := str(a.get("faction", ""))
 		var status  := str(a.get("status", ""))
 		if faction == "enemy":
-			total_enemies += 1
 			if status == "dead":
 				enemies_defeated += 1
 		elif faction == "echo":
@@ -171,26 +186,12 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			stage_objectives = raw_objs if raw_objs is Array else []
 			break
 
-	# V2-INFRA-003 Phase 8: the REALM-005 virtue bonus is STAGE cadence and no longer computed
-	# or paid here — StageSettlementService.settle() makes the same
-	# RealmService.calculate_stage_reward() call, with the same inputs, in the
-	# flow.complete_stage dispatch, and emits the same "economy.stage.reward" formula log line.
-	# formula_inputs is still surfaced on this snapshot for the Resolve screen's progression
-	# block, so the player still sees the formula that will pay them; it is display only.
-	var realm_virtue  := str(realm_model.get("virtue", ""))
-	var run_index     := int(realm_model.get("run_index", 0))
-	var stage_reward_data: Dictionary = RealmService.calculate_stage_reward(
-		stage_index, realm_virtue, run_index, reward_cfg
-	)
-	var formula_inputs: Dictionary = stage_reward_data.get("formula_inputs", {})
-
 	# ECONOMY-004: Compute and pay reward
 	var run_count := int(realm_model.get("run_count", 0))
+	var payout_factors := ActiveStageService.get_payout_factors(flow_ctx, flow_ctx.config_service, flow_ctx.logger, t)
 	var reward_data: Dictionary = RewardCalc.compute(
 		victory,
 		stage_objectives,
-		enemies_defeated,
-		total_enemies,
 		echoes_survived,
 		total_echoes,
 		round_ended,
@@ -198,20 +199,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		reward_cfg,
 		ectx.resolution_mode if ectx != null else "",
 		float(combat_state.get("par_rounds", 0.0)),
-		PaceService.rank_reached_count(combat_state),
-		int(combat_state.get("stage_base", 0)),
-		(combat_state.get("ally_killed_enemy_ids", []) as Array).size(),
-		str(combat_state.get("guide_mode", ""))
+		str(combat_state.get("guide_mode", "")),
+		flow_ctx.logger,
+		t,
+		flow_ctx.active_encounter_objective_index,
+		float(payout_factors["realm_scale"])
 	)
 	var _pace_mode := bool(reward_data.get("pace_mode", false))
-
-	# V2-ECONOMY-001: pre-compute ekwan_factor from first stage objective type
-	var _obj_type := "combat"
-	if not stage_objectives.is_empty() and stage_objectives[0] is Dictionary:
-		_obj_type = str((stage_objectives[0] as Dictionary).get("obj_type", "combat"))
-	var _ekwan_factor := float(reward_cfg.get("ekwan_base_factor", 0.12))
-	if _obj_type == "shrine":
-		_ekwan_factor *= float(reward_cfg.get("ekwan_shrine_multiplier", 1.5))
 
 	# V2-INFRA-003 Phase 8 (D77): the 25% defeat consolation is intended design and STAYS, but
 	# it pays once per situation. The situation is deliberately still NOT marked resolved on a
@@ -221,22 +215,25 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if not victory:
 		_consolation_eligible = ActiveStageService.claim_situation_defeat_consolation(flow_ctx)
 
+	# D-115: a win adds its fight row to the packs (nothing reaches the balance now). Every defeat loses
+	# the unsettled packs; only the small consolation above keeps its once-per-situation stamp.
+	var _claimant_fight: bool = ectx != null and ectx.encounter_id.ends_with(EarningsService.CLAIMANT_FIGHT_SUFFIX)
+	if victory:
+		ActiveStageService.record_fight_earnings(flow_ctx, _claimant_fight, t)
+	else:
+		ActiveStageService.lose_unsettled_packs(flow_ctx, t)
+
 	var economy_svc := EconomyService.new(flow_ctx.save_data)
 	var reward_result: Dictionary = economy_svc.reward_encounter_complete(
 		victory,
-		int(reward_data.get("base_reward", 0)),
-		int(reward_data.get("enemy_bonus", 0)),
-		enemies_defeated,
-		int(reward_data.get("echo_bonus", 0)),
-		echoes_survived,
-		int(reward_data.get("pace_bonus", 0)),
-		_pace_mode,
-		float(reward_data.get("redo_multiplier", 1.0)),
+		int(reward_data.get("consolation_base", 0)),
+		float(reward_data.get("realm_scale", 1.0)),
+		float(reward_data.get("replay_factor", 1.0)),
 		str(reward_data.get("rank", "F")),
 		_consolation_eligible,
-		_ekwan_factor,
 		flow_ctx.logger,
-		t
+		t,
+		RewardCalc.cfg_num(reward_cfg, "defeat_factor", 0.0, flow_ctx.logger, t) if not victory else 0.0
 	)
 
 	# Trigger save — the encounter payout (and, on a first defeat, the consolation stamp) are
@@ -256,23 +253,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# reflects the actual fear/morale echoes accumulated during the encounter.
 	# The win/loss drift in _apply_encounter_emotion_drift() then applies on top.
 	if ectx != null:
-		var em_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
-		var em_sanctum: Dictionary = em_sanctum_v if em_sanctum_v is Dictionary else {}
-		var em_roster_v: Variant = em_sanctum.get("roster", [])
-		var em_roster: Array = em_roster_v if em_roster_v is Array else []
-		for actor_v in ectx.actors:
-			if not actor_v is Dictionary:
-				continue
-			if str(actor_v.get("faction", "")) != "echo":
-				continue
-			var eid: String = str(actor_v.get("id", ""))
-			for i in range(em_roster.size()):
-				if em_roster[i] is Dictionary and str(em_roster[i].get("id", "")) == eid:
-					if not em_roster[i].has("emotion"):
-						em_roster[i]["emotion"] = {}
-					em_roster[i]["emotion"]["fear_current"]   = int(actor_v.get("fear", 0))
-					em_roster[i]["emotion"]["morale_current"] = int(actor_v.get("morale", 0))
-					break
+		sync_emotion_to_roster(flow_ctx, ectx)
 
 	# V2-EMOTION-001: per-echo emotion delta summary for resolve screen.
 	var pre_morale_map: Dictionary = ectx.pre_encounter_morale if ectx != null else {}
@@ -343,6 +324,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var objectives_remaining := EncounterSnapshotBuilder._count_remaining_required_objectives(flow_ctx)
 
 	# P1 CLOSE: surface — use the first objective type when known, else "combat" or "shrine".
+	var _obj_type := "combat"
+	if not stage_objectives.is_empty() and stage_objectives[0] is Dictionary:
+		_obj_type = str((stage_objectives[0] as Dictionary).get("type", "combat"))
 	var _combat_surface := _obj_type if not _obj_type.is_empty() else "combat"
 
 	# P1 CLOSE: summary_line — synthesize from reason and victory.
@@ -372,22 +356,35 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# ui/screens/venture/ResolveScreen.gd is data.get(key, <default>).
 	#
 	# PHASE 8 UPDATE (V2-INFRA-003, defects D36/D77/D05): the STAGE-cadence half of the payment
-	# HAS now moved. `RealmService.calculate_stage_reward`'s virtue bonus,
-	# `award_post_combat_xp()` and the `request_save("stage.reward")` that covered them are in
+	# HAS now moved. `award_post_combat_xp()` and the `request_save("stage.reward")` that covered them are in
 	# `StageSettlementService.settle()`, called from `VentureController.handle_complete_stage`
 	# so payment and stage advance land in ONE dispatch.
 	#
 	# WHAT REMAINS HERE, and why this producer still does not join the pure
 	# EncounterSnapshotBuilder beside producer B:
-	#   1. `reward_encounter_complete()` — the enemies-defeated / echoes-survived / pace bonuses
-	#      and the once-per-situation defeat consolation. Those measure THIS fight and belong to
+	#   1. `reward_encounter_complete()` — the once-per-situation defeat consolation. It measures THIS fight and belongs to
 	#      the dispatch that ends it, so `ase_awarded`/`ekwan_awarded` below are still real.
 	#   2. The ally-death morale/fear knock at the top of this function, whose writes three
 	#      later consumers read (_project_actor, the emotion summary, the roster sync).
 	#   3. The roster emotion write-back — the fear/morale THIS encounter accumulated.
 	# All three are encounter cadence. This function is smaller and honest now, but it is still
 	# not pure, so it stays a flow-state method.
-	var _breakdown: Array = reward_result.get("breakdown", [])
+	var _breakdown: Array = (reward_result.get("breakdown", []) as Array).duplicate()
+	# The stage payout preview already holds this fight (its encounters_overcome part), so a card
+	# that carries the preview must not also show the gathered row: the UI sums both.
+	var _stage_preview: Dictionary = {}
+	if victory and objectives_remaining == 0:
+		_stage_preview = StageSettlementService.new(flow_ctx, flow_ctx.config_service, null, null).preview()
+	var _fight_row: Dictionary = ActiveStageService.fight_row(flow_ctx, _claimant_fight) if victory else {}
+	if not _fight_row.is_empty() and _stage_preview.is_empty():
+		_breakdown.append({ "label": "Fight won", "delta": int(_fight_row.get("ase", 0)), "currency": "ase",
+			"cause": "encounter_gathered",
+			"params": { "kind": str(_fight_row.get("kind", "")), "gathered_ase": int(_fight_row.get("ase", 0)) } })
+	# A defeat that lost unsettled packs says so, with the amounts. Nothing reaches the balance, so delta is 0.
+	if not victory and ectx != null and not ectx.packs_lost.is_empty():
+		_breakdown.append({ "label": "Packs lost", "delta": 0, "currency": "ase", "cause": "packs_lost",
+			"params": { "lost_ase": int(ectx.packs_lost.get("lost_ase", 0)),
+				"lost_ekwan": int(ectx.packs_lost.get("lost_ekwan", 0)) } })
 	var _vow_outcome: Dictionary = flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {}
 
 	# A defeat shows nothing about pace (design §7): no colour on the result round line.
@@ -410,13 +407,24 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	ResolveSnapshotBuilder.add_actors(_data, projected_actors)
 	ResolveSnapshotBuilder.add_victory_flag(_data, victory)
 	ResolveSnapshotBuilder.add_ledger(_data, int(reward_result.get("ase_awarded", 0)), _breakdown)
+	ResolveSnapshotBuilder.add_ledger_seen(_data, SaveSchema.ledger_seen(flow_ctx.save_data))
+	# Same condition as the `flow.complete_stage` action in _build_resolve_actions.
+	if not _stage_preview.is_empty():
+		ResolveSnapshotBuilder.add_stage_payout(
+			_data, _stage_preview["rows"], int(_stage_preview["ase"]), int(_stage_preview["ekwan"]))
+	if victory and flow_ctx.encounter_start_revealed_count >= 0:
+		ResolveSnapshotBuilder.add_intel_gained(_data, maxi(0,
+			ActiveStageService.count_revealed_situations(flow_ctx) - flow_ctx.encounter_start_revealed_count))
+	if victory:
+		ResolveSnapshotBuilder.add_thread_whole(_data, ActiveStageService.lost_echo_names_with(flow_ctx, raw_actors).is_empty())
+		ResolveSnapshotBuilder.add_objective_overcome(_data, _objective_overcome(flow_ctx, stage_objectives))
 	ResolveSnapshotBuilder.add_ekwan(_data, int(reward_result.get("ekwan_awarded", 0)))
 	ResolveSnapshotBuilder.add_grade_rank(_data, str(reward_result.get("rank", "F")))
 	if _pace_mode and victory:
-		ResolveSnapshotBuilder.add_pace(_data, int(reward_data.get("pace_bonus", 0)),
+		ResolveSnapshotBuilder.add_pace(_data,
 			str(reward_data.get("pace_state", "")), bool(reward_data.get("pace_changed_rank", false)))
 	# PROG-003: per-echo XP events for ResolveScreen and EchoParty display.
-	ResolveSnapshotBuilder.add_progression(_data, formula_inputs, [], xp_events)
+	ResolveSnapshotBuilder.add_progression(_data, {}, [], xp_events)
 	# V2-EMOTION-001: per-echo emotion delta for ResolveScreen.
 	ResolveSnapshotBuilder.add_emotion(_data, emotion_summary)
 	# VOW-001 / V2-VOW-002: vow break/benefit/compliance outcome + vows unlocked this stage.
@@ -434,3 +442,25 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		EncounterSnapshotBuilder._build_combat_intro_line(flow_ctx)
 	)
 	return _snap
+
+
+## Writes each party actor's final fear and morale onto its roster Echo. Every ending fight calls it
+## (a standoff too, before its fear drop), so the roster shows what the fight left in them.
+static func sync_emotion_to_roster(flow_ctx: FlowContext, ectx: EncounterContext) -> void:
+	var em_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var em_sanctum: Dictionary = em_sanctum_v if em_sanctum_v is Dictionary else {}
+	var em_roster_v: Variant = em_sanctum.get("roster", [])
+	var em_roster: Array = em_roster_v if em_roster_v is Array else []
+	for actor_v in ectx.actors:
+		if not actor_v is Dictionary:
+			continue
+		if str(actor_v.get("faction", "")) != "echo":
+			continue
+		var eid: String = str(actor_v.get("id", ""))
+		for i in range(em_roster.size()):
+			if em_roster[i] is Dictionary and str(em_roster[i].get("id", "")) == eid:
+				if not em_roster[i].has("emotion"):
+					em_roster[i]["emotion"] = {}
+				em_roster[i]["emotion"]["fear_current"]   = int(actor_v.get("fear", 0))
+				em_roster[i]["emotion"]["morale_current"] = int(actor_v.get("morale", 0))
+				break

@@ -46,6 +46,9 @@ static func register(runner) -> void:
 	runner.register_test("pending_result/continue_consumes_and_then_reaches_sanctum", func(): return _t_consumed_on_leaving_resolve())
 	# 2 — combat end to end, across a real process-level quit
 	runner.register_test("pending_result/combat_result_survives_a_quit", func(): return _t_combat_survives_quit())
+	# D-116 — the standoff card is durable and resumes on the card
+	runner.register_test("pending_result/standoff_card_survives_a_quit", func(): return _t_standoff_survives_quit())
+	runner.register_test("pending_result/standoff_second_card_replays_both_buttons", func(): return _t_standoff_replay_second())
 	# 4 — idempotency of the capture
 	runner.register_test("pending_result/capture_is_first_write_wins", func(): return _t_first_write_wins())
 	# 5 — D84: the run's own bond and Thread movement is on the card
@@ -106,6 +109,7 @@ static func _t_classify_outcomes() -> Dictionary:
 		{ "name": "partial",    "data": { "encounter_id": "e1", "victory": true,  "objectives_remaining": 2 }, "want": PendingResultService.OUTCOME_PARTIAL },
 		{ "name": "defeat",     "data": { "encounter_id": "e1", "victory": false, "objectives_remaining": 1 }, "want": PendingResultService.OUTCOME_DEFEAT },
 		{ "name": "withdrawal", "data": { "run_type": "scout_return", "victory": false, "intel_count": 3 },    "want": PendingResultService.OUTCOME_WITHDRAWAL },
+		{ "name": "standoff",   "data": { "run_type": "standoff", "standoff_outcome": "nobody_moved" },       "want": PendingResultService.OUTCOME_STANDOFF },
 	]
 	var mismatches: Array = []
 	for c_v in cases:
@@ -151,7 +155,7 @@ static func _t_classify_exclusions() -> Dictionary:
 ## (realm seed, stage id, turn_count); the helper derives the same stream and picks the first
 ## turn_count that rolls a success, so no production value is nudged — the same technique
 ## tests/VentureCharacterizationTests.gd::_t_return_home_scout_return uses.
-static func _drive_withdrawal(tag: String) -> Dictionary:
+static func _drive_withdrawal(tag: String, ase_before: int = -1) -> Dictionary:
 	var save_path := _fresh_save_path(tag)
 	var runtime := FlowRuntime.new(_logger(), ConfigService.new(), save_path)
 	runtime.boot()
@@ -212,6 +216,8 @@ static func _drive_withdrawal(tag: String) -> Dictionary:
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 
+	if ase_before >= 0:
+		runtime.get_save_data()["economy"]["ase"] = ase_before
 	var card: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
 	if str(card.get("type", "")) != FlowStateIds.RESOLVE:
 		return { "ok": false, "error": "return_home did not publish a resolve card, got '%s'" % str(card.get("type", "")) }
@@ -568,3 +574,78 @@ static func _first_stage(flow_ctx: FlowContext) -> Dictionary:
 		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == 0:
 			return s_v
 	return {}
+
+
+# ---------------------------------------------------------------------------
+# D-116 — the standoff card
+# ---------------------------------------------------------------------------
+
+## A real stall, ended by the round loop, then a real quit. The card must come back from the file with the
+## same facts, and its action must lead back to the path. The Echo that froze really refuses (fear 95), so the
+## recorded cause and name travel through the save.
+static func _t_standoff_survives_quit() -> Dictionary:
+	var env: Dictionary = CombatRoundtripIntegrationTests._setup_no_progress("standoff_quit")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+	var ob_v: Variant = runtime.get_save_data().get("onboarding", {})
+	if ob_v is Dictionary:
+		(ob_v as Dictionary)["chapter_one_complete"]  = true
+		(ob_v as Dictionary)["chapter_one_step"]      = OnboardingService.STEP_COMPLETE
+		(ob_v as Dictionary)["keeper_intro_complete"] = true
+		(ob_v as Dictionary)["keeper_intro_step"]     = "complete"
+	var echo: Dictionary = RetreatTests._echo_actor(ectx)
+	echo["fear"] = 95
+	var entry: Dictionary = RetreatTests._roster_entry(flow_ctx, str(echo["id"]))
+	entry["emotion"] = { "faith": 50, "morale_base": 50, "morale_current": 50, "fear_current": 30, "fear_base": 0 }
+	CombatRoundtripIntegrationTests._drive_no_progress(
+		runtime, ectx, CombatRoundtripIntegrationTests._no_progress_round_limit(runtime))
+
+	var card: Dictionary = flow_ctx.last_snapshot
+	var data := _data_of(card)
+	var m: Array = []
+	if str(data.get("run_type", "")) != "standoff" or str(data.get("cause", "")) != "froze" \
+			or data.get("froze_names", null) != [str(echo["name"])] or data.get("calmed_names", null) != [str(echo["name"])]:
+		return { "ok": false, "error": "the stall did not end as a standoff naming the frozen Echo: %s" % str(data) }
+	var pr := PendingResultService.read(runtime.get_save_data())
+	if str(pr.get("outcome", "")) != PendingResultService.OUTCOME_STANDOFF or str(pr.get("source", "")) != "standoff":
+		m.append("durable result: outcome '%s', source '%s'" % [str(pr.get("outcome", "")), str(pr.get("source", ""))])
+
+	var rebooted := _reboot(runtime.save_path)
+	if not PendingResultService.has_pending(rebooted.get_save_data()):
+		return { "ok": false, "error": "the standoff card did not survive the reboot" }
+	# D-118: the fight's fear (95) is written back, then the drop (10) falls: the actor's final fear minus 10 is on disk, not the old 30 - 10.
+	if int(RetreatTests._roster_entry(rebooted.flow_ctx, str(echo["id"])).get("emotion", {}).get("fear_current", -1)) != maxi(0, int(echo["fear"]) - 10):
+		m.append("the written-back fear (%d) minus the drop is not on disk" % int(echo["fear"]))
+	var replayed: Dictionary = rebooted.dispatch({ "type": "flow.continue" })
+	if str(replayed.get("type", "")) != FlowStateIds.RESOLVE:
+		return { "ok": false, "error": "flow.continue published '%s', expected the standoff card" % str(replayed.get("type", "")) }
+	if JSON.stringify(_data_of(replayed)) != JSON.stringify(data):
+		m.append("replayed data differs: %s" % JSON.stringify(_data_of(replayed)))
+	if JSON.stringify(replayed.get("actions", {})) != JSON.stringify(card.get("actions", {})):
+		m.append("replayed actions differ: %s" % JSON.stringify(replayed.get("actions", {})))
+	var back: Dictionary = rebooted.dispatch({ "type": "stage.standoff_return" })
+	if str(back.get("type", "")) != FlowStateIds.STAGE_EXPLORE:
+		m.append("the resumed card's button did not reach the path: %s" % str(back.get("type", "")))
+	if PendingResultService.has_pending(rebooted.get_save_data()):
+		m.append("leaving the card did not consume the durable result")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The second card (both buttons, calmed names) replays byte for byte from the durable result.
+static func _t_standoff_replay_second() -> Dictionary:
+	var env := _drive_withdrawal("standoff_second")
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.SANCTUM })
+	var card := VentureResolveSnapshotBuilder.build_standoff_snapshot({ "standoff_count": 2, "can_go_sanctum": true,
+		"cause": "blocked", "froze_names": ["A", "B"], "calmed_names": ["A"] }, 9)
+	PendingResultService.capture_or_consume(runtime.flow_ctx, card, 9)
+	var back := PendingResultService.build_snapshot(runtime.flow_ctx, 9)
+	var m: Array = []
+	if JSON.stringify(back) != JSON.stringify(card):
+		m.append("replay differs: %s vs %s" % [JSON.stringify(back), JSON.stringify(card)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }

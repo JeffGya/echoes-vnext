@@ -854,11 +854,12 @@ static func _t_resolve_modal_geometry_compact_and_wide() -> Dictionary:
 				"echoes_survived": 4,
 				"round_ended": 8,
 				"reward_breakdown": breakdown,
+				"ledger_seen": false,
 				"emotion_summary": [],
 			},
 			"actions": {
 				"cta.continue": { "type": "flow.go_state", "label": "To Sanctum" },
-				"cta.next_stage": { "type": "flow.go_state", "label": "Next Stage" },
+				"cta.next_stage": { "type": "flow.go_state", "label": "Continue" },
 			},
 		},
 	})

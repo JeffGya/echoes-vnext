@@ -98,6 +98,10 @@ var dev_stop_short: String = ""
 # Reset to -1 on flow.select_stage and after objective is marked complete.
 var active_encounter_objective_index: int = -1
 
+# Revealed-situation count when the current encounter began; -1 when none is running. Volatile,
+# never saved. build_final_snapshot reads it to report `intel_gained`.
+var encounter_start_revealed_count: int = -1
+
 # V2-WEAVE-001: Threads crystallized from the most recently completed Realm (session-transient).
 # Populated by FlowRuntime._handle_complete_stage() on realm_complete.
 # Resets to [] on new game boot (FlowContext is freshly instantiated).
@@ -137,8 +141,11 @@ var session_broken_vow_effect: Dictionary = {}
 
 # V2-ECONOMY-001: transient economy cadence flags (never persisted to save)
 var pending_awakening_banner: bool = false         # true once after Ase Flame awakens
-var pending_scout_return_ase: int = 0              # partial Ase earned on retreat/return_home
-var pending_scout_return_intel_count: int = 0      # situations revealed on retreat/return_home
+var pending_scout_return_ase: int = 0              # Ase paid by the settle roll on return_home
+var pending_scout_return_intel_count: int = 0      # situations revealed on return_home
+var pending_scout_return_ekwan: int = 0            # Ekwan settled on return_home
+var pending_scout_return_settle_outcome: String = ""  # "none"|"some"|"all"|"nothing_new" after a return home; "" otherwise
+var pending_return_confirm: bool = false      # one-shot: the standoff card asked for the Sanctum return confirmation; the next stage_explore snapshot shows it, then dispatch() clears it. Never persisted
 
 # V2-INFRA-003: single choke point for requesting a save. Sets save_request and, when a
 # reason is given, accumulates it into save_request_reason (pipe-joined) so multiple

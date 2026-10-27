@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3 uid="uid://realm_return_home_modal"]
+[gd_scene load_steps=3 format=3 uid="uid://realm_return_home_modal"]
 
 [ext_resource type="Script" path="res://ui/overlays/realm/ReturnHomeModal.gd" id="1_script"]
 [ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
@@ -74,6 +74,38 @@ theme_type_variation = &"RealmModalBody"
 autowrap_mode = 3
 horizontal_alignment = 1
 
+[node name="GatheredLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="RiskLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="WarningLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+autowrap_mode = 3
+horizontal_alignment = 1
+
+[node name="KeepsLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+autowrap_mode = 3
+horizontal_alignment = 1
+
 [node name="ContinueButton" type="Button" parent="SafeFrame/Center/Card/Content"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 56)
@@ -81,3 +113,22 @@ layout_mode = 2
 size_flags_horizontal = 4
 theme_type_variation = &"RealmModalPrimaryButton"
 text = "Continue"
+
+[node name="ConfirmRow" type="HBoxContainer" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="CancelButton" type="Button" parent="SafeFrame/Center/Card/Content/ConfirmRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 56)
+layout_mode = 2
+theme_type_variation = &"RealmModalSecondaryButton"
+
+[node name="ConfirmButton" type="Button" parent="SafeFrame/Center/Card/Content/ConfirmRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 2
+theme_type_variation = &"RealmModalPrimaryButton"

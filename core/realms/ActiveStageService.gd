@@ -301,32 +301,82 @@ static func count_revealed_situations(flow_ctx_arg: FlowContext) -> int:
 	return count
 
 
-# V2-ECONOMY-001: Get the base reward of the current stage.
-#
-# V2-INFRA-003 Phase 8 — DEFECT D39 ANSWERED HERE, AND ANSWERED THE SAME WAY FOR BOTH READERS.
-# This used to read `_objs[0]` only, and read its type under the key `"obj_type"`, which
-# `ObjectiveModel.make()` never writes (it writes `"type"` — core/realms/ObjectiveModel.gd:63).
-# Both faults pushed the same way, so every stage fell through to the "combat" default and this
-# returned a flat 30, while `RewardCalc.compute()` — the stage-completion payer — SUMMED the
-# same stage's objective weights. Two "base reward of this stage" readers, one stage, two
-# answers, and the register warned that whatever answers D39 must answer it for both.
-#
-# It now delegates to `RewardCalc.base_reward()`, the single definition, so the two cannot
-# drift apart again. Consequence, deliberate: the partial-withdrawal payout rises on every
-# multi-objective stage (it is a fraction of this base), and shrine/boss objective weights
-# reach it for the first time.
-static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> int:
+# Base reward of the current stage, by `mode` (RewardCalc.MODE_*). The default pays completed
+# objectives only (retreat and return-home partials). The fought objective for the other modes is
+# `flow_ctx.active_encounter_objective_index`.
+static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService,
+		logger: StructuredLogger = null, t: int = 0, mode: String = RewardCalc.MODE_COMPLETED) -> int:
+	return RewardCalc.base_reward(_current_stage_objectives(flow_ctx_arg),
+		ConfigService.get_rewards_cfg(config_service_arg), logger, t,
+		mode, flow_ctx_arg.active_encounter_objective_index)
+
+
+# The realm scale and replay factor of the active realm (D-63, D-54), for the payers that do not
+# hold the realm model: the defeat consolation and the retreat and return-home partials.
+static func get_payout_factors(flow_ctx_arg: FlowContext, config_service_arg: ConfigService,
+		logger: StructuredLogger = null, t: int = 0) -> Dictionary:
+	var reward_cfg := ConfigService.get_rewards_cfg(config_service_arg)
+	var run_count := int(RealmService.get_active(flow_ctx_arg).get("run_count", 0))
+	return {
+		"realm_scale": RewardCalc.realm_scale(flow_ctx_arg.realm_id,
+			ConfigService.get_realm_order(config_service_arg), reward_cfg, logger, t),
+		"replay_factor": RewardCalc.replay_factor(run_count, reward_cfg, logger, t),
+	}
+
+
+# "Overcome of total" for the current stage; the boss stub is excluded by config. Read only.
+static func get_objective_counts(flow_ctx_arg: FlowContext, config_service_arg: ConfigService) -> Dictionary:
+	return RewardCalc.objective_counts(_current_stage_objectives(flow_ctx_arg),
+		ConfigService.get_rewards_cfg(config_service_arg))
+
+
+static func _current_stage_objectives(flow_ctx_arg: FlowContext) -> Array:
 	var _stage_idx := int(flow_ctx_arg.stage_id.replace("stage.", ""))
 	var _realm_v: Variant = flow_ctx_arg.save_data.get("realms", {}).get(flow_ctx_arg.realm_id, {})
 	var _realm: Dictionary = _realm_v if _realm_v is Dictionary else {}
 	var _stages_v: Variant = _realm.get("stages", [])
 	var _stages: Array = _stages_v if _stages_v is Array else []
-	var _objs: Array = []
 	if _stage_idx >= 0 and _stage_idx < _stages.size() and _stages[_stage_idx] is Dictionary:
-		var _stage: Dictionary = _stages[_stage_idx]
-		var _objs_v: Variant = _stage.get("objectives", [])
-		_objs = _objs_v if _objs_v is Array else []
-	return RewardCalc.base_reward(_objs, ConfigService.get_rewards_cfg(config_service_arg))
+		var _objs_v: Variant = (_stages[_stage_idx] as Dictionary).get("objectives", [])
+		return _objs_v if _objs_v is Array else []
+	return []
+
+
+## Display names of the party Echoes that died in the active stage's EARLIER fights, in order of
+## death. Old saves have no field and read empty. Names only: no ids reach the player.
+static func stage_lost_echo_names(flow_ctx_arg: FlowContext) -> Array:
+	var stored_v: Variant = FlowStageExploreStateScript._get_current_stage(flow_ctx_arg).get("lost_echo_names", [])
+	return (stored_v as Array).duplicate() if stored_v is Array else []
+
+
+## The ONE answer to "which Echoes died in this stage": the stored names plus the dead party Echoes
+## of `actors` (the fight just played), unique, in order of death. The Thread flag (D-50) and the
+## stipend row (D-81) both read it. The permadeath story (D-66) changes only this function.
+static func lost_echo_names_with(flow_ctx_arg: FlowContext, actors: Array) -> Array:
+	var names := stage_lost_echo_names(flow_ctx_arg)
+	for n_v in RewardCalc.echo_tally(actors)["lost"]:
+		if not names.has(n_v):
+			names.append(n_v)
+	return names
+
+
+## Writes this fight's dead party Echoes onto the stage record. Call once, where a fight ends:
+## a snapshot builder must not write (snapshot_purity), and the next fight rebuilds a dead Echo.
+func record_fight_deaths(t: int) -> void:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	if ectx == null:
+		return
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return
+	var names := lost_echo_names_with(flow_ctx, ectx.actors)
+	if names.size() == stage_lost_echo_names(flow_ctx).size():
+		return
+	stage["lost_echo_names"] = names
+	flow_ctx.request_save("stage.echo_lost")
+	logger.info(t, "stage.echo_lost", "Party Echoes died in this fight", {
+		"stage_id": flow_ctx.stage_id, "lost_count": names.size(),
+	})
 
 
 # V2-INFRA-003 Phase 8 (defect D77): claim the ONE defeat consolation of the situation that
@@ -377,6 +427,66 @@ static func claim_situation_defeat_consolation(flow_ctx_arg: FlowContext) -> boo
 	return true
 
 
+## D-115: a won fight that is not an objective adds ONE `fight` row to the packs. The row id is the
+## exactly-once stamp: a repeated final snapshot, a retry or a reload adds nothing. An objective fight
+## (`active_encounter_objective_index` >= 0) adds none; its objective weight is its pay. Returns true
+## when a row was written. Callers request the save.
+static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: int) -> bool:
+	if flow_ctx_arg.active_encounter_objective_index >= 0:
+		return false
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return false
+	var sit_id := _last_situation_id(stage)
+	var wrote := EarningsService.record_fight(stage, sit_id, claimant,
+		ConfigService.get_rewards_cfg(flow_ctx_arg.config_service), flow_ctx_arg.logger, t)
+	if wrote and flow_ctx_arg.logger != null:
+		flow_ctx_arg.logger.info(t, "economy.earnings.fight", "Won fight added to the packs", {
+			"stage_id": flow_ctx_arg.stage_id, "situation_id": sit_id, "claimant": claimant })
+	return wrote
+
+
+## The fight row of the situation being fought, or {} when there is none. Read only: a rebuilt final card
+## shows the same row as the first build, because it reads the row and not the act of writing it.
+static func fight_row(flow_ctx_arg: FlowContext, claimant: bool) -> Dictionary:
+	if flow_ctx_arg.active_encounter_objective_index >= 0:
+		return {}
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return {}
+	return EarningsService.row_of(stage, EarningsService.fight_id(_last_situation_id(stage), claimant))
+
+
+static func _last_situation_id(stage: Dictionary) -> String:
+	var emap_v: Variant = stage.get("explore_map", {})
+	return str((emap_v as Dictionary).get("last_situation_id", "")) if emap_v is Dictionary else ""
+
+
+## D-115: a defeat loses every unsettled row of the active stage's packs (rows kept on defeat stay).
+## A completed objective with no row gets its row first, so the safety net cannot add it back later.
+## Runs on every defeat. It is idempotent: a lost row is not unsettled, so a repeat marks nothing.
+## Returns how many rows were lost. The caller requests the save.
+static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return 0
+	EarningsService.ensure_objective_rows(stage, ConfigService.get_rewards_cfg(flow_ctx_arg.config_service),
+		flow_ctx_arg.logger, t)
+	# Amounts are read before the marks and use the same scale as the leave panel's gathered line.
+	var sums := EarningsService.sums(EarningsService.losable(EarningsService.rows_of(stage)))
+	var fx := get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service, flow_ctx_arg.logger, t)
+	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"])
+	var lost_ase := RewardCalc.round_payout(float(sums["scaled_ase"]) * k)
+	var lost_ekwan := RewardCalc.round_payout(float(sums["scaled_ekwan"]) * k)
+	var lost := EarningsService.mark_lost(stage)
+	if lost > 0 and (lost_ase > 0 or lost_ekwan > 0) and flow_ctx_arg.encounter_ctx != null:
+		flow_ctx_arg.encounter_ctx.packs_lost = { "lost_ase": lost_ase, "lost_ekwan": lost_ekwan }
+	if lost > 0 and flow_ctx_arg.logger != null:
+		flow_ctx_arg.logger.info(t, "economy.earnings.lost", "Defeat lost the packs", {
+			"stage_id": flow_ctx_arg.stage_id, "rows": lost, "ase": lost_ase, "ekwan": lost_ekwan })
+	return lost
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # Target selection
 # ────────────────────────────────────────────────────────────────────────────
@@ -398,11 +508,16 @@ func stage_movement_salt(stage: Dictionary) -> String:
 #             Returns synthetic { "id": "", "pos": <cell>, "is_frontier": true }.
 #   Tier 4 — FRONTIER EXHAUSTED (select_frontier returned {}, i.e. no reachable frontier):
 #             Re-offer the nearest unresolved OBJECTIVE including passed ones — so the stage
-#             remains completable when all optional nodes were skipped.
-#             Non-objective passed nodes are NEVER re-offered (player dismissed them on purpose).
-#             If no objective exists either, returns {} (nothing left; party parks).
+#             remains completable when all optional nodes were skipped. A fight carrying
+#             `retreat_pass_turn` (a chosen retreat from a normal fight, D-109, or a standoff on any
+#             fight, D-116) is re-offered here only on a later turn.
+#             Other passed non-objective nodes are NEVER re-offered (player dismissed them on purpose).
+#             If nothing qualifies, returns {} (nothing left; party parks).
 #
 # No directive ID may be named here. All behaviour comes from reading directive fields.
+#
+# `retreat_pass_turn` fights are re-offered in Tier 4 only on a later turn than the retreat or standoff.
+# stage.ignore_situation sets no such field.
 func find_explore_target(
 	explore_map: Dictionary,
 	directive: Dictionary,
@@ -432,7 +547,7 @@ func find_explore_target(
 		if not bool(sit.get("revealed", false)):
 			continue  # undiscovered — fog; not targetable
 		if bool(sit.get("passed", false)):
-			continue  # player skipped it; objectives return in Tier 4, others never
+			continue  # player skipped it; objectives and retreat-passed fights return in Tier 4
 		pool_candidates.append(sit)
 	var best_sit := StagePartyMovementAdapterScript.select_objective_target(
 		pool_candidates, dist_from_party, target_pref, category_map, slack_config, bend
@@ -474,14 +589,17 @@ func find_explore_target(
 	# ---- Tier 4: frontier exhausted — re-offer nearest unresolved OBJECTIVE (including passed) ----
 	# The whole reachable map is explored. If the player had previously passed an objective,
 	# the stage cannot be completed until they engage it — re-offer it here so the stage stays
-	# completable. Non-objective passed nodes are NOT re-offered.
+	# completable. Only retreat-passed fights (when due) return besides objectives.
 	var tier4_candidates: Array = []
 	for sit_v in situations:
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
 			continue
-		if not bool(sit.get("is_objective", false)):
-			continue  # only objectives are re-offered (non-objective passed nodes stay skipped)
+		if sit.has("retreat_pass_turn"):
+			if not _retreat_passed_due(sit, explore_map):
+				continue  # a retreated or stood-off fight waits for a later turn
+		elif not bool(sit.get("is_objective", false)):
+			continue  # ignored non-objective nodes stay skipped
 		if not bool(sit.get("revealed", false)):
 			continue  # still fog — cannot target
 		tier4_candidates.append(sit)
@@ -501,8 +619,86 @@ func find_explore_target(
 # Objective / situation resolution (mutates save_data, requests a save)
 # ────────────────────────────────────────────────────────────────────────────
 
+static func _retreat_passed_due(sit: Dictionary, explore_map: Dictionary) -> bool:
+	return sit.has("retreat_pass_turn") \
+		and int(explore_map.get("turn_count", 0)) > int(sit["retreat_pass_turn"])
+
+
+## True when an unresolved, revealed fight passed by a retreat is waiting for a later turn.
+## advance_turn uses it to let the turn counter move while the party has no other target.
+static func has_retreat_pass_waiting(explore_map: Dictionary) -> bool:
+	var sits_v: Variant = explore_map.get("situations", [])
+	for sit_v in (sits_v if sits_v is Array else []):
+		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
+		if bool(sit.get("resolved", false)) or not bool(sit.get("revealed", false)):
+			continue
+		if sit.has("retreat_pass_turn") and not _retreat_passed_due(sit, explore_map):
+			return true
+	return false
+
+
+## D-109: the roll key of the next combat retreat, built from saved numbers only. Counts the attempt on
+## the stage record before the roll; the caller must request a save in the same dispatch.
+static func next_retreat_roll_key(flow_ctx_arg: FlowContext, encounter_id: String) -> String:
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
+	var map_v: Variant = stage.get("explore_map", {})
+	var turn := int((map_v as Dictionary).get("turn_count", 0)) if map_v is Dictionary else 0
+	var attempt := int(stage.get("retreat_attempts", 0))
+	if not stage.is_empty():
+		stage["retreat_attempts"] = attempt + 1
+		FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)
+	var run_count := int(RealmService.get_active(flow_ctx_arg).get("run_count", 0))
+	return "encounter.retreat.%s.%d.%d.%d" % [encounter_id, run_count, turn, attempt]
+
+
+## D-106: a successful combat retreat costs one turn and returns the party to the path.
+## A normal fight is marked passed, as stage.ignore_situation does, and gets `retreat_pass_turn` so Tier 4
+## of find_explore_target offers it again on a later turn (ignore_situation sets no marker: never again).
+## An objective fight (objective_index >= 0) stays open: FlowStageExploreState offers it again on entry.
+## Caller reads objective_index before the encounter state exits. Returns { situation_id, can_reenter, returns }.
+## `standoff` (a stalemate, D-116): objective and normal fights alike get `passed` and `retreat_pass_turn`,
+## so neither returns at once, and the situation's saved `standoff_count` rises. Returns it too.
+static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int, t: int,
+		standoff: bool = false) -> Dictionary:
+	var out := { "situation_id": "", "can_reenter": false, "returns": false }
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
+	var map_v: Variant = stage.get("explore_map", {})
+	if not (map_v is Dictionary) or (map_v as Dictionary).is_empty():
+		return out
+	var explore_map: Dictionary = map_v
+	explore_map["turn_count"] = int(explore_map.get("turn_count", 0)) + 1
+	var sit_id := str(explore_map.get("last_situation_id", ""))
+	var sits_v: Variant = explore_map.get("situations", [])
+	for s_v in (sits_v if sits_v is Array else []):
+		if not (s_v is Dictionary) or str((s_v as Dictionary).get("id", "")) != sit_id or sit_id.is_empty():
+			continue
+		out["situation_id"] = sit_id
+		if objective_index >= 0 and not standoff:
+			explore_map["retreat_reoffer_id"] = sit_id
+			out["can_reenter"] = true
+		else:
+			(s_v as Dictionary)["passed"] = true
+			(s_v as Dictionary)["retreat_pass_turn"] = int(explore_map["turn_count"])
+		# `returns`: find_explore_target can offer this fight again (Tier 4). A resolved situation
+		# (the hostile Claimant, resolved before the fight) never returns.
+		out["returns"] = out["can_reenter"] or (not bool((s_v as Dictionary).get("resolved", false))
+			and bool((s_v as Dictionary).get("revealed", false)) and (s_v as Dictionary).has("retreat_pass_turn"))
+		if standoff:
+			out["standoff_count"] = int((s_v as Dictionary).get("standoff_count", 0)) + 1
+			(s_v as Dictionary)["standoff_count"] = out["standoff_count"]
+		break
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)
+	if flow_ctx_arg.logger != null:
+		flow_ctx_arg.logger.debug(t, "stage.retreat_return", "Retreat costs a turn; party goes back to the path", {
+			"stage_id": flow_ctx_arg.stage_id, "situation_id": sit_id,
+			"can_reenter": out["can_reenter"], "turn_count": int(explore_map["turn_count"]),
+		})
+	return out
+
+
 # V2-STAGE-002: Mark stage.objectives[objective_index].completed = true in save_data.
-# Used for stub-completed types (recover/protect/endure/pursue) and after combat victory.
+# Called after a good charge contact; combat victory marks it in resolve_combat_situation_and_objective.
 func mark_stage_objective_completed(objective_index: int, t: int) -> void:
 	if objective_index < 0:
 		return
@@ -516,6 +712,7 @@ func mark_stage_objective_completed(objective_index: int, t: int) -> void:
 	if objective_index < objs.size() and objs[objective_index] is Dictionary:
 		objs[objective_index]["completed"] = true
 		stage["objectives"] = objs
+		EarningsService.record_objective(stage, objective_index, ConfigService.get_rewards_cfg(config_service), logger, t)
 		FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
 		flow_ctx.request_save("stage.objective.completed")
 		logger.debug(t, "stage.objective.completed", "Stage objective marked completed", {
@@ -580,6 +777,7 @@ func resolve_combat_situation_and_objective(
 					var _vstage_objs: Array = _vstage_objs_v
 					if _vobj_idx < _vstage_objs.size() and _vstage_objs[_vobj_idx] is Dictionary:
 						_vstage_objs[_vobj_idx]["completed"] = true
+						EarningsService.record_objective(stage, _vobj_idx, ConfigService.get_rewards_cfg(config_service), logger, t)
 					stage["objectives"] = _vstage_objs
 		modified = true
 		matched_objective_index = int(_vs.get("objective_index", -1))

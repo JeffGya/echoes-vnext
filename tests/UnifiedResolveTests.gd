@@ -11,7 +11,7 @@
 #   3. unified_resolve/loot_emotion_summary_shape           — Array with pre/post/direction keys
 #   4. unified_resolve/loot_effects_is_array                — data.effects is Array
 #   5. unified_resolve/loot_continue_action_targets_explore — cta.continue.to == "flow.stage_explore"
-#   6. unified_resolve/money_ase_awarded_positive           — data.ase_awarded > 0
+#   6. unified_resolve/money_ase_awarded_positive           — data.ase_gathered > 0 and data.ase_awarded == 0 (found Ase waits in the packs)
 #   7. unified_resolve/money_reward_breakdown_entry_exists  — data.reward_breakdown has ≥1 entry
 #   8. unified_resolve/obstacle_choice_stays_stage_explore  — obstacle engage keeps type==stage_explore
 #   9. unified_resolve/obstacle_choice_overlay_present      — situation_overlay with panel_kind=="choice"
@@ -389,10 +389,10 @@ static func _t_money_ase_awarded_positive() -> Dictionary:
 	var data_v: Variant = snap.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 
-	var ase := int(data.get("ase_awarded", 0))
-	if ase <= 0:
+	var ase := int(data.get("ase_gathered", 0))
+	if ase <= 0 or int(data.get("ase_awarded", -1)) != 0:
 		_restore_save(_save_bak)
-		return { "ok": false, "error": "Expected ase_awarded > 0 for money, got %d" % ase }
+		return { "ok": false, "error": "Expected ase_gathered > 0 and ase_awarded 0 for money, got %d and %s" % [ase, str(data.get("ase_awarded"))] }
 
 	_restore_save(_save_bak)
 	return { "ok": true }

@@ -456,7 +456,7 @@ data.summoning.grade_costs: { uncalled: 60, called: 150, chosen: 400 }
 | `economy.ase` (active) | **Carryover** — field name, service choke points all valid | — |
 | `economy.ekwan` (placeholder) | ✅ **Done (V2-ECONOMY-001)** — Ekwan wired to stage rewards; displayed on Sanctum hub | — |
 | `EconomyService.spend_ase()` / `add_ase()` / `can_afford_ase()` | **Carryover** — valid single choke points | — |
-| `EconomyService.reward_stage_complete()` | ✅ **Done (V2-ECONOMY-001)** — now takes `ekwan_factor`; awards Ekwan; `reward_breakdown` entries include `currency` field | — |
+| `EconomyService.reward_stage_complete()` | ✅ **Done (V2-ECONOMY-001)** — now takes `ekwan_factor`; awards Ekwan; `reward_breakdown` entries include `currency` field. **Superseded (V2-ECONOMY-004 Phase 4):** `ekwan_factor` is gone; Ekwan is paid per completed objective type by the stage payout (`data.rewards.objective_ekwan`), fights pay none, and no breakdown row has `currency: ekwan` | — |
 | Settlement model (no frame-based accrual) | **Carryover** | — |
 | Ase Flame dormancy gate | ✅ **Done (V2-ECONOMY-001)** — `sanctum.ase_flame.awakened` gates offline accrual; set on onboarding completion; 40 Ase granted | — |
 | Scout-return resolve screen | ✅ **Done (V2-ECONOMY-001)** — retreat/return_home always routes to RESOLVE with intel-gated partial Ase | — |

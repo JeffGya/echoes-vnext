@@ -5,7 +5,7 @@
 # T2: _build_skill_entries_for_echo returns ward/root/break entries for okofor (not path/veil).
 # T3: Uncalled echo (calling="") returns [] — no calling_origin fallback.
 # T4: SaveService repairs unlocked_skills:[] on echoes that lack the field.
-# T5: sanctum.unlock_skill spends 40 Ase and writes skill_id to unlocked_skills.
+# T5: sanctum.unlock_skill spends 60 Ase and writes skill_id to unlocked_skills.
 # T6: sanctum.unlock_skill denied when skill already in unlocked_skills.
 # T7: sanctum.unlock_skill denied when echo has no confirmed calling.
 # T8: sanctum.party.toggle works from flow.sanctum without navigating to echo_party.
@@ -234,7 +234,7 @@ static func _t_unlocked_skills_after_repair() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# T5: sanctum.unlock_skill spends 40 Ase and writes skill_id to unlocked_skills
+# T5: sanctum.unlock_skill spends 60 Ase and writes skill_id to unlocked_skills
 # ---------------------------------------------------------------------------
 
 static func _t_unlock_skill_spends_ase() -> Dictionary:
@@ -278,10 +278,10 @@ static func _t_unlock_skill_spends_ase() -> Dictionary:
 
 	var econ_after := _get_economy(save_after)
 	var ase_after := int(econ_after.get("ase", -1))
-	if ase_after != 60:
+	if ase_after != 40:
 		return {
 			"ok":    false,
-			"error": "Expected ase=60 after spending 40 from 100, got %d" % ase_after,
+			"error": "Expected ase=40 after spending 60 from 100, got %d" % ase_after,
 		}
 
 	return { "ok": true }

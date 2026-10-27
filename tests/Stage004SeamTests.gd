@@ -1338,7 +1338,7 @@ static func _t_victory_return_clears_ally_fields_and_preserves_companion_invite(
 
 
 # BUG 2 regression: build_final_snapshot()'s echo tally (total_echoes / echoes_survived,
-# which feed RewardCalc's echo_bonus and rank denominator) must exclude combatants with
+# which feed the rank denominator and the chip count) must exclude combatants with
 # is_ally == true or is_spirit == true — they are temporary combat participants, not
 # roster echoes. Compares a snapshot with 3 roster echoes (2 alive, 1 dead) against an
 # otherwise-identical snapshot that ALSO has a living joined ally and a dead joined
@@ -1547,7 +1547,6 @@ static func _t_prebattle_modal_route_and_resolve_structure() -> Dictionary:
 			"objective_state": { "type": EncounterResolutionModes.COMBAT },
 			"combat_intro_line": "Claimant test line",
 			"retreat_eligible": true,
-			"retreat_tier_label": "Risky",
 			"retreat_ase_cost": 7,
 		},
 		{
@@ -3411,6 +3410,7 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	combat.set("_distance_layer", combat.get_node("%DistanceLayer"))
 	combat.set("_round_label", combat.get_node("RoundLabel"))
 	combat.set("_objective_banner", combat.get_node("%ObjectiveBanner"))
+	combat.set("_stall_panel", combat.get_node("%StallPanel"))  # _apply_responsive_layout now places it
 	combat.set("_recenter_button", combat.get_node("%RecenterButton"))
 	combat.set("_cta_button", combat.get_node("StartCombatButton"))
 	combat.set("_manual_toggle", combat.get_node("AutoToggleButton"))

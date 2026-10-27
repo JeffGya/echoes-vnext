@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3 uid="uid://realm_prebattle_modal"]
+[gd_scene load_steps=3 format=3 uid="uid://realm_prebattle_modal"]
 
 [ext_resource type="Script" path="res://ui/overlays/realm/PrebattleModal.gd" id="1_script"]
 [ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
@@ -71,6 +71,24 @@ theme_type_variation = &"RealmModalBody"
 theme_override_font_sizes/font_size = 16
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="StalledLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="RetreatNoteLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"RealmModalBody"
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/Center/Card/Content"]
 layout_mode = 2

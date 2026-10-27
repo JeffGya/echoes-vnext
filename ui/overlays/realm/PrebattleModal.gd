@@ -9,6 +9,11 @@ signal dismiss_requested
 @onready var _retreat_button: Button = %RetreatButton
 @onready var _enter_button: Button = %EnterCombatButton
 @onready var _safe_frame: MarginContainer = %SafeFrame
+@onready var _retreat_note: Label = %RetreatNoteLabel
+@onready var _stalled: Label = %StalledLabel
+
+const Strings := preload("res://ui/components/CarriedHomePresentation.gd")
+const StandoffStrings := preload("res://ui/components/StandoffPresentation.gd")
 
 var _enter_action: Dictionary = {}
 var _retreat_action: Dictionary = {}
@@ -23,11 +28,19 @@ func present(payload: Dictionary) -> void:
 	var intro_line := str(payload.get("intro_line", ""))
 	_intro.text = intro_line
 	_intro.visible = not intro_line.is_empty()
+	_stalled.text = StandoffStrings.PREBATTLE_STALLED
+	_stalled.visible = bool(payload.get("stalled_before", false))
 	_enter_action = payload.get("enter_action", {}).duplicate(true)
 	_retreat_action = payload.get("retreat_action", {}).duplicate(true)
 	_enter_button.disabled = _enter_action.is_empty()
 	_retreat_button.disabled = not bool(payload.get("retreat_enabled", false))
 	_retreat_button.text = str(payload.get("retreat_label", "Retreat is not possible"))
+	# After a refused retreat the price and the balance come from data.retreat_denied.
+	var denied_v: Variant = payload.get("retreat_denied", {})
+	var denied: Dictionary = denied_v if denied_v is Dictionary else {}
+	_retreat_note.text = Strings.retreat_denied_line(int(denied.get("ase_cost", 0)), int(denied.get("ase_balance", 0))) \
+		if not denied.is_empty() else ""
+	_retreat_note.visible = not denied.is_empty()
 
 func _on_enter_pressed() -> void:
 	if _enter_action.is_empty():

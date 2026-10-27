@@ -81,7 +81,7 @@
 #     data.combat.charge_pressure                 protect_duration_bonus, endure_wave_bonus
 #     data.combat.objective_modes.<mode>          scaled objective params (see D30)
 #     data.combat.encounter_approach.surprise_fear
-#     data.combat.movement.capacity + data.rewards pace_* + stage base -> ectx.pace_cfg
+#     data.combat.movement.capacity + data.rewards pace_* -> ectx.pace_cfg
 #     data.contact.ally                           level_base / growth / max, ally build cfg
 #     data.stages                                 terrain signature, via RealmGenerator
 #     data.maturity_expression                    passed to LeadershipEmotionService
@@ -177,6 +177,7 @@ func setup(t: int) -> void:
 		flow_ctx.encounter_ctx = EncounterContext.new()
 		flow_ctx.encounter_ctx.encounter_id = flow_ctx.encounter_id
 		flow_ctx.encounter_ctx.stop_short_override = flow_ctx.dev_stop_short
+		flow_ctx.encounter_start_revealed_count = ActiveStageService.count_revealed_situations(flow_ctx)
 		# COMBAT-006 dev toggle: use override if set, otherwise default to PURIFY_SHRINE.
 		if not flow_ctx.dev_combat_objective.is_empty():
 			flow_ctx.encounter_ctx.resolution_mode = flow_ctx.dev_combat_objective
@@ -732,11 +733,8 @@ func _setup_pace(t: int) -> void:
 		ectx.actors, ectx.resolution_mode, ectx.objective_params, capacity_cfg)
 	ectx.pace_cfg = {
 		"par_rounds":      par,
-		"pace_full_ratio": float(reward_cfg.get("pace_full_ratio", 1.1)),
-		"pace_zero_ratio": float(reward_cfg.get("pace_zero_ratio", 1.6)),
-		"pace_bonus_pct":  float(reward_cfg.get("pace_bonus_pct", 0.05)),
-		# The live state needs the Ase a win would pay (design §7). Pure read, no RNG.
-		"stage_base":      ActiveStageService.get_stage_base_reward(flow_ctx, flow_ctx.config_service),
+		"pace_full_ratio": RewardCalc.cfg_num(reward_cfg, "pace_full_ratio", 1.0, logger, t),
+		"pace_zero_ratio": RewardCalc.cfg_num(reward_cfg, "pace_zero_ratio", 2.0, logger, t),
 	}
 	if logger != null:
 		logger.info(t, "combat.pace.par", "Pace par set at fight start", {

@@ -15,9 +15,10 @@
 #   - No UI or scene-tree reference.
 #   - Reached through FlowRuntime._venture_controller(), a per-call factory.
 #
-# Owns 11 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
-# flow.complete_stage, stage.return_home, stage.ignore_situation, directive.select,
-# stage.dismiss_overlay, flow.select_realm, stage.confirm_return_home, and — added in Phase 6
+# Owns 12 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
+# flow.complete_stage, stage.return_home, stage.ignore_situation, stage.retreat_return,
+# stage.standoff_return, directive.select,
+# stage.dismiss_overlay, flow.select_realm, and — added in Phase 6
 # Slice 6F — flow.select_stage.
 #
 # ---------------------------------------------------------------------------
@@ -305,7 +306,7 @@ func _situation_resolve_outcome(verdict: Dictionary, t: int) -> FlowActionOutcom
 		str(verdict.get("summary_line", "")),
 		emo_v if emo_v is Array else [],
 		eff_v if eff_v is Array else [],
-		int(verdict.get("ase_awarded", 0)),
+		int(verdict.get("ase_gathered", 0)),
 		t
 	)
 	var outcome := FlowActionOutcome.snapshot_outcome_no_refresh(_snap)
@@ -316,7 +317,7 @@ func _situation_resolve_outcome(verdict: Dictionary, t: int) -> FlowActionOutcom
 
 ## stage.return_home — party attempts to leave before completing all objectives.
 ## Escape check: seeded roll > (stages.escape_base_threshold - bent escape bonus) = success.
-## Success → party_state = "escaped", partial intel Ase, transition to the scout-return card.
+## Success → party_state = "escaped", the settle roll pays, transition to the scout-return card.
 ## Failure → return_home_result overlay on the explore snapshot.
 ##
 ## DETERMINISM: the turn_count READ below is the counterpart of the increment inside
@@ -360,27 +361,13 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 		FlowStageExploreState._write_stage_back(flow_ctx, stage)
 		flow_ctx.request_save("stage.escaped")
 
-		# V2-ECONOMY-001: Intel-gated partial Ase award.
-		# V2-STAGE-004-P2: intel_retention keeps full revealed-count value (no penalty on withdrawal).
-		var _intel_count := ActiveStageService.count_revealed_situations(flow_ctx)
-		var _partial_ase := 0
-		if _intel_count > 0:
-			var _pf := float(ConfigService.get_rewards_cfg(config_service).get("partial_intel_reward_factor", 0.12))
-			# V2-STAGE-004-P2: intel_retention — a directive that retains intel on a failed/partial
-			# withdrawal multiplies the partial reward by its `intel_retention_bonus` (data-driven,
-			# default 1.0 = no change). Scout (retention true, bonus 1.5) keeps more of the value it
-			# gathered; Seek (false) does not. Magnitude is tunable in data.directives.
-			# Phase 8 (D39): get_stage_base_reward() now sums the stage's objective weights via
-			# RewardCalc.base_reward(), the same definition the stage payout uses. This partial
-			# payout therefore rises on every multi-objective stage.
-			var _retention_mul := 1.0
-			if bool(directive.get("intel_retention", false)):
-				_retention_mul = float(directive.get("intel_retention_bonus", 1.0))
-			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service)) * _pf * _retention_mul)
-			if _partial_ase > 0:
-				econ.add_ase(_partial_ase, "return_home_intel_partial", logger, t)
-		flow_ctx.pending_scout_return_ase         = _partial_ase
-		flow_ctx.pending_scout_return_intel_count = _intel_count
+		# D-104 to D-106: one roll settles the completed objectives not yet settled; the rest is lost.
+		var _settle := StageSettlementService.settle_leave(flow_ctx, config_service, econ,
+			StageSettlementService.retention_mul(directive), "return_home_settle", logger, t)
+		flow_ctx.pending_scout_return_ase            = _settle["ase"]
+		flow_ctx.pending_scout_return_ekwan          = _settle["ekwan"]
+		flow_ctx.pending_scout_return_intel_count    = _settle["intel_count"]
+		flow_ctx.pending_scout_return_settle_outcome = _settle["outcome"]
 
 		_emotion_consequence_service().apply_sanctum_emotion_tick(t)
 		var _outcome := FlowActionOutcome.snapshot_outcome_no_refresh(
@@ -400,7 +387,7 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 	var snap_fail := StageExploreSnapshotBuilder.build(flow_ctx, t)
 	snap_fail["data"]["return_home_result"] = {
 		"success": false,
-		"message": "The way is blocked. The party cannot leave yet.",
+		"message": "It was not possible to escape at the moment. Move on, we can try again later.",
 	}
 	return FlowActionOutcome.snapshot_outcome(snap_fail)
 
@@ -447,6 +434,28 @@ func handle_ignore_situation(_action: Dictionary, t: int) -> FlowActionOutcome:
 	return FlowActionOutcome.snapshot_outcome(StageExploreSnapshotBuilder.build(flow_ctx, t))
 
 
+## stage.retreat_return — the pulled-back card's action (D-106). Goes back to the path. It is not a
+## go_state, so the vow stage-entry check does not run a second time for the same visit.
+func handle_retreat_return(_action: Dictionary, _t: int) -> FlowActionOutcome:
+	var data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	if not (data_v is Dictionary) or str((data_v as Dictionary).get("run_type", "")) != "retreat_return":
+		return FlowActionOutcome.handled_outcome()
+	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE_EXPLORE, "stage.retreat_return")
+
+
+## stage.standoff_return — the standoff card's action (D-116). Back to the path, like stage.retreat_return
+## (a dedicated action, so the vow stage-entry check does not run). `to_sanctum` is honoured only when the
+## card offered the Sanctum button; it sets a one-shot flag that makes the stage_explore snapshot ask the UI
+## to open the return confirmation. The escape check and the settle roll stay in stage.return_home.
+func handle_standoff_return(action: Dictionary, _t: int) -> FlowActionOutcome:
+	var data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	if not (data_v is Dictionary) or str((data_v as Dictionary).get("run_type", "")) != "standoff":
+		return FlowActionOutcome.handled_outcome()
+	flow_ctx.pending_return_confirm = bool(action.get("to_sanctum", false)) \
+		and bool((data_v as Dictionary).get("can_go_sanctum", false))
+	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE_EXPLORE, "stage.standoff_return")
+
+
 ## stage.dismiss_overlay — rebuild the explore snapshot from save_data so overlay data
 ## (return_home_result, situation_overlay) is stripped. refresh_snapshot() alone just
 ## re-validates the stale snapshot. Pre-extraction the whole body sat inside the
@@ -455,13 +464,6 @@ func handle_dismiss_overlay(_action: Dictionary, t: int) -> FlowActionOutcome:
 	if FlowStageExploreState._get_current_stage(flow_ctx).is_empty():
 		return FlowActionOutcome.handled_outcome()
 	return FlowActionOutcome.snapshot_outcome(StageExploreSnapshotBuilder.build(flow_ctx, t))
-
-
-## stage.confirm_return_home — the player acknowledged the failed-escape overlay.
-func handle_confirm_return_home(_action: Dictionary, _t: int) -> FlowActionOutcome:
-	return FlowActionOutcome.transition_outcome(
-		FlowStateIds.STAGE_MAP, "stage.return_home.confirmed"
-	)
 
 
 # ---------------------------------------------------------------------------
@@ -549,6 +551,23 @@ func handle_select_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE, "ui.flow.select_stage")
 
 
+## resolve.ledger.mark_seen — the player has now seen a result ledger. Sets
+## `ui_flags.result_ledger_seen` once, patches the live Resolve snapshot so a re-render does not
+## reopen the ledger, and queues the save. No payout effect.
+func handle_ledger_mark_seen(t: int) -> FlowActionOutcome:
+	if SaveSchema.ledger_seen(flow_ctx.save_data):
+		return FlowActionOutcome.handled_outcome()
+	var flags_v: Variant = flow_ctx.save_data.get(SaveSchema.UI_FLAGS_KEY, {})
+	var flags: Dictionary = flags_v if flags_v is Dictionary else {}
+	flags[SaveSchema.LEDGER_SEEN_KEY] = true
+	flow_ctx.save_data[SaveSchema.UI_FLAGS_KEY] = flags
+	var snap_data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	if snap_data_v is Dictionary and (snap_data_v as Dictionary).has("ledger_seen"):
+		(snap_data_v as Dictionary)["ledger_seen"] = true
+	logger.info(t, "ui.ledger.seen", "Result ledger marked as seen", {})
+	return FlowActionOutcome.handled_outcome().with_save_reason("ui.ledger.seen")
+
+
 ## flow.complete_stage — REALM-004: advance the stage index; on realm complete, clear context
 ## and route to REALM_SELECT. `destination` overrides the non-completed destination (cta.continue
 ## on victory routes to SANCTUM instead of STAGE_MAP); realm completion always wins.
@@ -620,6 +639,7 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 									var _vstage_objs: Array = _vstage_objs_v
 									if _vobj_idx < _vstage_objs.size() and _vstage_objs[_vobj_idx] is Dictionary:
 										_vstage_objs[_vobj_idx]["completed"] = true
+										EarningsService.record_objective(_vstage, _vobj_idx, ConfigService.get_rewards_cfg(config_service), logger, t)
 									_vstage["objectives"] = _vstage_objs
 						break
 				_vmap["situations"] = _vsits
@@ -668,6 +688,7 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.active_encounter_objective_index = -1  # V2-STAGE-002: reset after combat resolves
+	flow_ctx.encounter_start_revealed_count = -1
 
 	# V2-WEAVE-001: thread config (read-only). V2-INFRA-003 D84: the inline balance.json walk
 	# became ConfigService.get_threads_cfg() when _end_round() gained a second read of it.

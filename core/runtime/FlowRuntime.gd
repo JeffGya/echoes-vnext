@@ -260,6 +260,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"flow.complete_stage":
 				_apply_action_outcome(_venture_controller().handle_complete_stage(action, t), t)
 	
+			"resolve.ledger.mark_seen":
+				_apply_action_outcome(_venture_controller().handle_ledger_mark_seen(t), t)
+
 			"flow.continue":
 				var is_first_boot: bool = bool(flow_ctx.save_data.get("first_boot", true))
 				if is_first_boot:
@@ -632,6 +635,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"stage.ignore_situation":  # V2-STAGE-002: clear pending without resolving
 				_apply_action_outcome(_venture_controller().handle_ignore_situation(action, t), t)
+
+			"stage.retreat_return":  # D-106: the pulled-back card's action, back to the path
+				_apply_action_outcome(_venture_controller().handle_retreat_return(action, t), t)
+
+			"stage.standoff_return":  # D-116: the standoff card's action, back to the path (or the Sanctum confirm)
+				_apply_action_outcome(_venture_controller().handle_standoff_return(action, t), t)
 	
 			# ---- Stage Exploration V2-STAGE-003: NPC Contact conversation ----
 			# V2-INFRA-003 Phase 5 Slice C: routed to ContactController. The controller reports
@@ -645,9 +654,6 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"stage.disengage_contact":
 				_apply_action_outcome(_contact_controller().handle_disengage_contact(action, t), t)
 	
-			"stage.confirm_return_home":
-				_apply_action_outcome(_venture_controller().handle_confirm_return_home(action, t), t)
-
 			# V2-INFRA-003 Phase 5 Slice D: originally planned as runtime-owned, but its body
 			# rebuilds a stage-explore snapshot, so it is venture-domain and moved with the rest.
 			"stage.dismiss_overlay":
@@ -736,12 +742,24 @@ func dispatch(action: Dictionary) -> Dictionary:
 	# have nothing to do with scouting. A combat resolve must never zero an Ase/intel value the
 	# player has not yet been shown. Do NOT "simplify" this to the type check alone.
 	#
-	# The two SETTERS — encounter.retreat and stage.return_home, both of which then build the
-	# scout-return snapshot in the same dispatch — are unchanged and stay where they are.
+	# The one SETTER — stage.return_home (VentureController), which then builds the scout-return
+	# snapshot in the same dispatch — is unchanged and stays where it is. A combat retreat sets none of these.
 	if str(out.get("type", "")) == FlowStateIds.RESOLVE \
 			and str((out.get("data", {}) as Dictionary).get("run_type", "")) == "scout_return":
 		flow_ctx.pending_scout_return_ase         = 0
+		flow_ctx.pending_scout_return_ekwan       = 0
 		flow_ctx.pending_scout_return_intel_count = 0
+		flow_ctx.pending_scout_return_settle_outcome = ""
+
+	# The standoff card's Sanctum button asked the stage_explore snapshot to carry
+	# return_confirm_requested; once that snapshot is out the request is spent. The caller gets a copy
+	# that still carries the key; last_snapshot loses it, or a later dispatch that does not rebuild
+	# (handled_outcome, refresh_outcome, economy.settle_time) would publish it again.
+	if str(out.get("type", "")) == FlowStateIds.STAGE_EXPLORE:
+		if flow_ctx.pending_return_confirm and out.get("data") is Dictionary:
+			out = out.duplicate(true)
+			(flow_ctx.last_snapshot["data"] as Dictionary).erase("return_confirm_requested")
+		flow_ctx.pending_return_confirm = false
 
 	# V2-INFRA-003 Phase 3 (slice C): consume _bark_line here, exactly once, AFTER the snapshot
 	# that surfaced it (flow.encounter / flow.keeper_trial / flow.resolve, built by
@@ -1088,18 +1106,17 @@ func _sanctum_controller() -> SanctumController:
 ## V2-INFRA-003 Phase 5 Slice C: builds a fresh ContactController scoped to the current
 ## flow_ctx/config_service/econ/logger. Same per-call construction rationale as
 ## _weave_controller() above. Owns 3 actions: stage.consult_echoes, stage.speak_response,
-## stage.disengage_contact. `econ` is needed by apply_contact_outcome()'s claimant/good branch
-## (econ.add_ase for the Ase reward).
+## stage.disengage_contact. A good Claimant writes a found row in the packs; it does not touch `econ`.
 func _contact_controller() -> ContactController:
 	return ContactController.new(flow_ctx, config_service, econ, logger)
 
 
 ## V2-INFRA-003 Phase 5 Slice D: builds a fresh VentureController scoped to the current
 ## flow_ctx/config_service/econ/directive_service/logger. Same per-call construction rationale
-## as _weave_controller() above. Owns 10 actions: stage.advance_turn, stage.engage_situation,
+## as _weave_controller() above. Owns 9 actions: stage.advance_turn, stage.engage_situation,
 ## stage.resolve_situation_choice, flow.complete_stage, stage.return_home,
-## stage.ignore_situation, directive.select, stage.dismiss_overlay, flow.select_realm,
-## stage.confirm_return_home. `directive_service` is a dependency because three of those
+## stage.ignore_situation, directive.select, stage.dismiss_overlay, flow.select_realm.
+## `directive_service` is a dependency because three of those
 ## handlers resolve the active directive (advance_turn's step budget / reveal radius,
 ## return_home's escape bonus, and directive.select itself).
 func _venture_controller() -> VentureController:
@@ -1156,32 +1173,43 @@ func _apply_action_outcome(outcome: FlowActionOutcome, t: int) -> void:
 # Helpers
 ## UI-004: Player attempts retreat before round 1.
 ## Gate (speed) and tier (agi) were computed at snapshot time and baked into the action dict.
-## Ase is spent regardless of roll outcome.
-## Success → clear encounter, go to Sanctum. Failure → start combat immediately.
+## Ase is spent regardless of roll outcome. A balance below the price refuses the action (D-79).
+## Success → clear encounter, show the pulled-back card (its action returns to the path). Failure → start combat immediately.
 func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		logger.debug(t, "encounter.retreat.no_op", "Retreat: no active encounter context", {})
 		return
 
-	var ase_cost:    int = int(action.get("ase_cost",    0))
+	# The price comes from config, never from the action dict: a UI-built action must not set its own price.
+	var ase_cost:    int = RetreatService.get_ase_cost(config_service)
 	var success_pct: int = int(action.get("success_pct", 0))
 	var encounter_id: String = flow_ctx.encounter_ctx.encounter_id
 
-	# Spend Ase (always, win or lose). Guard: only spend if player can afford.
-	if ase_cost > 0:
-		if econ.can_afford_ase(ase_cost):
-			econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
-		else:
-			logger.debug(t, "encounter.retreat.no_ase", "Retreat: insufficient Ase — no spend", {
-				"ase_cost": ase_cost, "ase_balance": econ.get_ase()
-			})
+	# D-79: a short balance refuses the retreat. Nothing changes; the fight stays at pre-combat.
+	if not econ.can_afford_ase(ase_cost):
+		var ase_balance: int = econ.get_ase()
+		logger.info(t, "encounter.retreat.denied", "Retreat denied: not enough Ase", {
+			"encounter_id": encounter_id, "ase_cost": ase_cost, "ase_balance": ase_balance
+		})
+		var snap_data: Variant = (flow_ctx.last_snapshot as Dictionary).get("data", null)
+		if snap_data is Dictionary:
+			(snap_data as Dictionary)["retreat_denied"] = {
+				"reason": "insufficient_ase", "ase_cost": ase_cost, "ase_balance": ase_balance
+			}
+		return
 
-	# Seeded roll for determinism.
+	# Spend Ase (always, win or lose).
+	econ.spend_ase(ase_cost, "encounter.retreat", logger, t)
+
+	# D-109: the key uses saved numbers only (not t), so a reload and retry rolls the same.
+	# The attempt is counted and saved in this dispatch, before the roll.
+	var roll_key: String = ActiveStageService.next_retreat_roll_key(flow_ctx, encounter_id)
+	_mark_save_requested("encounter.retreat.attempt")
 	var rng := RandomNumberGenerator.new()
 	if flow_ctx.campaign_seed != null:
-		rng = flow_ctx.campaign_seed.get_rng("encounter.retreat." + encounter_id + "." + str(t))
+		rng = flow_ctx.campaign_seed.get_rng(roll_key)
 	else:
-		rng.seed = hash("encounter.retreat." + encounter_id + "." + str(t))
+		rng.seed = hash(roll_key)
 
 	var roll_result: Dictionary = RetreatService.roll_retreat(success_pct, rng)
 	var success: bool = bool(roll_result.get("success", false))
@@ -1194,16 +1222,10 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 	})
 
 	if success:
-		# V2-ECONOMY-001: Intel-gated partial Ase award before clearing encounter context.
-		var _intel_count := ActiveStageService.count_revealed_situations(flow_ctx)
-		var _partial_ase := 0
-		if _intel_count > 0:
-			var _pf := float(ConfigService.get_rewards_cfg(config_service).get("partial_intel_reward_factor", 0.12))
-			_partial_ase = roundi(float(ActiveStageService.get_stage_base_reward(flow_ctx, config_service)) * _pf)
-			if _partial_ase > 0:
-				econ.add_ase(_partial_ase, "retreat_intel_partial", logger, t)
-		flow_ctx.pending_scout_return_ase         = _partial_ase
-		flow_ctx.pending_scout_return_intel_count = _intel_count
+		# D-106: a retreat settles nothing. It costs one turn and puts the party back on the path.
+		# The objective index must be read before the transition: FlowEncounterState.exit() resets it.
+		var _rt_back: Dictionary = ActiveStageService.apply_retreat_return(
+			flow_ctx, flow_ctx.active_encounter_objective_index, t)
 
 		# Clear encounter context — no emotion drift on retreat.
 		# FIX (P4 review bug 2): retreat-success also skipped ally-field teardown — clear
@@ -1216,10 +1238,9 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		# V2-SANCTUM-001: withdrawal — apply emotion modifiers + vow release before resolve.
 		_emotion_consequence_service().apply_run_emotion_modifiers("withdrawal", t)
 		_vow_consequence_service().check_vow_release_condition(t)
-		# V2-INFRA-003 Phase 5 Slice D: producer C moved to ActiveStageService
-		# (two callers, two domains — see that file's header). Same pure function.
-		flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(flow_ctx, t)
-		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.scout_return")
+		flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_retreat_return_snapshot(
+			bool(_rt_back.get("can_reenter", false)), t)
+		flow_machine.transition(FlowStateIds.RESOLVE, flow_ctx, logger, t, "encounter.retreat.pulled_back")
 	else:
 		logger.info(t, "encounter.retreat.failed", "Retreat failed — combat begins", {
 			"encounter_id": encounter_id,
@@ -1228,41 +1249,27 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		_handle_combat_init(t)
 
 
-## V2-COMBAT-003: a fight where neither faction dealt damage for
-## data.combat.stalemate.no_progress_round_limit consecutive rounds cannot end by any objective
-## check (CombatState.check_end_condition() reason "no_progress_forced_retreat"). Called from
-## _end_round() in place of the normal victory/defeat pipeline, so build_final_snapshot(), the
-## reward computation it drives, the bond/Thread consequence block and the recruit-offer check
-## never run for this fight.
-##
-## Reuses the encounter.retreat SUCCESS shape (clear ally fields, drop the encounter, build the
-## scout-return-shaped resolve card, transition to RESOLVE) with EVERY payout that path can grant
-## removed:
-##   - the intel-count read and the partial-Ase award it feeds (encounter.retreat's
-##     "retreat_intel_partial" econ.add_ase call) — never computed here
-##   - pending_scout_return_ase / pending_scout_return_intel_count — forced to 0, so the resolve
-##     card's ledger and intel line both read zero
-##   - apply_run_emotion_modifiers("withdrawal", t) — grants a 1.25x morale-recovery multiplier
-##     on the surviving party; not called
-##   - check_vow_release_condition(t) — not called (no vow benefit was ever staged: that only
-##     happens in the victory branch of the pipeline this function replaces)
-## A stalemate the simulation could not resolve earns the player nothing.
+## A fight where neither faction made progress for data.combat.stalemate.no_progress_round_limit rounds
+## (CombatState.check_end_condition() reason "no_progress_forced_retreat") ends as a standoff (D-116): the
+## party steps back onto the path. Called from _end_round() in place of the victory/defeat pipeline, so the
+## final snapshot, the reward, the bond/Thread block and the recruit offer never run for this fight.
+## It records the fight's deaths and writes the final fear and morale to the roster like any ending fight, costs one turn, spends no Ase, grants no withdrawal
+## bonus and no vow release, and touches no pack row (StandoffService.resolve).
 func _resolve_forced_retreat(t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		return
 
-	# Same teardown as a successful encounter.retreat — clearing ally fields and dropping the
-	# encounter is cleanup, not a reward.
+	_stage_explore_session_service().record_fight_deaths(t)
+	FlowEncounterState.sync_emotion_to_roster(flow_ctx, flow_ctx.encounter_ctx)
+	var facts: Dictionary = StandoffService.resolve(flow_ctx, t)
+
 	_recruitment_consequence_service().clear_ally_fields_if_present(t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.bond_outcome      = {}
-	flow_ctx.pending_scout_return_ase         = 0
-	flow_ctx.pending_scout_return_intel_count = 0
 	_mark_save_requested("combat.no_progress_forced_retreat")
 
-	flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
-		flow_ctx, t, "forced_retreat")
+	flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_standoff_snapshot(facts, t)
 	flow_machine.transition(
 		FlowStateIds.RESOLVE, flow_ctx, logger, t, "combat.no_progress_forced_retreat")
 
@@ -1641,6 +1648,7 @@ func _end_round(t: int) -> void:
 		combat_state["no_progress_streak"] = 0
 	else:
 		combat_state["no_progress_streak"] = int(combat_state.get("no_progress_streak", 0)) + 1
+	StandoffService.record_round(ectx, _np_damage_this_round or _np_novel)
 
 	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read
 	# round_counter, hold_counter, and objective_params.
@@ -1692,6 +1700,11 @@ func _end_round(t: int) -> void:
 		# No-op (byte-identical) when there is no joined ally, the ally died, or this wasn't a
 		# victory. See ANSWERS.md #28/#31.
 		_recruitment_consequence_service().compute_ally_recruit_offer_if_eligible(_arr_victory, round, t)
+
+		# Deaths are recorded on the stage record here, where the fight ends (win or loss), not in
+		# the snapshot builder. The card reads the union of the record and this fight, so order
+		# against build_final_snapshot does not matter.
+		_stage_explore_session_service().record_fight_deaths(t)
 
 		# V2-STAGE-002: on victory, resolve the situation AND mark objective complete BEFORE
 		# the final snapshot so objectives_remaining is accurate AND the situation is not

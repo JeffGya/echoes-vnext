@@ -26,7 +26,7 @@ extends RefCounted
 ## Every block writes into the `data` Dictionary returned inside the skeleton (GDScript
 ## Dictionaries are passed by reference) and returns void.
 ##
-## SIXTEEN BLOCKS. Which producer emits which is the table in
+## The block library is the `add_*` functions below. Which producer emits which is the table in
 ## docs/resolve-snapshot-block-spec.md §4.3 — check it before removing a block that looks unused.
 
 
@@ -123,6 +123,22 @@ static func add_ledger(data: Dictionary, ase_awarded: int, reward_breakdown: Arr
 	data["reward_breakdown"] = reward_breakdown
 
 
+## 7b — Whether the player has already seen a result ledger (`SaveSchema.ledger_seen`), so the
+## UI opens the ledger only the first time. Read-only here; the dispatched action
+## `resolve.ledger.mark_seen` writes it. Producers that emit a ledger call this beside add_ledger.
+static func add_ledger_seen(data: Dictionary, seen: bool) -> void:
+	data["ledger_seen"] = seen
+
+
+## 7c — Preview of the stage payout the next `flow.complete_stage` will pay: Ase rows with
+## `cause`/`params`, and the Ase and Ekwan totals (Ekwan has no rows). Only the card that offers
+## that action carries it.
+static func add_stage_payout(data: Dictionary, rows: Array, ase: int, ekwan: int) -> void:
+	data["stage_payout_rows"]  = rows
+	data["stage_payout_ase"]   = ase
+	data["stage_payout_ekwan"] = ekwan
+
+
 ## 8 — %EkwanRow / %EkwanValue + Ekwan EffectChip, gated on `> 0` by the screen. Producers
 ## A, C, E. Its own block rather than a `ledger(include_ekwan)` flag because it is its own
 ## screen section AND because B omits it — see spec §2.3.
@@ -177,9 +193,40 @@ static func add_combat_seams(
 	data["combat_intro_line"]      = combat_intro_line
 
 
+## 14b — Situations a combat victory revealed during the fight. Written only when above 0, so a
+## card that revealed nothing keeps the key list it had before this block existed.
+static func add_intel_gained(data: Dictionary, gained: int) -> void:
+	if gained > 0:
+		data["intel_gained"] = gained
+
+
+## 14c — Whether no party Echo has died in the stage so far (D-50). Combat victory card only.
+static func add_thread_whole(data: Dictionary, whole: bool) -> void:
+	data["thread_whole"] = whole
+
+
+## 14d — The objective THIS fight overcame: { index, type, label }. Written only when one was.
+static func add_objective_overcome(data: Dictionary, overcome: Dictionary) -> void:
+	if not overcome.is_empty():
+		data["objective_overcome"] = overcome
+
+
+## 14f — Ase found on this card that now waits in the packs. It is NOT in `ase_awarded`: nothing reaches
+## the balance until a leave or the path end. Written only when above 0. Situation and Claimant cards.
+static func add_ase_gathered(data: Dictionary, gathered: int) -> void:
+	if gathered > 0:
+		data["ase_gathered"] = gathered
+
+
 ## 14 — %ReasonLabel, "%d situation%s revealed". Producer C.
 static func add_scout_intel(data: Dictionary, intel_count: int) -> void:
 	data["intel_count"] = intel_count
+
+
+## 14e — The word for what a return home settled: "none", "some", "all" or "nothing_new". Producer C
+## on a return home only. A word, never a share: the player sees no percent and no odds.
+static func add_settle_outcome(data: Dictionary, outcome: String) -> void:
+	data["settle_outcome"] = outcome
 
 
 ## 15 — Banner text + banner colour + %ReasonLabel on the contact renderer. Producer D.
@@ -198,9 +245,20 @@ static func add_contact_outcome(
 
 ## 16 — Pace result (docs/stories/pace-reward/design.md §6-§7). Producers A and G, pace-mode wins only:
 ## the call is the gate, so a no-pace fight or a defeat carries none of these keys.
-## pace_bonus_awarded is the pre-redo Ase of the "Pace bonus" breakdown row.
-static func add_pace(data: Dictionary, pace_bonus_awarded: int, pace_state: String,
-		pace_changed_rank: bool) -> void:
-	data["pace_bonus_awarded"] = pace_bonus_awarded
+## pace_changed_rank is true when the pace points moved the grade. Speed pays no Ase (D-49).
+static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bool) -> void:
 	data["pace_state"]         = pace_state
 	data["pace_changed_rank"]  = pace_changed_rank
+
+
+## 17 — The standoff card (D-116). Producers H2 and G. Words and names only: no amount, no percent, no odds.
+## `cause` is "froze", "blocked" or "unknown". Names are display names, at most two each.
+static func add_standoff(data: Dictionary, standoff_count: int, can_go_sanctum: bool, cause: String,
+		froze_names: Array, calmed_names: Array, fight_returns: bool = true) -> void:
+	data["standoff_outcome"] = "nobody_moved"
+	data["standoff_count"]   = standoff_count
+	data["can_go_sanctum"]   = can_go_sanctum
+	data["cause"]            = cause
+	data["froze_names"]      = froze_names
+	data["calmed_names"]     = calmed_names
+	data["fight_returns"]    = fight_returns

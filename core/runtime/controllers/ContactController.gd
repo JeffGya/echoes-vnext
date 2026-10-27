@@ -151,6 +151,11 @@ var econ: EconomyService
 var logger: StructuredLogger
 
 
+## Base Ase of a good Claimant contact, written as a found row in the packs. A missing key logs and counts 0.
+static func claimant_good_ase(reward_cfg: Dictionary, log: StructuredLogger, t: int) -> int:
+	return int(RewardCalc.cfg_num(reward_cfg, "contact_claimant_good_ase", 0.0, log, t))
+
+
 func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _econ: EconomyService, _logger: StructuredLogger) -> void:
 	flow_ctx = _flow_ctx
 	config_service = _config_service
@@ -521,6 +526,7 @@ func apply_contact_outcome(
 			sit_ref_idx = _si
 			break
 
+	var found_ase := 0
 	match role:
 		"witness":
 			if outcome == "good":
@@ -613,9 +619,9 @@ func apply_contact_outcome(
 
 		"claimant":
 			if outcome == "good":
-				# Small Ase reward
-				var _ase_reward := 20
-				econ.add_ase(_ase_reward, "contact.claimant.good", logger, t)
+				found_ase = claimant_good_ase(ConfigService.get_rewards_cfg(config_service), logger, t)
+				if not EarningsService.record_found(stage, sit_id, "claimant_good", found_ase):
+					found_ase = 0
 				_emotion_consequence_service().apply_morale_to_party(+5, "contact.claimant.good", t)
 			elif outcome == "partial":
 				_emotion_consequence_service().apply_morale_to_party(+3, "contact.claimant.partial", t)
@@ -654,7 +660,7 @@ func apply_contact_outcome(
 					"situation_id": sit_id,
 				})
 
-				flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + "." + sit_id + ".claimant"
+				flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + "." + sit_id + EarningsService.CLAIMANT_FIGHT_SUFFIX
 				return FlowActionOutcome.transition_outcome(FlowStateIds.ENCOUNTER, "stage.claimant.combat_forced")
 
 		"temporary_ally":
@@ -726,7 +732,7 @@ func apply_contact_outcome(
 	})
 
 	return _resolve_transition_outcome(
-		_build_contact_resolve_snapshot(contact, outcome, true, t),
+		_build_contact_resolve_snapshot(contact, outcome, true, t, found_ase),
 		"stage.contact.resolve_screen")
 
 
@@ -755,7 +761,8 @@ func _build_contact_resolve_snapshot(
 	contact: Dictionary,
 	outcome: String,
 	go_back_to_stage: bool,
-	t: int
+	t: int,
+	found_ase: int = 0
 ) -> Dictionary:
 	var role := str(contact.get("role", ""))
 	var role_label := role.capitalize().replace("_", " ")
@@ -767,7 +774,7 @@ func _build_contact_resolve_snapshot(
 	var outcome_text := str(outcome_texts.get(role + "/" + outcome, _contact_outcome_text(role, outcome)))
 
 	var continue_to := FlowStateIds.STAGE_EXPLORE if go_back_to_stage else FlowStateIds.SANCTUM
-	var continue_label := "Return to Stage" if go_back_to_stage else "Return to Sanctum"
+	var continue_label := "Back to the path" if go_back_to_stage else "Return to Sanctum"
 
 	var _contact_verdict: String
 	match outcome:
@@ -795,6 +802,7 @@ func _build_contact_resolve_snapshot(
 	# P1 CLOSE: additive fields for unified Resolve component.
 	ResolveSnapshotBuilder.add_banner(_data, "npc_contact", outcome_text)
 	ResolveSnapshotBuilder.add_grade_verdict(_data, _contact_verdict)
+	ResolveSnapshotBuilder.add_ase_gathered(_data, found_ase)
 	return _snap
 # Maps a turn_score to a reaction word that keys into npc_followup in contact_responses.json.
 func _derive_contact_reaction_word(turn_score: float) -> String:

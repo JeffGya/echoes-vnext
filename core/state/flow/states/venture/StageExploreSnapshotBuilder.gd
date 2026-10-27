@@ -362,28 +362,10 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"slot":         "cta.ignore_situation",
 		}
 
-	# V2-STAGE-002: stage-complete gate — all required objectives done AND every objective
-	# situation actually reached.
-	#
-	# The `objectives_found >= obj_total` term is the fix for D94. `objectives_remaining` counts
-	# only stage.objectives entries flagged `required`, and RealmGenerator writes the boss
-	# objective `required = false` unconditionally (RealmGenerator.gd:152) while a `pursue`
-	# pre-boss is optional too (:146). realm.01 generates exactly two objectives, so about 14%
-	# of its stages carry NO required objective and this gate opened the moment nothing was
-	# pending — on entry, or on the first dismissal of an engagement popup. The explore map
-	# already tracked the honest pair, `objectives_found` against `objectives_total`, and the
-	# gate ignored it.
-	#
-	# Harmless until Phase 8A (091bcfd) moved the stage settlement into
-	# VentureController.handle_complete_stage and paid the no-encounter path as `cleared`
-	# (the D05 fix). From then on, walking one step past a situation paid a full stage reward.
-	#
-	# A stage whose objectives are all optional stays completable: once the frontier is
-	# exhausted, ActiveStageService.find_explore_target Tier 4 re-offers a passed objective,
-	# and situation_blocks_step re-prompts on that deliberate re-target.
-	var objectives_reached := int(explore_map.get("objectives_found", 0)) >= obj_total
-	if is_exploring and not has_pending and objectives_remaining == 0 and obj_total > 0 \
-			and objectives_reached:
+	# Stage-complete gate: ObjectiveModel.stage_completable (D-82). Skipping an optional
+	# objective is allowed; the "one overcome" term is the D94 guard, so a stage with no
+	# required objective cannot complete on entry or on dismissing a popup.
+	if is_exploring and not has_pending and ObjectiveModel.stage_completable(objectives):
 		actions["cta.proceed_to_stage_map"] = {
 			"type":  "flow.complete_stage",
 			"label": "Stage Complete",
@@ -439,7 +421,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 		else:
 			_steps_to_target = GridService.chebyshev_distance(party_pos, _tsit_pos)
 
-	return {
+	var snap: Dictionary = {
 		"type": FlowStateIds.STAGE_EXPLORE,
 		"data": {
 			"stage_id":               flow_ctx.stage_id,
@@ -492,13 +474,28 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"effective_steps":         int(explore_map.get("last_effective_steps", _step_budget_snap)),
 			"commitment_depth":        _commitment_depth(explore_map, _step_budget_snap),
 			"presentation":            ConfigService.get_stage_presentation_cfg(flow_ctx.config_service),
+			# What the party has gathered and has not yet settled: { ase, ekwan, overcome, total,
+			# nothing_new, gathered: { ase, ekwan, rows, has_fight_rows, has_found_rows } }. No odds. Read only.
+			"carry_home_preview":      _carry_preview(flow_ctx),
 		},
 		"actions": actions,
 		"meta": { "t": t },
 	}
+	# One-shot, present only when true: the standoff card's Sanctum button asks the UI to open the return confirmation.
+	if flow_ctx.pending_return_confirm:
+		snap["data"]["return_confirm_requested"] = true
+	return snap
 
 
 ## Steps the last Advance could commit to; the step row crosses out the rest. A malformed value reads as the budget.
+static func _carry_preview(flow_ctx: FlowContext) -> Dictionary:
+	var plan := StageSettlementService.settle_plan(flow_ctx, flow_ctx.config_service)
+	return { "ase": plan["ase"], "ekwan": plan["ekwan"], "overcome": plan["overcome"], "total": plan["total"],
+		"nothing_new": plan["nothing_new"],
+		"gathered": { "ase": plan["ase"], "ekwan": plan["ekwan"], "rows": plan["rows"],
+			"has_fight_rows": int(plan["fight_rows"]) > 0, "has_found_rows": int(plan["found_rows"]) > 0 } }
+
+
 static func _commitment_depth(explore_map: Dictionary, step_budget: int) -> int:
 	var v: Variant = explore_map.get("last_commitment_depth", step_budget)
 	return clampi(int(v), 0, step_budget) if (v is int or v is float) else step_budget

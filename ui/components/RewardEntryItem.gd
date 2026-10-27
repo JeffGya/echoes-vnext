@@ -1,30 +1,66 @@
 # res://ui/components/RewardEntryItem.gd
-# UI-003: Reward breakdown row for ResolveScreen.
-# Purposeful colors (positive/negative delta) via @export so they are
-# adjustable in the Godot editor / .tscn inspector.
+# One payout row on the Resolve card. A row with a known `cause` gets an (i) button; hover, focus
+# or tap on it asks the screen's CauseTooltip to open (the tooltip is not a child of this row).
+# Colors are @export so they stay adjustable in the .tscn inspector.
 
 class_name RewardEntryItem
 extends HBoxContainer
 
+## anchor is the (i) button. `pinned` is true when the player tapped it, false for hover or focus.
+signal cause_requested(anchor: Control, title: String, cause: String, params: Dictionary, scope: String, pinned: bool)
+## force is false for a mouse leaving (a tapped tooltip stays) and true for focus leaving.
+signal cause_released(anchor: Control, force: bool)
+
+const PayoutCausePresentation := preload("res://ui/components/PayoutCausePresentation.gd")
+
 @export var color_positive: Color = Color("#f0e8d0")
 @export var color_negative: Color = Color("#908870")
-@export var color_ekwan: Color = Color(0.91, 0.627, 0.188, 1)
-# A row that pays exactly 0 (for example "Pace bonus +0 Ase") is muted, not shown as a gain
-# (docs/stories/pace-reward/decisions.md D-28, D-29).
+# A row that earns exactly 0 is muted, not shown as a gain.
 @export var color_zero: Color = Color("#6E6450")
 
 @onready var entry_label: Label = %EntryLabel
+@onready var note_label: Label = %NoteLabel
 @onready var delta_label: Label = %DeltaLabel
+@onready var cause_button: Button = %CauseButton
+@onready var cause_spacer: Control = %CauseSpacer
 
-func setup(entry: Dictionary) -> void:
-	var delta    := int(entry.get("delta", 0))
-	var currency := str(entry.get("currency", "ase"))
-	entry_label.text = str(entry.get("label", ""))
-	var currency_label := "Ase" if currency == "ase" else "Ekwan"
+var cause: String = ""
+var params: Dictionary = {}
+var scope: String = PayoutCausePresentation.SCOPE_FIGHT
+
+
+## scope is "fight" or "stage"; only the Replay text differs between them.
+func setup(entry: Dictionary, row_scope: String = PayoutCausePresentation.SCOPE_FIGHT) -> void:
+	var delta := int(entry.get("delta", 0))
+	cause = str(entry.get("cause", ""))
+	var params_v: Variant = entry.get("params", {})
+	params = params_v if params_v is Dictionary else {}
+	scope = row_scope
+	entry_label.text = PayoutCausePresentation.row_name(cause, str(entry.get("label", "")))
+	note_label.text = PayoutCausePresentation.row_note(cause, params)
+	note_label.visible = not note_label.text.is_empty()
 	if delta >= 0:
-		delta_label.text = "+%d %s" % [delta, currency_label]
-		var pos_color := color_ekwan if currency == "ekwan" else color_positive
-		delta_label.add_theme_color_override("font_color", color_zero if delta == 0 else pos_color)
+		delta_label.text = "+%d Ase" % delta
+		delta_label.add_theme_color_override("font_color", color_zero if delta == 0 else color_positive)
 	else:
-		delta_label.text = "\u2212%d %s" % [abs(delta), currency_label]
+		delta_label.text = "\u2212%d Ase" % abs(delta)
 		delta_label.add_theme_color_override("font_color", color_negative)
+	if delta == 0:
+		entry_label.add_theme_color_override("font_color", color_zero)
+	else:
+		entry_label.remove_theme_color_override("font_color")
+	var has_cause := PayoutCausePresentation.has_cause(cause)
+	cause_button.visible = has_cause
+	cause_spacer.visible = not has_cause
+
+
+func _ready() -> void:
+	cause_button.mouse_entered.connect(_request.bind(false))
+	cause_button.focus_entered.connect(_request.bind(false))
+	cause_button.pressed.connect(_request.bind(true))
+	cause_button.mouse_exited.connect(func() -> void: cause_released.emit(cause_button, false))
+	cause_button.focus_exited.connect(func() -> void: cause_released.emit(cause_button, true))
+
+
+func _request(pinned: bool) -> void:
+	cause_requested.emit(cause_button, entry_label.text, cause, params, scope, pinned)

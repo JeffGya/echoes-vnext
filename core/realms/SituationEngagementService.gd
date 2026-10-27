@@ -100,7 +100,7 @@ func _contact_conversation_service() -> ContactConversationService:
 ##                carries "situation_id" / "type" / "choices" for data.situation_overlay
 ##   "resolved" — acknowledge / take / leave applied           → situation resolve card +
 ##                transition to RESOLVE; carries "sit", "emotion_summary", "effects",
-##                "summary_line", "ase_awarded"
+##                "summary_line", "ase_gathered" (found Ase, now in the packs)
 ##
 ## The async-vs-in-explore decision is NOT reimplemented here: SituationResolutionService.route()
 ## makes it, exactly as before.
@@ -108,8 +108,8 @@ func _contact_conversation_service() -> ContactConversationService:
 ## `econ` is a PARAMETER, not a constructor dependency — same reasoning as advance_turn()'s
 ## `directive_service`. Slice A fixed this service's constructor at
 ## (flow_ctx, config_service, logger) and two call sites already build it that way; widening
-## the constructor for two mid-body uses (the VowConsequenceService the engage condition needs,
-## and the situation.money award) would churn every existing construction site for no gain.
+## the constructor for one mid-body use (the VowConsequenceService the engage condition needs)
+## would churn every existing construction site for no gain.
 func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionary:
 	if sit_id.is_empty():
 		logger.debug(t, "stage.engage.no_id", "engage_situation: missing situation_id", {})
@@ -298,7 +298,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 				"situation." + sit_type, logger, t)
 
 	if int(_r.get("ase_delta", 0)) > 0:
-		econ.add_ase(int(_r.get("ase_delta", 0)), "situation.money", logger, t)
+		EarningsService.record_found(stage, sit_id, "money", int(_r.get("ase_delta", 0)))
 
 	var _loot_results_v: Variant = _r.get("loot_results", [])
 	var _loot_results: Array = _loot_results_v if _loot_results_v is Array else []
@@ -387,7 +387,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 		"emotion_summary": _in_emotion_summary,
 		"effects":         _in_effects,
 		"summary_line":    str(_r.get("result_text", "")),
-		"ase_awarded":     int(_r.get("ase_delta", 0)),
+		"ase_gathered":    int(_r.get("ase_delta", 0)),
 	}
 
 
@@ -545,5 +545,5 @@ func resolve_situation_choice(sit_id: String, choice_id: String, t: int) -> Dict
 		"emotion_summary": _rc_emotion_summary,
 		"effects":         _rc_effects,
 		"summary_line":    str(_c.get("result_text", "")),
-		"ase_awarded":     0,
+		"ase_gathered":    0,
 	}

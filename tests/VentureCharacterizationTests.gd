@@ -8,7 +8,7 @@
 #   C. FlowRuntime._build_scout_return_snapshot()                               (:4326–:4381)
 #      — reached from BOTH call sites: encounter.retreat (:1134) and
 #        _handle_stage_return_home (:4869)
-#   D. "stage.confirm_return_home" (:562–:563) and "stage.dismiss_overlay" (:565–:571)
+#   D. "stage.dismiss_overlay" (:565–:571)
 #   E. ContactController._build_contact_resolve_snapshot()
 #      — shape guard only; the SITUATION side of the same merge is already covered by
 #        tests/UnifiedResolveTests.gd and is deliberately NOT duplicated here.
@@ -66,17 +66,17 @@ static func register(runner) -> void:
 	runner.register_test("venture_char/complete_stage_realm_complete_crystallizes_threads", func(): return _t_complete_stage_realm_complete())
 	runner.register_test("venture_char/complete_stage_sanctum_override_applies_victory_modifiers", func(): return _t_complete_stage_sanctum_override())
 	# B — encounter.retreat
-	runner.register_test("venture_char/retreat_success_spends_ase_and_awards_intel", func(): return _t_retreat_success())
-	runner.register_test("venture_char/retreat_success_snapshot_is_scout_return", func(): return _t_retreat_snapshot())
-	runner.register_test("venture_char/retreat_without_ase_awards_intel_but_spends_nothing", func(): return _t_retreat_no_ase())
+	runner.register_test("venture_char/retreat_success_spends_ase_and_pays_nothing", func(): return _t_retreat_success())
+	runner.register_test("venture_char/retreat_success_snapshot_is_pulled_back", func(): return _t_retreat_snapshot())
+	runner.register_test("venture_char/retreat_without_ase_is_denied", func(): return _t_retreat_no_ase())
 	# C — _build_scout_return_snapshot, both call sites
 	# D1/D2/D3 inverted by V2-INFRA-003 Phase 5 Slice B — the three defects these pinned are fixed.
 	runner.register_test("venture_char/scout_return_meta_carries_t", func(): return _t_scout_return_meta_t())
 	runner.register_test("venture_char/scout_return_builder_is_pure_dispatch_consumes_once", func(): return _t_scout_return_pure_dispatch_consumes())
 	runner.register_test("venture_char/return_home_call_site_builds_scout_return", func(): return _t_return_home_scout_return())
+	runner.register_test("venture_char/return_home_failed_escape_message", func(): return _t_return_home_failed_message())
 	runner.register_test("venture_char/scout_return_builder_uses_static_party_reader", func(): return _t_scout_return_static_party_reader())
-	# D — stage.confirm_return_home / stage.dismiss_overlay
-	runner.register_test("venture_char/confirm_return_home_transitions_to_stage_map", func(): return _t_confirm_return_home())
+	# D — stage.dismiss_overlay
 	runner.register_test("venture_char/dismiss_overlay_rebuilds_stage_explore", func(): return _t_dismiss_overlay())
 	# E — contact resolve snapshot shape
 	runner.register_test("venture_char/contact_resolve_shape_back_to_stage", func(): return _t_contact_resolve_to_stage())
@@ -244,7 +244,7 @@ static func _rewards_cfg(runtime: FlowRuntime) -> Dictionary:
 ## The stage settlement now runs in this dispatch (StageSettlementService.settle(), called from
 ## VentureController.handle_complete_stage ahead of RealmService.advance_stage), and it does not
 ## care whether an encounter happened. So the three "untouched" assertions become "paid": the
-## stage's base objective weights + the realm-virtue bonus in Ase, the Ekwan share of that, and
+## stage's base objective weights in Ase, the Ekwan of its completed objectives, and
 ## xp_stage_clear_base of Storyweight per party echo. The exact figures are not hard-coded — the
 ## test asserts each moved in the right direction, which is what the defect was about.
 static func _t_complete_stage_no_encounter() -> Dictionary:
@@ -260,6 +260,11 @@ static func _t_complete_stage_no_encounter() -> Dictionary:
 	if int(realm.get("stage_count", 0)) < 2:
 		realm["stage_count"] = 2
 	realm["current_stage_index"] = 0
+
+	# Ekwan pays per COMPLETED objective (D-16), so this stage needs one: a recover pays 5.
+	for stage_v in (realm.get("stages", []) as Array):
+		if stage_v is Dictionary and int((stage_v as Dictionary).get("index", -1)) == 0:
+			(stage_v as Dictionary)["objectives"] = [ObjectiveModel.make(0, ObjectiveModel.TYPE_RECOVER, 1, {}, true)]
 
 	var ase_before := int(_economy(save_data).get("ase", -1))
 	var ekwan_before := int(_economy(save_data).get("ekwan", -1))
@@ -291,8 +296,8 @@ static func _t_complete_stage_no_encounter() -> Dictionary:
 		mismatches.append("flow.stage_map action slots changed: expected %s, got %s" % [str(expected_keys), str(keys)])
 	if int(_economy(save_data).get("ase", -1)) <= ase_before:
 		mismatches.append("expected the stage settlement to PAY Ase on a no-encounter complete_stage: %d -> %d" % [ase_before, int(_economy(save_data).get("ase", -1))])
-	if int(_economy(save_data).get("ekwan", -1)) <= ekwan_before:
-		mismatches.append("expected the stage settlement to PAY Ekwan on a no-encounter complete_stage: %d -> %d" % [ekwan_before, int(_economy(save_data).get("ekwan", -1))])
+	if int(_economy(save_data).get("ekwan", -1)) != ekwan_before + 5:
+		mismatches.append("expected the stage settlement to PAY 5 Ekwan on a no-encounter complete_stage: %d -> %d" % [ekwan_before, int(_economy(save_data).get("ekwan", -1))])
 	if int(echo_after.get("storyweight", echo_after.get("xp_total", 0))) <= story_before:
 		mismatches.append("expected the stage settlement to award Storyweight (xp_stage_clear_base): %d -> %d" \
 			% [story_before, int(echo_after.get("storyweight", echo_after.get("xp_total", 0)))])
@@ -567,6 +572,8 @@ static func _setup_retreat_env(tag: String, starting_ase: int, revealed_count: i
 	var actually_revealed := 0
 	if stage_v is Dictionary:
 		var stage: Dictionary = stage_v
+		# D-14: a partial pays only for completed objectives, so complete the first one.
+		((stage["objectives"] as Array)[0] as Dictionary)["completed"] = true
 		var emap_v: Variant = stage.get("explore_map", {})
 		var emap: Dictionary = emap_v if emap_v is Dictionary else {}
 		var sits_v: Variant = emap.get("situations", [])
@@ -594,35 +601,6 @@ static func _setup_retreat_env(tag: String, starting_ase: int, revealed_count: i
 	}
 
 
-## Expected intel-partial award, computed the same way the handler does (:1116–:1117):
-## roundi(stage_base_reward * rewards.partial_intel_reward_factor).
-static func _expected_intel_partial(runtime: FlowRuntime, intel_count: int) -> int:
-	if intel_count <= 0:
-		return 0
-	var rewards := _rewards_cfg(runtime)
-	var factor := float(rewards.get("partial_intel_reward_factor", 0.12))
-	var weights_v: Variant = rewards.get("objective_weights", {})
-	var weights: Dictionary = weights_v if weights_v is Dictionary else {}
-	var realm := _realm(runtime.get_save_data(), "realm.01")
-	var stages_v: Variant = realm.get("stages", [])
-	var stages: Array = stages_v if stages_v is Array else []
-	# V2-INFRA-003 Phase 8 (defect D39): the stage base is the SUM of the stage's objective
-	# weights, read under the key ObjectiveModel actually writes ("type", never "obj_type").
-	# This helper used to mirror get_stage_base_reward()'s two faults — first objective only,
-	# wrong key — and so expected the flat "combat" default (30) for every stage. It is
-	# recomputed here from the same rule the production single definition
-	# (RewardCalc.base_reward) uses, but independently, so this stays a characterization
-	# expectation rather than a restatement of the code under test.
-	var base := 0
-	if stages.size() > 0 and stages[0] is Dictionary:
-		var objs_v: Variant = (stages[0] as Dictionary).get("objectives", [])
-		var objs: Array = objs_v if objs_v is Array else []
-		for obj_v in objs:
-			if obj_v is Dictionary:
-				base += int(weights.get(str((obj_v as Dictionary).get("type", "")), 0))
-	return roundi(float(base) * factor)
-
-
 static func _t_retreat_success() -> Dictionary:
 	var env := _setup_retreat_env("retreat_success", 500, 3)
 	if not bool(env.get("ok", false)):
@@ -633,13 +611,13 @@ static func _t_retreat_success() -> Dictionary:
 	var save_data: Dictionary = runtime.get_save_data()
 
 	var ase_before := int(_economy(save_data).get("ase", -1))
-	var expected_award := _expected_intel_partial(runtime, intel_count)
-	var ase_cost := 40
+	# REWRITTEN (D-106): a successful retreat settles nothing, so the Ase change is the cost alone.
+	var expected_award := 0
+	var ase_cost := RetreatService.get_ase_cost(runtime.config_service)
 
 	logger.clear()
 	runtime.dispatch({
 		"type":        "encounter.retreat",
-		"ase_cost":    ase_cost,
 		"success_pct": 100,
 	})
 	var flushes := _flush_count(logger)
@@ -649,10 +627,8 @@ static func _t_retreat_success() -> Dictionary:
 	var mismatches: Array = []
 	if intel_count <= 0:
 		mismatches.append("test setup failed: expected at least one revealed situation, got %d" % intel_count)
-	if expected_award <= 0:
-		mismatches.append("test setup failed: expected a positive intel partial award, got %d" % expected_award)
 	if ase_after != ase_before - ase_cost + expected_award:
-		mismatches.append("expected Ase %d - %d(cost) + %d(intel partial) = %d, got %d" \
+		mismatches.append("expected Ase %d - %d(cost) + %d(retreat pays nothing) = %d, got %d" \
 			% [ase_before, ase_cost, expected_award, ase_before - ase_cost + expected_award, ase_after])
 	if runtime.flow_ctx.encounter_ctx != null:
 		mismatches.append("expected encounter_ctx nulled on a successful retreat")
@@ -666,16 +642,15 @@ static func _t_retreat_success() -> Dictionary:
 	return { "ok": true }
 
 
-## The published snapshot for a successful retreat is the scout-return resolve card, whose
-## whole `data` payload and single CTA slot are pinned explicitly here (no hash — a future
-## failure should name the field that changed).
+## REWRITTEN (6.2, D-106): a successful retreat no longer publishes the scout-return card (data keys,
+## "Return to Sanctum" to flow.sanctum, intel line, actors). It publishes the pulled-back card, which
+## carries words and one flag, no amounts, and an action that returns the party to the path.
+## Pinned explicitly (no hash) so a future failure names the field that changed.
 static func _t_retreat_snapshot() -> Dictionary:
 	var env := _setup_retreat_env("retreat_snapshot", 500, 2)
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
-	var intel_count: int = env["intel_count"]
-	var expected_award := _expected_intel_partial(runtime, intel_count)
 
 	var out: Dictionary = runtime.dispatch({
 		"type":        "encounter.retreat",
@@ -695,60 +670,20 @@ static func _t_retreat_snapshot() -> Dictionary:
 		mismatches.append("expected type %s, got %s" % [FlowStateIds.RESOLVE, str(out.get("type", ""))])
 	var data_keys: Array = data.keys()
 	data_keys.sort()
-	var expected_data_keys := [
-		"actors", "ase_awarded", "ekwan_awarded", "intel_count", "rank",
-		"reward_breakdown", "run_type", "summary_line", "surface", "verdict", "victory",
-	]
+	var expected_data_keys := ["can_reenter", "retreat_outcome", "run_type", "surface"]
 	if data_keys != expected_data_keys:
-		mismatches.append("scout_return data keys changed: expected %s, got %s" % [str(expected_data_keys), str(data_keys)])
-	if str(data.get("run_type", "")) != "scout_return":
-		mismatches.append("expected run_type 'scout_return', got '%s'" % str(data.get("run_type", "")))
-	if str(data.get("surface", "")) != "scout_return":
-		mismatches.append("expected surface 'scout_return', got '%s'" % str(data.get("surface", "")))
-	if str(data.get("verdict", "x")) != "":
-		mismatches.append("expected an empty verdict on the scout-return card, got '%s'" % str(data.get("verdict", "")))
-	if str(data.get("rank", "x")) != "":
-		mismatches.append("expected an empty rank on the scout-return card, got '%s'" % str(data.get("rank", "")))
-	if bool(data.get("victory", true)):
-		mismatches.append("expected victory=false on the scout-return card")
-	if int(data.get("ase_awarded", -1)) != expected_award:
-		mismatches.append("expected ase_awarded=%d, got %d" % [expected_award, int(data.get("ase_awarded", -1))])
-	if int(data.get("ekwan_awarded", -1)) != 0:
-		mismatches.append("expected ekwan_awarded=0, got %d" % int(data.get("ekwan_awarded", -1)))
-	if int(data.get("intel_count", -1)) != intel_count:
-		mismatches.append("expected intel_count=%d, got %d" % [intel_count, int(data.get("intel_count", -1))])
-	var plural := "s" if intel_count != 1 else ""
-	var expected_line := "%d crossing%s mapped." % [intel_count, plural]
-	if str(data.get("summary_line", "")) != expected_line:
-		mismatches.append("expected summary_line '%s', got '%s'" % [expected_line, str(data.get("summary_line", ""))])
-	var breakdown_v: Variant = data.get("reward_breakdown", [])
-	var breakdown: Array = breakdown_v if breakdown_v is Array else []
-	if expected_award > 0:
-		if breakdown.size() != 1:
-			mismatches.append("expected one reward_breakdown row for a positive award, got %d" % breakdown.size())
-		elif breakdown[0] is Dictionary:
-			var row: Dictionary = breakdown[0]
-			if str(row.get("label", "")) != "Scout return" or str(row.get("currency", "")) != "ase" or int(row.get("delta", -1)) != expected_award:
-				mismatches.append("reward_breakdown row changed: %s" % JSON.stringify(row))
-	var actors_v: Variant = data.get("actors", [])
-	var actors: Array = actors_v if actors_v is Array else []
-	if actors.size() != 5:
-		mismatches.append("expected the 5-echo party projected into data.actors, got %d" % actors.size())
-	elif actors[0] is Dictionary:
-		var a_keys: Array = (actors[0] as Dictionary).keys()
-		a_keys.sort()
-		var expected_a_keys := ["calling_origin", "emotional_status", "id", "name"]
-		if a_keys != expected_a_keys:
-			mismatches.append("scout_return actor projection keys changed: expected %s, got %s" % [str(expected_a_keys), str(a_keys)])
+		mismatches.append("retreat_return data keys changed: expected %s, got %s" % [str(expected_data_keys), str(data_keys)])
+	if str(data.get("run_type", "")) != "retreat_return":
+		mismatches.append("expected run_type 'retreat_return', got '%s'" % str(data.get("run_type", "")))
+	if str(data.get("retreat_outcome", "")) != "pulled_back":
+		mismatches.append("expected retreat_outcome 'pulled_back', got '%s'" % str(data.get("retreat_outcome", "")))
+	if typeof(data.get("can_reenter", null)) != TYPE_BOOL:
+		mismatches.append("expected a bool can_reenter")
 	var keys := _sorted_action_keys(out)
 	if keys != ["cta.continue"]:
 		mismatches.append("expected exactly one action slot cta.continue, got %s" % str(keys))
-	if str(cta.get("type", "")) != "flow.go_state":
-		mismatches.append("expected cta.continue.type 'flow.go_state', got '%s'" % str(cta.get("type", "")))
-	if str(cta.get("to", "")) != FlowStateIds.SANCTUM:
-		mismatches.append("expected cta.continue.to %s, got '%s'" % [FlowStateIds.SANCTUM, str(cta.get("to", ""))])
-	if str(cta.get("label", "")) != "Return to Sanctum":
-		mismatches.append("expected cta.continue.label 'Return to Sanctum', got '%s'" % str(cta.get("label", "")))
+	if str(cta.get("type", "")) != "stage.retreat_return":
+		mismatches.append("expected cta.continue.type 'stage.retreat_return', got '%s'" % str(cta.get("type", "")))
 	if str(cta.get("slot", "")) != "cta.continue":
 		mismatches.append("expected cta.continue.slot 'cta.continue', got '%s'" % str(cta.get("slot", "")))
 
@@ -757,30 +692,29 @@ static func _t_retreat_snapshot() -> Dictionary:
 	return { "ok": true }
 
 
-## The affordability guard at :1086–:1092: when the player cannot pay the retreat cost the
-## spend is skipped entirely — but the retreat still succeeds and the intel partial is still
-## awarded. Pinned so the "free retreat when broke" behaviour cannot move silently.
+## D-79: with less Ase than the price the retreat is refused. No spend, no intel partial, the
+## encounter stays, and the returned snapshot is still the encounter with a retreat_denied reason.
 static func _t_retreat_no_ase() -> Dictionary:
 	var env := _setup_retreat_env("retreat_no_ase", 0, 2)
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
-	var intel_count: int = env["intel_count"]
 	var save_data: Dictionary = runtime.get_save_data()
-	var expected_award := _expected_intel_partial(runtime, intel_count)
 
 	var out: Dictionary = runtime.dispatch({
 		"type":        "encounter.retreat",
-		"ase_cost":    999999,
 		"success_pct": 100,
 	})
 
 	var mismatches: Array = []
-	if int(_economy(save_data).get("ase", -1)) != expected_award:
-		mismatches.append("expected an unaffordable cost to be skipped, leaving 0 + %d(intel) = %d Ase, got %d" \
-			% [expected_award, expected_award, int(_economy(save_data).get("ase", -1))])
-	if str(out.get("type", "")) != FlowStateIds.RESOLVE:
-		mismatches.append("expected the retreat to succeed anyway and publish %s, got %s" % [FlowStateIds.RESOLVE, str(out.get("type", ""))])
+	if int(_economy(save_data).get("ase", -1)) != 0:
+		mismatches.append("expected a denied retreat to leave 0 Ase, got %d" % int(_economy(save_data).get("ase", -1)))
+	if runtime.flow_ctx.encounter_ctx == null:
+		mismatches.append("expected the encounter to stay after a denied retreat")
+	if str(out.get("type", "")) == FlowStateIds.RESOLVE:
+		mismatches.append("expected no resolve card after a denied retreat")
+	if not (out.get("data", {}) as Dictionary).has("retreat_denied"):
+		mismatches.append("expected data.retreat_denied in the returned snapshot")
 
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }
@@ -852,27 +786,25 @@ static func _t_scout_return_meta_t() -> Dictionary:
 ##      dispatch that publishes any other snapshot type leaves the one-shots untouched, so a
 ##      combat resolve can never discard an award the player has not been shown.
 static func _t_scout_return_pure_dispatch_consumes() -> Dictionary:
-	var env := _setup_retreat_env("scout_consume", 200, 3)
+	# REWRITTEN (6.2): this probe drove the scout-return card through encounter.retreat. A retreat
+	# now publishes the pulled-back card (D-106), so a successful stage.return_home drives it instead.
+	# The contract under test (the closure consumes once, builder is pure, run_type gate) is unchanged.
+	var env := PendingResultTests._drive_withdrawal("scout_consume")
 	if not bool(env.get("ok", false)):
 		return env
 	var runtime: FlowRuntime = env["runtime"]
 	var ctx: FlowContext = runtime.flow_ctx
-	var intel_count: int = env["intel_count"]
+	var intel_count := 3
+	var awarded := 7
 
-	var first: Dictionary = runtime.dispatch({
-		"type":        "encounter.retreat",
-		"ase_cost":    0,
-		"success_pct": 100,
-	})
-	var first_data: Dictionary = (first.get("data", {}) as Dictionary).duplicate(true)
-	var awarded := int(first_data.get("ase_awarded", -1))
+	var first_data: Dictionary = (env["card"].get("data", {}) as Dictionary).duplicate(true)
 
 	var mismatches: Array = []
 
 	# 1 — the published card carries the real values, i.e. nothing consumed them too early.
-	if int(first_data.get("intel_count", -1)) != intel_count:
-		mismatches.append("expected the published card to carry intel_count=%d, got %d" \
-			% [intel_count, int(first_data.get("intel_count", -1))])
+	if int(first_data.get("intel_count", -1)) != ActiveStageService.count_revealed_situations(ctx):
+		mismatches.append("expected the published card to carry the revealed count %d, got %d" \
+			% [ActiveStageService.count_revealed_situations(ctx), int(first_data.get("intel_count", -1))])
 	# ...and the closure has consumed them by the time dispatch() returns.
 	if ctx.pending_scout_return_ase != 0 or ctx.pending_scout_return_intel_count != 0:
 		mismatches.append("expected dispatch()'s closure to consume both pending_scout_return_* fields")
@@ -898,9 +830,9 @@ static func _t_scout_return_pure_dispatch_consumes() -> Dictionary:
 
 	# 3 — the closure's gate. This dispatch publishes flow.stage_map, not a scout-return
 	#     resolve, so it must NOT touch the one-shots.
-	var out_other: Dictionary = runtime.dispatch({ "type": "stage.confirm_return_home" })
+	var out_other: Dictionary = runtime.dispatch({ "type": "stage.dismiss_overlay" })
 	if str(out_other.get("type", "")) == FlowStateIds.RESOLVE:
-		mismatches.append("test setup failed: expected stage.confirm_return_home to publish a non-resolve snapshot")
+		mismatches.append("test setup failed: expected stage.dismiss_overlay to publish a non-resolve snapshot")
 	if ctx.pending_scout_return_ase != awarded or ctx.pending_scout_return_intel_count != intel_count:
 		mismatches.append("expected a dispatch that publishes a non-scout snapshot to leave the one-shots intact — the closure's run_type gate is missing or broken")
 
@@ -989,6 +921,43 @@ static func _t_return_home_scout_return() -> Dictionary:
 	return { "ok": true }
 
 
+## A failed escape roll publishes this exact message (Jeff's wording; do not edit it).
+static func _t_return_home_failed_message() -> Dictionary:
+	var env := _setup_explore_env("return_home_fail")
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var realm_seed := int(_realm(runtime.get_save_data(), "realm.01").get("seed", 0))
+	var directive: Dictionary = runtime.directive_service.get_active_directive()
+	var escape_threshold: int = maxi(0, 40 - int(directive.get("escape_bonus", 0)))
+	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	if stage.is_empty():
+		return { "ok": false, "error": "test setup failed: no active stage" }
+	var emap_v: Variant = stage.get("explore_map", {})
+	var explore_map: Dictionary = emap_v if emap_v is Dictionary else {}
+	var chosen_turn := -1
+	for candidate in range(0, 200):
+		var probe := CampaignSeed.get_rng_from(realm_seed, "stage.escape.%s.%d" % [flow_ctx.stage_id, candidate])
+		if probe.randi_range(0, 100) <= escape_threshold:
+			chosen_turn = candidate
+			break
+	if chosen_turn < 0:
+		return { "ok": false, "error": "test setup failed: no turn_count in 0..199 produced a failed escape roll" }
+	explore_map["turn_count"] = chosen_turn
+	stage["explore_map"] = explore_map
+	FlowStageExploreStateScript._write_stage_back(flow_ctx, stage)
+	var out: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
+	var data_v: Variant = out.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var res_v: Variant = data.get("return_home_result", {})
+	var res: Dictionary = res_v if res_v is Dictionary else {}
+	var expected := "It was not possible to escape at the moment. Move on, we can try again later."
+	if bool(res.get("success", true)) or str(res.get("message", "")) != expected:
+		return { "ok": false, "error": "failed escape result was %s" % str(res) }
+	return { "ok": true }
+
+
 ## INVERTED by V2-INFRA-003 Phase 5 Slice B (was: scout_return_builder_constructs_writing_service).
 ## _build_scout_return_snapshot() used to do `SanctumService.new(flow_ctx.save_data)` purely to
 ## read the party. That constructor runs SanctumState._ensure_sanctum_dict_exists(), which
@@ -1045,41 +1014,8 @@ static func _t_scout_return_static_party_reader() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# D — "stage.confirm_return_home" (:562) and "stage.dismiss_overlay" (:565)
+# D — "stage.dismiss_overlay" (:565)
 # ---------------------------------------------------------------------------
-
-## The whole handler is one transition line: RESOLVE/EXPLORE → flow.stage_map. No save is
-## requested, so this dispatch must flush nothing.
-static func _t_confirm_return_home() -> Dictionary:
-	var env := _setup_explore_env("confirm_return")
-	if not bool(env.get("ok", false)):
-		return env
-	var runtime: FlowRuntime = env["runtime"]
-	var logger: StructuredLogger = env["logger"]
-
-	logger.clear()
-	var out: Dictionary = runtime.dispatch({ "type": "stage.confirm_return_home" })
-	var flushes := _flush_count(logger)
-
-	var mismatches: Array = []
-	if str(out.get("type", "")) != FlowStateIds.STAGE_MAP:
-		mismatches.append("expected %s, got %s" % [FlowStateIds.STAGE_MAP, str(out.get("type", ""))])
-	var keys := _sorted_action_keys(out)
-	# FlowStageMapState.build_snapshot() emits exactly two slots: "nav.back" unconditionally and
-	# "cta.enter_stage" only while the realm is incomplete (core/state/flow/states/venture/
-	# FlowStageMapState.gd:97-113). There is no "nav.skills" slot anywhere in core/ or ui/ —
-	# `git log -S"nav.skills"` finds no commit that ever added one. The earlier expectation was
-	# invented, not observed; corrected here rather than reported as a missing action.
-	var expected_keys := ["cta.enter_stage", "nav.back"]
-	if keys != expected_keys:
-		mismatches.append("flow.stage_map action slots changed: expected %s, got %s" % [str(expected_keys), str(keys)])
-	if flushes != 0:
-		mismatches.append("expected 0 save flushes for a pure transition, got %d" % flushes)
-
-	if not mismatches.is_empty():
-		return { "ok": false, "error": " | ".join(mismatches) }
-	return { "ok": true }
-
 
 ## stage.dismiss_overlay rebuilds the flow.stage_explore snapshot from save_data (rather than
 ## calling refresh_snapshot() alone, which would just re-validate the stale snapshot — Lesson
@@ -1207,8 +1143,8 @@ static func _t_contact_resolve_to_stage() -> Dictionary:
 		mismatches.append("expected cta.continue.type 'flow.go_state', got '%s'" % str(cta.get("type", "")))
 	if str(cta.get("to", "")) != FlowStateIds.STAGE_EXPLORE:
 		mismatches.append("expected cta.continue.to %s for go_back_to_stage=true, got '%s'" % [FlowStateIds.STAGE_EXPLORE, str(cta.get("to", ""))])
-	if str(cta.get("label", "")) != "Return to Stage":
-		mismatches.append("expected cta.continue.label 'Return to Stage', got '%s'" % str(cta.get("label", "")))
+	if str(cta.get("label", "")) != "Back to the path":
+		mismatches.append("expected cta.continue.label 'Back to the path', got '%s'" % str(cta.get("label", "")))
 	if str(cta.get("slot", "")) != "cta.continue":
 		mismatches.append("expected cta.continue.slot 'cta.continue', got '%s'" % str(cta.get("slot", "")))
 
