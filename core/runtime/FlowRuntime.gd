@@ -638,6 +638,9 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"stage.retreat_return":  # D-106: the pulled-back card's action, back to the path
 				_apply_action_outcome(_venture_controller().handle_retreat_return(action, t), t)
+
+			"stage.standoff_return":  # D-116: the standoff card's action, back to the path (or the Sanctum confirm)
+				_apply_action_outcome(_venture_controller().handle_standoff_return(action, t), t)
 	
 			# ---- Stage Exploration V2-STAGE-003: NPC Contact conversation ----
 			# V2-INFRA-003 Phase 5 Slice C: routed to ContactController. The controller reports
@@ -747,6 +750,11 @@ func dispatch(action: Dictionary) -> Dictionary:
 		flow_ctx.pending_scout_return_ekwan       = 0
 		flow_ctx.pending_scout_return_intel_count = 0
 		flow_ctx.pending_scout_return_settle_outcome = ""
+
+	# The standoff card's Sanctum button asked the stage_explore snapshot to carry
+	# return_confirm_requested; once that snapshot is out the request is spent.
+	if str(out.get("type", "")) == FlowStateIds.STAGE_EXPLORE:
+		flow_ctx.pending_return_confirm = false
 
 	# V2-INFRA-003 Phase 3 (slice C): consume _bark_line here, exactly once, AFTER the snapshot
 	# that surfaced it (flow.encounter / flow.keeper_trial / flow.resolve, built by
@@ -1236,43 +1244,27 @@ func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
 		_handle_combat_init(t)
 
 
-## V2-COMBAT-003: a fight where neither faction dealt damage for
-## data.combat.stalemate.no_progress_round_limit consecutive rounds cannot end by any objective
-## check (CombatState.check_end_condition() reason "no_progress_forced_retreat"). Called from
-## _end_round() in place of the normal victory/defeat pipeline, so build_final_snapshot(), the
-## reward computation it drives, the bond/Thread consequence block and the recruit-offer check
-## never run for this fight.
-##
-## Reuses the encounter.retreat SUCCESS shape (clear ally fields, drop the encounter, build the
-## scout-return-shaped resolve card, transition to RESOLVE) with EVERY payout that path can grant
-## removed:
-##   - the intel-count read and the partial-Ase award it feeds (encounter.retreat's
-##     "retreat_intel_partial" econ.add_ase call) — never computed here
-##   - pending_scout_return_ase / pending_scout_return_intel_count — forced to 0, so the resolve
-##     card's ledger and intel line both read zero
-##   - apply_run_emotion_modifiers("withdrawal", t) — grants a 1.25x morale-recovery multiplier
-##     on the surviving party; not called
-##   - check_vow_release_condition(t) — not called (no vow benefit was ever staged: that only
-##     happens in the victory branch of the pipeline this function replaces)
-## A stalemate the simulation could not resolve earns the player nothing.
+## A fight where neither faction made progress for data.combat.stalemate.no_progress_round_limit rounds
+## (CombatState.check_end_condition() reason "no_progress_forced_retreat") ends as a standoff (D-116): the
+## party steps back onto the path. Called from _end_round() in place of the victory/defeat pipeline, so the
+## final snapshot, the reward, the bond/Thread block and the recruit offer never run for this fight.
+## It records the fight's deaths and writes the final fear and morale to the roster like any ending fight, costs one turn, spends no Ase, grants no withdrawal
+## bonus and no vow release, and touches no pack row (StandoffService.resolve).
 func _resolve_forced_retreat(t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		return
 
-	# Same teardown as a successful encounter.retreat — clearing ally fields and dropping the
-	# encounter is cleanup, not a reward.
+	_stage_explore_session_service().record_fight_deaths(t)
+	FlowEncounterState.sync_emotion_to_roster(flow_ctx, flow_ctx.encounter_ctx)
+	var facts: Dictionary = StandoffService.resolve(flow_ctx, t)
+
 	_recruitment_consequence_service().clear_ally_fields_if_present(t)
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null
 	flow_ctx.bond_outcome      = {}
-	flow_ctx.pending_scout_return_ase         = 0
-	flow_ctx.pending_scout_return_ekwan       = 0
-	flow_ctx.pending_scout_return_intel_count = 0
-	flow_ctx.pending_scout_return_settle_outcome = ""
 	_mark_save_requested("combat.no_progress_forced_retreat")
 
-	flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
-		flow_ctx, t, "forced_retreat")
+	flow_ctx.last_snapshot = VentureResolveSnapshotBuilder.build_standoff_snapshot(facts, t)
 	flow_machine.transition(
 		FlowStateIds.RESOLVE, flow_ctx, logger, t, "combat.no_progress_forced_retreat")
 
@@ -1651,6 +1643,7 @@ func _end_round(t: int) -> void:
 		combat_state["no_progress_streak"] = 0
 	else:
 		combat_state["no_progress_streak"] = int(combat_state.get("no_progress_streak", 0)) + 1
+	StandoffService.record_round(ectx, _np_damage_this_round or _np_novel)
 
 	# Check end condition — pass combat_state so RECOVER/PROTECT/ENDURE checks read
 	# round_counter, hold_counter, and objective_params.

@@ -38,7 +38,18 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("retreat/objective_fight_offered_again_at_once",   Callable(RetreatTests, "_t_objective_offered_again"))
 	runner.register_test("retreat/card_has_no_percent_or_odds",             Callable(RetreatTests, "_t_card_no_percent_or_odds"))
 	runner.register_test("retreat/failed_or_denied_changes_no_stage_state", Callable(RetreatTests, "_t_failed_or_denied_no_stage_change"))
-	runner.register_test("retreat/forced_retreat_still_ends_at_sanctum",    Callable(RetreatTests, "_t_forced_retreat_unchanged"))
+	runner.register_test("retreat/standoff_steps_back_and_costs_one_turn",  Callable(RetreatTests, "_t_standoff_steps_back"))
+	runner.register_test("retreat/standoff_objective_fight_returns_later",  Callable(RetreatTests, "_t_standoff_objective_later"))
+	runner.register_test("retreat/standoff_sanctum_button_from_second",     Callable(RetreatTests, "_t_standoff_sanctum_button"))
+	runner.register_test("retreat/standoff_records_deaths_before_the_stall", Callable(RetreatTests, "_t_standoff_records_deaths"))
+	runner.register_test("retreat/standoff_cause_only_from_recorded_events", Callable(RetreatTests, "_t_standoff_cause"))
+	runner.register_test("retreat/standoff_fear_drop_first_standoff_only",  Callable(RetreatTests, "_t_standoff_fear_drop"))
+	runner.register_test("retreat/standoff_rerun_applies_no_second_drop",   Callable(RetreatTests, "_t_standoff_rerun_no_second_drop"))
+	runner.register_test("retreat/stall_level_from_streak_no_numbers",      Callable(RetreatTests, "_t_stall_level"))
+	runner.register_test("retreat/prebattle_stalled_before",                Callable(RetreatTests, "_t_prebattle_stalled_before"))
+	runner.register_test("retreat/stalled_fight_rerun_is_deterministic",    Callable(RetreatTests, "_t_stalled_rerun_deterministic"))
+	runner.register_test("retreat/path_has_no_turn_limit",                  Callable(RetreatTests, "_t_no_turn_limit"))
+	runner.register_test("retreat/passive_income_ignores_turns",            Callable(RetreatTests, "_t_passive_income_ignores_turns"))
 	runner.register_test("retreat/roll_same_after_reload",                  Callable(RetreatTests, "_t_roll_same_after_reload"))
 	runner.register_test("retreat/roll_ignores_tick",                       Callable(RetreatTests, "_t_roll_ignores_tick"))
 	runner.register_test("retreat/attempt_count_saved_and_keys_differ",     Callable(RetreatTests, "_t_attempt_count_saved_and_keys_differ"))
@@ -437,25 +448,472 @@ static func _t_failed_or_denied_no_stage_change() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## D-106 item 6: the forced retreat (a stalemate) does not share the new path. It ends at the Sanctum
-## card, costs no turn and passes nothing, so the party is not put back in front of the same stalemate.
-static func _t_forced_retreat_unchanged() -> Dictionary:
-	var r: Dictionary = _engaged_retreat("rt_forced", false, 0, 50)
+# ──────────────────────────────────────────────────────────────────────────────
+# D-116: a stalemate is a standoff. The party steps back onto the path.
+# ──────────────────────────────────────────────────────────────────────────────
+
+static func _echo_actor(ectx: EncounterContext, n: int = 0) -> Dictionary:
+	var seen := 0
+	for a_v in ectx.actors:
+		if a_v is Dictionary and str((a_v as Dictionary).get("faction", "")) == "echo":
+			if seen == n:
+				return a_v
+			seen += 1
+	return {}
+
+
+## Records one round in which `actor` refused, through the same function _end_round calls.
+static func _refuse(ectx: EncounterContext, actor: Dictionary, round_no: int = 1) -> void:
+	ectx.combat_state["round_counter"] = round_no
+	ectx.last_round_results = [{ "action_type": "actor.refuse", "source_id": str(actor["id"]),
+		"source_name": str(actor["name"]) }]
+	StandoffService.record_round(ectx, false)
+
+
+static func _roster_entry(flow_ctx: FlowContext, id: String) -> Dictionary:
+	for e_v in flow_ctx.save_data["sanctum"]["roster"]:
+		if str((e_v as Dictionary).get("id", "")) == id:
+			return e_v
+	return {}
+
+
+## An engaged fight (normal or objective) that then stalls and ends as a standoff, with one earlier
+## unsettled pack row on the stage. Returns the harness dict plus the card and the pack rows before.
+static func _standoff(tag: String, objective: bool, refuse: bool = true, prior_count: int = 0) -> Dictionary:
+	var r: Dictionary = _engaged_retreat(tag, objective, 0, 50)
 	if not bool(r.get("ok", false)):
 		return r
 	var flow_ctx: FlowContext = r["flow_ctx"]
-	var ase_before := int(flow_ctx.save_data["economy"]["ase"])
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	EarningsService.add_row(stage, EarningsService.make_row("enc:old", "encounter", "fight", 6, 0))
+	if prior_count > 0:
+		_sit_of(flow_ctx, str(r["sit_id"]))["standoff_count"] = prior_count
+	r["rows_before"] = JSON.stringify(EarningsService.rows_of(stage))
+	r["ase_before"] = int(flow_ctx.save_data["economy"]["ase"])
+	if refuse:
+		var echo := _echo_actor(flow_ctx.encounter_ctx)
+		r["echo"] = echo
+		_refuse(flow_ctx.encounter_ctx, echo, 4)
 	(r["runtime"] as FlowRuntime)._resolve_forced_retreat(99)
-	var card: Dictionary = flow_ctx.last_snapshot
-	var cta: Dictionary = (card.get("actions", {}) as Dictionary).get("cta.continue", {})
+	r["card"] = flow_ctx.last_snapshot
+	return r
+
+
+## The party steps back: one turn, no Ase, no pack touched, the fight marked passed and counted, no amount on
+## the card. Replaces the test that pinned the old Sanctum exit (a free exit with the packs intact).
+static func _t_standoff_steps_back() -> Dictionary:
+	var r: Dictionary = _standoff("rt_standoff", false)
+	if not bool(r.get("ok", false)):
+		return r
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var card: Dictionary = r["card"]
+	var data: Dictionary = card.get("data", {})
+	var actions: Dictionary = card.get("actions", {})
 	var emap := _explore_map_of(flow_ctx)
+	var sit := _sit_of(flow_ctx, str(r["sit_id"]))
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
 	var m: Array = []
-	if str(card.get("data", {}).get("run_type", "")) != "forced_retreat" or str(cta.get("to", "")) != FlowStateIds.SANCTUM:
-		m.append("forced retreat card changed: %s %s" % [card.get("data", {}).get("run_type"), str(cta)])
-	if int(emap.get("turn_count", -1)) != 3 or bool(_sit_of(flow_ctx, str(r["sit_id"])).get("passed", false)):
-		m.append("forced retreat changed the stage: turn %s" % str(emap.get("turn_count")))
-	if int(flow_ctx.save_data["economy"]["ase"]) != ase_before:
-		m.append("forced retreat changed Ase")
+	if str(card.get("type", "")) != FlowStateIds.RESOLVE or str(data.get("run_type", "")) != "standoff":
+		m.append("expected a flow.resolve card with run_type standoff, got %s / %s" % [card.get("type"), data.get("run_type")])
+	var keys: Array = data.keys()
+	keys.sort()
+	if keys != ["calmed_names", "can_go_sanctum", "cause", "froze_names", "run_type", "standoff_count", "standoff_outcome"]:
+		m.append("card data keys: %s" % str(keys))
+	if str(data.get("standoff_outcome", "")) != "nobody_moved" or int(data.get("standoff_count", 0)) != 1 \
+			or data.get("can_go_sanctum", null) != false or str(data.get("cause", "")) != "froze" \
+			or data.get("froze_names", null) != [str((r["echo"] as Dictionary)["name"])]:
+		m.append("card facts: %s" % str(data))
+	var cta: Dictionary = actions.get("cta.continue", {})
+	if actions.keys() != ["cta.continue"] or str(cta.get("type", "")) != "stage.standoff_return" or cta.has("to"):
+		m.append("first standoff must offer one button, stage.standoff_return: %s" % str(actions))
+	var text := JSON.stringify(card).to_lower()
+	for bad in ["%", "percent", "odds", "ase_awarded", "ekwan_awarded", "reward_breakdown", "success_pct"]:
+		if text.contains(bad):
+			m.append("card contains '%s'" % bad)
+	if int(emap.get("turn_count", -1)) != 4:
+		m.append("turn_count 3 -> expected 4, got %s" % str(emap.get("turn_count")))
+	if int(flow_ctx.save_data["economy"]["ase"]) != int(r["ase_before"]):
+		m.append("a standoff changed Ase")
+	if not bool(sit.get("passed", false)) or int(sit.get("retreat_pass_turn", -1)) != 4 or int(sit.get("standoff_count", 0)) != 1:
+		m.append("fight not marked for a later turn: %s" % str(sit))
+	if JSON.stringify(EarningsService.rows_of(stage)) != str(r["rows_before"]):
+		m.append("a standoff changed the packs: %s" % JSON.stringify(EarningsService.rows_of(stage)))
+	if stage.has("settle_count") or stage.has("settled_ase") or emap.has("retreat_reoffer_id"):
+		m.append("a standoff settled or re-offered at once")
+	if flow_ctx.encounter_ctx != null:
+		m.append("the encounter was not dropped")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-116: an OBJECTIVE fight is not offered at once after a standoff (unlike a chosen retreat). It carries the
+## later-turn marker, and Tier 4 offers it only on a later turn, also when it is the only target left.
+static func _t_standoff_objective_later() -> Dictionary:
+	var r: Dictionary = _standoff("rt_standoff_obj", true)
+	if not bool(r.get("ok", false)):
+		return r
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var m: Array = []
+	var sit := _sit_of(flow_ctx, str(r["sit_id"]))
+	if not bool(sit.get("passed", false)) or int(sit.get("retreat_pass_turn", -1)) != 4 or _explore_map_of(flow_ctx).has("retreat_reoffer_id"):
+		m.append("objective fight after a standoff: %s" % str(sit))
+	var back: Dictionary = (r["runtime"] as FlowRuntime).dispatch({ "type": "stage.standoff_return" })
+	var pending: Variant = back.get("data", {}).get("situation_pending", null)
+	if str(back.get("type", "")) != FlowStateIds.STAGE_EXPLORE or (pending is Dictionary and not (pending as Dictionary).is_empty()):
+		m.append("objective fight offered at once after a standoff: %s" % str(pending))
+	# Tier 4, both kinds of fight, same turn and later turn.
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var ctx := FlowContext.new()
+	ctx.realm_id = "realm.01"
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var session := ActiveStageService.new(ctx, cs, logger)
+	var directive: Dictionary = ConfigService.get_directives_cfg(cs).get("directive.scout_carefully", {})
+	var walkable: Dictionary = {}
+	var explored: Dictionary = {}
+	for c in 6:
+		for rw in 3:
+			walkable["%d,%d" % [c, rw]] = true
+			explored["%d,%d" % [c, rw]] = true
+	for case in [["objective, same turn", true, 4, 4, false], ["objective, later turn", true, 4, 5, true],
+			["normal, same turn", false, 4, 4, false], ["normal, later turn", false, 4, 5, true]]:
+		var fight: Dictionary = SituationModel.make("fight", SituationModel.TYPE_NPC, 4, 1, 900, bool(case[1]))
+		fight["revealed"] = true
+		fight["passed"] = true
+		fight["retreat_pass_turn"] = case[2]
+		var em := { "situations": [fight], "party_pos": { "col": 0, "row": 1 }, "turn_count": case[3] }
+		var pick := session.find_explore_target(em, directive, walkable, explored, { "index": 0 })
+		if (str(pick.get("id", "")) == "fight") != bool(case[4]):
+			m.append("%s: expected offered=%s, got %s" % [case[0], case[4], str(pick.get("id", "<none>"))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-116 (3): the first standoff on a fight offers one button; the second also offers the Sanctum. The second
+## is a REAL second standoff: the fight is entered again and stalls again. The Sanctum button sends the same
+## action with to_sanctum and the explore snapshot then asks the UI to open the return confirmation, once.
+static func _t_standoff_sanctum_button() -> Dictionary:
+	var r: Dictionary = _standoff("rt_standoff_two", false)
+	if not bool(r.get("ok", false)):
+		return r
+	var runtime: FlowRuntime = r["runtime"]
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var m: Array = []
+	# to_sanctum on the first card is ignored: the card did not offer it.
+	var first: Dictionary = runtime.dispatch({ "type": "stage.standoff_return", "to_sanctum": true })
+	if str(first.get("type", "")) != FlowStateIds.STAGE_EXPLORE or first.get("data", {}).has("return_confirm_requested"):
+		m.append("first standoff: to_sanctum was honoured or the card did not return to the path")
+	# The party arrives at the same fight again (arrival sets last_situation_id) and it stalls again.
+	_explore_map_of(flow_ctx)["last_situation_id"] = str(r["sit_id"])
+	flow_ctx.encounter_ctx = null
+	FlowEncounterState.new().enter(flow_ctx, 100)
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "could not enter the fight again" }
+	_refuse(flow_ctx.encounter_ctx, _echo_actor(flow_ctx.encounter_ctx), 6)
+	runtime._resolve_forced_retreat(101)
+	var card: Dictionary = flow_ctx.last_snapshot
+	var data: Dictionary = card.get("data", {})
+	var actions: Dictionary = card.get("actions", {})
+	var sanctum: Dictionary = actions.get("cta.sanctum", {})
+	if int(data.get("standoff_count", 0)) != 2 or data.get("can_go_sanctum", null) != true:
+		m.append("second standoff facts: %s" % str(data))
+	if str(sanctum.get("type", "")) != "stage.standoff_return" or sanctum.get("to_sanctum", null) != true \
+			or str((actions.get("cta.continue", {}) as Dictionary).get("type", "")) != "stage.standoff_return":
+		m.append("second standoff buttons: %s" % str(actions))
+	var to_path: Dictionary = {}
+	var to_sanctum: Dictionary = {}
+	# Press the plain button on a copy of the state, then the Sanctum button.
+	to_sanctum = runtime.dispatch({ "type": "stage.standoff_return", "to_sanctum": true })
+	if str(to_sanctum.get("type", "")) != FlowStateIds.STAGE_EXPLORE or to_sanctum.get("data", {}).get("return_confirm_requested", null) != true:
+		m.append("the Sanctum button did not return to the path with return_confirm_requested: %s" % str(to_sanctum.get("data", {}).keys()))
+	if flow_ctx.pending_return_confirm:
+		m.append("the one-shot flag outlived the dispatch")
+	to_path = runtime.dispatch({ "type": "stage.dismiss_overlay" })
+	if to_path.get("data", {}).has("return_confirm_requested"):
+		m.append("return_confirm_requested stayed on a later snapshot")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-116 (2): deaths before the stall count. The fight's dead party Echoes join the stage death record, and the
+## earlier deaths stay. These are the names the stipend, the Thread flag and the rank cap read.
+static func _t_standoff_records_deaths() -> Dictionary:
+	var r: Dictionary = _engaged_retreat("rt_standoff_dead", false, 0, 50)
+	if not bool(r.get("ok", false)):
+		return r
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	stage["lost_echo_names"] = ["Earlier"]
+	var dead := _echo_actor(flow_ctx.encounter_ctx, 1)
+	dead["is_dead"] = true
+	(r["runtime"] as FlowRuntime)._resolve_forced_retreat(99)
+	var names: Array = ActiveStageService.stage_lost_echo_names(flow_ctx)
+	var m: Array = []
+	if names != ["Earlier", str(dead["name"])]:
+		m.append("expected the earlier death and this fight's death on the stage record, got %s" % str(names))
+	if ActiveStageService.lost_echo_names_with(flow_ctx, []) != names:
+		m.append("the rule the stipend and the Thread flag read does not return the record")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-116 (4b): the cause comes from recorded events only. A refusal by a party Echo is "froze" (newest first,
+## two names at most); a guard with no refusal is "blocked"; an enemy refusal or nothing is "unknown". Progress
+## clears the record. No recorded event marks a position block, so it reads as "unknown".
+static func _t_standoff_cause() -> Dictionary:
+	var r: Dictionary = _engaged_retreat("rt_cause", false, 0, 50)
+	if not bool(r.get("ok", false)):
+		return r
+	var ectx: EncounterContext = (r["flow_ctx"] as FlowContext).encounter_ctx
+	var a := _echo_actor(ectx, 0)
+	var b := _echo_actor(ectx, 1)
+	var c := _echo_actor(ectx, 2)
+	var m: Array = []
+	var enemy: Dictionary = {}
+	for x_v in ectx.actors:
+		if x_v is Dictionary and str((x_v as Dictionary).get("faction", "")) == "enemy":
+			enemy = x_v
+			break
+	StandoffService.record_round(ectx, true)
+	_refuse(ectx, enemy, 1)
+	if not (ectx.stall_record.get("refused", []) as Array).is_empty():
+		m.append("an enemy refusal was recorded as a party Echo freezing")
+	ectx.last_round_results = [{ "action_type": "actor.guard", "source_id": str(enemy["id"]), "source_name": "x" }]
+	StandoffService.record_round(ectx, false)
+	_refuse(ectx, a, 2)
+	_refuse(ectx, b, 3)
+	_refuse(ectx, c, 4)
+	_refuse(ectx, a, 5)
+	var order: Array = (ectx.stall_record["refused"] as Array).map(func(e): return str((e as Dictionary)["name"]))
+	if order != [str(b["name"]), str(c["name"]), str(a["name"])]:
+		m.append("refusal order (oldest first, latest wins): %s" % str(order))
+	if StandoffService.latest_froze_name(ectx) != str(a["name"]):
+		m.append("latest_froze_name: %s" % StandoffService.latest_froze_name(ectx))
+	StandoffService.record_round(ectx, true)
+	if not ectx.stall_record.is_empty() or StandoffService.latest_froze_name(ectx) != "":
+		m.append("progress did not clear the record")
+	# The facts the card gets.
+	var cases := [["froze", [a, b, c]], ["blocked", []], ["unknown", []]]
+	for case in cases:
+		var e2: Dictionary = _engaged_retreat("rt_cause_" + case[0], false, 0, 50)
+		var x2: EncounterContext = (e2["flow_ctx"] as FlowContext).encounter_ctx
+		StandoffService.record_round(x2, true)
+		for who in case[1]:
+			_refuse(x2, _echo_actor(x2, ((case[1] as Array).find(who))), 2)
+		if case[0] == "blocked":
+			x2.last_round_results = [{ "action_type": "actor.guard", "source_id": "x", "source_name": "x" }]
+			StandoffService.record_round(x2, false)
+		var facts := StandoffService.resolve(e2["flow_ctx"], 50)
+		if str(facts["cause"]) != case[0] or (facts["froze_names"] as Array).size() != (2 if case[0] == "froze" else 0):
+			m.append("%s: facts %s" % [case[0], str(facts)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-118 + D-116 (5): a standoff writes the fight's final fear to the roster (as every ending fight does), then the
+## fear drop falls once, on the FIRST standoff, for each party Echo that froze: written-back fear minus
+## data.combat.stalemate.standoff_fear_drop, clamped at 0. Only Echoes whose fear fell are named as calmed.
+## Replaces the old test that set the SAVED fear first, because the saved fear is now overwritten by the fight's.
+static func _t_standoff_fear_drop() -> Dictionary:
+	var m: Array = []
+	for case in [["95 -> 85", 95, 0, 85, true], ["5 -> 0", 5, 0, 0, true], ["0 cannot fall", 0, 0, 0, false],
+			["second standoff, written back, no drop", 95, 1, 95, false]]:
+		var r: Dictionary = _engaged_retreat("rt_fear_%s" % str(case[0]).left(3), false, 0, 50)
+		if not bool(r.get("ok", false)):
+			return r
+		var flow_ctx: FlowContext = r["flow_ctx"]
+		var echo := _echo_actor(flow_ctx.encounter_ctx)
+		var entry := _roster_entry(flow_ctx, str(echo["id"]))
+		entry["emotion"] = { "faith": 50, "morale_base": 50, "morale_current": 50, "fear_current": 30, "fear_base": 0 }
+		echo["fear"] = case[1]
+		var bystander := _echo_actor(flow_ctx.encounter_ctx, 1)
+		bystander["fear"] = 40
+		if int(case[2]) > 0:
+			_sit_of(flow_ctx, str(r["sit_id"]))["standoff_count"] = case[2]
+		_refuse(flow_ctx.encounter_ctx, echo, 5)
+		(r["runtime"] as FlowRuntime)._resolve_forced_retreat(60)
+		var calmed: Array = flow_ctx.last_snapshot["data"]["calmed_names"]
+		var after := int((entry["emotion"] as Dictionary)["fear_current"])
+		if after != case[3] or (calmed == [str(echo["name"])]) != bool(case[4]) or (not bool(case[4]) and not calmed.is_empty()):
+			m.append("%s: saved fear %d, calmed %s" % [case[0], after, str(calmed)])
+		if int(_roster_entry(flow_ctx, str(bystander["id"]))["emotion"]["fear_current"]) != 40:
+			m.append("%s: an Echo that did not freeze changed fear (write-back only)" % case[0])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-118: the drop is not applied twice across reruns. First standoff: 95 written back, 85 after the drop, named
+## as calmed. The fight is entered again; the Echo starts at 85, freezes again at 90 and the second standoff
+## writes 90 back with no drop and no calmed name.
+static func _t_standoff_rerun_no_second_drop() -> Dictionary:
+	var r: Dictionary = _engaged_retreat("rt_fear_rerun", false, 0, 50)
+	if not bool(r.get("ok", false)):
+		return r
+	var runtime: FlowRuntime = r["runtime"]
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var echo := _echo_actor(flow_ctx.encounter_ctx)
+	var id := str(echo["id"])
+	echo["fear"] = 95
+	_refuse(flow_ctx.encounter_ctx, echo, 3)
+	runtime._resolve_forced_retreat(70)
+	var m: Array = []
+	var first: Dictionary = flow_ctx.last_snapshot["data"]
+	if int(_roster_entry(flow_ctx, id)["emotion"]["fear_current"]) != 85 or first["calmed_names"] != [str(echo["name"])]:
+		m.append("first standoff: saved fear %s, calmed %s" % [str(_roster_entry(flow_ctx, id)["emotion"]["fear_current"]), str(first["calmed_names"])])
+	_explore_map_of(flow_ctx)["last_situation_id"] = str(r["sit_id"])
+	flow_ctx.encounter_ctx = null
+	FlowEncounterState.new().enter(flow_ctx, 100)
+	var echo2 := _echo_actor(flow_ctx.encounter_ctx)
+	echo2["fear"] = 90
+	_refuse(flow_ctx.encounter_ctx, echo2, 4)
+	runtime._resolve_forced_retreat(71)
+	var second: Dictionary = flow_ctx.last_snapshot["data"]
+	if int(_roster_entry(flow_ctx, id)["emotion"]["fear_current"]) != 90 or not (second["calmed_names"] as Array).is_empty() \
+			or int(second["standoff_count"]) != 2:
+		m.append("second standoff: saved fear %s, calmed %s, count %s" % [str(_roster_entry(flow_ctx, id)["emotion"]["fear_current"]), str(second["calmed_names"]), str(second["standoff_count"])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-116 (6): stall_level is 0 below the first threshold, 1 from it, 2 from the second (0.5 and 0.8 of a limit of 15
+## are streaks 8 and 12). It is derived, so a progress round clears it, and the snapshot carries no streak and no limit.
+static func _t_stall_level() -> Dictionary:
+	var r: Dictionary = _engaged_retreat("rt_level", false, 0, 50)
+	if not bool(r.get("ok", false)):
+		return r
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var cfg: Dictionary = ectx.stalemate_cfg
+	var m: Array = []
+	var seen: Array = []
+	for streak in range(0, 16):
+		ectx.combat_state["no_progress_streak"] = streak
+		ectx.combat_state["no_progress_round_limit"] = 15
+		seen.append(StandoffService.level(ectx.combat_state, cfg))
+	var want: Array = []
+	for streak in range(0, 16):
+		want.append(0 if streak < 8 else (1 if streak < 12 else 2))
+	if seen != want:
+		m.append("levels for streak 0..15: %s" % str(seen))
+	if StandoffService.level(ectx.combat_state, {}) != 0:
+		m.append("a missing threshold must switch the warning off")
+	ectx.combat_state["no_progress_streak"] = 13
+	_refuse(ectx, _echo_actor(ectx), 9)
+	var snap_a: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 5)
+	var data: Dictionary = snap_a["data"]
+	if int(data.get("stall_level", -1)) != 2 or str(data.get("stall_froze_name", "")) != str(_echo_actor(ectx)["name"]):
+		m.append("round snapshot: stall_level %s, stall_froze_name '%s'" % [str(data.get("stall_level")), str(data.get("stall_froze_name"))])
+	for key in data.keys():
+		if str(key).contains("streak") or str(key).contains("limit") or str(key).contains("no_progress"):
+			m.append("the round snapshot leaks a counter: %s" % str(key))
+	if JSON.stringify(EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 5)) != JSON.stringify(snap_a):
+		m.append("build_round_snapshot is not pure with the stall keys")
+	ectx.combat_state["no_progress_streak"] = 0
+	StandoffService.record_round(ectx, true)
+	var snap_b: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 6)
+	if int(snap_b["data"].get("stall_level", -1)) != 0 or str(snap_b["data"].get("stall_froze_name", "x")) != "":
+		m.append("progress did not clear the warning")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-116 (7): the round snapshot of the engaged situation says whether it has stalled before.
+static func _t_prebattle_stalled_before() -> Dictionary:
+	var r: Dictionary = _engaged_retreat("rt_prebattle", false, 0, 50)
+	if not bool(r.get("ok", false)):
+		return r
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var m: Array = []
+	var before: Variant = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 5)["data"].get("stalled_before", null)
+	_sit_of(flow_ctx, str(r["sit_id"]))["standoff_count"] = 1
+	var after: Variant = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 6)["data"].get("stalled_before", null)
+	if before != false or after != true:
+		m.append("stalled_before: expected false then true, got %s then %s" % [str(before), str(after)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Item 9c. A stalled fight that is entered again with unchanged inputs stalls the same way, round by round,
+## although the dispatch counter, the stage turn and the retreat attempts have all moved on. Nothing in the fight reads them.
+static func _t_stalled_rerun_deterministic() -> Dictionary:
+	var env: Dictionary = CombatRoundtripIntegrationTests._setup_no_progress("standoff_rerun")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var limit := CombatRoundtripIntegrationTests._no_progress_round_limit(runtime)
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	stage["explore_map"] = { "turn_count": 3, "last_situation_id": "", "situations": [] }
+	stage["retreat_attempts"] = 2
+	FlowStageExploreState._write_stage_back(flow_ctx, stage)
+	var first := _stall_trace(runtime, flow_ctx, limit)
+	if int(_explore_map_of(flow_ctx).get("turn_count", -1)) != 4:
+		return { "ok": false, "error": "the standoff did not move the stage turn, so the rerun proves nothing" }
+	flow_ctx.encounter_id = "realm.01.stage.0.standoff_rerun"
+	FlowEncounterState.new().enter(flow_ctx, 500)
+	if flow_ctx.encounter_ctx == null or not CombatRoundtripIntegrationTests._trim_to_stalled_pair(flow_ctx.encounter_ctx):
+		return { "ok": false, "error": "could not enter the fight again" }
+	for _i in range(9):
+		runtime.dispatch({ "type": "debug.seed.show" })
+	var second := _stall_trace(runtime, flow_ctx, limit)
+	var m: Array = []
+	if first.is_empty() or first != second:
+		m.append("the rerun differs: first %d chars, second %d chars" % [first.length(), second.length()])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Every round: the streak, the round counter and each actor's cell, hit points and flags.
+static func _stall_trace(runtime: FlowRuntime, flow_ctx: FlowContext, limit: int) -> String:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var trace: Array = []
+	runtime.dispatch({ "type": "combat.init" })
+	for _r in range(limit):
+		if flow_ctx.encounter_ctx == null:
+			break
+		runtime.dispatch({ "type": "combat.confirm_round" })
+		var guard := 0
+		while guard < 40 and flow_ctx.encounter_ctx != null:
+			guard += 1
+			var cs: Dictionary = ectx.combat_state
+			if bool(cs.get("combat_over", false)) or str(cs.get("round_phase", "")) != "in_round":
+				break
+			runtime.dispatch({ "type": "combat.next_actor" })
+		var row: Array = [int(ectx.combat_state.get("round_counter", -1)), int(ectx.combat_state.get("no_progress_streak", -1))]
+		for a_v in ectx.actors:
+			var a: Dictionary = a_v
+			row.append([str(a["id"]), a.get("grid_pos", {}), int(a.get("current_hp", -1)), bool(a.get("is_dead", false)), int(a.get("fear", -1)), int(a.get("morale", -1))])
+		trace.append(row)
+	return JSON.stringify(trace) if flow_ctx.encounter_ctx == null and trace.size() == limit else ""
+
+
+## Item 9a. A path has no turn limit: a stage that has run for 100000 turns still advances.
+static func _t_no_turn_limit() -> Dictionary:
+	var env := VentureCharacterizationTests._setup_explore_env("rt_no_limit")
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	var flow_ctx: FlowContext = runtime.flow_ctx
+	var emap := _explore_map_of(flow_ctx)
+	emap["turn_count"] = 100000
+	var snap: Dictionary = runtime.dispatch({ "type": "stage.advance_turn" })
+	var turns := int(_explore_map_of(flow_ctx).get("turn_count", -1))
+	var m: Array = []
+	if turns <= 100000 or str(snap.get("type", "")) != FlowStateIds.STAGE_EXPLORE:
+		m.append("turn 100000: after one Advance the turn is %d and the state is %s" % [turns, str(snap.get("type", ""))])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Item 9b. Passive time income (economy.settle_time) is paid by clock seconds. The stage turn is not an input,
+## so a standoff's extra turn earns nothing.
+static func _t_passive_income_ignores_turns() -> Dictionary:
+	var gains: Array = []
+	for turns in [0, 500]:
+		var env := VentureCharacterizationTests._setup_explore_env("rt_income_%d" % turns)
+		if not bool(env.get("ok", false)):
+			return env
+		var runtime: FlowRuntime = env["runtime"]
+		var flow_ctx: FlowContext = runtime.flow_ctx
+		flow_ctx.save_data["sanctum"]["ase_flame"] = { "awakened": true }
+		_explore_map_of(flow_ctx)["turn_count"] = turns
+		flow_ctx.save_data["economy"]["ase"] = 0
+		flow_ctx.save_data["economy"]["last_settle_unix"] = 1000000
+		runtime.dispatch({ "type": "economy.settle_time", "now_unix": 1000600 })
+		gains.append(int(flow_ctx.save_data["economy"]["ase"]))
+	var m: Array = []
+	if gains[0] <= 0 or gains[0] != gains[1]:
+		m.append("income for 600 s at turn 0 and turn 500: %s (must be equal and above 0)" % str(gains))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 

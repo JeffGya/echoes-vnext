@@ -42,7 +42,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			# Shape when populated:
 			# {
 			#   version:int, result_id:String, status:"pending_resolve"|"pending_return",
-			#   source:String, outcome:"victory"|"defeat"|"partial"|"withdrawal", created_t:int,
+			#   source:String, outcome:"victory"|"defeat"|"partial"|"withdrawal"|"standoff", created_t:int,
 			#   realm_id:String, realm_run_count:int, stage_id:String, stage_index:int,
 			#   encounter_id:String, objective_index:int, stage_complete:bool,
 			#   objectives_remaining:int, intel:{}, economy:{}, progression:{},

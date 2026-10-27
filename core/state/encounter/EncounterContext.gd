@@ -39,6 +39,12 @@ var stop_short_override: String = ""
 # COMBAT-005: transient combat result — set by FlowRuntime._end_round(); not persisted.
 # Shape: { "victory": bool, "reason": String, "round_ended": int, "shrine_hp": int }
 var combat_result: Dictionary = {}
+# What the current quiet run showed: { refused: [{id, name, round}], guards: int }. Written by
+# StandoffService.record_round, cleared when the fight makes progress. Never persisted.
+var stall_record: Dictionary = {}
+# Packs a defeat just lost: { lost_ase, lost_ekwan }, {} when none. Kept here so a rebuilt defeat
+# card shows the same row. Never persisted.
+var packs_lost: Dictionary = {}
 # COMBAT-006: id of the designated purifier echo — set once at combat init; "" if no shrine objective.
 var purifier_id: String = ""
 

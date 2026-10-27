@@ -253,23 +253,7 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# reflects the actual fear/morale echoes accumulated during the encounter.
 	# The win/loss drift in _apply_encounter_emotion_drift() then applies on top.
 	if ectx != null:
-		var em_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
-		var em_sanctum: Dictionary = em_sanctum_v if em_sanctum_v is Dictionary else {}
-		var em_roster_v: Variant = em_sanctum.get("roster", [])
-		var em_roster: Array = em_roster_v if em_roster_v is Array else []
-		for actor_v in ectx.actors:
-			if not actor_v is Dictionary:
-				continue
-			if str(actor_v.get("faction", "")) != "echo":
-				continue
-			var eid: String = str(actor_v.get("id", ""))
-			for i in range(em_roster.size()):
-				if em_roster[i] is Dictionary and str(em_roster[i].get("id", "")) == eid:
-					if not em_roster[i].has("emotion"):
-						em_roster[i]["emotion"] = {}
-					em_roster[i]["emotion"]["fear_current"]   = int(actor_v.get("fear", 0))
-					em_roster[i]["emotion"]["morale_current"] = int(actor_v.get("morale", 0))
-					break
+		sync_emotion_to_roster(flow_ctx, ectx)
 
 	# V2-EMOTION-001: per-echo emotion delta summary for resolve screen.
 	var pre_morale_map: Dictionary = ectx.pre_encounter_morale if ectx != null else {}
@@ -391,6 +375,11 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		_breakdown.append({ "label": "Fight won", "delta": int(_fight_row.get("ase", 0)), "currency": "ase",
 			"cause": "encounter_gathered",
 			"params": { "kind": str(_fight_row.get("kind", "")), "gathered_ase": int(_fight_row.get("ase", 0)) } })
+	# A defeat that lost unsettled packs says so, with the amounts. Nothing reaches the balance, so delta is 0.
+	if not victory and ectx != null and not ectx.packs_lost.is_empty():
+		_breakdown.append({ "label": "Packs lost", "delta": 0, "currency": "ase", "cause": "packs_lost",
+			"params": { "lost_ase": int(ectx.packs_lost.get("lost_ase", 0)),
+				"lost_ekwan": int(ectx.packs_lost.get("lost_ekwan", 0)) } })
 	var _vow_outcome: Dictionary = flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {}
 
 	# A defeat shows nothing about pace (design §7): no colour on the result round line.
@@ -450,3 +439,25 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		EncounterSnapshotBuilder._build_combat_intro_line(flow_ctx)
 	)
 	return _snap
+
+
+## Writes each party actor's final fear and morale onto its roster Echo. Every ending fight calls it
+## (a standoff too, before its fear drop), so the roster shows what the fight left in them.
+static func sync_emotion_to_roster(flow_ctx: FlowContext, ectx: EncounterContext) -> void:
+	var em_sanctum_v: Variant = flow_ctx.save_data.get("sanctum", {})
+	var em_sanctum: Dictionary = em_sanctum_v if em_sanctum_v is Dictionary else {}
+	var em_roster_v: Variant = em_sanctum.get("roster", [])
+	var em_roster: Array = em_roster_v if em_roster_v is Array else []
+	for actor_v in ectx.actors:
+		if not actor_v is Dictionary:
+			continue
+		if str(actor_v.get("faction", "")) != "echo":
+			continue
+		var eid: String = str(actor_v.get("id", ""))
+		for i in range(em_roster.size()):
+			if em_roster[i] is Dictionary and str(em_roster[i].get("id", "")) == eid:
+				if not em_roster[i].has("emotion"):
+					em_roster[i]["emotion"] = {}
+				em_roster[i]["emotion"]["fear_current"]   = int(actor_v.get("fear", 0))
+				em_roster[i]["emotion"]["morale_current"] = int(actor_v.get("morale", 0))
+				break

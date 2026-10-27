@@ -472,10 +472,18 @@ static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 		return 0
 	EarningsService.ensure_objective_rows(stage, ConfigService.get_rewards_cfg(flow_ctx_arg.config_service),
 		flow_ctx_arg.logger, t)
+	# Amounts are read before the marks and use the same scale as the leave panel's gathered line.
+	var sums := EarningsService.sums(EarningsService.losable(EarningsService.rows_of(stage)))
+	var fx := get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service, flow_ctx_arg.logger, t)
+	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"])
+	var lost_ase := RewardCalc.round_payout(float(sums["scaled_ase"]) * k)
+	var lost_ekwan := RewardCalc.round_payout(float(sums["scaled_ekwan"]) * k)
 	var lost := EarningsService.mark_lost(stage)
+	if lost > 0 and (lost_ase > 0 or lost_ekwan > 0) and flow_ctx_arg.encounter_ctx != null:
+		flow_ctx_arg.encounter_ctx.packs_lost = { "lost_ase": lost_ase, "lost_ekwan": lost_ekwan }
 	if lost > 0 and flow_ctx_arg.logger != null:
 		flow_ctx_arg.logger.info(t, "economy.earnings.lost", "Defeat lost the packs", {
-			"stage_id": flow_ctx_arg.stage_id, "rows": lost })
+			"stage_id": flow_ctx_arg.stage_id, "rows": lost, "ase": lost_ase, "ekwan": lost_ekwan })
 	return lost
 
 
@@ -500,15 +508,16 @@ func stage_movement_salt(stage: Dictionary) -> String:
 #             Returns synthetic { "id": "", "pos": <cell>, "is_frontier": true }.
 #   Tier 4 — FRONTIER EXHAUSTED (select_frontier returned {}, i.e. no reachable frontier):
 #             Re-offer the nearest unresolved OBJECTIVE including passed ones — so the stage
-#             remains completable when all optional nodes were skipped. A normal fight passed by a
-#             retreat (`retreat_pass_turn`) is re-offered here on a later turn (D-109).
+#             remains completable when all optional nodes were skipped. A fight carrying
+#             `retreat_pass_turn` (a chosen retreat from a normal fight, D-109, or a standoff on any
+#             fight, D-116) is re-offered here only on a later turn.
 #             Other passed non-objective nodes are NEVER re-offered (player dismissed them on purpose).
 #             If nothing qualifies, returns {} (nothing left; party parks).
 #
 # No directive ID may be named here. All behaviour comes from reading directive fields.
 #
-# D-109: a normal fight passed by a retreat carries `retreat_pass_turn` and is re-offered in Tier 4
-# too, but only on a later turn than the retreat. stage.ignore_situation sets no such field.
+# `retreat_pass_turn` fights are re-offered in Tier 4 only on a later turn than the retreat or standoff.
+# stage.ignore_situation sets no such field.
 func find_explore_target(
 	explore_map: Dictionary,
 	directive: Dictionary,
@@ -586,8 +595,11 @@ func find_explore_target(
 		var sit: Dictionary = sit_v if sit_v is Dictionary else {}
 		if bool(sit.get("resolved", false)):
 			continue
-		if not bool(sit.get("is_objective", false)) and not _retreat_passed_due(sit, explore_map):
-			continue  # ignored or not-yet-due non-objective nodes stay skipped
+		if sit.has("retreat_pass_turn"):
+			if not _retreat_passed_due(sit, explore_map):
+				continue  # a retreated or stood-off fight waits for a later turn
+		elif not bool(sit.get("is_objective", false)):
+			continue  # ignored non-objective nodes stay skipped
 		if not bool(sit.get("revealed", false)):
 			continue  # still fog — cannot target
 		tier4_candidates.append(sit)
@@ -644,7 +656,10 @@ static func next_retreat_roll_key(flow_ctx_arg: FlowContext, encounter_id: Strin
 ## of find_explore_target offers it again on a later turn (ignore_situation sets no marker: never again).
 ## An objective fight (objective_index >= 0) stays open: FlowStageExploreState offers it again on entry.
 ## Caller reads objective_index before the encounter state exits. Returns { situation_id, can_reenter }.
-static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int, t: int) -> Dictionary:
+## `standoff` (a stalemate, D-116): objective and normal fights alike get `passed` and `retreat_pass_turn`,
+## so neither returns at once, and the situation's saved `standoff_count` rises. Returns it too.
+static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int, t: int,
+		standoff: bool = false) -> Dictionary:
 	var out := { "situation_id": "", "can_reenter": false }
 	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
 	var map_v: Variant = stage.get("explore_map", {})
@@ -658,12 +673,15 @@ static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int
 		if not (s_v is Dictionary) or str((s_v as Dictionary).get("id", "")) != sit_id or sit_id.is_empty():
 			continue
 		out["situation_id"] = sit_id
-		if objective_index >= 0:
+		if objective_index >= 0 and not standoff:
 			explore_map["retreat_reoffer_id"] = sit_id
 			out["can_reenter"] = true
 		else:
 			(s_v as Dictionary)["passed"] = true
 			(s_v as Dictionary)["retreat_pass_turn"] = int(explore_map["turn_count"])
+		if standoff:
+			out["standoff_count"] = int((s_v as Dictionary).get("standoff_count", 0)) + 1
+			(s_v as Dictionary)["standoff_count"] = out["standoff_count"]
 		break
 	stage["explore_map"] = explore_map
 	FlowStageExploreStateScript._write_stage_back(flow_ctx_arg, stage)

@@ -111,14 +111,17 @@ static func mark_settled(stage: Dictionary, ids: Array, share_pct: int) -> void:
 			r["settled_share"] = share_pct
 
 
-## Marks every unsettled row lost, except rows kept on defeat. Returns how many rows it marked.
+## The rows a defeat loses: unsettled and not kept on defeat.
+static func losable(rows: Array) -> Array:
+	return unsettled(rows).filter(func(r): return not bool((r as Dictionary).get("keep_on_defeat", false)))
+
+
+## Marks every losable row lost. Returns how many rows it marked.
 static func mark_lost(stage: Dictionary) -> int:
 	var n := 0
-	for r_v in unsettled(rows_of(stage)):
-		var r: Dictionary = r_v
-		if not bool(r.get("keep_on_defeat", false)):
-			r["lost"] = true
-			n += 1
+	for r_v in losable(rows_of(stage)):
+		(r_v as Dictionary)["lost"] = true
+		n += 1
 	return n
 
 

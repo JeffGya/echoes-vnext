@@ -421,7 +421,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 		else:
 			_steps_to_target = GridService.chebyshev_distance(party_pos, _tsit_pos)
 
-	return {
+	var snap: Dictionary = {
 		"type": FlowStateIds.STAGE_EXPLORE,
 		"data": {
 			"stage_id":               flow_ctx.stage_id,
@@ -481,6 +481,10 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 		"actions": actions,
 		"meta": { "t": t },
 	}
+	# One-shot, present only when true: the standoff card's Sanctum button asks the UI to open the return confirmation.
+	if flow_ctx.pending_return_confirm:
+		snap["data"]["return_confirm_requested"] = true
+	return snap
 
 
 ## Steps the last Advance could commit to; the step row crosses out the rest. A malformed value reads as the budget.

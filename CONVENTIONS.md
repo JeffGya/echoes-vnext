@@ -1076,6 +1076,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `stage.engage_situation` | routes by type: async → ENCOUNTER; in_explore → resolve or choice (V2-STAGE-004) |
 | | `stage.ignore_situation` | dismisses engagement popup; party stays; next turn skips this pos |
 | | `stage.retreat_return` | action of the `retreat_return` card; back to `flow.stage_explore`; an objective fight is offered again at once (D-106) |
+| | `stage.standoff_return` | action of the `standoff` card (a stalemate, D-116); back to `flow.stage_explore` without the vow entry check. `to_sanctum: true` (second standoff on a fight on) also sets the one-shot `data.return_confirm_requested` on the explore snapshot; the escape check and settle roll stay in `stage.return_home` |
 | | `stage.return_home` | escape roll; success → resolve (scout return); fail → `data.return_home_result` |
 | | `stage.calling_action` | calling-qualified bonus explore action (V2-STAGE-002) |
 | | `stage.consult_echoes` | payload: `{ echo_ids: Array }`. Selects ≤3 echoes to hear per contact turn (V2-STAGE-003) |

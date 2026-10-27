@@ -471,6 +471,11 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"retreat_ase_cost":        retreat_ase_cost,
 			"retreat_affordable":      retreat_affordable,
 			"retreat_success_pct":     retreat_success_pct,
+			# Quiet-fight warning (0, 1, 2) and the party Echo that froze last. Words only: no streak, no limit.
+			"stall_level":             StandoffService.level(combat_state, ectx.stalemate_cfg) if ectx != null else 0,
+			"stall_froze_name":        StandoffService.latest_froze_name(ectx) if ectx != null else "",
+			# True when the engaged situation has had a standoff before (read at the prebattle screen).
+			"stalled_before":          StandoffService.stalled_before(flow_ctx),
 			# V2-STAGE-002: remaining required objectives (informational during combat).
 			"objectives_remaining":    EncounterSnapshotBuilder._count_remaining_required_objectives(flow_ctx),
 			# V2-STAGE-004 P3a: irregular terrain dict for CombatBoardScreen tilemap.

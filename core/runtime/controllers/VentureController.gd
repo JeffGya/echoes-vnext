@@ -15,8 +15,9 @@
 #   - No UI or scene-tree reference.
 #   - Reached through FlowRuntime._venture_controller(), a per-call factory.
 #
-# Owns 11 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
-# flow.complete_stage, stage.return_home, stage.ignore_situation, stage.retreat_return, directive.select,
+# Owns 12 actions: stage.advance_turn, stage.engage_situation, stage.resolve_situation_choice,
+# flow.complete_stage, stage.return_home, stage.ignore_situation, stage.retreat_return,
+# stage.standoff_return, directive.select,
 # stage.dismiss_overlay, flow.select_realm, and — added in Phase 6
 # Slice 6F — flow.select_stage.
 #
@@ -440,6 +441,19 @@ func handle_retreat_return(_action: Dictionary, _t: int) -> FlowActionOutcome:
 	if not (data_v is Dictionary) or str((data_v as Dictionary).get("run_type", "")) != "retreat_return":
 		return FlowActionOutcome.handled_outcome()
 	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE_EXPLORE, "stage.retreat_return")
+
+
+## stage.standoff_return — the standoff card's action (D-116). Back to the path, like stage.retreat_return
+## (a dedicated action, so the vow stage-entry check does not run). `to_sanctum` is honoured only when the
+## card offered the Sanctum button; it sets a one-shot flag that makes the stage_explore snapshot ask the UI
+## to open the return confirmation. The escape check and the settle roll stay in stage.return_home.
+func handle_standoff_return(action: Dictionary, _t: int) -> FlowActionOutcome:
+	var data_v: Variant = flow_ctx.last_snapshot.get("data", {})
+	if not (data_v is Dictionary) or str((data_v as Dictionary).get("run_type", "")) != "standoff":
+		return FlowActionOutcome.handled_outcome()
+	flow_ctx.pending_return_confirm = bool(action.get("to_sanctum", false)) \
+		and bool((data_v as Dictionary).get("can_go_sanctum", false))
+	return FlowActionOutcome.transition_outcome(FlowStateIds.STAGE_EXPLORE, "stage.standoff_return")
 
 
 ## stage.dismiss_overlay — rebuild the explore snapshot from save_data so overlay data

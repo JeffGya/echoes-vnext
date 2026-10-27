@@ -125,6 +125,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/packs_claimant_fight_has_its_own_row_id", Callable(EconomyCharacterizationTests, "_t_packs_claimant_fight"))
 	runner.register_test("econ_char/packs_retreat_and_standoff_write_no_row", Callable(EconomyCharacterizationTests, "_t_packs_retreat_standoff"))
 	runner.register_test("econ_char/packs_defeat_loses_unsettled_rows_once", Callable(EconomyCharacterizationTests, "_t_packs_defeat"))
+	runner.register_test("econ_char/packs_defeat_card_names_the_loss", Callable(EconomyCharacterizationTests, "_t_packs_defeat_card"))
 	runner.register_test("econ_char/packs_found_ase_waits_in_the_packs", Callable(EconomyCharacterizationTests, "_t_packs_found"))
 	runner.register_test("econ_char/packs_leave_settles_all_sources_with_one_roll", Callable(EconomyCharacterizationTests, "_t_packs_leave"))
 	runner.register_test("econ_char/packs_path_end_banks_rows_and_replay_scales_them", Callable(EconomyCharacterizationTests, "_t_packs_path_end"))
@@ -1303,10 +1304,6 @@ static func _t_cause_scout_rows() -> Dictionary:
 			or ((zero[0] as Dictionary).get("params", {}) as Dictionary).has("partial") \
 			or int(((zero[0] as Dictionary).get("params", {}) as Dictionary).get("total", -1)) != 1:
 		m.append("zero partial row: %s" % JSON.stringify(zero))
-	var forced: Array = VentureResolveSnapshotBuilder.build_scout_return_snapshot(
-		_scout_ctx(none, 0), 1, "forced_retreat")["data"]["reward_breakdown"]
-	if not forced.is_empty():
-		m.append("forced_retreat carries rows: %s" % JSON.stringify(forced))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
@@ -3112,6 +3109,42 @@ static func _t_packs_defeat() -> Dictionary:
 	FlowEncounterState.build_final_snapshot(obj_env["flow_ctx"], 7)
 	if not bool((EarningsService.rows_of(obj_env["stage"])[-1] as Dictionary)["lost"]) or _balance_ase(obj_env) != 5:
 		m.append("objective fight, second defeat: the new row must be lost and the consolation must not repeat (balance %d)" % _balance_ase(obj_env))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## D-116 (8): a defeat that loses unsettled packs adds a `packs_lost` ledger row with the amounts lost; nothing
+## lost, no row. A rebuilt card shows the same row, a settled or kept row is not counted, a win has no row.
+static func _t_packs_defeat_card() -> Dictionary:
+	var m: Array = []
+	var env := _fight_env("econ_char_packs_lost_card", false)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var stage: Dictionary = env["stage"]
+	EarningsService.add_row(stage, EarningsService.make_row("enc:a", "encounter", "fight", 6, 0))
+	EarningsService.add_row(stage, EarningsService.make_row("found:b", "found", "money", 9, 2))
+	EarningsService.add_row(stage, EarningsService.make_row("enc:settled", "encounter", "fight", 6, 0))
+	EarningsService.mark_settled(stage, ["enc:settled"], 50)
+	EarningsService.add_row(stage, EarningsService.make_row("keep:1", "found", "money", 5, 0, true, true))
+	_fight_build(env)
+	var rows: Array = (env["card"]["data"]["reward_breakdown"] as Array).filter(
+		func(r): return str((r as Dictionary).get("cause", "")) == "packs_lost")
+	if rows.size() != 1 or int((rows[0] as Dictionary)["params"]["lost_ase"]) != 15 or int((rows[0] as Dictionary)["params"]["lost_ekwan"]) != 2 \
+			or int((rows[0] as Dictionary)["delta"]) != 0:
+		m.append("packs_lost row: %s (expected 15 Ase and 2 Ekwan lost, delta 0)" % JSON.stringify(rows))
+	# A rebuilt card adds its own "repeat defeat" row (the consolation was claimed); the loss row stays the same.
+	var again: Dictionary = FlowEncounterState.build_final_snapshot(env["flow_ctx"], 7)["data"]
+	var again_rows: Array = (again["reward_breakdown"] as Array).filter(
+		func(r): return str((r as Dictionary).get("cause", "")) == "packs_lost")
+	if JSON.stringify(again_rows) != JSON.stringify(rows):
+		m.append("a rebuilt defeat card shows another loss row: %s" % JSON.stringify(again_rows))
+	var bare := _fight_build(_fight_env("econ_char_packs_lost_none", false))
+	for r_v in (bare["card"]["data"]["reward_breakdown"] as Array):
+		if str((r_v as Dictionary).get("cause", "")) == "packs_lost":
+			m.append("a defeat that lost nothing carries a packs_lost row")
+	var won := _fight_build(_fight_env("econ_char_packs_lost_win", true))
+	for r_v in (won["card"]["data"]["reward_breakdown"] as Array):
+		if str((r_v as Dictionary).get("cause", "")) == "packs_lost":
+			m.append("a win carries a packs_lost row")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 

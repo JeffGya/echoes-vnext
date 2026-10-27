@@ -499,9 +499,14 @@ static func _enemy_pos(ectx) -> Dictionary:
 ## Returns {} on setup failure or if a living echo/enemy pair could not be found.
 static func _setup_no_progress(seed_tag: String) -> Dictionary:
 	var env: Dictionary = _setup(seed_tag, true, "off", EncounterResolutionModes.COMBAT)
-	if env.is_empty():
+	if env.is_empty() or not _trim_to_stalled_pair(env["ectx"]):
 		return {}
-	var ectx: EncounterContext = env["ectx"]
+	return env
+
+
+## The trim of _setup_no_progress, callable on any freshly built encounter (a re-entered fight too).
+## Returns false when no living echo/enemy pair is found.
+static func _trim_to_stalled_pair(ectx: EncounterContext) -> bool:
 	var echo: Dictionary = {}
 	var enemy: Dictionary = {}
 	for a_v in ectx.actors:
@@ -513,7 +518,7 @@ static func _setup_no_progress(seed_tag: String) -> Dictionary:
 		elif enemy.is_empty() and str(a.get("faction", "")) == "enemy" and not a.get("is_dead", false):
 			enemy = a
 	if echo.is_empty() or enemy.is_empty():
-		return {}
+		return false
 	for a in [echo, enemy]:
 		var a_stats: Dictionary = a.get("stats", {})
 		a_stats["atk"] = 0
@@ -540,7 +545,7 @@ static func _setup_no_progress(seed_tag: String) -> Dictionary:
 	echo["grid_pos"] = { "col": 5, "row": 5 }
 	enemy["grid_pos"] = { "col": 6, "row": 5 }
 	ectx.actors = [echo, enemy]
-	return env
+	return true
 
 
 ## Drives combat.init, then up to max_rounds full rounds, stopping as soon as combat ends.
@@ -606,8 +611,8 @@ static func test_no_progress_stalemate_ends_as_forced_retreat() -> Dictionary:
 	if str(snap.get("type", "")) != FlowStateIds.RESOLVE:
 		return { "ok": false, "error": "expected a flow.resolve snapshot, got type=%s" % str(snap.get("type", "")) }
 	var data: Dictionary = snap.get("data", {})
-	if str(data.get("run_type", "")) != "forced_retreat":
-		return { "ok": false, "error": "expected run_type=forced_retreat (never confused with a chosen retreat), got: %s" % str(data.get("run_type", "")) }
+	if str(data.get("run_type", "")) != "standoff":
+		return { "ok": false, "error": "expected run_type=standoff (never confused with a chosen retreat), got: %s" % str(data.get("run_type", "")) }
 	return { "ok": true }
 
 
@@ -640,17 +645,13 @@ static func test_forced_retreat_grants_nothing() -> Dictionary:
 		return { "ok": false, "error": "the fight did not resolve as a forced retreat — nothing to assert zero-payout on" }
 	var snap: Dictionary = flow_ctx.last_snapshot
 	var data: Dictionary = snap.get("data", {})
-	if str(data.get("run_type", "")) != "forced_retreat":
-		return { "ok": false, "error": "expected the forced_retreat card, got run_type=%s" % str(data.get("run_type", "")) }
+	if str(data.get("run_type", "")) != "standoff":
+		return { "ok": false, "error": "expected the standoff card, got run_type=%s" % str(data.get("run_type", "")) }
 
-	# The card itself must show zero.
-	if int(data.get("ase_awarded", -1)) != 0:
-		return { "ok": false, "error": "forced_retreat card shows non-zero Ase: %s" % str(data.get("ase_awarded")) }
-	if int(data.get("ekwan_awarded", -1)) != 0:
-		return { "ok": false, "error": "forced_retreat card shows non-zero Ekwan: %s" % str(data.get("ekwan_awarded")) }
-	var breakdown: Array = data.get("reward_breakdown", []) as Array
-	if not breakdown.is_empty():
-		return { "ok": false, "error": "forced_retreat card carries a non-empty reward_breakdown: %s" % str(breakdown) }
+	# The card carries no amount at all (D-116): not a zero, no key.
+	for key in ["ase_awarded", "ekwan_awarded", "reward_breakdown"]:
+		if data.has(key):
+			return { "ok": false, "error": "standoff card carries '%s'" % key }
 
 	# The durable economy and roster Storyweight (xp_total) must be byte-identical to baseline.
 	if runtime.econ.get_ase() != ase_before:
@@ -927,7 +928,7 @@ static func test_guide_spirit_escort_blocked_still_force_retreats() -> Dictionar
 
 	# The no-progress branch (unlike every other end condition) never writes ectx.combat_result —
 	# it goes straight to _resolve_forced_retreat(), which clears encounter_ctx and rebuilds
-	# flow_ctx.last_snapshot as the flow.resolve card. That snapshot is the only place the reason
+	# flow_ctx.last_snapshot as the standoff card. That snapshot is the only place the reason
 	# survives; matches test_no_progress_stalemate_ends_as_forced_retreat's assertion above.
 	if flow_ctx.encounter_ctx != null:
 		return { "ok": false, "error": "the blocked escort never ended (round_counter=%d, streak=%d, limit=%d) — expected a forced retreat" \
@@ -935,8 +936,8 @@ static func test_guide_spirit_escort_blocked_still_force_retreats() -> Dictionar
 
 	var snap: Dictionary = flow_ctx.last_snapshot
 	var data: Dictionary = snap.get("data", {})
-	if str(data.get("run_type", "")) != "forced_retreat":
-		return { "ok": false, "error": "expected run_type=forced_retreat for an unreachable spirit, got '%s'" % str(data.get("run_type", "")) }
+	if str(data.get("run_type", "")) != "standoff":
+		return { "ok": false, "error": "expected run_type=standoff for an unreachable spirit, got '%s'" % str(data.get("run_type", "")) }
 
 	if escort_started_before_end:
 		return { "ok": false, "error": "escort_started=true at some point for a spirit the party could never reach — setup did not exercise the blocked case" }
