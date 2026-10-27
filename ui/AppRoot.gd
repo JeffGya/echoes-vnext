@@ -411,15 +411,16 @@ func _unhandled_input(event: InputEvent) -> void:
 ## dispatches the screen's own `nav.back` action, so it can only reach states the player could
 ## already reach by tapping.
 ##
-## A blocking modal swallows Back. ModalHost owns focus containment while a modal is up, and
-## some modals (`sanctum.companion_invite`) persist until decided; dismissing them from here
-## would be a design change, not a repair.
+## A blocking modal swallows Back. Only a modal that offers `handle_go_back` reacts (the return
+## confirmation closes like Stay). Others persist until decided (`sanctum.companion_invite`).
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		_handle_go_back_request()
 
 func _handle_go_back_request() -> void:
 	if modal_host != null and modal_host.has_method("has_active_modal") and bool(modal_host.call("has_active_modal")):
+		if modal_host.has_method("handle_go_back"):
+			modal_host.call("handle_go_back")
 		return
 	var actions_v: Variant = _last_snapshot.get("actions", {})
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}

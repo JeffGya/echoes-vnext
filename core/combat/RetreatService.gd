@@ -24,6 +24,15 @@ static func get_ase_cost(config_service: ConfigService) -> int:
 	return int(combat_cfg["retreat_ase_cost"])
 
 
+## The chance tier of the live party against the live enemies, from data.combat.retreat_agi_tiers.
+## The one reader for the snapshot (cta.retreat) and the dispatch handler, so a hand-sent action
+## cannot set its own chance. {} when the party cannot attempt a retreat.
+static func chance_tier(actors: Array, config_service: ConfigService) -> Dictionary:
+	var bal: Dictionary = config_service.get_balance() if config_service != null else {}
+	var tier_cfg: Array = bal.get("data", {}).get("combat", {}).get("retreat_agi_tiers", [])
+	return get_chance_tier(actors, tier_cfg)
+
+
 ## Returns true if the echo faction can ATTEMPT a retreat (speed gate).
 ## Echo avg speed must be strictly greater than enemy avg speed.
 ## Returns false if either faction has no living non-structure actors.

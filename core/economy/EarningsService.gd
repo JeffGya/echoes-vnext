@@ -199,7 +199,7 @@ static func ensure_objective_rows(stage: Dictionary, reward_cfg: Dictionary,
 		logger: StructuredLogger, t: int) -> void:
 	for row_v in _missing_objective_rows(stage, reward_cfg, logger, t):
 		var row: Dictionary = row_v
-		logger.warn(t, "economy.earnings.missing_row", "Completed objective had no earnings row; row written now", {
+		logger.error(t, "economy.earnings.missing_row", "Completed objective had no earnings row; row written now", {
 			"stage_index": int(stage.get("index", -1)), "id": row["id"] })
 		add_row(stage, row)
 

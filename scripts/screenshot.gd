@@ -125,6 +125,7 @@ func _fixtures() -> Dictionary:
 		"return_card_none": [_combat(6, recover), _return_card("none", 0, 0)],
 		"return_card_some": [_combat(6, recover), _return_card("some", 7, 2)],
 		"return_card_all": [_combat(6, recover), _return_card("all", 14, 4)],
+		"return_card_ekwan_only": [_combat(6, recover), _return_card_ekwan_only(), "skip_motion"],
 		"return_card_nothing_new": [_combat(6, recover), _return_card("nothing_new", 0, 0)],
 		"retreat_card_no_reenter": [_combat(6, recover), _retreat_card(false)],
 		"retreat_card_reenter": [_combat(6, recover), _retreat_card(true)],
@@ -453,6 +454,13 @@ func _return_card(outcome: String, ase: int, ekwan: int) -> Dictionary:
 	return _payout_snap(data)
 
 
+## Ekwan above 0 and no other row: the ledger that opens holds only the total and the Ekwan line.
+func _return_card_ekwan_only() -> Dictionary:
+	var snap := _return_card("some", 0, 5)
+	snap["data"]["ledger_seen"] = false
+	return snap
+
+
 ## Left with nothing completed: the core still sends settle_outcome "nothing_new"; the card shows the row only.
 func _return_card_empty_leave() -> Dictionary:
 	var snap := _return_card("nothing_new", 0, 0)
@@ -482,5 +490,5 @@ func _prebattle(extra: Dictionary) -> Dictionary:
 	snap["data"].merge(extra, true)
 	snap["actions"] = {
 		"cta.combat_init": { "type": "combat.init", "slot": "cta.combat_init", "label": "Start Combat" },
-		"cta.retreat": { "type": "encounter.retreat", "slot": "cta.retreat", "success_pct": 50, "ase_cost": 10 } }
+		"cta.retreat": { "type": "encounter.retreat", "slot": "cta.retreat", "ase_cost": 10 } }
 	return snap

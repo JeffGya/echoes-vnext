@@ -372,8 +372,8 @@ static func get_economy_cfg(config_service: ConfigService) -> Dictionary:
 
 
 ## data.rewards — stage/objective reward weights and partial-intel factor. Feeds
-## FlowRuntime._handle_encounter_retreat (Phase 6 territory), FlowRuntime's return-home
-## path, and ActiveStageService.get_stage_base_reward(). V2-INFRA-003 Phase 5
+## FlowRuntime._handle_encounter_retreat (Phase 6 territory) and FlowRuntime's return-home
+## path. V2-INFRA-003 Phase 5
 ## Slice A: moved off FlowRuntime (private _get_balance_rewards_cfg) — a plain subtree read
 ## with callers in two different domains, so neither domain owns it; ConfigService does.
 static func get_rewards_cfg(config_service: ConfigService) -> Dictionary:

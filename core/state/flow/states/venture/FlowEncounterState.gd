@@ -323,10 +323,11 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# V2-STAGE-002: count required objectives not yet completed (post-victory mark).
 	var objectives_remaining := EncounterSnapshotBuilder._count_remaining_required_objectives(flow_ctx)
 
-	# P1 CLOSE: surface — use the first objective type when known, else "combat" or "shrine".
+	# Banner surface: the type of the objective being fought; "combat" for a fight that belongs to no objective.
 	var _obj_type := "combat"
-	if not stage_objectives.is_empty() and stage_objectives[0] is Dictionary:
-		_obj_type = str((stage_objectives[0] as Dictionary).get("type", "combat"))
+	var _fought_idx := flow_ctx.active_encounter_objective_index
+	if _fought_idx >= 0 and _fought_idx < stage_objectives.size() and stage_objectives[_fought_idx] is Dictionary:
+		_obj_type = str((stage_objectives[_fought_idx] as Dictionary).get("type", "combat"))
 	var _combat_surface := _obj_type if not _obj_type.is_empty() else "combat"
 
 	# P1 CLOSE: summary_line — synthesize from reason and victory.
@@ -408,6 +409,8 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	ResolveSnapshotBuilder.add_victory_flag(_data, victory)
 	ResolveSnapshotBuilder.add_ledger(_data, int(reward_result.get("ase_awarded", 0)), _breakdown)
 	ResolveSnapshotBuilder.add_ledger_seen(_data, SaveSchema.ledger_seen(flow_ctx.save_data))
+	# The card's total of fight pay in the packs (block 14f): the sum of its encounter_gathered rows.
+	ResolveSnapshotBuilder.add_ase_gathered(_data, ResolveSnapshotBuilder.fight_rows_ase(_breakdown))
 	# Same condition as the `flow.complete_stage` action in _build_resolve_actions.
 	if not _stage_preview.is_empty():
 		ResolveSnapshotBuilder.add_stage_payout(

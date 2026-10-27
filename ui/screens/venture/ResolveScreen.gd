@@ -567,8 +567,8 @@ func _build_ledger(data: Dictionary) -> void:
 	_chevron.visible = has_rows
 
 
-## Ase found or won on this card that waits in the packs. Event cards carry `ase_gathered`; the
-## fight win carries only its one `encounter_gathered` row, whose delta is the base amount.
+## Ase found or won on this card that waits in the packs: the core key `ase_gathered` (the sum). A card
+## without the key falls back to its one `encounter_gathered` row.
 func _gathered_ase(data: Dictionary) -> int:
 	if data.has("ase_gathered"):
 		return int(data["ase_gathered"])

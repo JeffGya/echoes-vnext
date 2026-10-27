@@ -348,7 +348,7 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 	# with nothing paid, so the parent keys are checked first. Nothing is marked or paid on failure.
 	var bad_key := _invalid_carry_key(reward_cfg)
 	if not bad_key.is_empty():
-		logger.warn(t, "economy.settle.config_error", "data.rewards parent key is missing or invalid; nothing settled", {
+		logger.error(t, "economy.settle.config_error", "data.rewards parent key is missing or invalid; nothing settled", {
 			"parent_key": "data.rewards." + bad_key, "stage_id": ctx.stage_id,
 		})
 		return result

@@ -112,6 +112,25 @@ The agent-written build choices that the copy file did not fix (ASSUMED in `phas
 - Jeff chose the wording. The confirmation panel shows: "Escaping might be more difficult than expected. It might not be possible." It has no subtitle. A failed escape shows the subtitle "No way out." and the body "It was not possible to escape at the moment. Move on, we can try again later."
 - The roll is unchanged. The panel shows no chance of success.
 
+## Technical debt round (D-121, steps 8.A and 8.B)
+
+Built on branch `fix/economy-004-tech-debt` after the merge of PR 125. Sources: `decisions.md` D-121, `phase8-a-build.md`, `phase8-b-build.md`.
+
+| Step | Commit | Content |
+|---|---|---|
+| D-121 | `0b3a92a` | Jeff's answers and the follow-up triage |
+| 8.A | `c722a9d` | Backend: `flow.complete_stage` gate (25); retreat chance from core (33); `TIER_PASSED_FIGHT` (34); `StructuredLogger.error` (38); core `ase_gathered` on the fight win card (50); banner `surface` (3); stale and dead items (56) |
+| 8.B | `10d07a5` | UI: Back closes the return confirmation (37); Ekwan-only card checked (45); 5 new `payout_ui` tests |
+
+Follow-ups 3, 25, 33, 34, 37, 38, 45, 50 and 56 are DONE. Follow-ups 2, 12 and 22 are CLOSED (D-121). Follow-up 56 is done in part (see follow-up 58).
+
+**Left open:**
+- Copy (Jeff): follow-ups 43, 44, 47 and the placeholders listed above.
+- Design decisions (Jeff): follow-up 57 (hand-sent retreat with no tier), follow-up 59 (Back on the failed-escape display), and the open play test items.
+- Block spec rows 7b, 7c, 14c, 14d and 14e (follow-up 58).
+- Verification gap (follow-up 60): the 8.A RUN REQUEST (`reward`, `combat_baseline`, `combat_roundtrip`, `maturity_baseline`, the fingerprint suites) has no recorded result in these docs. UNSOURCED: whether it ran. No fingerprint constant was re-recorded; `phase8-a-build.md` predicts none moves.
+- Not committed or merged: no QA record yet for 8.A and 8.B.
+
 ## Where to look
 
 | Need | File |

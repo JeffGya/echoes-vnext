@@ -36,7 +36,6 @@
 #   _stage_movement_salt           → stage_movement_salt          (reads flow_ctx.realm_id)
 #   _find_explore_target           → find_explore_target
 #   _count_revealed_situations     → count_revealed_situations    (static + flow_ctx param)
-#   _get_stage_base_reward         → get_stage_base_reward        (static + flow_ctx param)
 #   _mark_stage_objective_completed → mark_stage_objective_completed
 #   _resolve_combat_situation_and_objective + the situation-resolution body of
 #     _apply_victory_return_to_explore  → resolve_combat_situation_and_objective (see below)
@@ -119,6 +118,7 @@
 #
 # ────────────────────────────────────────────────────────────────────────────
 # RENAMED — Half A review correction C4. WAS StageExploreSessionService.
+# (get_stage_base_reward, named below, was later deleted as dead code; the argument is history.)
 # ────────────────────────────────────────────────────────────────────────────
 # The name stopped being true at Slice E. "Session" described the three long procedure bodies
 # that ran a stage-explore session — advance_turn, engage_situation, resolve_situation_choice —
@@ -299,16 +299,6 @@ static func count_revealed_situations(flow_ctx_arg: FlowContext) -> int:
 		if s is Dictionary and bool((s as Dictionary).get("revealed", false)):
 			count += 1
 	return count
-
-
-# Base reward of the current stage, by `mode` (RewardCalc.MODE_*). The default pays completed
-# objectives only (retreat and return-home partials). The fought objective for the other modes is
-# `flow_ctx.active_encounter_objective_index`.
-static func get_stage_base_reward(flow_ctx_arg: FlowContext, config_service_arg: ConfigService,
-		logger: StructuredLogger = null, t: int = 0, mode: String = RewardCalc.MODE_COMPLETED) -> int:
-	return RewardCalc.base_reward(_current_stage_objectives(flow_ctx_arg),
-		ConfigService.get_rewards_cfg(config_service_arg), logger, t,
-		mode, flow_ctx_arg.active_encounter_objective_index)
 
 
 # The realm scale and replay factor of the active realm (D-63, D-54), for the payers that do not
@@ -607,7 +597,7 @@ func find_explore_target(
 		tier4_candidates, dist_from_party, {}, category_map, slack_config
 	)
 	if not best_obj4_sit.is_empty():
-		best_obj4_sit["_movement_tier"] = StagePartyMovementAdapterScript.TIER_PASSED_OBJECTIVE
+		best_obj4_sit["_movement_tier"] = StagePartyMovementAdapterScript.TIER_PASSED_FIGHT
 		best_obj4_sit["is_frontier"] = false
 		return best_obj4_sit
 

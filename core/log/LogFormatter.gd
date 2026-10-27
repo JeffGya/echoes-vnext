@@ -15,6 +15,8 @@ static func format(event: Dictionary) -> String:
 	var sev_label := "Info"
 	if sev == "debug":
 		sev_label = "Debug"
+	elif sev == "error":
+		sev_label = "Error"
 		
 	var category := "Core"
 	if type.begins_with("save."):

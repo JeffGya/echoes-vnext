@@ -699,6 +699,7 @@ static func _t_prologue_pays_exactly_one_thread() -> Dictionary:
 	var before := _thread_count(runtime)
 	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.STAGE_MAP })
 	runtime.dispatch({ "type": "flow.select_stage", "stage_id": "stage.0" })
+	VentureCharacterizationTests._overcome_stage_objectives(_prologue_entry(runtime), 0)
 	runtime.dispatch({ "type": "flow.complete_stage" })
 
 	var prologue := _prologue_entry(runtime)
@@ -739,6 +740,7 @@ static func _t_prologue_pays_exactly_one_thread() -> Dictionary:
 
 	var before_normal := _thread_count(runtime)
 	runtime.dispatch({ "type": "flow.select_stage", "stage_id": "stage.%d" % (stage_count - 1) })
+	VentureCharacterizationTests._overcome_stage_objectives(realm, stage_count - 1)
 	runtime.dispatch({ "type": "flow.complete_stage" })
 	var normal_earned: int = runtime.flow_ctx.last_realm_threads_earned.size()
 	if normal_earned <= 1:
