@@ -98,6 +98,14 @@ static func cfg_num(reward_cfg: Dictionary, key: String, safe: float,
 	return safe
 
 
+## Base Ase of one encounter kind (`data.rewards.encounter_weights.<kind>`), before the realm scale and
+## the replay factor. A missing table or kind logs `economy.reward.missing_config_key` and counts 0.
+static func encounter_weight(reward_cfg: Dictionary, kind: String,
+		logger: StructuredLogger = null, t: int = 0) -> int:
+	var table_v: Variant = reward_cfg.get("encounter_weights", {})
+	return roundi(cfg_num(table_v if table_v is Dictionary else {}, kind, 0.0, logger, t))
+
+
 ## Realm scale on objective Ase and Ekwan (D-63): 1 + step x (position in `realm_order` - 1).
 ## A realm outside `realm_order` (the prologue) uses 1.0. The Echoes stipend is never scaled.
 static func realm_scale(realm_id: String, realm_order: Array, reward_cfg: Dictionary,

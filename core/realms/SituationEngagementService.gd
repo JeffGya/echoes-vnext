@@ -108,8 +108,8 @@ func _contact_conversation_service() -> ContactConversationService:
 ## `econ` is a PARAMETER, not a constructor dependency — same reasoning as advance_turn()'s
 ## `directive_service`. Slice A fixed this service's constructor at
 ## (flow_ctx, config_service, logger) and two call sites already build it that way; widening
-## the constructor for two mid-body uses (the VowConsequenceService the engage condition needs,
-## and the situation.money award) would churn every existing construction site for no gain.
+## the constructor for one mid-body use (the VowConsequenceService the engage condition needs)
+## would churn every existing construction site for no gain.
 func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionary:
 	if sit_id.is_empty():
 		logger.debug(t, "stage.engage.no_id", "engage_situation: missing situation_id", {})
@@ -298,7 +298,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 				"situation." + sit_type, logger, t)
 
 	if int(_r.get("ase_delta", 0)) > 0:
-		econ.add_ase(int(_r.get("ase_delta", 0)), "situation.money", logger, t)
+		EarningsService.record_found(stage, sit_id, "money", int(_r.get("ase_delta", 0)))
 
 	var _loot_results_v: Variant = _r.get("loot_results", [])
 	var _loot_results: Array = _loot_results_v if _loot_results_v is Array else []

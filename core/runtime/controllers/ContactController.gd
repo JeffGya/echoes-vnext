@@ -618,8 +618,8 @@ func apply_contact_outcome(
 
 		"claimant":
 			if outcome == "good":
-				econ.add_ase(claimant_good_ase(ConfigService.get_rewards_cfg(config_service), logger, t),
-					"contact.claimant.good", logger, t)
+				EarningsService.record_found(stage, sit_id, "claimant_good",
+					claimant_good_ase(ConfigService.get_rewards_cfg(config_service), logger, t))
 				_emotion_consequence_service().apply_morale_to_party(+5, "contact.claimant.good", t)
 			elif outcome == "partial":
 				_emotion_consequence_service().apply_morale_to_party(+3, "contact.claimant.partial", t)
@@ -658,7 +658,7 @@ func apply_contact_outcome(
 					"situation_id": sit_id,
 				})
 
-				flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + "." + sit_id + ".claimant"
+				flow_ctx.encounter_id = flow_ctx.realm_id + "." + flow_ctx.stage_id + "." + sit_id + EarningsService.CLAIMANT_FIGHT_SUFFIX
 				return FlowActionOutcome.transition_outcome(FlowStateIds.ENCOUNTER, "stage.claimant.combat_forced")
 
 		"temporary_ally":

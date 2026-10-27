@@ -10,6 +10,11 @@ extends RefCounted
 ## reserved and always empty. Pure statics: no RNG, no save call, no tick of its own.
 
 const SOURCE_OBJECTIVE := "objective"
+const SOURCE_ENCOUNTER := "encounter"
+const SOURCE_FOUND := "found"
+const KIND_FIGHT := "fight"
+## The encounter id of a hostile-Claimant forced fight ends with this.
+const CLAIMANT_FIGHT_SUFFIX := ".claimant"
 
 
 static func make_row(id: String, source: String, kind: String, ase: int, ekwan: int,
@@ -54,8 +59,8 @@ static func unsettled(rows: Array) -> Array:
 	return out
 
 
-## Base sums of `rows`. Unscaled rows are summed apart: no producer of one exists yet, so the payers
-## read only the scaled sums.
+## Base sums of `rows`. Unscaled rows are summed apart. The payers read only the scaled sums, so a
+## row with `scaled` false is never paid until a payer reads `flat_*`; no producer writes one.
 static func sums(rows: Array) -> Dictionary:
 	var out := { "scaled_ase": 0, "scaled_ekwan": 0, "flat_ase": 0, "flat_ekwan": 0 }
 	for r_v in rows:
@@ -99,6 +104,34 @@ static func mark_lost(stage: Dictionary) -> int:
 			r["lost"] = true
 			n += 1
 	return n
+
+
+# ---------------------------------------------------------------------------
+# Fight and found rows
+# ---------------------------------------------------------------------------
+
+## Row id of a won fight that is not an objective. The Claimant fight has its own id: its situation
+## is resolved before the fight starts.
+static func fight_id(situation_id: String, claimant: bool) -> String:
+	return "enc:%s%s" % [situation_id, ":claimant" if claimant else ""]
+
+
+## Writes the one `fight` row of a won fight: Ase only, scaled. False when the situation is unknown or
+## the row exists. The weight is read only when the row is new, so a repeat logs nothing.
+static func record_fight(stage: Dictionary, situation_id: String, claimant: bool, reward_cfg: Dictionary,
+		logger: StructuredLogger = null, t: int = 0) -> bool:
+	var id := fight_id(situation_id, claimant)
+	if situation_id.is_empty() or has_row(stage, id):
+		return false
+	var ase := RewardCalc.encounter_weight(reward_cfg, KIND_FIGHT, logger, t)
+	return add_row(stage, make_row(id, SOURCE_ENCOUNTER, KIND_FIGHT, ase, 0))
+
+
+## Writes the row of Ase found on a situation (`money`, `claimant_good`). Scaled like every other row.
+static func record_found(stage: Dictionary, situation_id: String, kind: String, ase: int) -> bool:
+	if situation_id.is_empty():
+		return false
+	return add_row(stage, make_row("found:%s" % situation_id, SOURCE_FOUND, kind, ase, 0))
 
 
 # ---------------------------------------------------------------------------

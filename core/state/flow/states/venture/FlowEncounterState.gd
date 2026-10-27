@@ -215,6 +215,14 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if not victory:
 		_consolation_eligible = ActiveStageService.claim_situation_defeat_consolation(flow_ctx)
 
+	# D-115: a win adds its fight row to the packs (nothing reaches the balance now); a defeat loses the
+	# unsettled packs once, behind the same stamp as the consolation.
+	if victory:
+		ActiveStageService.record_fight_earnings(flow_ctx,
+			ectx != null and ectx.encounter_id.ends_with(EarningsService.CLAIMANT_FIGHT_SUFFIX), t)
+	elif _consolation_eligible:
+		ActiveStageService.lose_unsettled_packs(flow_ctx, t)
+
 	var economy_svc := EconomyService.new(flow_ctx.save_data)
 	var reward_result: Dictionary = economy_svc.reward_encounter_complete(
 		victory,

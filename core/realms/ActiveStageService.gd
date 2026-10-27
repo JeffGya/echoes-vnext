@@ -427,6 +427,42 @@ static func claim_situation_defeat_consolation(flow_ctx_arg: FlowContext) -> boo
 	return true
 
 
+## D-115: a won fight that is not an objective adds ONE `fight` row to the packs. The row id is the
+## exactly-once stamp: a repeated final snapshot, a retry or a reload adds nothing. An objective fight
+## (`active_encounter_objective_index` >= 0) adds none; its objective weight is its pay. Returns true
+## when a row was written. Callers request the save.
+static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: int) -> bool:
+	if flow_ctx_arg.active_encounter_objective_index >= 0:
+		return false
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return false
+	var emap_v: Variant = stage.get("explore_map", {})
+	var sit_id := str((emap_v as Dictionary).get("last_situation_id", "")) if emap_v is Dictionary else ""
+	var wrote := EarningsService.record_fight(stage, sit_id, claimant,
+		ConfigService.get_rewards_cfg(flow_ctx_arg.config_service), flow_ctx_arg.logger, t)
+	if wrote and flow_ctx_arg.logger != null:
+		flow_ctx_arg.logger.info(t, "economy.earnings.fight", "Won fight added to the packs", {
+			"stage_id": flow_ctx_arg.stage_id, "situation_id": sit_id, "claimant": claimant })
+	return wrote
+
+
+## D-115: a defeat loses every unsettled row of the active stage's packs (rows kept on defeat stay).
+## A completed objective with no row gets its row first, so the safety net cannot add it back later.
+## Returns how many rows were lost. The caller guards the exactly-once stamp and requests the save.
+static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return 0
+	EarningsService.ensure_objective_rows(stage, ConfigService.get_rewards_cfg(flow_ctx_arg.config_service),
+		flow_ctx_arg.logger, t)
+	var lost := EarningsService.mark_lost(stage)
+	if lost > 0 and flow_ctx_arg.logger != null:
+		flow_ctx_arg.logger.info(t, "economy.earnings.lost", "Defeat lost the packs", {
+			"stage_id": flow_ctx_arg.stage_id, "rows": lost })
+	return lost
+
+
 # ────────────────────────────────────────────────────────────────────────────
 # Target selection
 # ────────────────────────────────────────────────────────────────────────────

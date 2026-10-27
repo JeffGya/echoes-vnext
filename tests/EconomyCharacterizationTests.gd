@@ -120,6 +120,17 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/earnings_rows_survive_save_and_reload", Callable(EconomyCharacterizationTests, "_t_earnings_survive_reload"))
 	runner.register_test("econ_char/earnings_repair_defaults_and_new_stage_is_empty", Callable(EconomyCharacterizationTests, "_t_earnings_repair_default"))
 	runner.register_test("econ_char/earnings_every_completion_hook_writes_one_row", Callable(EconomyCharacterizationTests, "_t_earnings_hooks"))
+	runner.register_test("econ_char/packs_fight_win_adds_one_row_once", Callable(EconomyCharacterizationTests, "_t_packs_fight_win"))
+	runner.register_test("econ_char/packs_objective_fight_adds_no_fight_row", Callable(EconomyCharacterizationTests, "_t_packs_objective_fight"))
+	runner.register_test("econ_char/packs_claimant_fight_has_its_own_row_id", Callable(EconomyCharacterizationTests, "_t_packs_claimant_fight"))
+	runner.register_test("econ_char/packs_retreat_and_standoff_write_no_row", Callable(EconomyCharacterizationTests, "_t_packs_retreat_standoff"))
+	runner.register_test("econ_char/packs_defeat_loses_unsettled_rows_once", Callable(EconomyCharacterizationTests, "_t_packs_defeat"))
+	runner.register_test("econ_char/packs_found_ase_waits_in_the_packs", Callable(EconomyCharacterizationTests, "_t_packs_found"))
+	runner.register_test("econ_char/packs_leave_settles_all_sources_with_one_roll", Callable(EconomyCharacterizationTests, "_t_packs_leave"))
+	runner.register_test("econ_char/packs_path_end_banks_rows_and_replay_scales_them", Callable(EconomyCharacterizationTests, "_t_packs_path_end"))
+	runner.register_test("econ_char/packs_realm01_worked_total_matches_design", Callable(EconomyCharacterizationTests, "_t_packs_worked_total"))
+	runner.register_test("econ_char/packs_fight_weight_reads_config_and_fails_visibly", Callable(EconomyCharacterizationTests, "_t_packs_weight_config"))
+	runner.register_test("econ_char/packs_rows_survive_save_and_reload", Callable(EconomyCharacterizationTests, "_t_packs_reload"))
 	runner.register_test("econ_char/intel_gained_absent_zero_present_count_absent_on_defeat", Callable(EconomyCharacterizationTests, "_t_intel_gained"))
 	runner.register_test("econ_char/intel_gained_replays_from_stored_result", Callable(EconomyCharacterizationTests, "_t_intel_gained_replay"))
 	runner.register_test("econ_char/death_record_carries_to_later_fight", Callable(EconomyCharacterizationTests, "_t_death_record"))
@@ -2931,3 +2942,323 @@ static func _t_earnings_hooks() -> Dictionary:
 		m.append("C: rows %s, expected the complete_stage branch to write obj:0:0" % JSON.stringify(EarningsService.rows_of(stage_c)))
 	_row_invariant(stage_c, "C", m)
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+# ---------------------------------------------------------------------------
+# Fight and found rows in the packs
+# ---------------------------------------------------------------------------
+
+## A fight ready to end, before the Resolve card exists. `objective_index` is the fought objective's
+## index (-1: a normal fight). `claimant` marks the hostile-Claimant fight, whose situation is already
+## resolved when the fight starts. Call `_fight_build` to run the production order.
+static func _fight_env(tag: String, victory: bool, objective_index: int = -1, claimant: bool = false) -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter("combat", tag)
+	if env.is_empty():
+		return {}
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	var ectx: EncounterContext = env["ectx"]
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(flow_ctx)
+	stage["objectives"] = [_req(0, "combat", false), ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)]
+	stage["settlement_receipt"] = {}
+	stage["earnings"] = []
+	stage["explore_map"] = { "last_situation_id": "sit.fight", "situations": [{ "id": "sit.fight", "type": "combat",
+		"resolved": claimant, "revealed": true, "is_objective": objective_index >= 0, "objective_index": objective_index }] }
+	flow_ctx.active_encounter_objective_index = objective_index
+	flow_ctx.encounter_start_revealed_count = ActiveStageService.count_revealed_situations(flow_ctx)
+	if claimant:
+		ectx.encounter_id += EarningsService.CLAIMANT_FIGHT_SUFFIX
+	ectx.combat_result = { "victory": victory, "reason": "all_enemies_defeated", "round_ended": 4 }
+	ectx.combat_state["combat_over"] = true
+	env["victory"] = victory
+	env["stage"] = stage
+	return env
+
+
+static func _fight_build(env: Dictionary) -> Dictionary:
+	if bool(env["victory"]):
+		env["runtime"]._stage_explore_session_service().resolve_combat_situation_and_objective(
+			5, true, true, "stage.combat_resolved", "econ_char fight", true)
+	env["card"] = FlowEncounterState.build_final_snapshot(env["flow_ctx"], 6)
+	return env
+
+
+static func _ids(stage: Dictionary) -> Array:
+	return EarningsService.rows_of(stage).map(func(r): return str((r as Dictionary)["id"]))
+
+
+static func _balance_ase(env: Dictionary) -> int:
+	return int((env["flow_ctx"].save_data["economy"] as Dictionary)["ase"])
+
+
+## A won normal fight adds ONE row: Ase 6 from config, Ekwan 0, scaled. The balance does not move
+## and the card pays 0. A second build of the card adds nothing.
+static func _t_packs_fight_win() -> Dictionary:
+	var m: Array = []
+	var env := _fight_build(_fight_env("econ_char_packs_win", true))
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var stage: Dictionary = env["stage"]
+	var rows := EarningsService.rows_of(stage)
+	var want := int(_rewards_cfg()["encounter_weights"]["fight"])
+	if rows.size() != 1:
+		return { "ok": false, "error": "rows %s, expected one fight row" % JSON.stringify(rows) }
+	var r: Dictionary = rows[0]
+	if str(r["id"]) != "enc:sit.fight" or str(r["source"]) != "encounter" or str(r["kind"]) != "fight" or int(r["ase"]) != want \
+			or want != 6 or int(r["ekwan"]) != 0 or not bool(r["scaled"]) or bool(r["settled"]) or bool(r["lost"]) or bool(r["keep_on_defeat"]):
+		m.append("row %s, expected an unsettled scaled fight row of 6 Ase" % JSON.stringify(r))
+	if _balance_ase(env) != 0 or int((env["card"]["data"] as Dictionary).get("ase_awarded", -1)) != 0:
+		m.append("balance %d and card ase_awarded %s, expected 0 and 0" % [_balance_ase(env), str(env["card"]["data"].get("ase_awarded"))])
+	FlowEncounterState.build_final_snapshot(env["flow_ctx"], 7)
+	FlowEncounterState.build_final_snapshot(env["flow_ctx"], 8)
+	if EarningsService.rows_of(stage).size() != 1:
+		m.append("a repeated card build left %d rows, expected 1" % EarningsService.rows_of(stage).size())
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The objective weight is the pay of an objective fight: only the objective row, no fight row.
+static func _t_packs_objective_fight() -> Dictionary:
+	var env := _fight_build(_fight_env("econ_char_packs_obj", true, 0))
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var ids := _ids(env["stage"])
+	return { "ok": ids == ["obj:0:0"], "error": "rows %s, expected [obj:0:0] only" % str(ids) }
+
+
+## The hostile-Claimant fight pays like a normal fight under its own id, because its situation is
+## marked resolved before the fight. A normal fight on the same situation would have another id.
+static func _t_packs_claimant_fight() -> Dictionary:
+	var m: Array = []
+	var env := _fight_build(_fight_env("econ_char_packs_claim", true, -1, true))
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var rows := EarningsService.rows_of(env["stage"])
+	if rows.size() != 1 or str((rows[0] as Dictionary)["id"]) != "enc:sit.fight:claimant" or int((rows[0] as Dictionary)["ase"]) != 6 \
+			or int((rows[0] as Dictionary)["ekwan"]) != 0:
+		m.append("rows %s, expected one claimant fight row of 6" % JSON.stringify(rows))
+	FlowEncounterState.build_final_snapshot(env["flow_ctx"], 7)
+	if EarningsService.rows_of(env["stage"]).size() != 1:
+		m.append("a repeated card build added a row")
+	if EarningsService.fight_id("sit.fight", true) == EarningsService.fight_id("sit.fight", false):
+		m.append("the claimant fight shares the normal fight id")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A retreat from an unfinished fight and a forced retreat (standoff) never build the final card,
+## so they write no row and pay nothing.
+static func _t_packs_retreat_standoff() -> Dictionary:
+	var m: Array = []
+	var env := _fight_env("econ_char_packs_retreat", false)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	ActiveStageService.apply_retreat_return(env["flow_ctx"], -1, 3)
+	if not EarningsService.rows_of(env["stage"]).is_empty() or _balance_ase(env) != 0:
+		m.append("retreat: rows %s, balance %d" % [JSON.stringify(EarningsService.rows_of(env["stage"])), _balance_ase(env)])
+	var env2 := _fight_env("econ_char_packs_standoff", false)
+	env2["runtime"]._resolve_forced_retreat(4)
+	if not EarningsService.rows_of(env2["stage"]).is_empty() or _balance_ase(env2) != 0:
+		m.append("standoff: rows %s, balance %d" % [JSON.stringify(EarningsService.rows_of(env2["stage"])), _balance_ase(env2)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## A defeat loses the unsettled rows. A settled row and a keep_on_defeat row stay. It happens once per
+## situation, behind the consolation stamp: a repeat defeat there loses nothing more. An objective
+## fight still pays its small consolation to the balance, as before.
+static func _t_packs_defeat() -> Dictionary:
+	var m: Array = []
+	var env := _fight_env("econ_char_packs_defeat", false)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var stage: Dictionary = env["stage"]
+	var cfg := _rewards_cfg()
+	_complete(stage, 0, ConfigService.new())
+	EarningsService.add_row(stage, EarningsService.make_row("enc:old", "encounter", "fight", 6, 0))
+	EarningsService.mark_settled(stage, ["enc:old"], 50)
+	EarningsService.add_row(stage, EarningsService.make_row("found:x", "found", "money", 9, 0))
+	EarningsService.add_row(stage, EarningsService.make_row("keep:1", "found", "money", 5, 0, true, true))
+	_fight_build(env)
+	var by_id := {}
+	for r_v in EarningsService.rows_of(stage):
+		by_id[str((r_v as Dictionary)["id"])] = r_v
+	var want := { "obj:0:0": true, "found:x": true, "enc:old": false, "keep:1": false }
+	for id in want:
+		if bool((by_id[id] as Dictionary)["lost"]) != want[id]:
+			m.append("row %s lost=%s, expected %s" % [id, str((by_id[id] as Dictionary)["lost"]), str(want[id])])
+	if bool((by_id["enc:old"] as Dictionary)["settled"]) == false or bool((by_id["keep:1"] as Dictionary)["settled"]):
+		m.append("a defeat changed the settled marks")
+	if int(EarningsService.plan(stage, cfg)["scaled_ase"]) != 5 or _balance_ase(env) != 0:
+		m.append("after the defeat the packs hold %s and the balance %d, expected 5 and 0" % [str(EarningsService.plan(stage, cfg)["scaled_ase"]), _balance_ase(env)])
+	EarningsService.add_row(stage, EarningsService.make_row("found:y", "found", "money", 7, 0))
+	FlowEncounterState.build_final_snapshot(env["flow_ctx"], 7)
+	if bool((EarningsService.rows_of(stage)[-1] as Dictionary)["lost"]):
+		m.append("a second defeat at the same situation lost a row again (the stamp must hold)")
+
+	var obj_env := _fight_env("econ_char_packs_defeat_obj", false, 0)
+	EarningsService.add_row(obj_env["stage"], EarningsService.make_row("found:z", "found", "money", 9, 0))
+	_fight_build(obj_env)
+	var z: Dictionary = EarningsService.rows_of(obj_env["stage"])[0]
+	if not bool(z["lost"]) or _balance_ase(obj_env) != 5:
+		m.append("objective fight defeat: row lost=%s, balance %d, expected lost and the 5 Ase consolation" % [str(z["lost"]), _balance_ase(obj_env)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Found Ase (money situation, good Claimant) goes into the packs as a scaled row and not into the balance.
+static func _t_packs_found() -> Dictionary:
+	var m: Array = []
+	var env := VentureCharacterizationTests._setup_stage_env("econ_char_packs_found")
+	if not bool(env.get("ok", false)):
+		return env
+	var rt: FlowRuntime = env["runtime"]
+	rt.flow_ctx.realm_id = "realm.01"
+	rt.flow_ctx.stage_id = "stage.0"
+	rt.flow_ctx.save_data["economy"]["ase"] = 0
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(rt.flow_ctx)
+	stage["earnings"] = []
+	var emap: Dictionary = stage["explore_map"]
+	var sits: Array = emap.get("situations", [])
+	sits.append({ "id": "sit.money", "type": "money", "revealed": true, "resolved": false, "is_objective": false, "objective_index": -1 })
+	sits.append({ "id": "sit.claim", "type": "npc", "revealed": true, "resolved": false, "is_objective": false, "objective_index": -1 })
+	emap["situations"] = sits
+	var res := SituationEngagementService.new(rt.flow_ctx, rt.config_service, _logger()).engage_situation(
+		"sit.money", EconomyService.new(rt.flow_ctx.save_data), 5)
+	var paid := int(res.get("ase_awarded", 0))
+	var rows := EarningsService.rows_of(stage)
+	if str(res.get("outcome", "")) != "resolved" or paid < 8 or paid > 20 or rows.size() != 1 \
+			or str((rows[0] as Dictionary)["id"]) != "found:sit.money" or int((rows[0] as Dictionary)["ase"]) != paid \
+			or str((rows[0] as Dictionary)["kind"]) != "money" or not bool((rows[0] as Dictionary)["scaled"]) or int((rows[0] as Dictionary)["ekwan"]) != 0:
+		m.append("money: outcome %s, paid %d, rows %s" % [str(res.get("outcome")), paid, JSON.stringify(rows)])
+	rt._contact_controller().apply_contact_outcome({ "id": "sit.claim", "role": "claimant", "outcome": "good" }, stage, stage["explore_map"], 6)
+	rows = EarningsService.rows_of(stage)
+	var good := int(RewardCalc.cfg_num(ConfigService.get_rewards_cfg(rt.config_service), "contact_claimant_good_ase", 0.0))
+	if rows.size() != 2 or str((rows[1] as Dictionary)["id"]) != "found:sit.claim" or int((rows[1] as Dictionary)["ase"]) != good \
+			or good != 20 or str((rows[1] as Dictionary)["kind"]) != "claimant_good":
+		m.append("claimant: rows %s, expected a claimant_good row of 20" % JSON.stringify(rows))
+	if int((rt.flow_ctx.save_data["economy"] as Dictionary)["ase"]) != 0:
+		m.append("found Ase reached the balance: %s" % str(rt.flow_ctx.save_data["economy"]))
+	if EarningsService.record_found(stage, "sit.money", "money", 9) or EarningsService.rows_of(stage).size() != 2:
+		m.append("a second found row for the same situation was written")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Adds `fights` fight rows and one money row of `found` Ase to the stage of a `_carry_ctx`.
+static func _gather(ctx: FlowContext, fights: int, found: int) -> void:
+	var st := _carry_stage(ctx)
+	for i in fights:
+		EarningsService.record_fight(st, "f%d" % i, false, _rewards_cfg())
+	if found > 0:
+		EarningsService.record_found(st, "m0", "money", found)
+
+
+## One roll settles objective, fight and found rows alike. Ase 30 + 6 + 12 = 48 and Ekwan 6 are cut by the
+## same share. A fight won after the leave is a new row and joins the next settle or the path end.
+static func _t_packs_leave() -> Dictionary:
+	var m: Array = []
+	for c in [["all", 48, 6, 100], ["some", 24, 3, 50], ["none", 0, 0, 0]]:
+		var ctx := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], _seed_for(c[0]))
+		_gather(ctx, 1, 12)
+		var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
+		if int(plan["ase"]) != 48 or int(plan["ekwan"]) != 6 or (plan["ids"] as Array).size() != 3:
+			m.append("%s: gathered %s, expected 48/6 over 3 rows" % [c[0], str(plan)])
+		var got := _leave(ctx)
+		var bal := ctx.save_data["economy"] as Dictionary
+		if str(got["outcome"]) != c[0] or int(got["ase"]) != c[1] or int(got["ekwan"]) != c[2] or int(bal["ase"]) != c[1]:
+			m.append("%s: leave %s, balance %s, expected %d/%d" % [c[0], str(got), str(bal), c[1], c[2]])
+		for r_v in EarningsService.rows_of(_carry_stage(ctx)):
+			var r: Dictionary = r_v
+			if not bool(r["settled"]) or int(r["settled_share"]) != c[3]:
+				m.append("%s: row %s settled=%s share=%s, expected the one roll's %d" % [c[0], r["id"], str(r["settled"]), str(r["settled_share"]), c[3]])
+		if int(_carry_stage(ctx)["settle_count"]) != 1:
+			m.append("%s: settle_count %s, expected 1" % [c[0], str(_carry_stage(ctx)["settle_count"])])
+		_gather(ctx, 2, 0)
+		var next := StageSettlementService.settle_plan(ctx, ctx.config_service)
+		if int(next["ase"]) != 6 or str(next["ids"]) != str(["enc:f1"]):
+			m.append("%s: after a new fight the packs hold %s, expected 6 in row enc:f1" % [c[0], str(next)])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Finishing the path banks every unsettled row (the preview is what `settle` pays) plus the stipend, and a
+## row settled at a leave pays nothing more. The replay factor and the realm scale reach fight and found rows;
+## the payer rounds ONCE on the sum.
+static func _t_packs_path_end() -> Dictionary:
+	var m: Array = []
+	# [realm, run_count, base row, ase (with the 10 / 5 stipend), redo row]
+	for c in [["realm.01", 0, 48, 58, 0], ["realm.02", 0, 60, 70, 0], ["realm.01", 1, 48, 22, -31]]:
+		var ctx := _carry_ctx(c[0], c[1], [_obj(0, "shrine", true), _carry_boss()])
+		_gather(ctx, 1, 12)
+		var pv := StageSettlementService.new(ctx, ctx.config_service, _carry_econ(ctx), null).preview()
+		var base := _row_by_cause(pv["rows"], "objectives_overcome")
+		var redo := _row_by_cause(pv["rows"], "replay")
+		if int(pv["ase"]) != c[3] or int(base.get("delta", -1)) != c[2] or int(redo.get("delta", 0)) != c[4]:
+			m.append("%s run %s: pays %s, base %s, redo %s; expected %d, %d, %d" % [c[0], c[1], str(pv["ase"]), str(base.get("delta")), str(redo.get("delta")), c[3], c[2], c[4]])
+	var ctx2 := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], _seed_for("all"))
+	_gather(ctx2, 1, 12)
+	_leave(ctx2)
+	_gather(ctx2, 2, 0)
+	var end := StageSettlementService.new(ctx2, ctx2.config_service, _carry_econ(ctx2), null).preview()
+	if int(_row_by_cause(end["rows"], "objectives_overcome").get("delta", -1)) != 6 or int(end["ase"]) != 16 or int(end["ekwan"]) != 0:
+		m.append("leave, then a fight, then the path end: pays %s/%s, expected the new fight (6) + stipend 10 and no Ekwan" % [str(end["ase"]), str(end["ekwan"])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Design file section 2.2, realm.01, party of 5, first run: objectives 24.9 + fights 4.5 + found 4.5 + stipend 10 = 43.9
+## (39.4 before fights). The payer pays the objective mean, the fight base and the money base; the visit share
+## (0.75) and the found mean (4.5) are the design's inputs.
+static func _t_packs_worked_total() -> Dictionary:
+	var m: Array = []
+	var obj_sum := 0.0
+	var types := ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"]
+	for type in types:
+		var ctx := _carry_ctx("realm.01", 0, [_obj(0, type, true), _carry_boss()])
+		obj_sum += float(StageSettlementService.settle_plan(ctx, ctx.config_service)["ase"])
+	var fight_ctx := _carry_ctx("realm.01", 0, [_carry_boss()])
+	_gather(fight_ctx, 1, 0)
+	var fight_one := float(StageSettlementService.settle_plan(fight_ctx, fight_ctx.config_service)["ase"])
+	var objective_mean := obj_sum / float(types.size())
+	var fights := 1.0 * 0.75 * fight_one
+	var before := objective_mean + 4.5 + 10.0
+	var after := before + fights
+	if absf(objective_mean - 24.86) > 0.05 or absf(fights - 4.5) > 0.01 or absf(before - 39.4) > 0.1 or absf(after - 43.9) > 0.1 \
+			or absf(fights / after - 0.10) > 0.01:
+		m.append("objectives %.2f, fights %.2f, before %.2f, after %.2f, fight share %.3f; design: 24.9, 4.5, 39.4, 43.9, 0.10" \
+			% [objective_mean, fights, before, after, fights / after])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## The fight base is read through cfg_num: a missing table or key logs and counts 0, never a default.
+static func _t_packs_weight_config() -> Dictionary:
+	var m: Array = []
+	if RewardCalc.encounter_weight(_rewards_cfg(), "fight") != 6:
+		m.append("config fight weight is not 6")
+	for bad in [{}, { "encounter_weights": {} }, { "encounter_weights": 5 }]:
+		var loud := StructuredLogger.new()
+		if RewardCalc.encounter_weight(bad, "fight", loud, 3) != 0:
+			m.append("%s did not count 0" % JSON.stringify(bad))
+		var hits := 0
+		for e in loud.get_logs():
+			if str(e["type"]) == "economy.reward.missing_config_key":
+				hits += 1
+		if hits != 1:
+			m.append("%s logged %d missing_config_key lines, expected 1" % [JSON.stringify(bad), hits])
+	var stage := { "index": 0 }
+	if EarningsService.record_fight(stage, "", false, _rewards_cfg()) or not EarningsService.rows_of(stage).is_empty():
+		m.append("a fight with no situation id wrote a row")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Fight and found rows sit in the save: a JSON round trip keeps the plan, and the leave marks hold.
+static func _t_packs_reload() -> Dictionary:
+	var m: Array = []
+	var ctx := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], _seed_for("all"))
+	_gather(ctx, 1, 12)
+	var before := StageSettlementService.settle_plan(ctx, ctx.config_service)
+	var back := _carry_ctx("realm.01", 0, [], 0)
+	back.save_data = JSON.parse_string(JSON.stringify(ctx.save_data))
+	var after := StageSettlementService.settle_plan(back, back.config_service)
+	if int(after["ase"]) != int(before["ase"]) or str(after["ids"]) != str(before["ids"]) or int(after["ase"]) != 48:
+		m.append("plan after reload %s, before %s" % [str(after), str(before)])
+	_leave(back)
+	var twice := _carry_ctx("realm.01", 0, [], 0)
+	twice.save_data = JSON.parse_string(JSON.stringify(back.save_data))
+	if str(_leave(twice)["outcome"]) != "nothing_new":
+		m.append("settled fight and found rows paid again after a second reload")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
