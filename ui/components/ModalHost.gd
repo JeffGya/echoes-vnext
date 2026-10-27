@@ -29,6 +29,11 @@ func has_active_modal() -> bool:
 func active_modal_id() -> StringName:
 	return _active_modal_id
 
+## Hardware Back while a modal is up. Only a modal with `handle_go_back` reacts; the rest ignore it.
+func handle_go_back() -> void:
+	if has_active_modal() and _active_modal.has_method("handle_go_back"):
+		_active_modal.call("handle_go_back")
+
 func present_modal_for_id(modal_id: StringName, scene: PackedScene, payload: Dictionary = {}) -> bool:
 	if modal_id == &"":
 		return false
