@@ -698,7 +698,7 @@ const RETREAT_TICK_OUTCOMES: Array = [
 ]
 const RETREAT_FALLBACK_OUTCOME: Dictionary = { "snapshot_type": "flow.resolve", "success": true }
 
-## A retreat that has a real chance of failing (success_pct 100 short-circuits the roll's
+## A retreat that has a real chance of failing (a 100 percent chance short-circuits the roll's
 ## observable effect and would pin nothing about the tick).
 const RETREAT_SUCCESS_PCT := 50
 
@@ -721,11 +721,8 @@ static func _retreat_probe(tag: String, padding_dispatches: int, null_seed: bool
 		flow_ctx.campaign_seed = null
 
 	var tick_at_dispatch: int = int(flow_ctx.sim_tick)
-	runtime.dispatch({
-		"type":        "encounter.retreat",
-		"ase_cost":    0,
-		"success_pct": RETREAT_SUCCESS_PCT,
-	})
+	RetreatTests.force_chance(flow_ctx, RETREAT_SUCCESS_PCT)
+	runtime.dispatch({ "type": "encounter.retreat", "ase_cost": 0 })
 	# Success clears the encounter and publishes the retreat-return resolve card; failure
 	# falls through to _handle_combat_init and leaves the context in place.
 	var success: bool = flow_ctx.encounter_ctx == null

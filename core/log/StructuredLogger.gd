@@ -13,6 +13,8 @@ var _logs: Array[Dictionary] = []
 const LEVEL_OFF := "off"
 const LEVEL_INFO := "info"
 const LEVEL_DEBUG := "debug"
+## A severity, not a verbosity: error() events are kept at every level except off.
+const LEVEL_ERROR := "error"
 
 var _level: String = LEVEL_INFO
 
@@ -33,6 +35,8 @@ func get_level() -> String:
 func _should_log(sev: String) -> bool:
 	if _level == LEVEL_OFF:
 		return false
+	if sev == LEVEL_ERROR:
+		return true
 	if _level == LEVEL_INFO:
 		return sev == LEVEL_INFO
 	if _level == LEVEL_DEBUG:
@@ -47,6 +51,9 @@ func debug(t: int, type: String, msg: String, data: Dictionary = {}) -> void:
 
 func warn(t: int, type: String, msg: String, data: Dictionary = {}) -> void:
 	log_event(t, LEVEL_INFO, type, msg, data)
+
+func error(t: int, type: String, msg: String, data: Dictionary = {}) -> void:
+	log_event(t, LEVEL_ERROR, type, msg, data)
 
 func get_logs() -> Array[Dictionary]:
 	# Return a shallow copy so callers don't accidentally mutate our internal array.

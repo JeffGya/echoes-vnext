@@ -219,7 +219,7 @@ static func _t_goal_validates_for_every_tier() -> Dictionary:
 
 	var tiers: Array = [
 		[Adapter.TIER_OBJECTIVE, {"id": "sit.obj", "pos": {"col": 3, "row": 2}}, "advance"],
-		[Adapter.TIER_PASSED_OBJECTIVE, {"id": "sit.obj", "pos": {"col": 3, "row": 2}}, "advance"],
+		[Adapter.TIER_PASSED_FIGHT, {"id": "sit.obj", "pos": {"col": 3, "row": 2}}, "advance"],
 		[Adapter.TIER_WEIGHTED, {"id": "sit.intel", "pos": {"col": 2, "row": 4}}, "reposition"],
 		[Adapter.TIER_FRONTIER, {"pos": {"col": 5, "row": 5}, "is_frontier": true}, "reposition"],
 	]
@@ -254,7 +254,7 @@ static func _t_goal_tier_urgency_ordering() -> Dictionary:
 	var target: Dictionary = {"id": "sit.x", "pos": {"col": 3, "row": 3}}
 
 	var objective: float = float(Adapter.build_goal(explore_map, target, Adapter.TIER_OBJECTIVE, walkable)["urgency"])
-	var passed: float = float(Adapter.build_goal(explore_map, target, Adapter.TIER_PASSED_OBJECTIVE, walkable)["urgency"])
+	var passed: float = float(Adapter.build_goal(explore_map, target, Adapter.TIER_PASSED_FIGHT, walkable)["urgency"])
 	var weighted: float = float(Adapter.build_goal(explore_map, target, Adapter.TIER_WEIGHTED, walkable)["urgency"])
 	var frontier: float = float(Adapter.build_goal(explore_map, target, Adapter.TIER_FRONTIER, walkable)["urgency"])
 	if not (objective > passed and passed > weighted and weighted > frontier):
@@ -301,7 +301,7 @@ static func _t_goal_pressure_sources_are_admissible() -> Dictionary:
 	var walkable: Dictionary = _full_walkable(6, 6)
 	var explore_map: Dictionary = _explore_map({"col": 0, "row": 0})
 	var tiers: Array = [
-		Adapter.TIER_OBJECTIVE, Adapter.TIER_PASSED_OBJECTIVE,
+		Adapter.TIER_OBJECTIVE, Adapter.TIER_PASSED_FIGHT,
 		Adapter.TIER_WEIGHTED, Adapter.TIER_FRONTIER,
 	]
 	for tier_value: Variant in tiers:
@@ -1096,7 +1096,7 @@ static func _t_goal_advance_only_when_objective_truthfully_named() -> Dictionary
 	var destination: Dictionary = {"col": 3, "row": 2}
 
 	# (1) An objective tier with a usable id advances, place-directed.
-	for tier_value: Variant in [Adapter.TIER_OBJECTIVE, Adapter.TIER_PASSED_OBJECTIVE]:
+	for tier_value: Variant in [Adapter.TIER_OBJECTIVE, Adapter.TIER_PASSED_FIGHT]:
 		var tier: int = int(tier_value)
 		var goal: Dictionary = Adapter.build_goal(
 			explore_map, {"id": "sit.obj", "pos": destination}, tier, walkable

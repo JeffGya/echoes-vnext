@@ -65,6 +65,7 @@ static func register(runner) -> void:
 	runner.register_test("venture_char/complete_stage_flushes_at_most_once", func(): return _t_complete_stage_flush_count())
 	runner.register_test("venture_char/complete_stage_realm_complete_crystallizes_threads", func(): return _t_complete_stage_realm_complete())
 	runner.register_test("venture_char/complete_stage_sanctum_override_applies_victory_modifiers", func(): return _t_complete_stage_sanctum_override())
+	runner.register_test("venture_char/complete_stage_refused_when_stage_not_completable", func(): return _t_complete_stage_refused())
 	# B — encounter.retreat
 	runner.register_test("venture_char/retreat_success_spends_ase_and_pays_nothing", func(): return _t_retreat_success())
 	runner.register_test("venture_char/retreat_success_snapshot_is_pulled_back", func(): return _t_retreat_snapshot())
@@ -400,6 +401,63 @@ static func _t_complete_stage_no_encounter_loss_flavour() -> Dictionary:
 	return { "ok": true }
 
 
+## flow.complete_stage is gated by ObjectiveModel.stage_completable, so a fixture that dispatches
+## it must first overcome the current stage's non-boss objectives.
+static func _overcome_stage_objectives(realm: Dictionary, stage_index: int) -> void:
+	for stage_v in (realm.get("stages", []) as Array):
+		if stage_v is Dictionary and int((stage_v as Dictionary).get("index", -1)) == stage_index:
+			for obj_v in ((stage_v as Dictionary).get("objectives", []) as Array):
+				if obj_v is Dictionary and str((obj_v as Dictionary).get("type", "")) != ObjectiveModel.TYPE_BOSS:
+					(obj_v as Dictionary)["completed"] = true
+
+
+## A hand-sent flow.complete_stage on a stage that fails ObjectiveModel.stage_completable is refused
+## with a log line and NO state change; the same dispatch passes once the objective is overcome.
+static func _t_complete_stage_refused() -> Dictionary:
+	var env := _setup_stage_env("cs_refused")
+	if not bool(env.get("ok", false)):
+		return env
+	var runtime: FlowRuntime = env["runtime"]
+	var logger: StructuredLogger = env["logger"]
+	var save_data: Dictionary = runtime.get_save_data()
+	var realm := _realm(save_data, "realm.01")
+	if int(realm.get("stage_count", 0)) < 2:
+		realm["stage_count"] = 2
+	realm["current_stage_index"] = 0
+	for stage_v in (realm.get("stages", []) as Array):
+		if stage_v is Dictionary and int((stage_v as Dictionary).get("index", -1)) == 0:
+			(stage_v as Dictionary)["objectives"] = [ObjectiveModel.make(0, ObjectiveModel.TYPE_RECOVER, 1, {}, false, true)]
+
+	var ase_before := int(_economy(save_data).get("ase", -1))
+	var ekwan_before := int(_economy(save_data).get("ekwan", -1))
+	var type_before := str(runtime.flow_ctx.last_snapshot.get("type", ""))
+	var stage_before := str(runtime.flow_ctx.stage_id)
+	logger.clear()
+	runtime.dispatch({ "type": "flow.complete_stage" })
+
+	var mismatches: Array = []
+	if int(realm.get("current_stage_index", -1)) != 0:
+		mismatches.append("refused action advanced the stage index to %d" % int(realm.get("current_stage_index", -1)))
+	if int(_economy(save_data).get("ase", -1)) != ase_before or int(_economy(save_data).get("ekwan", -1)) != ekwan_before:
+		mismatches.append("refused action changed the balance")
+	if str(runtime.flow_ctx.last_snapshot.get("type", "")) != type_before or str(runtime.flow_ctx.stage_id) != stage_before:
+		mismatches.append("refused action changed the snapshot or the stage id")
+	if _flush_count(logger) != 0:
+		mismatches.append("refused action flushed a save")
+	var refused_logs := 0
+	for ev in logger.get_logs():
+		if str((ev as Dictionary).get("type", "")) == "stage.complete.refused":
+			refused_logs += 1
+	if refused_logs != 1:
+		mismatches.append("expected one stage.complete.refused log, got %d" % refused_logs)
+
+	_overcome_stage_objectives(realm, 0)
+	runtime.dispatch({ "type": "flow.complete_stage" })
+	if int(realm.get("current_stage_index", -1)) != 1:
+		mismatches.append("the completable stage did not advance, index %d" % int(realm.get("current_stage_index", -1)))
+	return { "ok": mismatches.is_empty(), "error": " | ".join(mismatches) }
+
+
 ## One dispatch → at most one real save flush, even though _handle_complete_stage requests a
 ## save from several places (stage.combat_resolved, realm.stage_advance, thread.crystallize,
 ## encounter.emotion_drift…). Same invariant tests/FlowTransactionTests.gd proves generically,
@@ -416,6 +474,7 @@ static func _t_complete_stage_flush_count() -> Dictionary:
 	if int(realm.get("stage_count", 0)) < 2:
 		realm["stage_count"] = 2
 	realm["current_stage_index"] = 0
+	_overcome_stage_objectives(realm, 0)
 
 	logger.clear()
 	runtime.dispatch({ "type": "flow.complete_stage" })
@@ -442,6 +501,8 @@ static func _t_complete_stage_realm_complete() -> Dictionary:
 	var realm := _realm(save_data, "realm.01")
 	var stage_count := int(realm.get("stage_count", 1))
 	realm["current_stage_index"] = stage_count - 1
+	runtime.flow_ctx.stage_id = "stage.%d" % (stage_count - 1)
+	_overcome_stage_objectives(realm, stage_count - 1)
 
 	var threads_before_v: Variant = _sanctum(save_data).get("threads", {})
 	var threads_before: int = (threads_before_v as Dictionary).size() if threads_before_v is Dictionary else 0
@@ -503,6 +564,7 @@ static func _t_complete_stage_sanctum_override() -> Dictionary:
 	if int(realm.get("stage_count", 0)) < 2:
 		realm["stage_count"] = 2
 	realm["current_stage_index"] = 0
+	_overcome_stage_objectives(realm, 0)
 
 	var out: Dictionary = runtime.dispatch({
 		"type": "flow.complete_stage",
@@ -526,9 +588,9 @@ static func _t_complete_stage_sanctum_override() -> Dictionary:
 # ---------------------------------------------------------------------------
 #
 # tests/RetreatTests.gd covers only RetreatService.roll_retreat()/compute_*, never the
-# handler. success_pct=100 makes the seeded roll deterministic (roll_retreat compares
-# randi_range(0, 99) < success_pct), so these tests exercise the success branch without
-# depending on the campaign seed.
+# handler. RetreatTests.force_chance(ctx, 100) makes the seeded roll deterministic (roll_retreat
+# compares randi_range(0, 99) < the core chance), so these tests exercise the success branch
+# without depending on the campaign seed.
 
 ## Encounter env with a controllable intel count. Built like
 ## tests/FlowFingerprintTests.gd::_setup_encounter (realm via RealmService.get_or_create, a
@@ -616,10 +678,8 @@ static func _t_retreat_success() -> Dictionary:
 	var ase_cost := RetreatService.get_ase_cost(runtime.config_service)
 
 	logger.clear()
-	runtime.dispatch({
-		"type":        "encounter.retreat",
-		"success_pct": 100,
-	})
+	RetreatTests.force_chance(runtime.flow_ctx, 100)
+	runtime.dispatch({ "type": "encounter.retreat" })
 	var flushes := _flush_count(logger)
 
 	var ase_after := int(_economy(save_data).get("ase", -1))
@@ -652,11 +712,8 @@ static func _t_retreat_snapshot() -> Dictionary:
 		return env
 	var runtime: FlowRuntime = env["runtime"]
 
-	var out: Dictionary = runtime.dispatch({
-		"type":        "encounter.retreat",
-		"ase_cost":    0,
-		"success_pct": 100,
-	})
+	RetreatTests.force_chance(runtime.flow_ctx, 100)
+	var out: Dictionary = runtime.dispatch({ "type": "encounter.retreat", "ase_cost": 0 })
 
 	var data_v: Variant = out.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
@@ -701,10 +758,8 @@ static func _t_retreat_no_ase() -> Dictionary:
 	var runtime: FlowRuntime = env["runtime"]
 	var save_data: Dictionary = runtime.get_save_data()
 
-	var out: Dictionary = runtime.dispatch({
-		"type":        "encounter.retreat",
-		"success_pct": 100,
-	})
+	RetreatTests.force_chance(runtime.flow_ctx, 100)
+	var out: Dictionary = runtime.dispatch({ "type": "encounter.retreat" })
 
 	var mismatches: Array = []
 	if int(_economy(save_data).get("ase", -1)) != 0:
@@ -745,11 +800,8 @@ static func _t_scout_return_meta_t() -> Dictionary:
 	# was the test that was off by one — the snapshot tick is not lagging.
 	var expected_tick: int = runtime.flow_ctx.sim_tick
 
-	var out: Dictionary = runtime.dispatch({
-		"type":        "encounter.retreat",
-		"ase_cost":    0,
-		"success_pct": 100,
-	})
+	RetreatTests.force_chance(runtime.flow_ctx, 100)
+	var out: Dictionary = runtime.dispatch({ "type": "encounter.retreat", "ase_cost": 0 })
 	var meta_v: Variant = out.get("meta", {})
 	var meta: Dictionary = meta_v if meta_v is Dictionary else {}
 

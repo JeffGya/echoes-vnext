@@ -139,6 +139,8 @@ it to `""`, so the sentinel is safe).
 | 14 | `scout_intel` | `intel_count` | C | Reason line ("N situations revealed") |
 | 15 | `contact_outcome` | `role`, `role_label`, `outcome`, `outcome_text` | D | Banner colour + reason text |
 | 16 | `pace` | `pace_state`, `pace_changed_rank` | A (pace-mode win only), G | Round line colour + rank-cause note (speed pays no Ase, D-49) |
+| 14f | `ase_gathered` | `ase_gathered` (only when above 0) | A (fight win), E (money), D (good Claimant), G | Found line and the gathered total; Ase that waits in the packs, never in `ase_awarded` |
+| 17 | `standoff` | `standoff_outcome`, `standoff_count`, `can_go_sanctum`, `cause`, `froze_names`, `calmed_names`, `fight_returns` | standoff card (`run_type` `standoff`), G | Standoff renderer: words and names only |
 
 ### 2.3 Blocks that are partial or forced
 
@@ -235,6 +237,8 @@ but it still has to hold, because `FlowFingerprintTests` pins A's exact `data_ke
 | 13 `combat_seams` | **no** | `objectives_remaining` shapes A's own action set before the snapshot is built; `guide_spirit_protected` is a V2-ITEM-002 seam; `combat_intro_line` is S15 prep. |
 | 14 `scout_intel` | yes | `%ReasonLabel` — `"%d situation%s revealed"` |
 | 15 `contact_outcome` | yes | banner text + banner colour + `%ReasonLabel` |
+| 14f `ase_gathered` | yes | the "found" outcome line (money, good Claimant) and the gathered part of the card total |
+| 17 `standoff` | yes | the standoff renderer (`run_type` `standoff`): outcome line, cause line, the buttons |
 
 ---
 
@@ -289,6 +293,8 @@ Dictionaries are references). Every one returns `void`.
 | 14 | `static func add_scout_intel(data: Dictionary, intel_count: int) -> void` |
 | 15 | `static func add_contact_outcome(data: Dictionary, role: String, role_label: String, outcome: String, outcome_text: String) -> void` |
 | 16 | `static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bool) -> void` |
+| 14f | `static func add_ase_gathered(data: Dictionary, gathered: int) -> void` (and the helper `fight_rows_ase(rows: Array) -> int`) |
+| 17 | `static func add_standoff(data: Dictionary, standoff_count: int, can_go_sanctum: bool, cause: String, froze_names: Array, calmed_names: Array, fight_returns: bool = true) -> void` |
 
 ### 4.3 How a producer declares its blocks
 
@@ -328,6 +334,23 @@ The table rows above are unchanged. The rules for block 16:
    calls `pace` only when the stored result has `pace_state`.
 3. So the key absence is load-bearing: `ResolveScreen` shows the pace row and colour only when the
    keys are present.
+
+Blocks 14f and 17 were added after this table was measured (V2-ECONOMY-004 steps 7.C and 7.D to 7.S).
+The rows above are unchanged. The rules:
+
+1. Block 14f `ase_gathered`: the call is the gate. `add_ase_gathered` writes the key only when the
+   amount is above 0. The amount is Ase that waits in the packs (a leave or the path end pays it).
+   It is NOT in `ase_awarded`. Callers: `VentureResolveSnapshotBuilder.build_situation_resolve_snapshot`
+   (money), `ContactController` (good Claimant), `FlowEncounterState.build_final_snapshot` (the fight win:
+   the sum of the card's `encounter_gathered` rows through `fight_rows_ase`; a stage-ending win and an
+   objective fight carry none), and producer G, which replays the stored key.
+2. Block 17 `standoff`: the card for a forced retreat. `VentureResolveSnapshotBuilder.build_standoff_snapshot`
+   passes `run_type` `standoff`. Words and names only: no amount, no percent, no odds. `cause` is `froze`,
+   `blocked` or `unknown`. `froze_names` and `calmed_names` are display names, at most two each.
+   `fight_returns` is false when the fight cannot return (a Claimant fight). Producer G replays the card
+   from the stored result when it has `standoff_outcome`.
+3. Numbers 16 and 17 name these blocks now. The deleted `title` and `note` blocks of the same numbers
+   (Q3 below) are gone.
 
 ### 4.4 Purity contract
 

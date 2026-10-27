@@ -248,17 +248,18 @@ static func _t_field_count_is_nonzero() -> Dictionary:
 # Test 7 (UI-004): pre_combat_has_retreat_fields
 # Setup: minimal pre_combat FlowContext (no config_service → defaults apply).
 # Expected: build_round_snapshot returns data with retreat_eligible, retreat_ase_cost,
-#           retreat_success_pct keys, and NOT the removed retreat_tier_label / carry_retreat_preview.
+#           retreat_affordable keys, and NOT the removed retreat_tier_label / carry_retreat_preview /
+#           retreat_success_pct (the chance is computed in core at dispatch, follow-up 33).
 static func _t_pre_combat_has_retreat_fields() -> Dictionary:
 	var ctx: FlowContext = CombatSnapshotTests._make_pre_combat_ctx()
 	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(ctx, 1)
 	var data: Dictionary = snap.get("data", {})
 
-	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_affordable", "retreat_success_pct"]:
+	for key in ["retreat_eligible", "retreat_ase_cost", "retreat_affordable"]:
 		if not data.has(key):
 			return { "ok": false, "error": "pre_combat data missing UI-004 key: '%s'" % key }
 	# REWRITTEN (6.4, D-110): retreat_tier_label is removed (no reader), so its presence is no longer required.
-	for key in ["retreat_tier_label", "carry_retreat_preview"]:
+	for key in ["retreat_tier_label", "carry_retreat_preview", "retreat_success_pct"]:
 		if data.has(key):
 			return { "ok": false, "error": "pre_combat data still carries the removed key '%s'" % key }
 
