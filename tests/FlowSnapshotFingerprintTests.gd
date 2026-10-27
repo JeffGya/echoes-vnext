@@ -330,7 +330,13 @@ static func test_sanctum_fingerprint() -> Dictionary:
 # V2-DIRECTIVE-002 frontend: 18 new stages.presentation keys (D-57); the old hash is 81d5d887...b1ac.
 # V2-DIRECTIVE-002 frontend: party_preview id; preview presentation. The old hash is 31bea0d4...1fa5.
 # V2-DIRECTIVE-002 play fix: commitment_depth (D-60); the old hash is 16239869...afee.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "b4c2a6e7016fdb20bd0a8af88272c6f0bc359b26e8019c4dd8f433ee3d2619d9"
+# RE-RECORDED, V2-ECONOMY-004 step 5.8: one new key, data.carry_home_preview. Attributed by removing
+# the key: the old hash b4c2a6e7...19d9 came back. Nothing else in the payload moved.
+# RE-RECORDED, V2-ECONOMY-004 step 6.1: one new key, data.carry_home_preview.nothing_new (D-106). Attributed
+# by removing the key: the old hash 1728e1fe...df7e came back (2 of 2 passed). Nothing else moved.
+# RE-RECORDED, V2-ECONOMY-004 step 7.C: one new key, data.carry_home_preview.gathered. Attributed by removing
+# the key: the old hash 5515ca86...5440 came back (2 of 2 passed). Nothing else moved.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "fe7d8a0ee91a221f0c314684ca3acb4bcb11335cadb2510c3cf3da28bd3179c4"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")
@@ -422,17 +428,16 @@ static func test_purity_build_does_not_consume_pending_flags() -> Dictionary:
 ## NOW: the stage-cadence half is gone from the builder. D76's revised action said to invert to
 ## "must NOT mutate"; that is TOO STRONG and this probe would have passed vacuously under it,
 ## because two mutations correctly REMAIN and are not defects:
-##   - the ENCOUNTER payout (enemies defeated / echoes survived / speed, and the once-per-
-##     situation defeat consolation) — this fight's own reward, paid in the dispatch that ends
-##     this fight, so economy still moves here;
+##   - the ENCOUNTER payout: only the once-per-situation defeat consolation remains (a win pays 0
+##     at fight level since Phase 5.2), so economy moves here on a defeat only;
 ##   - the roster emotion write-back — the fear/morale THIS encounter accumulated.
 ## What LEFT is the STAGE-CLEAR Storyweight award. The inverted assertion is therefore specific,
 ## and it is NOT "xp_total must not move": per-kill Storyweight is applied mid-combat, per kill,
 ## and is encounter cadence — one echo in this fight ends the drive with a kill bonus, correctly.
 ## The precise observable is the resolve snapshot's own `xp_events` array: that array IS the
 ## return value of ProgressionService.award_post_combat_xp(), the call that moved. It must now be
-## EMPTY at combat end, and refill only after a flow.complete_stage dispatch. Meanwhile economy
-## and emotion MUST still move here. A non-empty xp_events would mean the stage-clear award had
+## EMPTY at combat end, and refill only after a flow.complete_stage dispatch. Meanwhile emotion
+## MUST still move here, and economy on a defeat. A non-empty xp_events would mean the stage-clear award had
 ## crept back into the builder; an economy or emotion freeze would mean the encounter-cadence
 ## half had wrongly followed it out.
 static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
@@ -492,9 +497,14 @@ static func test_purity_build_final_snapshot_pays_rewards() -> Dictionary:
 	if not xp_events.is_empty():
 		mismatches.append("the stage-clear Storyweight award is back inside build_final_snapshot(): %d xp_events at combat end with no flow.complete_stage dispatch (xp %s -> %s)" \
 			% [xp_events.size(), JSON.stringify(xp_before), JSON.stringify(xp_after)])
-	if not economy_changed:
-		mismatches.append("the ENCOUNTER payout stopped paying at combat end: ase %d->%d ekwan %d->%d" \
+	# A won fight pays 0 at fight level (D-43, D-44: the Echoes stipend is a stage row). A defeat
+	# still pays its consolation.
+	var won := bool(final_data.get("victory", false))
+	if won and economy_changed:
+		mismatches.append("a won fight paid at combat end: ase %d->%d ekwan %d->%d" \
 			% [ase_before, ase_after, ekwan_before, ekwan_after])
+	if not won and not economy_changed:
+		mismatches.append("a defeat paid no consolation at combat end: ase %d->%d" % [ase_before, ase_after])
 	if not emotion_changed:
 		mismatches.append("the roster emotion write-back stopped running at combat end")
 	if not mismatches.is_empty():
@@ -1086,7 +1096,7 @@ static func test_purity_dispatch_preserves_pending_return_notification_until_san
 ## payloads. It follows the snapshot_purity/generic_double_build_is_stable idiom above, but
 ## needs no runtime env at all, which is exactly the point.
 ##
-## It exercises ALL SEVENTEEN blocks plus the base, including the eight only producers A
+## It exercises ALL the `add_*` blocks plus the base, including the eight only producers A
 ## (combat) and B (keeper trial) will call once they migrate in Phase 6. Phase 6 therefore
 ## inherits this guard without editing the builder.
 static func test_purity_resolve_builder_double_build_is_stable() -> Dictionary:

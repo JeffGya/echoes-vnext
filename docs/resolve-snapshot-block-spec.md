@@ -126,6 +126,11 @@ it to `""`, so the sentinel is safe).
 | 6 | `actors` | `actors` | A, B, C | Echo stage / actor preview |
 | 7 | `ledger` | `ase_awarded`, `reward_breakdown` | A, B, C, E | Ase value + breakdown + Ase chip |
 | 8 | `ekwan` | `ekwan_awarded` | A, C, E | Ekwan row + Ekwan chip |
+
+> V2-ECONOMY-004 Phase 4: a fight pays no Ekwan, so `ekwan_awarded` is `0` on a fight card (the key stays). The stage Ekwan is `stage_payout_ekwan`, beside `stage_payout_ase`, on the stage-ending victory card only. No breakdown row has `currency: "ekwan"`.
+
+> V2-ECONOMY-004 Phase 5.2: a won fight pays 0 Ase and carries no `echoes_alive` row (`echoes_survived` stays for the count chip). The Echoes stipend is the `echoes_alive` row of `stage_payout_rows` (params `alive`, `started`, `lost` names, `cap`, `replay`), on the stage-ending victory card only.
+
 | 9 | `emotion` | `emotion_summary` | A, B, E | Echo stage rows |
 | 10 | `vows` | `vow_outcome`, `newly_unlocked_vows` | A | Vow outcome + Vow discovered + vow chip |
 | 11 | `effects` | `effects` | E | Effects rail extras |
@@ -133,7 +138,7 @@ it to `""`, so the sentinel is safe).
 | 13 | `combat_seams` | `objectives_remaining`, `guide_spirit_protected`, `combat_intro_line` | A | **none — routing / future seams** |
 | 14 | `scout_intel` | `intel_count` | C | Reason line ("N situations revealed") |
 | 15 | `contact_outcome` | `role`, `role_label`, `outcome`, `outcome_text` | D | Banner colour + reason text |
-| 16 | `pace` | `pace_bonus_awarded`, `pace_state`, `pace_changed_rank` | A (pace-mode win only), G | Round line colour + "Pace bonus" row + rank-cause note |
+| 16 | `pace` | `pace_state`, `pace_changed_rank` | A (pace-mode win only), G | Round line colour + rank-cause note (speed pays no Ase, D-49) |
 
 ### 2.3 Blocks that are partial or forced
 
@@ -283,7 +288,7 @@ Dictionaries are references). Every one returns `void`.
 | 13 | `static func add_combat_seams(data: Dictionary, objectives_remaining: int, guide_spirit_protected: bool, combat_intro_line: String) -> void` |
 | 14 | `static func add_scout_intel(data: Dictionary, intel_count: int) -> void` |
 | 15 | `static func add_contact_outcome(data: Dictionary, role: String, role_label: String, outcome: String, outcome_text: String) -> void` |
-| 16 | `static func add_pace(data: Dictionary, pace_bonus_awarded: int, pace_state: String, pace_changed_rank: bool) -> void` |
+| 16 | `static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bool) -> void` |
 
 ### 4.3 How a producer declares its blocks
 

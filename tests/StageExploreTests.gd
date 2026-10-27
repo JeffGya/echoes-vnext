@@ -11,7 +11,6 @@
 #   7. explore/map_locks_on_enter                 — FlowStageExploreStateScript.enter() sets locked=true
 #   8. explore/map_lock_is_idempotent             — Re-entering does not reset map state
 #   9. explore/advance_moves_party                — stage.advance_turn updates party_pos + turn_count
-#   10. explore/return_home_failure_snapshot      — Low roll → snapshot has return_failed=true
 #   11. explore/combat_situation_routes_encounter — combat situation → snapshot type flow.encounter
 #   12. explore/objectives_found_increments       — is_objective situation → objectives_found +1
 #   13. explore/all_objectives_triggers_complete  — all objectives found → party_state=complete
@@ -82,7 +81,6 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("explore/map_locks_on_enter",              Callable(StageExploreTests, "_t_map_locks_on_enter"))
 	runner.register_test("explore/map_lock_is_idempotent",          Callable(StageExploreTests, "_t_map_lock_is_idempotent"))
 	runner.register_test("explore/advance_moves_party",             Callable(StageExploreTests, "_t_advance_moves_party"))
-	runner.register_test("explore/return_home_failure_snapshot",    Callable(StageExploreTests, "_t_return_home_failure_snapshot"))
 	runner.register_test("explore/combat_situation_routes_encounter", Callable(StageExploreTests, "_t_combat_situation_routes_encounter"))
 	runner.register_test("explore/objectives_found_increments",     Callable(StageExploreTests, "_t_objectives_found_increments"))
 	runner.register_test("explore/all_objectives_triggers_complete", Callable(StageExploreTests, "_t_all_objectives_triggers_complete"))
@@ -338,26 +336,6 @@ static func _t_advance_moves_party() -> Dictionary:
 	var pos_after: Dictionary = em_after.get("party_pos", {})
 	if int(pos_after.get("col", -1)) != int(target_pos.get("col", 0)):
 		return { "ok": false, "error": "party_pos col did not update" }
-
-	return { "ok": true }
-
-
-# ─── Test 10 — return_home failure produces return_failed snapshot flag ───────
-# We can't easily force a specific roll without a controlled seed, so we
-# test the snapshot shape contract: when return_failed is set, it appears in data.
-static func _t_return_home_failure_snapshot() -> Dictionary:
-	var ctx := _make_ctx()
-	_inject_realm(ctx, 2, 1)
-	FlowStageExploreStateScript._lock_map_if_needed(ctx, 1)
-
-	# Inject return_failed manually into snapshot (mirrors what FlowRuntime sets on failure)
-	var snap := StageExploreSnapshotBuilder.build(ctx, 1)
-	snap["data"]["return_failed"] = true
-
-	var data_v: Variant = snap.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-	if not bool(data.get("return_failed", false)):
-		return { "ok": false, "error": "return_failed flag not present in snapshot data" }
 
 	return { "ok": true }
 

@@ -8,6 +8,14 @@ const SCHEMA_VERSION: int = 1
 #Default save path (single-slot strategy, stored in a folder for autosave/backup support)
 const DEFAULT_SAVE_PATH: String = "user://saves/slot_01.json"
 
+# Player-seen UI flags. Additive: an old save has no "ui_flags" and reads every flag as false.
+const UI_FLAGS_KEY: String = "ui_flags"
+const LEDGER_SEEN_KEY: String = "result_ledger_seen"
+
+static func ledger_seen(save: Dictionary) -> bool:
+	var flags_v: Variant = save.get(UI_FLAGS_KEY, {})
+	return flags_v is Dictionary and (flags_v as Dictionary).get(LEDGER_SEEN_KEY, false) == true
+
 static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> Dictionary:
 	# Creates a new save dictionary that conforms to the schema.
 	# Keep this stabel and addive over time (avoid breaking changes).
@@ -34,7 +42,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			# Shape when populated:
 			# {
 			#   version:int, result_id:String, status:"pending_resolve"|"pending_return",
-			#   source:String, outcome:"victory"|"defeat"|"partial"|"withdrawal", created_t:int,
+			#   source:String, outcome:"victory"|"defeat"|"partial"|"withdrawal"|"standoff", created_t:int,
 			#   realm_id:String, realm_run_count:int, stage_id:String, stage_index:int,
 			#   encounter_id:String, objective_index:int, stage_complete:bool,
 			#   objectives_remaining:int, intel:{}, economy:{}, progression:{},
@@ -135,6 +143,7 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"active_directive_id": DirectiveService.DEFAULT_DIRECTIVE_ID,
 			"intel": {},  # V2-MIG-002 / V2-INTEL-001+: stage-intel persistence stub
 		},
+		"ui_flags": { "result_ledger_seen": false },
 		# REALM-001: generated realm models keyed by realm_id (e.g. "realm.01": { ...RealmModel fields })
 		"realms": {}
 	}

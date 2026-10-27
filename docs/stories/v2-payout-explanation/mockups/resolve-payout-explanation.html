@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Resolve earnings explanation mockup</title>
+<style>
+:root{--bg:#F6F1E3;--fg:#2A2A3A;--mut:#5a5a6a;--line:#cdbf94;--acc:#8a6d12;--sheet:#FFFDF2;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#16221b;--fg:#FFF8DC;--mut:#c9c3a8;--line:#3D5A47;--acc:#D4AF37;--sheet:#1f2f26;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+main{max-width:1440px;margin:0 auto}
+h1{font-size:1.4rem;margin:0 0 4px}
+h2{font-size:1.15rem;margin:32px 0 4px;color:var(--acc)}
+p,li{max-width:80ch}
+.mut{color:var(--mut);font-size:.9rem}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.bar button{font:inherit;min-height:44px;min-width:44px;padding:6px 14px;border-radius:8px;border:2px solid var(--line);background:var(--sheet);color:var(--fg);cursor:pointer}
+.bar button[aria-pressed="true"]{border-color:var(--acc);background:var(--acc);color:#1b1b1b}
+.row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.col{flex:0 0 auto}
+.cap{font-weight:600;margin:0 0 6px}
+.note{background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:8px 0;max-width:80ch}
+.tag{display:inline-block;font-size:.75rem;padding:1px 8px;border-radius:99px;border:1px solid var(--line);margin-left:6px}
+
+/* ---- game card (Living Grove, dark card) ---- */
+.card{width:680px;max-width:100%;background:#2b3d31;color:#F5E6D3;border:2px solid #D4AF37;border-radius:14px;padding:18px 22px 0;font-size:15px;position:relative}
+.card .hdr{text-align:center}
+.card .banner{font-size:26px;font-weight:700;color:#FFF8DC;letter-spacing:.5px}
+.card .sum{font-size:14px;color:#E8D0A0}
+.card .why{font-size:13px;color:#C9B98C;font-style:italic}
+.card hr{border:0;border-top:1px solid #4a6353;margin:10px 0}
+.k{color:#C9B98C}
+.mutedv{color:#6E6450}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:4px 0 6px}
+.tile{background:#34493b;border-radius:8px;padding:6px 8px;text-align:center}
+.tile b{display:block;font-size:20px;color:#FFF8DC}
+.tile span{font-size:12px;color:#C9B98C}
+.sect{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#D4AF37;margin:10px 0 2px}
+.entry{display:flex;align-items:center;gap:6px;min-height:48px;border-bottom:1px solid #3b5143}
+.entry .l{flex:1}
+.entry .d{min-width:92px;text-align:right;font-variant-numeric:tabular-nums;color:#f0e8d0}
+.entry .d.neg{color:#d9a08a}
+.entry .d.zero{color:#6E6450}
+.entry .d.ekw{color:#E8A030}
+.entry.zero .l{color:#a89c7c}
+.ibtn{width:48px;height:48px;flex:0 0 48px;border:0;background:transparent;color:#D4AF37;cursor:pointer;display:grid;place-items:center;border-radius:8px}
+.ibtn span{width:26px;height:26px;border:2px solid currentColor;border-radius:50%;display:grid;place-items:center;font:700 14px/1 Georgia,serif}
+.ibtn[aria-expanded="true"]{background:#3c5444}
+.ibtn:hover{background:#3c5444}
+.ibtn:focus-visible{outline:3px solid #FFF8DC}
+.spacer{width:48px;flex:0 0 48px}
+.tip{position:absolute;z-index:50;width:280px;background:#F5E6D3;color:#3D2817;border:1px solid #8B7355;border-radius:10px;padding:10px 12px;font:14px/1.4 system-ui,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.45);pointer-events:none}
+.tip[hidden]{display:none}
+.tip b{display:block;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#8a6d12;margin-bottom:2px}
+.tip small{display:block;color:#8B7355;margin-top:4px;font-size:11px}
+.tip::after{content:"";position:absolute;left:var(--ax,50%);width:12px;height:12px;background:#F5E6D3;border:1px solid #8B7355;transform:translateX(-50%) rotate(45deg)}
+.tip.below::after{top:-7px;border-right:0;border-bottom:0}
+.tip.above::after{bottom:-7px;border-left:0;border-top:0}
+.total{display:flex;justify-content:space-between;align-items:baseline;padding:8px 48px 8px 0;font-size:22px;font-weight:700;color:#FFF8DC}
+.total.ekw{font-size:17px;color:#E8A030;padding-top:2px}
+.total.zero{color:#8a8068}
+.extras{font-size:12px;color:#C9B98C;border:1px dashed #5b7364;border-radius:8px;padding:8px;margin:10px 0}
+.footer{display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #4a6353;margin:12px -22px 0;padding:10px 22px}
+.btn{min-height:48px;min-width:120px;padding:0 18px;border-radius:10px;border:2px solid #D4AF37;background:transparent;color:#F5E6D3;font:inherit;display:grid;place-items:center}
+.btn.p{background:#D4AF37;color:#3D2817;font-weight:700}
+.old .dupe{outline:2px dashed #C85A54;outline-offset:2px}
+.legend{color:#C85A54;font-size:12px}
+.chip{display:inline-block;padding:2px 10px;border-radius:99px;background:#3c5444;color:#F5E6D3;margin:0 6px 0 0;font-size:13px}
+ul.tight{margin:4px 0 4px 18px;padding:0}
+table{border-collapse:collapse;max-width:100%}
+td,th{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top;font-size:.92rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Resolve screen — earnings explanation <span class="tag">PROPOSAL</span></h1>
+<p class="note"><strong>Layout note:</strong> Jeff chose Option 1 of <code>resolve-compact.html</code> (one screen, collapsed earnings line, ledger open the first time). This file stays as the reference for row states, tooltips and the cause table. Its tall card layout is superseded.</p>
+<p class="mut">V2-ECONOMY-004 follow-up (D-17). Mockup only. Nothing is built. All card wording is PROPOSAL until Jeff approves it. Card size matches the game: 680 px wide (1280×720 viewport). In the game the body scrolls; here it is shown at full height.</p>
+
+<div class="bar" role="group" aria-label="Copy option">
+  <strong>Wording (all options now equal, A approved):</strong>
+  <button data-opt="A" aria-pressed="true">A</button>
+  <button data-opt="B" aria-pressed="false">B</button>
+  <button data-opt="C" aria-pressed="false">C</button>
+  <span class="mut">Hover, focus or tap an (i) to open its tooltip. Tap elsewhere or press Esc to close.</span>
+</div>
+
+<h2>1. Today and proposed, side by side (objective overcome)</h2>
+<div class="row">
+  <div class="col">
+    <p class="cap">Today <span class="legend">red dashes = the same fact shown more than once</span></p>
+    <div class="card old">
+      <div class="hdr"><div class="banner">Victory</div><div class="sum">Stage 2 · Objective 2 of 3</div><div class="why">The grove held.</div></div>
+      <hr/>
+      <div class="entry"><span class="l">Rank</span><b>A</b><span class="k" style="margin-left:10px">faster than the goal</span></div>
+      <div class="entry dupe"><span class="l">Ase</span><b style="font-size:20px">110 Ase</b></div>
+      <div class="entry dupe"><span class="l">Ekwan</span><b style="font-size:18px;color:#E8A030">33 Ekwan</b></div>
+      <div class="entry"><span class="l">3 enemies defeated</span><span class="d">+60 Ase</span></div>
+      <div class="entry"><span class="l">4 echoes survived</span><span class="d">+40 Ase</span></div>
+      <div class="entry"><span class="l">Pace bonus</span><span class="d zero">+0 Ase</span></div>
+      <div class="entry"><span class="l">Redo penalty</span><span class="d neg">−30 Ase</span></div>
+      <div class="entry"><span class="l">Sanctum share</span><span class="d ekw">+33 Ekwan</span></div>
+      <div class="dupe" style="margin:6px 0">= 110 Ase</div>
+      <div class="entry dupe" style="border:0"><span class="k">Enemies defeated</span><b style="margin-left:auto">3</b></div>
+      <div class="entry dupe" style="border:0"><span class="k">Echoes alive</span><b style="margin-left:auto">4</b></div>
+      <div class="entry" style="border:0"><span class="k">Rounds</span><b style="margin-left:auto">6</b></div>
+      <div class="dupe" style="margin:8px 0"><span class="chip">+110 Ase</span><span class="chip">+33 Ekwan</span><span class="chip">3 defeated</span></div>
+      <div class="extras">Emotion list · vow sections (unchanged)</div>
+      <div class="footer"><div class="btn">Sanctum</div><div class="btn p">Next stage</div></div>
+    </div>
+  </div>
+  <div class="col" id="after-objective"></div>
+</div>
+
+<div class="note">
+<strong>What gets cleaner on the Resolve screen</strong>
+<ul class="tight">
+<li><strong>Ase appears 3 times today</strong> (big row, “= N Ase” line, chip). Proposed: once, as the total at the end of the Ase ledger.</li>
+<li><strong>Ekwan appears 3 times</strong> (row, “Sanctum share” row, chip). Proposed: its own small ledger with one total.</li>
+<li><strong>Enemies defeated appears 3 times</strong> (breakdown label, stat grid, chip). Proposed: once, in the fight strip.</li>
+<li><strong>Rank, enemies, echoes, rounds</strong> become one 4-tile strip at the top of the body. The long stat grid and the rank row go away.</li>
+<li>The effects rail keeps only things that are not Ase or Ekwan: items, intel, continuity. The Ase, Ekwan and “defeated” chips are removed.</li>
+<li>Every row gets a 48×48 (i) target. Rows with no cause keep a blank 48 px spacer, so the numbers stay in one column.</li>
+</ul>
+<span class="mut">Not changed: banner, summary and reason lines, emotion list, vow sections, footer buttons, the pace colors on Rounds.</span>
+</div>
+
+<h2>2. Objective vs stage vs realm — what each result shows</h2>
+<p class="mut">Facts from <code>EconomyService.gd</code> and <code>StageSettlementService.gd</code> (Part A work in progress; rows can change in Phase 3b and 4).</p>
+<table>
+<tr><th>Result</th><th>When it is earned</th><th>Rows</th></tr>
+<tr><td><strong>Objective</strong> (after each fight)</td><td>Earned once per fight (<code>reward_encounter_complete</code>)</td><td>Win: enemies defeated, echoes survived, pace bonus, replay. Loss: consolation (D-13), replay. Then the Ekwan earned.</td></tr>
+<tr><td><strong>Stage</strong> (stage cleared)</td><td>Earned once per stage, on <code>flow.complete_stage</code> (<code>settle_stage_complete</code>)</td><td>Objectives overcome (overcome only, D-11), repeat run, realm virtue. Then the Ekwan earned.</td></tr>
+<tr><td><strong>Retreat / return home</strong></td><td>When the party leaves early</td><td>One row today (“Scout return”). Earns 12% of overcome objectives, so 0 before the first one (D-14).</td></tr>
+<tr><td><strong>Realm</strong></td><td><strong>No earnings of its own in the code.</strong></td><td>The realm only shapes the stage rows: its run count sets “Repeat run”, its virtue sets “Realm virtue”. These show in the stage result and the objective result.</td></tr>
+</table>
+<p>So the three screens do <strong>not</strong> show the same rows. They share one row design and one tooltip. Only the cause ids differ. If you want a earnings when a whole realm ends, that is a new design decision. The code has none now.</p>
+<p class="mut">Open point: today the objective and stage payers both earn Ase for the same fight (enemies + echoes on the objective; objective weights on the stage). The player may ask “why did I earn twice?”. The stage tooltip for “Objectives overcome” should say it is a separate stage earnings. This is a wording question for Jeff.</p>
+
+<div class="row">
+  <div class="col" id="after-stage"></div>
+  <div class="col" id="after-defeat"></div>
+  <div class="col" id="after-retreat"></div>
+</div>
+
+<h2>3. Row anatomy</h2>
+<table>
+<tr><th>Part</th><th>Node (in <code>RewardEntryItem.tscn</code>)</th><th>Rule</th></tr>
+<tr><td>Label</td><td><code>%EntryLabel</code> (exists)</td><td>Short. No numbers that the panel explains.</td></tr>
+<tr><td>Amount</td><td><code>%DeltaLabel</code> (exists)</td><td>Gain: cream. Zero: muted. Loss: terracotta tint. Ekwan: amber.</td></tr>
+<tr><td>Info button</td><td><code>%CauseButton</code> (new)</td><td>48×48 minimum. Shown only when the row has a cause. Otherwise a spacer of the same width.</td></tr>
+<tr><td>Tooltip</td><td><code>%CauseTip</code> (new, one per screen, hidden)</td><td>Floating popover with an arrow to the (i). It does not move the rows. 280 px wide. Small title (row name) and 1–2 lines. One open at a time. Opens on hover, focus or tap. Closes on tap outside or Esc. Text comes from the cause id and params.</td></tr>
+</table>
+<p class="mut">Hover alone is not enough on a phone, so the tooltip also opens on tap. The same tap pattern already exists in <code>EchoRankBenefitGlyph</code>. A screen reader reads the row label, the amount, then “Why?”.</p>
+
+<h2>4. Needs from the backend (not built here)</h2>
+<p>Each <code>breakdown</code> row needs a stable <code>cause</code> id and a <code>params</code> dictionary. A zero earnings by rule needs a zero row. Details are in <code>earnings-explanation-proposal.md</code> section 4. The mockup assumes these exist. Rows can still change in Phase 3b and 4.</p>
+</main>
+
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script>
+// PROPOSAL copy. Three options per cause. Numbers come from "params" in the real build.
+const COPY = {
+  enemies:{A:"Each enemy the party defeats earns Ase.",B:"Each enemy the party defeats earns Ase.",C:"Each enemy the party defeats earns Ase."},
+  survived:{A:"Each Echo still standing when the fight ends earns Ase.",B:"Each Echo still standing when the fight ends earns Ase.",C:"Each Echo still standing when the fight ends earns Ase."},
+  pace_missed:{A:"The party was not quick enough to earn a bonus.",B:"The party was not quick enough to earn a bonus.",C:"The party was not quick enough to earn a bonus."},
+  redo:{A:"The party has been here before. It earns less.",B:"The party has been here before. It earns less.",C:"The party has been here before. It earns less."},
+  objectives_won:{A:"Only objectives the party found and overcame earn Ase. 2 of 3 so far.",B:"Only objectives the party found and overcame earn Ase. 2 of 3 so far.",C:"Only objectives the party found and overcame earn Ase. 2 of 3 so far."},
+  realm_virtue:{A:"The realm rewards the virtue the party showed here.",B:"The realm rewards the virtue the party showed here.",C:"The realm rewards the virtue the party showed here."},
+  defeat_consolation:{A:"The party lost, but the fight still earns a small part.",B:"The party lost, but the fight still earns a small part.",C:"The party lost, but the fight still earns a small part."},
+  partial_retreat:{A:"The party left early. It keeps a small part of what it overcame.",B:"The party left early. It keeps a small part of what it overcame.",C:"The party left early. It keeps a small part of what it overcame."},
+  nothing_won_yet:{A:"The party has not overcome anything yet. Nothing is earned.",B:"The party has not overcome anything yet. Nothing is earned.",C:"The party has not overcome anything yet. Nothing is earned."},
+  sanctum_share:{A:"Part of the Ase the party earns also becomes Ekwan for the Sanctum.",B:"Part of the Ase the party earns also becomes Ekwan for the Sanctum.",C:"Part of the Ase the party earns also becomes Ekwan for the Sanctum."},
+  repeat_defeat:{A:"The party already earned the consolation for this. Another loss earns nothing.",B:"The party already earned the consolation for this. Another loss earns nothing.",C:"The party already earned the consolation for this. Another loss earns nothing."}
+};
+const SCENES = {
+  objective:{title:"Objective result — after one fight (win)",banner:"Victory",sum:"Stage 2 · Objective 2 of 3",why:"The grove held.",
+    tiles:[["A","Rank"],["3","Enemies defeated"],["4","Echoes alive"],["6","Rounds"]],
+    ase:[["3 enemies defeated","+60 Ase","enemies",""],["4 echoes survived","+40 Ase","survived",""],["Bonus","+0 Ase","pace_missed","zero"],["Replay","−10 Ase","redo","neg"]],aseTotal:"= 90 Ase",
+    ekwan:[["Ekwan earned","+27 Ekwan",null,"ekw"]],ekwanTotal:"= 27 Ekwan",open:"pace_missed",
+    btns:["Sanctum","Continue"]},
+  stage:{title:"Stage result — stage complete (earned once)",banner:"Stage cleared",sum:"Stage 2 of 5 · 2 of 3 objectives overcome",why:"The grove opens ahead.",
+    tiles:null,
+    ase:[["Objectives overcome","+100 Ase","objectives_won",""],["Replay","−10 Ase","redo","neg"],["Realm virtue","+40 Ase","realm_virtue",""]],aseTotal:"= 130 Ase",
+    ekwan:[["Ekwan earned","+39 Ekwan",null,"ekw"]],ekwanTotal:"= 39 Ekwan",open:null,
+    btns:["Sanctum","Next stage"]},
+  defeat:{title:"Objective result — defeat with consolation",banner:"Defeat",sum:"Stage 2 · Objective 3 of 3",why:"The party fell back.",
+    tiles:[["C","Rank"],["1","Enemies defeated"],["2","Echoes alive"],["9","Rounds"]],
+    ase:[["Consolation","+10 Ase","defeat_consolation",""],["Replay","−3 Ase","redo","neg"]],aseTotal:"= 7 Ase",
+    ekwan:[],ekwanTotal:null,open:null,
+    btns:["Sanctum","Try again"]},
+  retreat:{title:"Retreat before any objective overcome (zero total)",banner:"Retreat",sum:"Stage 2 · Objective 1 of 3",why:"The party left the stage.",
+    tiles:null,
+    ase:[["Carried home","+0 Ase","nothing_won_yet","zero"]],aseTotal:"= 0 Ase",aseTotalZero:true,
+    ekwan:[],ekwanTotal:null,open:null,
+    btns:["Sanctum"]}
+};
+const tip=document.getElementById("tip");
+let activeBtn=null;
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+function hideTip(){tip.hidden=true;if(activeBtn){activeBtn.setAttribute("aria-expanded","false");activeBtn=null;}}
+function showTip(btn){
+  if(activeBtn)activeBtn.setAttribute("aria-expanded","false");
+  activeBtn=btn;btn.setAttribute("aria-expanded","true");
+  tip.innerHTML=`<b>${esc(btn.dataset.label)}</b>${esc(COPY[btn.dataset.cause][opt])}<small>PROPOSAL wording ${opt}</small>`;
+  tip.hidden=false;
+  const r=btn.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight;
+  const cx=r.left+r.width/2+scrollX;
+  let left=Math.min(Math.max(cx-w/2,8),scrollX+document.documentElement.clientWidth-w-8);
+  const below=r.bottom+h+14<innerHeight;
+  tip.className="tip "+(below?"below":"above");
+  tip.style.left=left+"px";
+  tip.style.top=(below?r.bottom+scrollY+8:r.top+scrollY-h-8)+"px";
+  tip.style.setProperty("--ax",(cx-left)+"px");
+}
+document.addEventListener("click",e=>{if(!e.target.closest(".ibtn"))hideTip();});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")hideTip();});
+function render(key,mountId){
+  const s=SCENES[key];
+  const rows=(list)=>list.map(r=>{
+    const [label,amt,cause,cls]=r;
+    const entryCls="entry"+(cls==="zero"?" zero":"");
+    const dcls=cls==="neg"?"d neg":cls==="zero"?"d zero":cls==="ekw"?"d ekw":"d";
+    return `<div class="${entryCls}"><span class="l">${esc(label)}</span><span class="${dcls}">${esc(amt)}</span>
+      ${cause?`<button class="ibtn" aria-expanded="false" aria-label="Why: ${esc(label)}" data-cause="${cause}" data-label="${esc(label)}"><span aria-hidden="true">i</span></button>`:'<span class="spacer"></span>'}</div>`;
+  }).join("");
+  const tiles=s.tiles?`<div class="tiles">${s.tiles.map(t=>`<div class="tile"><b>${esc(t[0])}</b><span>${esc(t[1])}</span></div>`).join("")}</div>`:"";
+  const el=document.getElementById(mountId);
+  el.innerHTML=`<p class="cap">${esc(s.title)} <span class="tag">PROPOSAL</span></p>
+  <div class="card"><div class="hdr"><div class="banner">${s.banner}</div><div class="sum">${s.sum}</div><div class="why">${s.why}</div></div>
+  <hr/>${tiles}
+  <div class="sect">Ase</div>${rows(s.ase)}
+  <div class="total${s.aseTotalZero?' zero':''}"><span>Total</span><span>${s.aseTotal}</span></div>
+  ${s.ekwan.length?`<div class="sect">Ekwan</div>${rows(s.ekwan)}<div class="total ekw"><span>Total</span><span>${s.ekwanTotal}</span></div>`:""}
+  <div class="extras">Emotion list · vow sections (unchanged)</div>
+  <div class="footer">${s.btns.map((b,i,a)=>`<div class="btn${i===a.length-1?' p':''}">${b}</div>`).join("")}</div></div>`;
+  el.querySelectorAll(".ibtn").forEach(btn=>{
+    btn.addEventListener("click",e=>{e.stopPropagation();activeBtn===btn&&!tip.hidden?hideTip():showTip(btn);});
+    btn.addEventListener("mouseenter",()=>showTip(btn));
+    btn.addEventListener("mouseleave",()=>{if(matchMedia("(hover:hover)").matches)hideTip();});
+    btn.addEventListener("focus",()=>showTip(btn));
+    btn.addEventListener("blur",hideTip);
+  });
+}
+let opt="A";
+function all(){hideTip();render("objective","after-objective");render("stage","after-stage");render("defeat","after-defeat");render("retreat","after-retreat");}
+document.querySelectorAll("[data-opt]").forEach(b=>b.addEventListener("click",()=>{
+  opt=b.dataset.opt;document.querySelectorAll("[data-opt]").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false"));all();}));
+all();
+setTimeout(()=>{const b=document.querySelector('#after-objective .ibtn[data-cause="pace_missed"]');if(b)showTip(b);},50);
+</script>
+</body>
+</html>

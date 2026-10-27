@@ -85,6 +85,9 @@ var _cached_back_action:    Dictionary = {}
 var _cached_stage_complete_action: Dictionary = {}
 var _cached_advance_action: Dictionary = {}
 var _cached_return_action:  Dictionary = {}
+var _cached_carry_preview:  Dictionary = {}
+# The standoff card asked for the return confirmation: it opens once per request, not on every refresh.
+var _return_confirm_opened := false
 var _cached_overlay_action: Dictionary = {}
 var _cached_ignore_action:  Dictionary = {}
 
@@ -607,10 +610,7 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 		int(data.get("objectives_found", 0)),
 		int(data.get("objectives_total", 0)),
 	]
-	if data.get("return_failed", false):
-		_party_state_label.text = "Couldn't escape..."
-	else:
-		_party_state_label.text = str(data.get("party_state", "exploring")).capitalize()
+	_party_state_label.text = str(data.get("party_state", "exploring")).capitalize()
 
 	var adv_v: Variant   = actions.get("cta.advance_turn", {})
 	var adv: Dictionary  = adv_v if adv_v is Dictionary else {}
@@ -618,6 +618,7 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_advance_btn.disabled = not _advance_allowed or is_travel
 	_cached_advance_action = { "type": "stage.advance_turn" }
 	_cached_return_action  = { "type": "stage.return_home" }
+	_cached_carry_preview  = _dict_or_empty(data.get("carry_home_preview", {}))
 
 	# Stage Complete button — shown when all required objectives are done.
 	var sc_v: Variant = actions.get("cta.proceed_to_stage_map", {})
@@ -635,6 +636,7 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_back_btn.hide()
 	_directive_overlay.hide()
 	_apply_responsive_layout()
+	_sync_return_confirm(data)
 	if not _explore_requests_modal(data, actions):
 		if _stage_complete_btn.visible and not _stage_complete_btn.disabled:
 			_stage_complete_btn.grab_focus()
@@ -802,27 +804,6 @@ func _show_result_overlay(result: Dictionary) -> void:
 	_cached_overlay_action  = { "type": "stage.dismiss_overlay" }
 	_ignore_btn.visible     = false
 	_choice_container.visible = false
-	_sit_overlay.show()
-
-
-func _show_return_home_overlay(result: Dictionary) -> void:
-	var success := bool(result.get("success", false))
-	_sit_header_label.text = "Return Home"
-	_sit_header_label.remove_theme_color_override("font_color")
-	if success:
-		_sit_type_label.text   = "Escaped"
-		_dismiss_btn.text      = "Leave"
-		_cached_overlay_action = { "type": "stage.confirm_return_home" }
-	else:
-		_sit_type_label.text   = "Blocked"
-		_dismiss_btn.text      = "Continue"
-		_cached_overlay_action = { "type": "stage.dismiss_overlay" }
-	_sit_result_label.text        = str(result.get("message", ""))
-	_intel_clue_label.visible     = false
-	_enemy_estimate_label.visible = false
-	_dismiss_btn.visible          = true
-	_ignore_btn.visible           = false
-	_choice_container.visible     = false
 	_sit_overlay.show()
 
 
@@ -1093,9 +1074,24 @@ func _on_advance_pressed() -> void:
 		action_requested.emit(_cached_advance_action)
 
 
+## data.return_confirm_requested is a one-shot from the standoff card: open the same confirmation the
+## Return button opens. A refresh that still carries the flag does not open it again.
+func _sync_return_confirm(data: Dictionary) -> void:
+	var requested := bool(data.get("return_confirm_requested", false))
+	if requested and not _return_confirm_opened:
+		_on_return_pressed()
+	_return_confirm_opened = requested
+
+
+## The Return button only opens the confirmation. The modal's Confirm button sends the action.
 func _on_return_pressed() -> void:
-	if not _cached_return_action.is_empty():
-		action_requested.emit(_cached_return_action)
+	if _cached_return_action.is_empty():
+		return
+	modal_requested.emit(&"realm.return_home", {
+		"confirm": true,
+		"action": _cached_return_action.duplicate(true),
+		"carry": _cached_carry_preview.duplicate(true),
+	})
 
 
 func _on_begin_pressed() -> void:
@@ -1684,6 +1680,8 @@ func _apply_responsive_layout() -> void:
 	_directive_badge.offset_bottom = _directive_badge.offset_top + _DIRECTIVE_BADGE_HEIGHT
 
 func _explore_requests_modal(data: Dictionary, actions: Dictionary) -> bool:
+	if bool(data.get("return_confirm_requested", false)):
+		return true
 	var contact_v: Variant = data.get("contact_pending", {})
 	if contact_v is Dictionary and not (contact_v as Dictionary).is_empty():
 		return true
@@ -1992,3 +1990,8 @@ func _min_zoom_for_span(span: Vector2) -> float:
 func _party_bark_anchor() -> Vector2:
 	var viewport_pos: Vector2 = _party_layer.get_global_transform_with_canvas() * (_party_layer.call("display_position") as Vector2)
 	return _bark_layer.get_global_transform_with_canvas().affine_inverse() * viewport_pos
+
+
+func _dict_or_empty(v: Variant) -> Dictionary:
+	return (v as Dictionary).duplicate(true) if v is Dictionary else {}
+

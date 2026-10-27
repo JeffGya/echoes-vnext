@@ -37,30 +37,73 @@ extends RefCounted
 ## a service whose constructor can write (in particular never SanctumService.new()).
 
 
-## Producer C — the scout-return / withdrawal resolve card.
-## Moved verbatim from FlowRuntime._build_scout_return_snapshot(). It has THREE callers in
-## different domains: VentureController.handle_return_home() (successful escape),
-## FlowRuntime._handle_encounter_retreat() (successful retreat) and
-## FlowRuntime._resolve_forced_retreat() (V2-COMBAT-003, a no-progress stalemate — same shape,
-## zero payout, its own run_type). Per core/AGENTS.md a helper used by two or more domains needs
-## one owner, and a producer that READS FlowContext cannot live on ResolveSnapshotBuilder — that
-## builder's purity contract takes no FlowContext at all. It is the "party withdrew from the
-## stage" card, so it belongs to this stage-session service, static with an explicit flow_ctx
-## parameter exactly like count_revealed_situations() and get_stage_base_reward() above.
-##
-## `run_type` defaults to "scout_return" so the two pre-existing callers are byte-identical.
-## FlowRuntime._resolve_forced_retreat() passes "forced_retreat" — a distinct banner surface
-## and a distinct PendingResultService run_type — so a stalemate the simulation could not
-## resolve is never shown, logged, or recorded as a retreat the player chose. Callers still
-## control every payout by what they leave in pending_scout_return_ase/_intel_count BEFORE
-## calling this — this producer only reads and clears neither.
+## Producer H — the card after a successful combat retreat (D-106). It carries words and a flag
+## only: no amount, no percent, no odds. `can_reenter` is true for an objective fight. Its action
+## returns the party to the path.
+static func build_retreat_return_snapshot(can_reenter: bool, t: int) -> Dictionary:
+	var _actions: Dictionary = {
+		"cta.continue": {
+			"type":  "stage.retreat_return",
+			"label": "Leave",
+			"slot":  "cta.continue",
+		}
+	}
+	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, "retreat_return")
+	var _data: Dictionary = _snap["data"]
+	_data["surface"]         = "retreat_return"
+	_data["retreat_outcome"] = "pulled_back"
+	_data["can_reenter"]     = can_reenter
+	return _snap
+
+
+## Producer H2 — the standoff card (D-116): a stalemate ended the fight and the party stepped back onto the
+## path. `facts` is StandoffService.resolve()'s answer. No amount, no percent, no odds. The first standoff
+## offers one button; from the second, `cta.sanctum` also appears and sends the same action with
+## `to_sanctum`. Labels are the final copy of phase7-copy-final.md (the UI may read its own constants).
+static func build_standoff_snapshot(facts: Dictionary, t: int) -> Dictionary:
+	var _can_sanctum := bool(facts.get("can_go_sanctum", false))
+	var _actions: Dictionary = {
+		"cta.continue": { "type": "stage.standoff_return", "label": "Back to the path", "slot": "cta.continue" },
+	}
+	if _can_sanctum:
+		_actions["cta.sanctum"] = { "type": "stage.standoff_return", "label": "To the Sanctum",
+			"slot": "cta.sanctum", "to_sanctum": true }
+	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, "standoff")
+	ResolveSnapshotBuilder.add_standoff(_snap["data"], int(facts.get("standoff_count", 1)), _can_sanctum,
+		str(facts.get("cause", StandoffService.CAUSE_UNKNOWN)),
+		(facts.get("froze_names", []) as Array).duplicate(), (facts.get("calmed_names", []) as Array).duplicate(),
+		bool(facts.get("fight_returns", true)))
+	return _snap
+
+
+## Producer C — the scout-return / withdrawal resolve card, built by VentureController.handle_return_home().
+## A producer that READS FlowContext cannot live on ResolveSnapshotBuilder (its purity contract takes no
+## FlowContext), so it sits here, static with an explicit flow_ctx parameter.
+## The payout is whatever the caller left in pending_scout_return_ase/_intel_count BEFORE calling this;
+## this producer only reads and clears neither.
 ## Pure: two calls with the same arguments return byte-identical payloads.
-static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_type: String = "scout_return") -> Dictionary:
+static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int) -> Dictionary:
 	var _ase   := flow_ctx_arg.pending_scout_return_ase
+	var _ekwan := flow_ctx_arg.pending_scout_return_ekwan
 	var _intel := flow_ctx_arg.pending_scout_return_intel_count
+	var _settle := flow_ctx_arg.pending_scout_return_settle_outcome
 	var breakdown: Array = []
-	if _ase > 0:
-		breakdown.append({ "label": "Scout return", "delta": _ase, "currency": "ase" })
+	# A return home names its outcome in a row (`settle_<outcome>`, never a share). `nothing_overcome_yet`
+	# shows only when nothing was gathered, overcome or settled on this stage (a won fight or found Ase
+	# is a gathered row).
+	var _counts := ActiveStageService.get_objective_counts(flow_ctx_arg, flow_ctx_arg.config_service)
+	var _settled_before := int(StageSettlementService.settle_plan(
+		flow_ctx_arg, flow_ctx_arg.config_service)["settle_count"]) > 0
+	if _settle in ["none", "some", "all"]:
+		breakdown.append({ "label": "Settled when you left", "delta": _ase, "currency": "ase",
+			"cause": "settle_" + _settle, "params": _counts.duplicate() })
+	elif _settle == "nothing_new" and (int(_counts.get("overcome", 0)) > 0 or _settled_before):
+		breakdown.append({ "label": "Settled when you left", "delta": 0, "currency": "ase",
+			"cause": "settle_nothing_new", "params": _counts.duplicate() })
+	elif int(_counts.get("overcome", 0)) == 0:
+		breakdown.append({ "label": "Nothing overcome yet", "delta": 0, "currency": "ase",
+			"cause": "nothing_overcome_yet", "params": {
+			"overcome": 0, "total": int(_counts.get("total", 0)) } })
 
 	var actor_preview: Array = []
 	# V2-INFRA-003 Phase 5 Slice B: was SanctumService.new(flow_ctx.save_data).get_party_actors().
@@ -109,21 +152,19 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_t
 			"slot":  "cta.continue",
 		}
 	}
-	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, run_type)
+	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, "scout_return")
 	var _data: Dictionary = _snap["data"]
 	ResolveSnapshotBuilder.add_ledger(_data, _ase, breakdown)
-	ResolveSnapshotBuilder.add_ekwan(_data, 0)
+	ResolveSnapshotBuilder.add_ekwan(_data, _ekwan)
+	ResolveSnapshotBuilder.add_ledger_seen(_data, SaveSchema.ledger_seen(flow_ctx_arg.save_data))
 	ResolveSnapshotBuilder.add_scout_intel(_data, _intel)
+	if not _settle.is_empty():
+		ResolveSnapshotBuilder.add_settle_outcome(_data, _settle)
 	ResolveSnapshotBuilder.add_actors(_data, actor_preview)
 	ResolveSnapshotBuilder.add_victory_flag(_data, false)
 	ResolveSnapshotBuilder.add_grade_rank(_data, "")
 	# P1 CLOSE: additive fields for unified Resolve component.
-	# V2-COMBAT-003: forced_retreat gets its own banner text — the fight did not resolve, so
-	# "crossings mapped" (written for a chosen scout return) would misreport what happened.
-	var _banner_line: String = "%d crossing%s mapped." % [_intel, _intel_plural]
-	if run_type == "forced_retreat":
-		_banner_line = "The fight did not end. The party pulled back. Nothing was gained."
-	ResolveSnapshotBuilder.add_banner(_data, run_type, _banner_line)
+	ResolveSnapshotBuilder.add_banner(_data, "scout_return", "%d crossing%s mapped." % [_intel, _intel_plural])
 	ResolveSnapshotBuilder.add_grade_verdict(_data, "")
 	return _snap
 
@@ -138,7 +179,7 @@ static func build_situation_resolve_snapshot(
 		summary_line: String,
 		emotion_summary: Array,
 		effects: Array,
-		ase_awarded: int,
+		ase_gathered: int,
 		t: int
 ) -> Dictionary:
 	var sit_type := str(sit.get("type", ""))
@@ -152,9 +193,11 @@ static func build_situation_resolve_snapshot(
 		_:
 			_verdict = "passed"
 
+	# Found Ase waits in the packs: the card pays the balance nothing, so `ase_awarded` is 0.
 	var _breakdown: Array = []
-	if ase_awarded > 0:
-		_breakdown.append({ "label": "Found", "delta": ase_awarded, "currency": "ase" })
+	if ase_gathered > 0:
+		_breakdown.append({ "label": "Found", "delta": ase_gathered, "currency": "ase",
+			"cause": "found_gathered", "params": { "kind": sit_type } })
 
 	# V2-INFRA-003 Phase 5 Slice B: producer E, composed through ResolveSnapshotBuilder.
 	# Same nine keys as before. tests/UnifiedResolveTests.gd pins this producer end to end and
@@ -164,7 +207,7 @@ static func build_situation_resolve_snapshot(
 		"cta.continue": {
 			"type":  "flow.go_state",
 			"to":    FlowStateIds.STAGE_EXPLORE,
-			"label": "Return to Stage",
+			"label": "Back to the path",
 			"slot":  "cta.continue",
 		},
 	}
@@ -174,6 +217,7 @@ static func build_situation_resolve_snapshot(
 	ResolveSnapshotBuilder.add_grade_verdict(_data, _verdict)
 	ResolveSnapshotBuilder.add_emotion(_data, emotion_summary)
 	ResolveSnapshotBuilder.add_effects(_data, effects)
-	ResolveSnapshotBuilder.add_ledger(_data, ase_awarded, _breakdown)
+	ResolveSnapshotBuilder.add_ledger(_data, 0, _breakdown)
+	ResolveSnapshotBuilder.add_ase_gathered(_data, ase_gathered)
 	ResolveSnapshotBuilder.add_ekwan(_data, 0)
 	return _snap

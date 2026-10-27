@@ -100,12 +100,25 @@
 			"awakening_boost_bank_interval_seconds": 240.0
 		},
 		"summoning": {
-			"ase_cost_per_summon": 60.0,
-			"ase_cost_per_summon_by_grade": {
-				"uncalled": 60.0,
-				"called": 150.0,
-				"chosen": 400.0
+			"price_by_echo_number": {
+				"2": 60,
+				"3": 60,
+				"4": 70,
+				"5": 85,
+				"6": 100,
+				"7": 120,
+				"8": 145,
+				"9": 175,
+				"10": 210,
+				"11": 250,
+				"12": 300,
+				"13": 360,
+				"14": 430
 			},
+			"village_ceiling": 14,
+			"called_extra": 90,
+			"chosen_extra": 340,
+			"grade_enabled": { "uncalled": true, "called": false, "chosen": false },
 			"trait_min": 30.0,
 			"trait_max": 70.0,
 			"calling_weights": {
@@ -1531,19 +1544,51 @@
 		},
 		"rewards": {
 			"_comment": "ECONOMY-004: Stage reward payout config. All values tunable without code changes.",
+			"_objective_weights_comment": "Ase per objective type (D-09). A type with no key logs an error and pays 0. boss stays 0 until a boss story exists (D-02).",
 			"objective_weights": {
-				"combat": 30,
-				"shrine": 40,
-				"boss": 60
+				"pursue": 16,
+				"combat": 20,
+				"recover": 24,
+				"protect": 24,
+				"endure": 28,
+				"shrine": 30,
+				"guide_spirit": 32,
+				"boss": 0
 			},
-			"enemy_defeated_bonus": 5,
-			"echo_survived_bonus": 10,
+			"_objective_ekwan_comment": "Ekwan per COMPLETED objective type (D-29, working set B). Fights pay none. A type with no key logs an error and pays 0. The stage sum is multiplied by the realm scale and the replay factor and rounded once.",
+			"objective_ekwan": {
+				"pursue": 2,
+				"combat": 2,
+				"protect": 3,
+				"guide_spirit": 3,
+				"endure": 4,
+				"recover": 5,
+				"shrine": 6,
+				"boss": 0
+			},
+			"_encounter_weights_comment": "Base Ase per encounter kind, before the realm scale and the replay factor (D-115). fight = one won normal fight, for the whole party. Read through RewardCalc.cfg_num. A won fight adds one row to the packs; the leave roll or the path end pays it.",
+			"encounter_weights": {
+				"fight": 6
+			},
+			"_objective_count_excluded_comment": "Objective types left out of the 'overcome of total' count on the payout ledger. boss is a stub today; remove it from this list when the boss becomes a real objective. No payout effect.",
+			"objective_count_excluded_types": ["boss"],
+			"_echo_home_comment": "V2-ECONOMY-004 D-43/D-44/D-53: Echoes stipend, paid once per stage in the stage payout. Ase per Echo home at the stage end, capped; on a replay (run_count > 0) the cap is halved and the rate stays. Outside the replay factor and the realm scale.",
+			"echo_home_ase": 2,
+			"echo_home_cap": 10,
+			"echo_home_cap_replay": 5,
 			"pace_full_ratio": 1.1,
 			"pace_zero_ratio": 1.6,
-			"pace_bonus_pct": 0.05,
-			"redo_penalty_per_run": 0.1,
-			"redo_penalty_floor": 0.5,
+			"_realm_scale_comment": "V2-ECONOMY-004 D-63: scale on objective Ase and Ekwan = 1 + realm_scale_step x (position in realms.json realm_order - 1). A realm outside realm_order (the prologue) uses 1.0. The stipend is not scaled.",
+			"realm_scale_step": 0.25,
+			"_replay_factor_comment": "V2-ECONOMY-004 D-54: flat factor on objective Ase and Ekwan when the realm run_count is above 0. Rounded once on the stage sum. The stipend and the rank ignore it.",
+			"replay_factor": 0.35,
 			"defeat_factor": 0.25,
+			"_rank_points_comment": "V2-ECONOMY-004 D-49: rank score = win + home + pace. home is Echoes alive / Echoes started in the fight; pace is the pace fraction (a no-pace mode gets the full pace points). Ase amounts do not enter the score.",
+			"rank_points": {
+				"win": 0.4,
+				"home": 0.4,
+				"pace": 0.2
+			},
 			"rank_thresholds": {
 				"S": 0.9,
 				"A": 0.75,
@@ -1551,18 +1596,19 @@
 				"C": 0.35,
 				"D": 0.15
 			},
-			"_comment_realm005": "REALM-005: Virtue-based stage bonus. Formula: roundi((virtue_bonuses[virtue] + stage_index * stage_index_bonus_per) * (base + run_index * step)). Victory-only.",
-			"virtue_bonuses": {
-				"courage": 10,
-				"wisdom": 15,
-				"faith": 20
+			"_carry_odds_comment": "V2-ECONOMY-004 D-104/D-105/D-106: a return home settles the completed, unsettled objectives by ONE roll. carry_odds are weights (not percents); carry_shares is the share of the gathered amount each outcome pays; what the roll does not pay is lost. The Scout directive multiplies the weights of outcomes whose share is above 0, then the weights are renormalised. Never shown to the player.",
+			"carry_odds": {
+				"none": 50,
+				"some": 30,
+				"all": 20
 			},
-			"stage_index_bonus_per": 5,
-			"realm_order_multiplier_base": 1.0,
-			"realm_order_multiplier_step": 0.5,
-			"ekwan_base_factor": 0.12,
-			"ekwan_shrine_multiplier": 1.5,
-			"partial_intel_reward_factor": 0.12
+			"carry_shares": {
+				"none": 0.0,
+				"some": 0.5,
+				"all": 1.0
+			},
+			"_contact_claimant_good_comment": "Base Ase of a good Claimant contact (V2-ECONOMY-004 5.15). It goes in the packs as a found row and takes the realm scale and the replay factor like every other row (D-115).",
+			"contact_claimant_good_ase": 20
 		},
 		"grid": {
 			"_comment": "Combat board dimensions — immutable mid-combat; read by GridService. GRID-001. Default 10x10 for MVP (range 6x6–30x30 depending on tier — tier scaling deferred to future GRID/COMBAT story).",
@@ -1781,7 +1827,11 @@
 			"_comment": "COMBAT-002: Initiative scoring modifiers. Formula: (speed*3 + agi*2) + arch_mod + calling_mod + trait_mod + vec_mod + nudge. Sort descending. Tiebreak: party list order. Nudge: CampaignSeed.derive_from(placement_seed, actor_id) % 10. All values tunable without code changes.",
 			"stalemate": {
 				"_comment": "PROPOSED DEFAULT. V2-COMBAT-003, generalized in V2-COMBAT-003.5: a fight where nothing moves for no_progress_round_limit consecutive rounds cannot end by any objective check (both sides refuse, guard, or otherwise land no hit). 'Nothing moves' is no damage AND a board state the fight has already been in, per CombatState.get_progress_watch() + record_progress_watch(): every actor position, hit-point total and death flag, the four progress counters, plus each objective's own clock (shrine hit points, spirit-to-destination distance, the ENDURE/PURSUE countdown). No objective is exempt by name; a genuinely advancing fight -- including a party still walking toward a spirit it has not reached -- always produces a state it has not been in before and never reaches the limit. The converse does not hold: a fight producing new board states every round is not guaranteed to be genuinely advancing toward a win condition (e.g. aperiodic movement with no damage, such as a fleeing spirit never repeating a position, can run past the limit undetected) -- a known, accepted trade-off (Jeff, 2026-09-13: acceptable, no hard round cap added), narrower than the defect this signal was built to fix. Measured: the shipped combat_baseline/transition_sequence_guide_spirit fixture needs up to 12 damage-free, counter-free rounds before its escorting echo reaches the spirit and guide_protect_counter starts moving; 8 (and 10) cut it off as a false stalemate. 15 keeps a comfortable margin above that measured 12, while staying far below the round count of a genuine soft-lock (the reported bug ran to round 122-202+ with fear refusal on one side and an unlimited enemy guard on the other, pre-V2-COMBAT-003). At the limit, CombatState.check_end_condition() ends the encounter as a forced retreat that pays nothing (FlowRuntime._resolve_forced_retreat()). DEPENDENCY: PURIFY_SHRINE relies on shrine.base_drain_per_round staying non-trivial (5.0 today). The drain is what moves that objective forward with no actor acting; tuned toward 0 the shrine fight would stop generating its own progress signal and would then rest on generic actor activity alone.",
-				"no_progress_round_limit": 15
+				"no_progress_round_limit": 15,
+				"_standoff_comment": "PROPOSED DEFAULTS (mid-game-designer tunes). warn_level1_fraction / warn_level2_fraction: the round snapshot's stall_level becomes 1 / 2 when no_progress_streak reaches that fraction of no_progress_round_limit (0.5 -> streak 8, 0.8 -> streak 12 at a limit of 15). A fraction at or below 0 switches that level off. standoff_fear_drop: points of fear removed once, on the FIRST standoff of a fight, from each party Echo that refused during the stall (EmotionService.apply_fear_delta, clamped at 0). The drop applies after the stalled fight's final fear is written to the roster.",
+				"warn_level1_fraction": 0.5,
+				"warn_level2_fraction": 0.8,
+				"standoff_fear_drop": 10
 			},
 			"shrine": {
 				"_comment": "COMBAT-006: Purify Shrine objective config. Drain runs after all actor turns each round. Purify slows drain — it does not heal. Purifier = highest (faith × weight_faith + vector_bonus) echo, selected once at combat init.",
@@ -1859,7 +1909,7 @@
 				"late_count_bonus": 1,
 				"max_count": 4
 			},
-			"retreat_ase_cost": 30.0,
+			"retreat_ase_cost": 10.0,
 			"retreat_agi_tiers": [
 				{
 					"min_delta": 10.0,
@@ -2529,7 +2579,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2547,7 +2597,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2566,7 +2616,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2585,7 +2635,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2603,7 +2653,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2621,7 +2671,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2641,7 +2691,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2660,7 +2710,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2677,7 +2727,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2694,7 +2744,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2711,7 +2761,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2728,7 +2778,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2745,7 +2795,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				},
@@ -2762,7 +2812,7 @@
 					"unlock_conditions": {
 						"min_standing": 3,
 						"storyweight_threshold": 0,
-						"ase_cost": 40,
+						"ase_cost": 60,
 						"lived_condition": ""
 					}
 				}
@@ -3112,7 +3162,7 @@
 				"protect": { "label": "Protect", "required": true,  "reveal_hint": "A presence here needs guarding." },
 				"endure":  { "label": "Endure",  "required": true,  "reveal_hint": "The pressure here does not relent." },
 				"pursue":  { "label": "Pursue",  "required": false, "reveal_hint": "Something is moving through this area." },
-				"guide_spirit": { "label": "Guide the Spirit", "required": false, "reveal_hint": "A lost spirit lingers here, waiting to be seen home." }
+				"guide_spirit": { "label": "Guide the Spirit", "required": true,  "reveal_hint": "A lost spirit lingers here, waiting to be seen home." }
 			},
 
 			"foundation_objective_pool": ["combat", "shrine", "recover", "protect", "endure", "pursue", "guide_spirit"],

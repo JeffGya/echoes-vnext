@@ -1176,6 +1176,17 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 			repaired = true
 			repaired_notes.append("stage_context.encounter_approach defaulted to {} (V2-STAGE-004)")
 
+	# ---- ui_flags: player-seen flags, default false ----
+	if not save.has("ui_flags") or not (save["ui_flags"] is Dictionary):
+		save["ui_flags"] = {}
+		repaired = true
+		repaired_notes.append("ui_flags added")
+	var _ui_flags: Dictionary = save["ui_flags"]
+	if typeof(_ui_flags.get("result_ledger_seen")) != TYPE_BOOL:
+		_ui_flags["result_ledger_seen"] = false
+		repaired = true
+		repaired_notes.append("ui_flags.result_ledger_seen set to false")
+
 	# ---- REALM-001: realms repair ----
 	if not save.has("realms") or typeof(save["realms"]) != TYPE_DICTIONARY:
 		save["realms"] = {}
@@ -1221,6 +1232,11 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						_stage["settlement_receipt"] = {}
 						repaired = true
 						repaired_notes.append("realm.%s.stage.%s.settlement_receipt defaulted (V2-INFRA-003)" % [_realm_id, _stage_label])
+
+					if not _stage.has("earnings") or not (_stage["earnings"] is Array):
+						_stage["earnings"] = []
+						repaired = true
+						repaired_notes.append("realm.%s.stage.%s.earnings defaulted" % [_realm_id, _stage_label])
 
 					# V2-STAGE-002: objective completed + required fields
 					var _objs_repair_v: Variant = _stage.get("objectives", [])

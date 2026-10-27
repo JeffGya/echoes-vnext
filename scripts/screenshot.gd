@@ -6,6 +6,7 @@
 #
 #   <fixture>  one key of FIXTURES; "all" renders every fixture; "list" prints the keys.
 #   [out_dir]  an absolute directory; default user://screenshots. Output: <out_dir>/<fixture>.png.
+#   [profile]  compact, standard or wide: forces that layout profile. Output: <fixture>_<profile>.png.
 #
 # On macOS, run it from a real window without xvfb:
 #   godot --path <checkout> --resolution 1920x1080 --script res://scripts/screenshot.gd -- <fixture> <out_dir>
@@ -20,6 +21,7 @@
 extends SceneTree
 
 const HarnessScene := preload("res://scripts/screenshot_harness.tscn")
+const SanctumHarnessScene := preload("res://scripts/screenshot_harness_sanctum.tscn")
 const SETTLE_FRAMES := 45
 
 
@@ -33,6 +35,7 @@ func _run() -> void:
 	var args := OS.get_cmdline_user_args()
 	var which := str(args[0]) if args.size() > 0 else "list"
 	var out_dir := str(args[1]) if args.size() > 1 else "user://screenshots"
+	var profile := str(args[2]) if args.size() > 2 else ""
 	var fixtures := _fixtures()
 	if which == "list" or (which != "all" and not fixtures.has(which)):
 		print("Fixtures: all, ", ", ".join(PackedStringArray(fixtures.keys())))
@@ -41,29 +44,40 @@ func _run() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var names: Array = fixtures.keys() if which == "all" else [which]
 	for fixture_name in names:
-		await _render_fixture(str(fixture_name), fixtures[fixture_name], out_dir)
+		await _render_fixture(str(fixture_name), fixtures[fixture_name], out_dir, profile)
 	quit(0)
 
 
-func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String) -> void:
+func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, profile: String = "") -> void:
 	var layout := ResponsiveLayoutController.calculate_layout(Vector2(root.size))
+	if not profile.is_empty():
+		layout["profile"] = StringName(profile)
 	ResponsiveLayoutController.apply_content_scale_size(root, layout)
 
-	var harness := HarnessScene.instantiate()
+	# A fixture of flow.summon snapshots needs the Sanctum shell, which owns that screen.
+	var sanctum_fixture: bool = fixture_name.begins_with("summon_")
+	var harness := (SanctumHarnessScene if sanctum_fixture else HarnessScene).instantiate()
 	root.add_child(harness)
-	var shell := harness.get_node("ContentLayer/RealmShell") as Control
+	var shell := harness.get_node("ContentLayer/SanctumShell" if sanctum_fixture else "ContentLayer/RealmShell") as Control
 	var modal_host := harness.get_node("ModalLayer/ModalHost") as Control
 	shell.modal_requested.connect(func(modal_id: StringName, payload: Dictionary) -> void:
 		modal_host.call("present_modal_for_id", modal_id, shell.call("modal_scene_for", modal_id), payload))
 
 	shell.call("set_layout", layout)
 	for snap in snapshots:
-		shell.call("set_snapshot", snap)
+		if snap is Dictionary and snap.has("_modal"):
+			var req: Dictionary = snap["_modal"]
+			modal_host.call("present_modal_for_id", req["id"], shell.call("modal_scene_for", req["id"]), req["payload"])
+		elif snap is String:
+			_run_step(harness, snap)
+		else:
+			shell.call("set_snapshot", snap)
 		await process_frame
 	for _i in range(SETTLE_FRAMES):
 		await process_frame
 
-	var path := out_dir.path_join(fixture_name + ".png")
+	var file_name := fixture_name if profile.is_empty() else "%s_%s" % [fixture_name, profile]
+	var path := out_dir.path_join(file_name + ".png")
 	var err := root.get_texture().get_image().save_png(path)
 	print("SHOT %s -> %s (err=%d)" % [fixture_name, ProjectSettings.globalize_path(path), err])
 	harness.queue_free()
@@ -84,16 +98,88 @@ func _fixtures() -> Dictionary:
 		"combat_escort_pace_partial": [_combat(7, _with(escort, "pace_state", "partial"))],
 		"combat_initiative_full": [_combat_initiative(_with(escort, "pace_state", "partial"))],
 		"resolve_escort_win":  [_combat(9, escort),
-			_resolve(true, "spirit_escorted", 9, "S", { "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": false })],
+			_resolve(true, "spirit_escorted", 9, "S", { "pace_state": "full", "pace_changed_rank": false })],
 		"resolve_pace_win":    [_combat(6, recover),
-			_resolve(true, "relic_secured", 6, "B", { "pace_state": "partial", "pace_bonus_awarded": 2, "pace_changed_rank": false })],
+			_resolve(true, "relic_secured", 6, "B", { "pace_state": "partial", "pace_changed_rank": false })],
 		"resolve_pace_win_rank_changed": [_combat(4, recover),
-			_resolve(true, "relic_secured", 4, "A", { "pace_state": "full", "pace_bonus_awarded": 3, "pace_changed_rank": true })],
+			_resolve(true, "relic_secured", 4, "A", { "pace_state": "full", "pace_changed_rank": true })],
 		"resolve_pace_win_zero": [_combat(10, recover),
-			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_bonus_awarded": 0, "pace_changed_rank": false })],
+			_resolve(true, "relic_secured", 10, "C", { "pace_state": "none", "pace_changed_rank": false })],
 		"resolve_no_pace_win": [_combat(8, endure), _resolve(true, "endured", 8, "B", {})],
 		"resolve_pace_defeat": [_combat(7, recover), _resolve(false, "all_echoes_dead", 7, "F", {})],
+		"resolve_ledger_closed": [_combat(6, recover), _payout_stage_end(true), "skip_motion"],
+		"resolve_ledger_open_fight": [_combat(6, recover), _payout_repeat_defeat()],
+		"resolve_stage_end": [_combat(6, recover), _payout_stage_end(false), "skip_motion"],
+		"resolve_stage_end_first_view": [_combat(6, recover), _payout_stage_end(false), "freeze_motion"],
+		"resolve_stage_earlier_death": [_combat(6, recover), _payout_stage_earlier_death(), "skip_motion"],
+		"resolve_stage_home_lost": [_combat(6, recover), _payout_stage_end(true), "skip_motion"],
+		"resolve_stage_home_all": [_combat(6, recover), _payout_stage_all_home(), "skip_motion"],
+		"resolve_midstage_win_no_rows": [_combat(6, recover), _payout_midstage_win(), "skip_motion"],
+		"resolve_midstage_event": [_combat(6, recover), _payout_midstage_event(), "skip_motion"],
+		"resolve_defeat_consolation": [_combat(7, recover), _payout_defeat()],
+		"resolve_retreat_zero": [_combat(7, recover), _payout_retreat_zero()],
+		"carry_return_home": [_combat(6, recover), _return_home_modal({ "ase": 4, "ekwan": 2, "overcome": 1, "total": 3, "nothing_new": false })],
+		"carry_return_home_ase_only": [_combat(6, recover), _return_home_modal({ "ase": 4, "ekwan": 0, "overcome": 1, "total": 3, "nothing_new": false })],
+		"carry_return_home_nothing_new": [_combat(6, recover), _return_home_modal({ "ase": 0, "ekwan": 0, "overcome": 1, "total": 3, "nothing_new": true })],
+		"carry_return_home_failed": [_combat(6, recover), _return_home_modal({}, true)],
+		"return_card_none": [_combat(6, recover), _return_card("none", 0, 0)],
+		"return_card_some": [_combat(6, recover), _return_card("some", 7, 2)],
+		"return_card_all": [_combat(6, recover), _return_card("all", 14, 4)],
+		"return_card_nothing_new": [_combat(6, recover), _return_card("nothing_new", 0, 0)],
+		"retreat_card_no_reenter": [_combat(6, recover), _retreat_card(false)],
+		"retreat_card_reenter": [_combat(6, recover), _retreat_card(true)],
+		"retreat_button": [_prebattle({})],
+		"retreat_disabled_price": [_prebattle({ "retreat_affordable": false })],
+		"retreat_denied": [_prebattle({ "retreat_affordable": false,
+			"retreat_denied": { "reason": "insufficient_ase", "ase_cost": 10, "ase_balance": 4 } })],
+		"resolve_tooltip_replay": [_combat(6, recover), _payout_stage_end(false), "skip_motion", "focus_cause:1"],
+		"resolve_defeat_tooltip": [_combat(7, recover), _payout_defeat(), "focus_cause:0"],
+		"return_card_empty_leave": [_combat(6, recover), _return_card_empty_leave()],
+		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(false), "skip_motion", "focus_cause:2"],
+		"standoff_first": [_combat(6, recover), _standoff_card(1, false, "unknown", [], [])],
+		"standoff_second": [_combat(6, recover), _standoff_card(2, true, "blocked", [], [])],
+		"standoff_froze_two": [_combat(6, recover), _standoff_card(2, true, "froze", ["Ama", "Kofi"], [])],
+		"standoff_calm": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"])],
+		"standoff_fight_gone": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"], false)],
+		"warning_level_1": [_combat_stall(1, "")],
+		"warning_level_2": [_combat_stall(2, "Ama")],
+		"prebattle_stalled": [_prebattle({ "stalled_before": true })],
+		"fight_won_packs": [_combat(6, recover), _payout_fight_won_packs(), "skip_motion"],
+		"found_money_card": [_combat(6, recover), _found_money_card()],
+		"defeat_packs_lost": [_combat(7, recover), _payout_defeat_packs_lost()],
+		"carry_packs_gathered": [_combat(6, recover), _return_home_modal(_preview(12, 3))],
+		"carry_packs_empty": [_combat(6, recover), _return_home_modal(_preview(0, 0))],
+		"summon_price_rising":   [_summon({})],
+		"summon_price_flat":     [_summon({ "living_count": 14, "price_flat": true, "batch_affordable_max": 1,
+			"batch_prices": [430, 430, 430, 430, 430, 430, 430, 430, 430, 430],
+			"batch_totals": [430, 860, 1290, 1720, 2150, 2580, 3010, 3440, 3870, 4300],
+			"ase_balance": 500,
+			"summon_grade_options": _summon_grades(430, 430) })],
+		"summon_price_short":    [_summon({ "ase_balance": 100, "batch_affordable_max": 0, "summon_disabled": true, "ase_short_by": 45 })],
 	}
+
+
+func _summon_grades(uncalled: int, after: int) -> Array:
+	return [
+		{ "key": "uncalled", "label": "Uncalled", "enabled": true, "ase_cost": uncalled, "ase_cost_after": after },
+		{ "key": "called", "label": "Called", "enabled": false, "ase_cost": uncalled + 90, "ase_cost_after": after + 90 },
+		{ "key": "chosen", "label": "Chosen", "enabled": false, "ase_cost": uncalled + 340, "ase_cost_after": after + 340 },
+	]
+
+
+# FlowSummonState.build_snapshot data keys, V2-ECONOMY-004 Phase 5.5. Defaults: 7 living, 700 Ase.
+func _summon(over: Dictionary) -> Dictionary:
+	var data := {
+		"title": "Summon Echo", "ase_balance": 700, "ase_rate_per_hour_hint": 4.0, "living_count": 7,
+		"village_ceiling": 14, "price_flat": false, "selected_grade": "uncalled", "summon_disabled": false,
+		"batch_prices": [145, 175, 210, 250, 300, 360, 430, 430, 430, 430],
+		"batch_totals": [145, 320, 530, 780, 1080, 1440, 1870, 2300, 2730, 3160],
+		"batch_affordable_max": 3, "ase_short_by": 0,
+		"summon_grade_options": _summon_grades(145, 175), "pending_summon_reveals": [],
+	}
+	for k in over.keys():
+		data[k] = over[k]
+	return { "type": "flow.summon", "data": data, "actions": { "cta.summon": { "type": "sanctum.summon", "slot": "cta.summon" } } }
 
 
 func _with(d: Dictionary, key: String, value: Variant) -> Dictionary:
@@ -162,14 +248,10 @@ func _combat_initiative(objective_state: Dictionary) -> Dictionary:
 	return snap
 
 
-## An empty pace dict omits the "Pace bonus" row, as EconomyService does for a no-pace fight or a defeat.
 func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pace: Dictionary) -> Dictionary:
 	var breakdown: Array = []
 	if victory:
-		breakdown.append({ "label": "2 enemies defeated", "delta": 10, "currency": "ase" })
 		breakdown.append({ "label": "3 echoes survived", "delta": 15, "currency": "ase" })
-		if pace.has("pace_bonus_awarded"):
-			breakdown.append({ "label": "Pace bonus", "delta": int(pace["pace_bonus_awarded"]), "currency": "ase" })
 	else:
 		breakdown.append({ "label": "Base objectives", "delta": 40, "currency": "ase" })
 		breakdown.append({ "label": "Defeat penalty", "delta": -30, "currency": "ase" })
@@ -191,3 +273,214 @@ func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pac
 	data.merge(pace)
 	var actions := { "cta.continue": { "type": "flow.go_state", "slot": "cta.continue", "label": "To Sanctum" } }
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
+
+
+## A fixture step that is a String acts on the live scene. "focus_cause:N" focuses the Nth (i) button.
+func _run_step(harness: Node, step: String) -> void:
+	var parts := step.split(":")
+	if parts[0] == "freeze_motion":
+		for node in harness.find_children("*", "Control", true, false):
+			if node.has_method("skip_motion") and node.get("_motion") != null:
+				(node.get("_motion") as Tween).pause()
+	if parts[0] == "skip_motion":
+		for node in harness.find_children("*", "Control", true, false):
+			if node.has_method("skip_motion"):
+				node.call("skip_motion")
+	if parts[0] == "focus_cause":
+		var buttons := harness.find_children("CauseButton", "Button", true, false)
+		var visible_buttons := buttons.filter(func(b: Node) -> bool: return (b as Button).is_visible_in_tree())
+		var index := int(parts[1]) if parts.size() > 1 else 0
+		if index < visible_buttons.size():
+			(visible_buttons[index] as Button).grab_focus()
+
+
+func _row(label: String, delta: int, cause: String, params: Dictionary = {}) -> Dictionary:
+	return { "label": label, "delta": delta, "currency": "ase", "cause": cause, "params": params }
+
+
+## Fixture amounts are arbitrary. The real values come from EconomyService.
+func _payout_data(victory: bool, reason: String, rank: String, rows: Array, seen: bool) -> Dictionary:
+	var total := 0
+	for row in rows:
+		total += int(row["delta"])
+	return {
+		"victory": victory, "reason": reason, "rank": rank, "ase_awarded": total, "ekwan_awarded": 0,
+		"enemies_defeated": 3, "echoes_survived": 3 if victory else 0, "round_ended": 6,
+		"reward_breakdown": rows, "ledger_seen": seen, "actors": _actors(),
+		"emotion_summary": [
+			{ "echo_id": "e1", "name": "Ama", "pre_emotional_status": "grounded", "post_emotional_status": "radiant", "direction": "lift" },
+			{ "echo_id": "e2", "name": "Kofi", "pre_emotional_status": "grounded", "post_emotional_status": "uncertain", "direction": "fall" },
+			{ "echo_id": "e3", "name": "Esi", "pre_emotional_status": "grounded", "post_emotional_status": "grounded", "direction": "steady" },
+		],
+	}
+
+
+func _payout_snap(data: Dictionary) -> Dictionary:
+	var actions := { "cta.continue": { "type": "flow.go_state", "slot": "cta.continue", "label": "To Sanctum" } }
+	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
+
+
+## A mid-stage win pays nothing and has no rows: the Direction E card. Three Echoes, all alive.
+func _payout_midstage_win() -> Dictionary:
+	var data := _payout_data(true, "relic_secured", "A", [], true)
+	data["pace_state"] = "partial"
+	return _payout_snap(data)
+
+
+## The same card with every line present: a shaken Echo, an overcome objective, intel, a whole Thread.
+func _payout_midstage_event() -> Dictionary:
+	var snap := _payout_midstage_win()
+	snap["data"]["emotion_summary"][1]["direction"] = "fall"
+	snap["data"]["intel_gained"] = 1
+	snap["data"]["thread_whole"] = true
+	snap["data"]["objective_overcome"] = { "index": 1, "type": "recover", "label": "A lost keepsake is recovered." }
+	return snap
+
+
+func _payout_stage_end(seen: bool) -> Dictionary:
+	var snap := _payout_midstage_win()
+	var stage_rows := [
+		_row("Base objectives", 90, "objectives_overcome", { "overcome": 2, "total": 3, "realm_scale": 1.0 }),
+		_row("Redo penalty", -58, "replay", { "factor": 0.35 }),
+		_row("Echoes home", 4, "echoes_alive", { "alive": 2, "started": 3, "lost": ["Kofi"], "cap": 10, "replay": true }),
+		_row("Settled when you left", 0, "settled_on_leave", { "settled_ase": 20, "settled_ekwan": 3 }),
+	]
+	snap["data"]["ledger_seen"] = seen
+	snap["data"]["echoes_survived"] = 2
+	snap["data"]["stage_payout_rows"] = stage_rows
+	snap["data"]["stage_payout_ase"] = 16
+	snap["data"]["stage_payout_ekwan"] = 4
+	snap["actions"]["cta.next_stage"] = { "type": "flow.complete_stage", "slot": "cta.next_stage", "label": "Continue" }
+	return snap
+
+
+func _payout_stage_all_home() -> Dictionary:
+	var snap := _payout_stage_end(true)
+	var rows: Array = snap["data"]["stage_payout_rows"]
+	rows[2] = _row("Echoes home", 6, "echoes_alive", { "alive": 3, "started": 3, "lost": [], "cap": 10, "replay": false })
+	snap["data"]["echoes_survived"] = 3
+	return snap
+
+
+## Yaw died in an earlier fight: params.lost names him, no row of this fight carries him.
+func _payout_stage_earlier_death() -> Dictionary:
+	var snap := _payout_stage_end(true)
+	var rows: Array = snap["data"]["stage_payout_rows"]
+	rows[2] = _row("Echoes home", 6, "echoes_alive", { "alive": 3, "started": 4, "lost": ["Yaw"], "cap": 10, "replay": false })
+	snap["data"]["echoes_survived"] = 3
+	return snap
+
+
+func _payout_repeat_defeat() -> Dictionary:
+	return _payout_snap(_payout_data(false, "all_echoes_dead", "F", [_row("Repeat defeat", 0, "repeat_defeat")], false))
+
+
+func _payout_defeat() -> Dictionary:
+	var rows := [
+		_row("Base objectives", 40, "defeat_consolation", { "part": "base" }),
+		_row("Defeat penalty", -30, "defeat_consolation", { "part": "penalty" }),
+		_row("Redo penalty", -1, "replay", { "factor": 0.9 }),
+	]
+	return _payout_snap(_payout_data(false, "all_echoes_dead", "F", rows, false))
+
+
+func _payout_retreat_zero() -> Dictionary:
+	var data := _payout_data(false, "", "F", [_row("Nothing overcome yet", 0, "nothing_overcome_yet")], false)
+	data["run_type"] = "scout_return"
+	data["intel_count"] = 0
+	data["actors"] = _actors()
+	return _payout_snap(data)
+
+
+## The standoff card, built by the real producer so the fixture follows the contract.
+func _standoff_card(count: int, can_sanctum: bool, cause: String, froze: Array, calmed: Array, fight_returns: bool = true) -> Dictionary:
+	return VentureResolveSnapshotBuilder.build_standoff_snapshot({ "standoff_count": count, "can_go_sanctum": can_sanctum,
+		"cause": cause, "froze_names": froze, "calmed_names": calmed, "fight_returns": fight_returns }, 3)
+
+
+## A quiet fight: the round snapshot with stall_level (and the Echo that froze at level 2).
+func _combat_stall(level: int, froze_name: String) -> Dictionary:
+	var snap := _combat(11, { "type": "combat" })
+	snap["data"]["stall_level"] = level
+	snap["data"]["stall_froze_name"] = froze_name
+	return snap
+
+
+func _preview(ase: int, ekwan: int) -> Dictionary:
+	return { "ase": ase, "ekwan": ekwan, "overcome": 1, "total": 3, "nothing_new": ase + ekwan == 0,
+		"gathered": { "ase": ase, "ekwan": ekwan, "rows": [], "has_fight_rows": ase > 0, "has_found_rows": false } }
+
+
+## A mid-path fight win: the mid-stage card plus the one encounter_gathered row.
+func _payout_fight_won_packs() -> Dictionary:
+	var snap := _payout_midstage_win()
+	snap["data"]["reward_breakdown"] = [_row("Fight won", 6, "encounter_gathered", { "kind": "combat", "gathered_ase": 6 })]
+	snap["data"]["ase_awarded"] = 0
+	snap["data"]["ledger_seen"] = false
+	return snap
+
+
+func _found_money_card() -> Dictionary:
+	var snap := VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "money" }, "A small purse lay in the grass.", [], [], 12, 2)
+	snap["data"]["actors"] = _actors()
+	return snap
+
+
+func _payout_defeat_packs_lost() -> Dictionary:
+	var snap := _payout_defeat()
+	snap["data"]["reward_breakdown"].append(_row("Packs lost", 0, "packs_lost", { "lost_ase": 12, "lost_ekwan": 0 }))
+	return snap
+
+
+## The confirmation opens before the action. `failed` builds the failed-escape display instead.
+func _return_home_modal(carry: Dictionary, failed: bool = false) -> Dictionary:
+	if failed:
+		return { "_modal": { "id": &"realm.return_home", "payload": {
+			"result": { "success": false, "message": "It was not possible to escape at the moment. Move on, we can try again later." } } } }
+	return { "_modal": { "id": &"realm.return_home", "payload": {
+		"confirm": true, "action": { "type": "stage.return_home" }, "carry": carry } } }
+
+
+## The card after a return: the outcome in words, then the amounts. The ledger row has no label here.
+func _return_card(outcome: String, ase: int, ekwan: int) -> Dictionary:
+	var data := _payout_data(false, "", "F", [_row("Settled when you left", ase, "settle_" + outcome)], true)
+	data["run_type"] = "scout_return"
+	data["intel_count"] = 2
+	data["settle_outcome"] = outcome
+	data["ase_awarded"] = ase
+	data["ekwan_awarded"] = ekwan
+	data["actors"] = _actors()
+	return _payout_snap(data)
+
+
+## Left with nothing completed: the core still sends settle_outcome "nothing_new"; the card shows the row only.
+func _return_card_empty_leave() -> Dictionary:
+	var snap := _return_card("nothing_new", 0, 0)
+	snap["data"]["reward_breakdown"] = [_row("Nothing overcome yet", 0, "nothing_overcome_yet", { "overcome": 0, "total": 3 })]
+	return snap
+
+
+## The card after a combat retreat: words only and one button.
+func _retreat_card(can_reenter: bool) -> Dictionary:
+	return { "type": "flow.resolve", "meta": { "t": 1 }, "actions": { "cta.continue": {
+		"type": "stage.retreat_return", "label": "Leave", "slot": "cta.continue" } },
+		"data": { "run_type": "retreat_return", "surface": "retreat_return", "retreat_outcome": "pulled_back", "can_reenter": can_reenter } }
+
+
+## A pre-combat snapshot: the shell shows the pre-battle modal with the retreat button.
+func _prebattle(extra: Dictionary) -> Dictionary:
+	var snap := _combat(1, { "type": "combat" })
+	var actors: Array = _actors()
+	for a in actors:
+		if a["faction"] == "echo":
+			a["emotional_status"] = "grounded"
+	snap["data"]["actors"] = actors
+	snap["data"]["round_phase"] = "pre_combat"
+	snap["data"]["retreat_eligible"] = true
+	snap["data"]["retreat_ase_cost"] = 10
+	snap["data"]["retreat_affordable"] = true
+	snap["data"].merge(extra, true)
+	snap["actions"] = {
+		"cta.combat_init": { "type": "combat.init", "slot": "cta.combat_init", "label": "Start Combat" },
+		"cta.retreat": { "type": "encounter.retreat", "slot": "cta.retreat", "success_pct": 50, "ase_cost": 10 } }
+	return snap

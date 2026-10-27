@@ -21,7 +21,7 @@ const StageTerrainScript      := preload("res://core/realms/StageTerrain.gd")   
 # Flow path:
 #   flow.stage → cta.start → flow.stage_explore
 #   stage.advance_turn   → move party, reveal check, engage situation
-#   stage.return_home    → escape check → flow.stage_map (or return_failed flag)
+#   stage.return_home    → escape check → flow.stage_map (or return_home_result on the snapshot)
 #   stage.engage_situation (combat) → flow.encounter
 #   all objectives found → flow.complete_stage
 
@@ -106,8 +106,10 @@ static func _reset_session_state(flow_ctx: FlowContext, t: int) -> void:
 		"turn_count":          preserved_turns if preserve_pos else 0,
 		"objectives_found":    obj_found,
 		"objectives_total":    obj_total,
-		"last_situation_id":   "",
-		"pending_situation_id": "",
+		# A retreat from an objective fight leaves its id here: the fight is offered again at once.
+		# last_situation_id is how the victory path finds the situation to resolve.
+		"last_situation_id":   str(old_map.get("retreat_reoffer_id", "")),
+		"pending_situation_id": str(old_map.get("retreat_reoffer_id", "")),
 		"pending_contact":      {},   # V2-STAGE-003: cleared on session reset; active contact persists in save
 		"contact_responses":    [],   # V2-STAGE-003: cleared on session reset
 		"terrain":             terrain, # V2-STAGE-004-P2: permanent geometry, never cleared on reset

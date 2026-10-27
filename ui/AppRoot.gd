@@ -21,6 +21,7 @@ const SpatialModeGoalTestsScript := preload("res://tests/SpatialModeGoalTests.gd
 const StagePartyMovementTestsScript := preload("res://tests/StagePartyMovementTests.gd")
 const CombatObjectiveLabelTestsScript := preload("res://tests/CombatObjectiveLabelTests.gd")
 const PaceUITestsScript := preload("res://tests/PaceUITests.gd")
+const ResolvePayoutUITestsScript := preload("res://tests/ResolvePayoutUITests.gd")
 const StageStopUITestsScript := preload("res://tests/StageStopUITests.gd")
 
 @onready var snapshot_view: RichTextLabel = %SnapshotView
@@ -546,6 +547,7 @@ func _run_tests(parts: Array) -> void:
 	CombatTokenPresentationTests.register(runner)
 	CombatObjectiveLabelTestsScript.register(runner)
 	PaceUITestsScript.register(runner)
+	ResolvePayoutUITestsScript.register(runner)
 	StageStopUITestsScript.register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
@@ -583,6 +585,7 @@ func _run_tests(parts: Array) -> void:
 	VoiceTests.register(runner)           # V2-VOICE-001
 	InstitutionTests.register(runner)     # V2-SANCTUM-002
 	SanctumLayoutTests.register(runner)  # V2-SANCTUM-002: layout + occupant placement
+	SummonPriceUITests.register(runner)  # V2-ECONOMY-004: Summon price card
 	BoardCameraInputTests.register(runner)  # V2-COMBAT-003.5 camera unification: input routing
 	CombatCameraSelectTests.register(runner)  # follow-up #15: combat selection-lock camera
 	BoardCameraPointerTests.register(runner)  # Story 3 phase C: Sanctum tap versus drag
@@ -629,6 +632,8 @@ func _run_tests(parts: Array) -> void:
 	FlowSnapshotFingerprintTests.register(runner)  # V2-INFRA-003 Phase 3 entry gate: sanctum/stage_explore fingerprints + snapshot purity probes
 	SnapshotContractTests.register(runner)  # V2-INFRA-003 Phase 3 Slice B1: universal snapshot contract (type/meta.t/data/actions)
 	VentureCharacterizationTests.register(runner)  # V2-INFRA-003: characterization guard for complete_stage / retreat / scout-return / contact-resolve
+	EconomyCharacterizationTests.register(runner)  # V2-ECONOMY-004 phase 1: what the stage and encounter payers pay today
+	RiskProbeTests.register(runner)  # V2-ECONOMY-004 phase 5: do player choices change pace outcome and Echo loss (measures, asserts no design number)
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
 	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence
 	BehaviorCharacterizationTests.register(runner)  # V2-COMBAT-003 Phase 1: characterization of movement-starvation, actor.idle-while-moved, enemy refusal, spatial-term zeroing, purify delegation, silent legacy fallback, health_ratio divergence

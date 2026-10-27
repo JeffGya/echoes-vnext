@@ -90,6 +90,10 @@
 | 81 | directive-is-data-only-to-add | A new Directive is added as a data entry plus tests, with no logic change. No Directive id literal or substring match in `core/` logic. Unlock stays `unlock_condition: always` until V2-DIRECTIVE-003 | 2026-10-10 |
 | 82 | directive-profile-inputs | Profile inputs that may bend a Directive: Calling family, virtue domains (through the identity state only), Standing/Judgment, fear, morale. Bonds are an interrupt only. Vows and equipment wait for their own stories | 2026-10-10 |
 | 83 | tunables-live-in-config | Tunable values live in `data/balance.json`, not hard-coded in `core/` or `ui/`, unless there is a documented reason (for example a contract floor that code and contract must share). Applies to new work and to code a story touches | 2026-10-11 |
+| 84 | ekwan-only-from-stage-objectives | Ekwan is paid only by completed stage objectives, per objective type. Fights pay none. Revisit when the GDD sets the Ekwan cadence. | 2026-10-20 |
+| 85 | permadeath-connection-points | Permadeath is not built in V2-ECONOMY-004. The reward code is written so the permadeath story changes only named places. | 2026-10-22 |
+| 86 | player-word-rules | Player-facing text never uses "home" (say "Sanctum" or another word) and never uses "stage" (say "path"). What an early exit does not carry is "lost". Applies to all player-facing text in the game, not one story. | 2026-10-26 |
+| 87 | path-earnings-are-packs | Everything earned on a path (Ase, Ekwan, later items) from any source is gathered in the packs. An early leave settles it by the roll. Finishing the path banks what is left. | 2026-10-26 |
 
 ---
 
@@ -843,5 +847,41 @@
 **A:** In `data/balance.json`, not hard-coded in `core/` or `ui/`, unless there is a documented reason (for example a contract floor that code and the movement contract must share). A story that touches code with a hard-coded tunable lists it and either moves it to config or states why it stays. Jeff: "I would rather not have hardcoded values whenever possible. These should live in config unless there is a good reason for having them hardcoded."
 **Source:** Jeff, 2026-10-11 (V2-DIRECTIVE-002 design question Q10; decisions.md D-33)
 **Date:** 2026-10-11
+
+---
+
+### 84. ekwan-only-from-stage-objectives
+
+**Q:** Where does Ekwan come from?
+**A:** Only from stage objectives. Each objective type pays its own Ekwan amount (`data.rewards.objective_ekwan`). Only COMPLETED objectives count. The replay factor and the realm scale apply. A fight pays no Ekwan, and no payout row carries `currency: ekwan`. Revisit when the Working GDD sets the early Ekwan cadence (GDD §19.10, §21.1 leave it open).
+**Source:** Jeff, 2026-10-20 (V2-ECONOMY-004; decisions.md D-05, D-06, D-16, D-28, D-32)
+**Date:** 2026-10-20
+
+---
+
+### 85. permadeath-connection-points
+
+**Q:** Does V2-ECONOMY-004 build permadeath, and what must the permadeath story change?
+**A:** No. Jeff chose to build the reward system so it connects to permadeath later. The permadeath story changes these places: `ActiveStageService.lost_echo_names_with` (the stage death record), `SummonService.living_count` (the summon price counts living Echoes), and the `echo_id = roster.size() + 1` scheme in three places (ids repeat once Echoes leave the roster). A note is on Notion story V2-INFRA-005.
+**Source:** Jeff, 2026-10-22 (V2-ECONOMY-004; decisions.md D-66, D-67, D-81, D-92, D-101)
+**Date:** 2026-10-22
+
+---
+
+## #86 — Player word rules: no "home", no "stage" (2026-10-26)
+
+**Q:** Which words may player-facing text use for the Sanctum, a level and a reward that is not carried?
+**A:** Never "home": the Sanctum is a village or community, not a building, so say "Sanctum" or another word. Never "stage": "stage" is internal game language, so say "path". A reward that an early exit does not carry is "lost". The rules apply to ALL player-facing text in the game (buttons, labels, tooltips, headers, snapshot labels from the core), not only to one story. They do not apply to internal ids, keys, constants, file names or code comments. Story-voice lines (Keeper intro) are checked case by case with Jeff. New text must follow the rules; old text is reworded under follow-up 47.
+**Source:** Jeff, 2026-10-26 (V2-ECONOMY-004; decisions.md D-107, D-111, D-112)
+**Date:** 2026-10-26
+
+---
+
+## #87 — All earnings on a path are gathered, then settled or banked (2026-10-26)
+
+**Q:** When does the party receive what it earns on a path (objectives, encounters, other sources)?
+**A:** Everything earned on a path is gathered in the packs: currency (Ase, Ekwan) from objectives, from encounters and from any other source, and later also items found in encounters or on the path. The party receives it in one of two ways. (1) Early leave: the seeded roll settles the packs (nothing, some or everything, D-104 to D-106); what the roll does not carry is lost. (2) Finishing the path: the packs are banked in full, minus what an earlier leave already settled. A new earning source must add to the packs and must not pay directly into the balance. Build the packs as one list of earnings by source, so a new source adds a row and no new payout path.
+**Source:** Jeff, 2026-10-26 (V2-ECONOMY-004; decisions.md D-104 to D-106, D-113, D-114)
+**Date:** 2026-10-26
 
 ---

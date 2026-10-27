@@ -4,6 +4,78 @@ extends RefCounted
 
 class_name SummonService
 
+const GRADES: Array[String] = ["uncalled", "called", "chosen"]
+## The batch cap of one sanctum.summon action. The summon snapshot lists prices up to this count.
+const MAX_BATCH := 10
+
+## The one place that counts the village. Permadeath changes only this function.
+static func living_count(save_data: Dictionary) -> int:
+	var sanctum_v: Variant = save_data.get("sanctum", {})
+	if not (sanctum_v is Dictionary):
+		return 0
+	var roster_v: Variant = (sanctum_v as Dictionary).get("roster", [])
+	return (roster_v as Array).size() if roster_v is Array else 0
+
+
+## The price of the Echo with number echo_number (living count + 1 when bought). The only price
+## function: the handler, the grade select and the summon snapshot all call it.
+## price_by_echo_number holds string keys; a number above village_ceiling pays the ceiling price.
+static func price_for(summoning_cfg: Dictionary, grade: String, echo_number: int) -> int:
+	var table_v: Variant = summoning_cfg.get("price_by_echo_number", {})
+	var table: Dictionary = table_v if table_v is Dictionary else {}
+	var n := mini(echo_number, village_ceiling(summoning_cfg))
+	if table.is_empty():
+		push_error("SummonService: data.summoning.price_by_echo_number is empty")
+		return 0
+	# Echo 1 is the free starter and has no entry: a number below the first entry pays the first price.
+	var best_key := -1
+	var low_key := 1 << 30
+	var base := 0
+	var low_base := 0
+	for k: Variant in table.keys():
+		var key_n := int(str(k))
+		if key_n <= n and key_n > best_key:
+			best_key = key_n
+			base = int(table[k])
+		if key_n < low_key:
+			low_key = key_n
+			low_base = int(table[k])
+	if best_key < 0:
+		base = low_base
+	if grade == "uncalled":
+		return base
+	var extra_key := "%s_extra" % grade
+	if not summoning_cfg.has(extra_key):
+		push_error("SummonService: data.summoning.%s is missing; no surcharge applied" % extra_key)
+		return base
+	return base + int(summoning_cfg[extra_key])
+
+
+## The one reader of data.summoning.grade_enabled. A missing key means enabled for uncalled and
+## disabled for every other grade, so a broken config never opens a locked grade.
+static func grade_enabled(summoning_cfg: Dictionary, grade: String) -> bool:
+	if not GRADES.has(grade):
+		return false
+	var table_v: Variant = summoning_cfg.get("grade_enabled", {})
+	var table: Dictionary = table_v if table_v is Dictionary else {}
+	return bool(table.get(grade, grade == "uncalled"))
+
+
+## A missing key is logged and means no cap: the highest table entry then sets the price.
+static func village_ceiling(summoning_cfg: Dictionary) -> int:
+	if not summoning_cfg.has("village_ceiling"):
+		push_error("SummonService: data.summoning.village_ceiling is missing; no ceiling applied")
+		return 1 << 30
+	return int(summoning_cfg["village_ceiling"])
+
+
+## Prices of summon 1..count in one action: summon i pays for Echo (living + i + 1).
+static func batch_prices(summoning_cfg: Dictionary, grade: String, living: int, count: int) -> Array[int]:
+	var out: Array[int] = []
+	for i in range(count):
+		out.append(price_for(summoning_cfg, grade, living + i + 1))
+	return out
+
 static func summon_paid_one(
 	save_data: Dictionary,
 	seed_root: String,

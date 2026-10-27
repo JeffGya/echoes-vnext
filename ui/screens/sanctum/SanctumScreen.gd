@@ -369,10 +369,10 @@ func _render() -> void:
 		var proverb_en := str(active_vow.get("proverb_en", ""))
 		vow_mantra_label.text = "%s - \"%s\"" % [proverb_twi, proverb_en]
 		vow_mantra_label.visible = not proverb_twi.is_empty() or not proverb_en.is_empty()
-		# V2-VOW-002: compliance count under mantra — "N stages honored" when count > 0.
+		# V2-VOW-002: compliance count under mantra — "N paths finished" when count > 0.
 		var cc := int(active_vow.get("compliance_count", 0))
 		if cc > 0:
-			_vow_compliance_label.text = "%d stage%s honored" % [cc, "s" if cc != 1 else ""]
+			_vow_compliance_label.text = "%d path%s finished" % [cc, "s" if cc != 1 else ""]
 			_vow_compliance_label.visible = true
 		else:
 			_vow_compliance_label.visible = false

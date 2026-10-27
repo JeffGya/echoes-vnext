@@ -91,8 +91,6 @@ static func create(actors: Array, objective: String,
 		"par_rounds":        float(pace_cfg.get("par_rounds", 0.0)),
 		"pace_full_ratio":   float(pace_cfg.get("pace_full_ratio", 0.0)),
 		"pace_zero_ratio":   float(pace_cfg.get("pace_zero_ratio", 0.0)),
-		"pace_bonus_pct":    float(pace_cfg.get("pace_bonus_pct", 0.0)),
-		"stage_base":        int(pace_cfg.get("stage_base", 0)),
 		"reached_enemy_ids": [],
 		"ally_killed_enemy_ids": [],
 	}

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Resolve compact layout mockup</title>
+<style>
+:root{--bg:#F6F1E3;--fg:#2A2A3A;--mut:#5a5a6a;--line:#cdbf94;--acc:#8a6d12;--sheet:#FFFDF2;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#16221b;--fg:#FFF8DC;--mut:#c9c3a8;--line:#3D5A47;--acc:#D4AF37;--sheet:#1f2f26;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+main{max-width:1440px;margin:0 auto}
+h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.15rem;margin:28px 0 4px;color:var(--acc)}
+p,li{max-width:80ch}.mut{color:var(--mut);font-size:.9rem}
+.row{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.cap{font-weight:600;margin:0 0 6px}
+.tag{display:inline-block;font-size:.75rem;padding:1px 8px;border-radius:99px;border:1px solid var(--line);margin-left:6px}
+.note{background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:8px 0;max-width:80ch}
+table{border-collapse:collapse}td,th{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top;font-size:.92rem}
+/* card: fixed to the real card size 680x476 */
+.card{width:680px;height:476px;max-width:100%;background:#2b3d31;color:#F5E6D3;border:2px solid #D4AF37;border-radius:14px;padding:12px 20px 0;font-size:14px;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.card .body{flex:1;overflow:auto;min-height:0}
+.hdr{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.banner{font-size:24px;font-weight:700;color:#FFF8DC}
+.sum{color:#E8D0A0;font-size:13px}
+.why{width:100%;font-size:12px;color:#C9B98C;font-style:italic;margin-top:-2px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.chip{background:#34493b;border-radius:99px;padding:3px 12px;font-size:13px;color:#F5E6D3}
+.chip b{color:#FFF8DC}
+.chip.rank{border:1px solid #D4AF37}
+.pay{display:flex;align-items:center;gap:8px;min-height:48px;background:#34493b;border-radius:10px;padding:0 6px 0 14px;cursor:pointer;width:100%;border:0;color:inherit;font:inherit;text-align:left}
+.pay .a{font-size:20px;font-weight:700;color:#FFF8DC}
+.pay .e{font-size:16px;font-weight:700;color:#E8A030}
+.pay .sp{flex:1}.pay .hint{color:#C9B98C;font-size:12px}
+.pay .chev{width:36px;text-align:center;color:#D4AF37;font-size:16px}
+.ledger{margin:2px 0 4px;padding-left:14px}
+.entry{display:flex;align-items:center;gap:6px;min-height:44px;border-bottom:1px solid #3b5143}
+.entry .l{flex:1}.entry .d{min-width:92px;text-align:right;font-variant-numeric:tabular-nums}
+.entry .d.neg{color:#d9a08a}.entry .d.zero{color:#6E6450}.entry .d.ekw{color:#E8A030}.entry.zero .l{color:#a89c7c}
+.ibtn{width:48px;height:48px;flex:0 0 48px;border:0;background:transparent;color:#D4AF37;cursor:pointer;display:grid;place-items:center;border-radius:8px;margin:-2px 0}
+.ibtn span{width:24px;height:24px;border:2px solid currentColor;border-radius:50%;display:grid;place-items:center;font:700 13px/1 Georgia,serif}
+.ibtn:hover,.ibtn[aria-expanded="true"]{background:#3c5444}
+.grp{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#D4AF37;margin:8px 0 0}
+.grp i{font-style:normal;text-transform:none;letter-spacing:0;color:#C9B98C;font-size:12px}
+.entry.pre .l,.entry.pre .d{opacity:.7}
+.tot{display:flex;justify-content:space-between;align-items:baseline;padding:6px 48px 4px 0;font-weight:700;font-size:16px;color:#FFF8DC}
+.sect{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#D4AF37;margin:10px 0 2px;display:flex;justify-content:space-between}
+.echo{display:flex;align-items:center;gap:10px;height:34px}
+.echo .av{width:26px;height:26px;border-radius:50%;background:#4a6353;display:grid;place-items:center;font-size:12px}
+.echo .n{flex:1}.echo .st{color:#C9B98C;font-size:13px}
+.echo .ar{font-size:13px;min-width:20px;text-align:center}
+.up{color:#7fd09a}.down{color:#d9a08a}.same{color:#C9B98C}
+.vow{display:flex;align-items:center;gap:8px;min-height:40px;background:#34493b;border-radius:8px;padding:0 12px;margin-top:6px;font-size:13px}
+.vow b{color:#D4AF37}
+.footer{display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #4a6353;margin:8px -20px 0;padding:8px 20px;flex:0 0 auto}
+.btn{min-height:48px;min-width:120px;padding:0 18px;border-radius:10px;border:2px solid #D4AF37;color:#F5E6D3;display:grid;place-items:center}
+.btn.p{background:#D4AF37;color:#3D2817;font-weight:700}
+.seg{display:flex;gap:6px;margin:8px 0}
+.seg div{flex:1;min-height:48px;display:grid;place-items:center;border-radius:10px;background:#34493b;position:relative}
+.seg div.on{background:#D4AF37;color:#3D2817;font-weight:700}
+.seg i{position:absolute;top:8px;right:14px;width:8px;height:8px;border-radius:50%;background:#C85A54}
+.tip{position:absolute;z-index:50;width:260px;background:#F5E6D3;color:#3D2817;border:1px solid #8B7355;border-radius:10px;padding:10px 12px;font:14px/1.4 system-ui,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.45);pointer-events:none}
+.tip[hidden]{display:none}.tip b{display:block;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#8a6d12;margin-bottom:2px}
+.tip::after{content:"";position:absolute;left:var(--ax,50%);width:12px;height:12px;background:#F5E6D3;border:1px solid #8B7355;transform:translateX(-50%) rotate(45deg)}
+.tip.below::after{top:-7px;border-right:0;border-bottom:0}.tip.above::after{bottom:-7px;border-left:0;border-top:0}
+.fit{font-size:12px;color:#C9B98C;text-align:right;margin:4px 0 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Resolve screen — compact layout <span class="tag">PROPOSAL</span></h1>
+<p class="mut">Both cards are the real card size (680×476 on a 1280×720 viewport). Nothing needs scrolling in the normal case. Click “How it was earned” to open the ledger. Click an (i) for its tooltip. Echo names and states are placeholders.</p>
+
+<div class="note"><strong>The idea in one line:</strong> the earnings are one line by default (“+90 Ase · +27 Ekwan”). The rows and the causes are one tap away. That frees the space for the Echo list and the vows.</div>
+
+<h2>Option 1 — One screen, collapsed earnings <span class="tag">recommended</span></h2>
+<div class="row">
+  <div><p class="cap">Normal (ledger closed)</p><div id="o1"></div></div>
+  <div><p class="cap">Ledger open (body scrolls)</p><div id="o1b"></div></div>
+</div>
+
+<h2>Stage earnings on the card <span class="tag">PROPOSAL</span></h2>
+<p class="mut">Jeff decided the stage payout shows on the Resolve card. The ledger gets two groups: <strong>This fight</strong> and <strong>Stage</strong>. One total adds both. The earnings line shows that total.</p>
+<div class="row">
+  <div><p class="cap">A. Stage-ending fight (both options)</p><div id="s1"></div></div>
+  <div><p class="cap">B. Mid-stage fight — APPROVED: fight rows only</p><div id="s3"></div></div>
+  <div><p class="cap">C. Mid-stage fight — REJECTED alternative: muted stage preview</p><div id="s2"></div></div>
+</div>
+<div class="note"><strong>Open question for Jeff.</strong> The stage payout is paid when the player ends the stage, not at the fight. On a mid-stage fight, the stage rows can only be a preview of what the stage would earn now. The mockup shows them muted under “Earned when the stage ends”, and the total counts only what is earned now. Is that right, or should the preview be in the total?</div>
+<p class="mut"><strong>Proposed snapshot keys</strong> (names are the backend's to confirm): <code>stage_payout_rows</code> (same row shape as <code>reward_breakdown</code>) and <code>stage_payout_ase</code>. The UI adds <code>reward_breakdown</code> + <code>stage_payout_rows</code> for the total, or reads one combined number if the backend gives it. A mid-stage flag is needed (for example <code>stage_payout_final: bool</code>). The boss stub is not in the “of N” count.</p>
+<div class="note"><strong>Ekwan (decided by the backend and Jeff):</strong> fights earn no Ekwan, so fight cards show Ase only. Ekwan shows only on the stage-ending card: an “Ekwan earned” line with its amount, no (i), and it is not added to the Ase total. Key: <code>stage_payout_ekwan</code> (name to be confirmed).</div>
+<p class="mut"><strong>Stage replay tooltip (PROPOSAL; Ekwan wording):</strong> “The party has been here before. The whole stage earns less.” Option with Ekwan: “The party has been here before. The whole stage earns less Ase and Ekwan.” The fight-level text stays “…It earns less.” Same row name, “Replay”.</p>
+
+<h2>Option 2 — Three tabs</h2>
+<div class="row">
+  <div><p class="cap">Earnings tab</p><div id="o2a"></div></div>
+  <div><p class="cap">Echoes tab</p><div id="o2b"></div></div>
+</div>
+
+<h2>Compared with today</h2>
+<table>
+<tr><th></th><th>Today</th><th>Option 1</th><th>Option 2</th></tr>
+<tr><td>Scrolling</td><td>Always (long body)</td><td>None normally; scrolls only with ledger open or 5+ Echoes</td><td>None per tab</td></tr>
+<tr><td>Echo list</td><td>Below the fold</td><td>Visible at once</td><td>One tap away (tab)</td></tr>
+<tr><td>Earnings cause</td><td>Not shown</td><td>One tap to the ledger, one more to a row’s tooltip</td><td>Same, on the Earnings tab</td></tr>
+<tr><td>Vow</td><td>Below the fold</td><td>One line, only when a vow changed</td><td>Own tab, dot when new</td></tr>
+<tr><td>Risk</td><td></td><td>Tight if there are many Echoes or two vow lines</td><td>The player may skip the Echoes tab. Echo growth is a pillar, so this hides it.</td></tr>
+</table>
+<p class="mut"><strong>My recommendation: Option 1.</strong> Echo growth stays in view (ANSWERS #66 vocabulary). Option 2 is simpler to build but hides the Echoes. Node impact for Option 1: remove <code>AseRow</code>, <code>EkwanRow</code>, <code>RankRow</code>, <code>StatGrid</code>, and the Ase / Ekwan / defeated chips; add one <code>EarningsSummary</code> button row and fold the existing <code>BreakdownSection</code> under it. Emotion and vow sections keep their nodes with tighter rows.</p>
+<div class="note"><strong>Open points</strong>
+<ul>
+<li>Stat chips: keep Enemies, Echoes and Rounds as chips, or drop one? Rounds carries the pace color, so I keep it.</li>
+<li>Echo rows are 34 px and not tappable. If an Echo row opens a detail later, it must grow to 48 px.</li>
+<li>Decided (Jeff): the ledger starts open the first time the player sees a result. After that it starts closed. Needs one saved flag (backend: UI-seen flag in the save).</li>
+</ul></div>
+</main>
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script>
+const COPY={objectives:'Only objectives the party found and overcame earn Ase. 2 of 3 so far.',virtue:'The realm rewards the virtue the party showed here.',stage_redo:'The party has been here before. The whole stage earns less Ase and Ekwan.',enemies:'Each enemy the party defeats earns Ase.',survived:'Each Echo still standing when the fight ends earns Ase.',pace:'The party was not quick enough to earn a bonus.',redo:'The party has been here before. It earns less.',sanctum:'Part of the Ase the party earns also becomes Ekwan for the Sanctum.'};
+const ROWS=[["3 enemies defeated","+60 Ase","enemies",""],["4 echoes survived","+40 Ase","survived",""],["Bonus","+0 Ase","pace","zero"],["Replay","−10 Ase","redo","neg"]];
+const ECHOES=[["Adwoa","Grounded → Radiant","up","▲"],["Kofi","Uncertain → Hesitant","down","▼"],["Ama","Whole","same","•"],["Yaw","Burdened → Grounded","up","▲"]];
+const e=s=>s.replace(/&/g,"&amp;");
+const hdr=`<div class="hdr"><span class="banner">Victory</span><span class="sum">Stage 2 · Objective 2 of 3</span><span class="why">The grove held.</span></div>
+<div class="chips"><span class="chip rank">Rank <b>A</b></span><span class="chip">Enemies defeated <b>3</b></span><span class="chip">Echoes alive <b>4</b></span><span class="chip">Rounds <b>6</b></span></div>`;
+const pay=(open)=>`<button class="pay" data-toggle aria-expanded="${open}"><span class="a">+90 Ase</span><span class="sp"></span><span class="hint">How it was earned</span><span class="chev">${open?"▴":"▾"}</span></button>`+
+(open?`<div class="ledger">${ROWS.map(r=>`<div class="entry${r[3]==="zero"?" zero":""}"><span class="l">${e(r[0])}</span><span class="d ${r[3]}">${e(r[1])}</span>${r[2]?`<button class="ibtn" aria-expanded="false" aria-label="Why: ${e(r[0])}" data-c="${r[2]}" data-l="${e(r[0])}"><span>i</span></button>`:'<span style="width:48px;flex:0 0 48px"></span>'}</div>`).join("")}</div>`:"");
+const echoes=`<div class="sect"><span>Echoes</span></div>${ECHOES.map(x=>`<div class="echo"><span class="av">${x[0][0]}</span><span class="n">${x[0]}</span><span class="st">${x[1]}</span><span class="ar ${x[2]}">${x[3]}</span></div>`).join("")}`;
+const vow=`<div class="vow"><b>Vow kept</b> Adwoa: “Protect the weak.”</div>`;
+const foot=`<div class="footer"><div class="btn">Sanctum</div><div class="btn p">Continue</div></div>`;
+const card=(inner)=>`<div class="card"><div class="body">${inner}</div>${foot}</div>`;
+const tabs=(on)=>`<div class="seg">${["Earnings","Echoes","Vows"].map((t,i)=>`<div class="${i===on?"on":""}">${t}${t==="Vows"?"<i></i>":""}</div>`).join("")}</div>`;
+function mount(id,html){const el=document.getElementById(id);el.innerHTML=html;
+ el.querySelectorAll("[data-toggle]").forEach(b=>b.addEventListener("click",()=>{const open=b.getAttribute("aria-expanded")!=="true";mount(id,id==="o1"?card(hdr+pay(open)+echoes+vow):card(hdr+pay(open)+echoes+vow));}));
+ wire(el);}
+const tip=document.getElementById("tip");let act=null;
+function hide(){tip.hidden=true;if(act)act.setAttribute("aria-expanded","false");act=null}
+function show(b){if(act)act.setAttribute("aria-expanded","false");act=b;b.setAttribute("aria-expanded","true");
+ tip.innerHTML=`<b>${b.dataset.l}</b>${COPY[b.dataset.c]}`;tip.hidden=false;
+ const r=b.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight,cx=r.left+r.width/2+scrollX;
+ const left=Math.min(Math.max(cx-w/2,8),scrollX+document.documentElement.clientWidth-w-8),below=r.bottom+h+14<innerHeight;
+ tip.className="tip "+(below?"below":"above");tip.style.left=left+"px";tip.style.top=(below?r.bottom+scrollY+8:r.top+scrollY-h-8)+"px";tip.style.setProperty("--ax",(cx-left)+"px");}
+function wire(el){el.querySelectorAll(".ibtn").forEach(b=>{b.addEventListener("click",ev=>{ev.stopPropagation();act===b&&!tip.hidden?hide():show(b)});b.addEventListener("mouseenter",()=>show(b));b.addEventListener("mouseleave",()=>{if(matchMedia("(hover:hover)").matches)hide()});});}
+document.addEventListener("click",ev=>{if(!ev.target.closest(".ibtn"))hide()});
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape")hide()});
+const FIGHT=[["3 enemies defeated","+60 Ase","enemies",""],["4 echoes survived","+40 Ase","survived",""],["Bonus","+0 Ase","pace","zero"],["Replay","−10 Ase","redo","neg"]];
+const STAGE=[["Objectives overcome","+100 Ase","objectives",""],["Replay","−10 Ase","stage_redo","neg"],["Realm virtue","+40 Ase","virtue",""]];
+const erow=(r,pre)=>`<div class="entry${r[3]==="zero"?" zero":""}${pre?" pre":""}"><span class="l">${e(r[0])}</span><span class="d ${r[3]}">${e(r[1])}</span>${r[2]?`<button class="ibtn" aria-expanded="false" aria-label="Why: ${e(r[0])}" data-c="${r[2]}" data-l="${e(r[0])}"><span>i</span></button>`:'<span style="width:48px;flex:0 0 48px"></span>'}</div>`;
+const payS=(final)=>`<button class="pay" aria-expanded="true"><span class="a">${final?"+220":"+90"} Ase</span>${final?'<span class="e">+14 Ekwan</span>':""}<span class="sp"></span><span class="hint">How it was earned</span><span class="chev">▴</span></button><div class="ledger">
+<div class="grp"><span>This fight</span></div>${FIGHT.map(r=>erow(r,false)).join("")}
+<div class="grp"><span>Stage</span><i>${final?"Stage cleared":"Earned when the stage ends"}</i></div>${STAGE.map(r=>erow(r,!final)).join("")}
+<div class="tot"><span>${final?"Total earned":"Earned now"}</span><span>${final?"= 220 Ase":"= 90 Ase"}</span></div>${final?"":'<div class="tot" style="font-size:12px;font-weight:400;color:#C9B98C"><span>Stage preview</span><span>+130 Ase later</span></div>'}
+${final?'<div class="entry" style="border:0"><span class="l" style="color:#E8A030">Ekwan earned</span><span class="d ekw">+14 Ekwan</span><span style="width:48px;flex:0 0 48px"></span></div>':""}</div>`;
+mount("s1",card(hdr+payS(true)));
+mount("s2",card(hdr+payS(false)));
+mount("s3",card(hdr+`<button class="pay" aria-expanded="true"><span class="a">+90 Ase</span><span class="sp"></span><span class="hint">How it was earned</span><span class="chev">▴</span></button><div class="ledger">${FIGHT.map(r=>erow(r,false)).join("")}<div class="tot"><span>Total earned</span><span>= 90 Ase</span></div></div>`));
+mount("o1",card(hdr+pay(false)+echoes+vow));
+mount("o1b",card(hdr+pay(true)+echoes+vow));
+mount("o2a",card(hdr+tabs(0)+pay(true)));
+mount("o2b",card(hdr+tabs(1)+echoes));
+</script>
+</body>
+</html>

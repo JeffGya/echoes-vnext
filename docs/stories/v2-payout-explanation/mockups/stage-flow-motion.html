@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Stage flow in motion: running tally directions (mockup)</title>
+<style>
+:root{--bg:#F6F1E3;--fg:#2A2A3A;--mut:#5a5a6a;--line:#cdbf94;--acc:#8a6d12;--sheet:#FFFDF2;--on:#2D6A4F;--onfg:#fff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#16221b;--fg:#FFF8DC;--mut:#c9c3a8;--line:#3D5A47;--acc:#D4AF37;--sheet:#1f2f26;--on:#D4AF37;--onfg:#2b2410;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+main{max-width:1440px;margin:0 auto}
+h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1.1rem;margin:24px 0 4px;color:var(--acc)}
+p,li{max-width:90ch}.mut{color:var(--mut);font-size:.9rem}
+.tag{display:inline-block;font-size:.75rem;padding:1px 8px;border-radius:99px;border:1px solid var(--line);margin-left:6px}
+.note{background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:8px 0;max-width:100ch}
+table{border-collapse:collapse}td,th{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top;font-size:.9rem}
+button,.tg{font:inherit}
+.btn0{min-height:48px;min-width:48px;padding:0 14px;border-radius:10px;border:2px solid var(--line);background:var(--sheet);color:var(--fg);cursor:pointer}
+.btn0[aria-pressed="true"]{background:var(--on);color:var(--onfg);border-color:var(--on);font-weight:700}
+.btn0:disabled{opacity:.45;cursor:default}
+.btn0:focus-visible,.tg:focus-within,.st button:focus-visible{outline:3px solid #C85A54;outline-offset:2px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;margin:10px 0;padding:10px;background:var(--sheet);border:1px solid var(--line);border-radius:10px}
+.ctl .g{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ctl .lab{font-size:.8rem;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+.tg{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 10px;border:2px solid var(--line);border-radius:10px;cursor:pointer;background:var(--bg)}
+.tg input{width:22px;height:22px;accent-color:var(--on)}
+.st{display:flex;gap:8px;list-style:none;padding:0;margin:8px 0;flex-wrap:wrap}
+.st li{margin:0}
+.st button{min-height:48px;min-width:48px;padding:2px 12px;border-radius:10px;border:2px solid var(--line);background:var(--sheet);color:var(--fg);cursor:pointer;display:flex;align-items:center;gap:8px;font:inherit;font-size:.85rem}
+.st button b{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:2px solid currentColor;font-size:.8rem}
+.st button[aria-current="step"]{background:var(--on);color:var(--onfg);border-color:var(--on);font-weight:700}
+.subctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.scenes{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.scn .cap{font-weight:700;margin:0 0 4px}
+.frame{position:relative;overflow:hidden;border-radius:10px;border:1px solid var(--line)}
+.cap2{background:var(--sheet);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-top:8px;font-size:.92rem}
+.asm{display:inline-block;font-size:11px;font-weight:700;padding:0 6px;border-radius:99px;border:1px solid #9E3F3A;color:#9E3F3A;background:#fff3ee;margin-left:6px;vertical-align:middle}
+/* ---------- the 1280x720 viewport ---------- */
+.vp{width:1280px;height:720px;position:absolute;left:0;top:0;transform-origin:0 0;background:radial-gradient(ellipse at 50% 30%,#2b4033 0,#16221b 70%);color:#F5E6D3;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+.vp button{font:inherit}
+.vp .pp{position:absolute;right:10px;top:8px;z-index:60;font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid #D4AF37;color:#F5E6D3;background:rgba(0,0,0,.45)}
+/* stage map */
+.hd{height:68px;display:flex;flex-direction:column;justify-content:center;padding:0 28px;background:#1f2f26;border-bottom:1px solid #3D5A47}
+.hd .t{font-size:24px;font-weight:700;color:#FFF8DC}.hd .s{color:#C9B98C}
+.pan{position:absolute;background:#243a2d;border:1px solid #3D5A47;border-radius:12px;padding:16px}
+.pan h4{margin:0 0 8px;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#D4AF37}
+.cord{display:flex;gap:6px;margin:6px 0 14px}.cord i{flex:1;height:14px;border-radius:7px;background:#34493b;border:1px solid #4a6353}
+.cord i.f{background:#D4AF37;border-color:#D4AF37}.cord i.n{background:#D4AF37;animation:fillseg .9s .25s both}
+@keyframes fillseg{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.srowm{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 12px;border-radius:10px;background:#2b4033;margin-bottom:8px}
+.srowm.cur{border:2px solid #D4AF37}.srowm .sp{flex:1}.srowm .m{color:#C9B98C;font-size:13px}
+.lines{list-style:none;margin:6px 0 12px;padding:0}.lines li{padding:6px 0;border-bottom:1px solid #3b5143;display:flex;gap:10px;align-items:center}
+.lines .ok{color:#7fd09a;font-weight:700}
+.stat{display:inline-block;padding:2px 12px;border-radius:99px;border:1px solid #D4AF37;font-size:13px;color:#F5E6D3}
+.vbtn{min-height:56px;min-width:200px;padding:0 24px;border-radius:12px;border:2px solid #D4AF37;background:#D4AF37;color:#3D2817;font-weight:700;font-size:16px;cursor:pointer}
+.vbtn.sec{background:transparent;color:#F5E6D3;font-weight:400;min-height:48px}
+.vbtn:focus-visible,.rc button:focus-visible,.dlg button:focus-visible{outline:3px solid #C85A54;outline-offset:2px}
+/* explore */
+.grid{position:absolute;left:60px;top:116px;display:grid;grid-template-columns:repeat(10,56px);grid-auto-rows:56px;gap:3px}
+.grid div{border-radius:6px;display:grid;place-items:center;font-size:22px;position:relative}
+.t0{background:#2f4a38}.t1{background:#35523f}.t2{background:#2a4132}.t3{background:#3b5a45}.tp{background:#4a6a50}
+.tok{background:#D4AF37 !important;color:#3D2817;font-weight:700;border-radius:50% !important}
+.mk{background:#3a3220 !important;border:2px solid #D4AF37;color:#D4AF37}
+.mk.new{animation:pop .7s .2s both,glowm 1.6s .9s 2}
+.mk.done{background:#2D6A4F !important;color:#fff;border-color:#7fd09a}
+@keyframes pop{from{transform:scale(.3);opacity:0}60%{transform:scale(1.2)}to{transform:scale(1);opacity:1}}
+@keyframes glowm{50%{box-shadow:0 0 18px 6px rgba(212,175,55,.7)}}
+.side{position:absolute;left:700px;top:116px;width:520px}
+.bar{height:16px;border-radius:8px;background:#34493b;overflow:hidden;margin:6px 0 14px}.bar i{display:block;height:100%;background:#D4AF37}
+.toast{position:absolute;left:700px;top:300px;width:520px;background:#F5E6D3;color:#3D2817;border:2px solid #D4AF37;border-radius:12px;padding:14px 18px;animation:slideup .45s .35s both;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.toast b{display:block;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#8a6d12;margin-bottom:4px}
+.toast p{margin:0;font-size:16px}
+@keyframes slideup{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.decide{position:absolute;left:700px;top:460px;width:520px;display:flex;gap:12px;flex-wrap:wrap}
+/* card */
+.rc{width:680px;height:476px;background:#F5E6D3;color:#3D2817;border:2px solid #D4AF37;border-radius:14px;padding:12px 20px 0;display:flex;flex-direction:column;overflow:hidden;position:absolute;left:300px;top:122px;box-shadow:0 18px 50px rgba(0,0,0,.5);animation:cardin .35s both}
+@keyframes cardin{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.rc.dimmed{filter:brightness(.55)}
+.rc .body{flex:1;overflow:auto;min-height:0}
+.rise{animation:rise .4s var(--d,0s) both}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.hdr{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.banner{font-size:24px;font-weight:700}.sum{color:#6b5238;font-size:13px}.why{width:100%;font-size:12px;color:#6b5238;font-style:italic}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.chip{background:#E8D2B4;border-radius:99px;padding:3px 12px;font-size:13px}.chip b{color:#3D2817}.chip.rank{border:1px solid #8a6d12}
+.sect{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#8a6d12;margin:8px 0 2px;display:flex;justify-content:space-between;font-weight:700}
+.sect .hcount{letter-spacing:.3px;text-transform:none;font-size:13px;color:#3D2817;font-weight:700;transition:color .4s}
+.sect .hcount.whole{color:#1F4D38}
+.echo{display:flex;align-items:center;gap:10px;height:30px}
+.echo .av{width:24px;height:24px;border-radius:50%;background:#D9BE9A;display:grid;place-items:center;font-size:12px;border:2px solid transparent;transition:opacity .3s}
+.echo .n{flex:1;min-width:0}.echo .st2{color:#6b5238;font-size:13px}
+.echo .ar{font-size:13px;min-width:18px;text-align:center}
+.up{color:#1F4D38}.down{color:#9E3F3A}.same{color:#6b5238}
+.hm{min-width:74px;text-align:center;font-size:12px;font-weight:700;border:1px solid #2D6A4F;color:#1F4D38;border-radius:99px;padding:1px 8px;transition:opacity .25s,transform .25s}
+.echo.pend .hm{opacity:0;transform:scale(.8)}
+.echo .lostline{display:none;font-style:italic}
+.echo.lost .nm,.echo.lost .st2{display:none}.echo.lost .lostline{display:inline}
+.echo.lost .av{opacity:.5;border:2px dashed #6b5238}.echo.lost .hm{display:none}
+.echo.hold{background:rgba(212,175,55,.22);border-radius:8px;animation:holdp .5s both}
+@keyframes holdp{from{opacity:.4}to{opacity:1}}
+.homeline{font-size:13px;color:#1F4D38;min-height:20px;margin:2px 0;transition:opacity .5s}
+.pre{opacity:0}
+.after{transition:opacity .6s}
+.pay{display:flex;align-items:center;gap:12px;min-height:48px;background:#EAD5B8;border-radius:10px;padding:0 6px 0 14px;cursor:pointer;width:100%;border:0;color:inherit;text-align:left;margin-top:6px}
+.pay .a{font-size:17px;font-weight:600;color:#1F4D38}.pay .e{font-size:15px;font-weight:600;color:#7a4a00}
+.pay .sp{flex:1}.pay .hint{color:#6b5238;font-size:12px}.pay .chev{width:36px;text-align:center;color:#8a6d12;font-size:16px}
+.ledger{margin:2px 0 4px;padding-left:10px}
+.grp{display:flex;justify-content:space-between;align-items:baseline;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#8a6d12;margin:6px 0 0;font-weight:700}
+.grp i{font-style:normal;text-transform:none;letter-spacing:0;color:#6b5238;font-size:12px;font-weight:400}
+.entry{display:flex;align-items:center;gap:6px;min-height:44px;border-bottom:1px solid #d6bf9f}
+.entry .l{flex:1}.entry .d{min-width:92px;text-align:right;font-variant-numeric:tabular-nums}.entry .d.ekw{color:#7a4a00}
+.ibtn{width:48px;height:48px;flex:0 0 48px;border:0;background:transparent;color:#8a6d12;cursor:pointer;display:grid;place-items:center;border-radius:8px;margin:-2px 0}
+.ibtn span{width:24px;height:24px;border:2px solid currentColor;border-radius:50%;display:grid;place-items:center;font:700 13px/1 Georgia,serif}
+.ibtn:hover,.ibtn[aria-expanded="true"]{background:#E8D2B4}
+.sp48{width:48px;flex:0 0 48px}
+.tot{display:flex;justify-content:space-between;padding:6px 48px 4px 0;font-weight:700;font-size:15px}
+.line{font-style:italic;margin:6px 0;min-height:22px}
+.srow{display:flex;align-items:center;gap:10px;min-height:34px}
+.srow svg{flex:0 0 22px;color:#2D6A4F}
+.srow.thr svg{color:#8a6d12}
+.footer{display:flex;gap:10px;justify-content:flex-end;border-top:1px solid #d6bf9f;margin:8px -20px 0;padding:8px 20px;flex:0 0 auto}
+.rc .btn{min-height:48px;min-width:120px;padding:0 18px;border-radius:10px;border:2px solid #8a6d12;background:transparent;color:#3D2817;cursor:pointer}
+.rc .btn.p{min-height:56px;background:#D4AF37;color:#3D2817;font-weight:700;border-color:#D4AF37}
+.rc .btn.rise{animation-delay:var(--d)}
+.ember{position:absolute;right:18px;top:14px;width:26px;height:26px;color:#C85A54}
+.glow{animation:cardin .35s both,kindle 1.6s .3s both;box-shadow:0 0 46px 8px rgba(232,160,48,.55),0 18px 50px rgba(0,0,0,.5)}
+@keyframes kindle{from{box-shadow:0 0 0 0 rgba(232,160,48,0),0 18px 50px rgba(0,0,0,.5)}}
+/* dialog */
+.dim{position:absolute;inset:0;background:rgba(10,16,12,.62);z-index:30;display:grid;place-items:center}
+.dlg{width:540px;background:#F5E6D3;color:#3D2817;border:2px solid #D4AF37;border-radius:14px;padding:16px 20px;box-shadow:0 18px 50px rgba(0,0,0,.6);animation:cardin .3s both}
+.dlg h3{margin:0 0 8px;font-size:20px}
+.dlg .tabs{display:flex;gap:8px;margin-bottom:8px}
+.cmp{list-style:none;margin:0 0 10px;padding:0}.cmp li{display:flex;gap:10px;align-items:center;min-height:40px;padding:2px 0;border-bottom:1px solid #d6bf9f;max-width:none}
+.cmp svg{flex:0 0 22px;color:#2D6A4F}.cmp .ix{flex:1}
+.cmp .mini{display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+.cmp .mini span{font-size:12px;background:#E8D2B4;border-radius:99px;padding:1px 9px}
+.dlg .bt{display:flex;gap:10px;justify-content:flex-end}
+.dlg .btn{min-height:48px;min-width:120px;padding:0 18px;border-radius:10px;border:2px solid #8a6d12;background:transparent;color:#3D2817;cursor:pointer}
+.dlg .btn.p{min-height:56px;background:#D4AF37;border-color:#D4AF37;font-weight:700}
+.tip{position:absolute;z-index:80;width:260px;background:#FFF6E8;color:#3D2817;border:1px solid #8B7355;border-radius:10px;padding:10px 12px;font:14px/1.4 system-ui,sans-serif;box-shadow:0 8px 22px rgba(0,0,0,.45);pointer-events:none}
+.tip[hidden]{display:none}.tip b{display:block;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#8a6d12;margin-bottom:2px}
+.tip::after{content:"";position:absolute;left:var(--ax,50%);width:12px;height:12px;background:#FFF6E8;border:1px solid #8B7355;transform:translateX(-50%) rotate(45deg)}
+.tip.below::after{top:-7px;border-right:0;border-bottom:0}.tip.above::after{bottom:-7px;border-left:0;border-top:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<main>
+<h1>Stage flow in motion <span class="tag">PROPOSAL wording</span> <span class="tag">example amounts</span></h1>
+<p class="mut">Click through one stage: stage, objective found, fight result, go-on-or-go-home, next objective, stage-ending card, stage cleared. Pick a variant, or show two side by side. Arrow keys go Back and Next. Every player-facing string in the scenes is PROPOSAL wording. Jeff owns the copy.</p>
+
+<section class="ctl" aria-label="Mockup controls">
+  <div class="g" role="group" aria-label="Variant"><span class="lab">Variant</span>
+    <button class="btn0" data-var="1" aria-pressed="false">1 Status quo</button>
+    <button class="btn0" data-var="2" aria-pressed="false">2 Direction E</button>
+    <button class="btn0" data-var="3" aria-pressed="false">3 E + flame glow (RISKY)</button>
+  </div>
+  <label class="tg"><input type="checkbox" id="side"> Side by side</label>
+  <div class="g" id="cmpg" role="group" aria-label="Compare with" hidden><span class="lab">Compare with</span>
+    <button class="btn0" data-cmp="1" aria-pressed="false">1</button>
+    <button class="btn0" data-cmp="2" aria-pressed="false">2</button>
+    <button class="btn0" data-cmp="3" aria-pressed="false">3</button>
+  </div>
+  <label class="tg"><input type="checkbox" id="lose"> Lose an Echo</label>
+  <button class="btn0" id="replay">Replay motion</button>
+  <div class="g"><button class="btn0" id="back">&larr; Back</button><button class="btn0" id="next">Next &rarr;</button></div>
+</section>
+<ol class="st" id="steps" aria-label="Steps"></ol>
+<div class="subctl" id="subctl" hidden>
+  <span class="lab mut">Step 4 view</span>
+  <button class="btn0" data-sub="choice" aria-pressed="false">Choice</button>
+  <button class="btn0" data-sub="home" aria-pressed="false">Return home confirmation</button>
+  <button class="btn0" data-sub="retreat" aria-pressed="false">Retreat confirmation</button>
+  <label class="tg"><input type="checkbox" id="zero"> Before any objective is overcome</label>
+</div>
+<div id="scenes" class="scenes"></div>
+<div id="cap" class="cap2" aria-live="polite"></div>
+
+<h2>Legend and rules used</h2>
+<div class="note"><strong>PROPOSAL wording.</strong> All text inside the scenes is placeholder wording. Jeff decides the copy. <strong>Example amounts.</strong> Realm 2 example, two objectives (recover 24, then combat 20), realm scale 1.25, party of 4. 24 x 1.25 = 30. 20 x 1.25 = 25. Objectives earn 55 Ase. The Echoes stipend is 2 Ase per Echo home, cap 10 (D-43), so 8 Ase for 4 Echoes. Total 63 Ase. Ekwan +14 is an example only. Carried home: 12% of 30 = 3.6, shown as 4 (rounding of the partial is not decided). Retreat costs 10 Ase (D-46). Return home is free.</div>
+<table>
+<tr><th>Variant</th><th>Mid-stage card (step 3)</th><th>Decision (step 4)</th><th>Stage-ending card (step 6)</th></tr>
+<tr><td>1 Status quo</td><td>Chips and the Echo emotion list. Empty fight group. No ledger. No Ase anywhere.</td><td>Today's Advance and Return Home buttons. Plain confirmation. No carried figure.</td><td>Approved layout plus "home N of M" row.</td></tr>
+<tr><td>2 Direction E</td><td>Party and state, one line about what the fight changed, objective as a story mark, intel gained, "the Thread is whole so far", then Go home / Go on. No Ase number.</td><td>Confirmation shows who is safe, intel, whether the stage waits, then "carried" only above 0, and the cost.</td><td>Same as variant 1.</td></tr>
+<tr><td>3 E + flame glow</td><td>Variant 2 plus a wordless warm glow and an ember mark on the card. The feel agent rates this RISKY.</td><td>Same as variant 2.</td><td>Same as variant 1.</td></tr>
+</table>
+<div class="note"><strong>Flame glow risks (variant 3).</strong> It carries no data. If it scales to a goal, it reveals how many hidden objectives remain. In this mockup it only kindles once and does not scale to a total. Light alone is not accessible: the ember carries no meaning that text does not carry.</div>
+<div class="note"><strong>ASSUMED items shown in the scenes</strong> (also listed in the report):
+<ul>
+<li><span class="asm">ASSUMED</span> "The stage waits" and "what the party learned stays": GDD 20.8 says an unresolved stage instance locks and keeps what the player learned. It is not stated whether an overcome objective stays overcome after a return home.</li>
+<li><span class="asm">ASSUMED</span> The lost Echo falls in the last fight. The mid-stage card and the "Thread is whole so far" line stay unchanged by the toggle.</li>
+<li><span class="asm">ASSUMED</span> Stage-ending card: the fight group is empty (fights earn no Ase), so only the Stage group shows. Rank chip: A with everyone home, B with one lost. Rank for a loss is an example only.</li>
+<li><span class="asm">ASSUMED</span> The "Echoes alive" chip is replaced by the "home N of M" Echoes row. The Echoes tooltip text is a new line modelled on the decided text.</li>
+<li><span class="asm">ASSUMED</span> The retreat confirmation uses the same layout as the return home confirmation. A retreat keeps the 12% partial (D-46).</li>
+<li><span class="asm">ASSUMED</span> The explore label shows only objectives found, with no total, so it does not leak the hidden count.</li>
+<li><span class="asm">ASSUMED</span> In variants 2 and 3 the go-on / go-home choice sits on the card. In variant 1 it sits on the explore screen, as today.</li>
+</ul></div>
+<p class="mut">Motion rules used (5b of the economy recheck): party first, each Echo marked home in turn (130 ms each), the count completes, then a quiet Ase figure fades in. With a lost Echo: the sequence holds 550 ms on that Echo, the row names the Echo once, no minus figure, no price on a death, no "perfect" label. With prefers-reduced-motion: no animation, the final state shows at once.</p>
+</main>
+
+<script>
+const REDUCED=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const VN={1:"Status quo",2:"Direction E",3:"E + flame glow (RISKY)"};
+const STEPS=["Stage","Objective found","Fight result","Go on or go home","Next objective","Stage ends","Stage cleared"];
+const S={v:2,v2:1,side:false,step:1,sub:"choice",lose:false,zero:false,ledger:{},ended:false};
+const ECH=[["Adwoa","Grounded → Radiant","up","▲"],["Kofi","Uncertain → Hesitant","down","▼"],["Ama","Whole","same","•"],["Yaw","Burdened → Grounded","up","▲"]];
+const LOST=1;
+const COPY={objectives:["Objectives overcome","Only objectives the party found and overcame earn Ase. 2 of 2."],echoes:["Echoes home","Each Echo that comes home earns Ase."],carried:["Carried home","The party left early. It keeps a small part of what it overcame."]};
+const IC={
+ seal:'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>',
+ eye:'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>',
+ thread:'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h16" stroke="currentColor" stroke-width="2.5" fill="none"/><circle cx="4" cy="12" r="2.5" fill="currentColor"/><circle cx="20" cy="12" r="2.5" fill="currentColor"/></svg>',
+ safe:'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 12l3 3 5-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+ wait:'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v6l4 2" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+ ase:'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3c3 4 6 6 6 10a6 6 0 0 1-12 0c0-4 3-6 6-10z" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+ cost:'<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12h16M14 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg>'
+};
+const asm='<span class="asm">ASSUMED</span>';
+const ibtn=(k,l)=>`<button class="ibtn" aria-expanded="false" aria-label="Why: ${l}" data-c="${k}"><span>i</span></button>`;
+
+/* ---------- stage map ---------- */
+function mapView(cleared){
+ const objs=cleared?`<ul class="lines"><li><span class="ok">&#10003;</span> A lost keepsake was recovered. <span class="stat">found and overcome</span></li><li><span class="ok">&#10003;</span> The ground was held. <span class="stat">found and overcome</span></li></ul>`
+  :`<ul class="lines"><li>&bull; Not yet known</li></ul>`;
+ const intel=cleared?`<p>Gathered intel: the old well, the east path, the keeper of the ground.</p>`:`<p>Gathered intel: none</p>`;
+ return `<div class="hd"><span class="t">The second realm</span><span class="s">Stage map</span></div>
+ <div class="pan" style="left:28px;top:92px;width:420px;height:590px"><h4>Recovery cord</h4>
+  <div class="cord"><i class="f"></i><i class="${cleared?"n":""}"></i><i></i><i></i></div>
+  <div class="srowm"><span style="color:#7fd09a">&#10003;</span> Stage 1 <span class="sp"></span><span class="m">Cleared</span></div>
+  <div class="srowm cur"><span>&#9658;</span> Stage 2 <span class="sp"></span><span class="m">${cleared?"Cleared":"Ready"}</span></div>
+  <div class="srowm" style="opacity:.7"><span>&#9679;</span> Stage 3 <span class="sp"></span><span class="m">Locked</span></div></div>
+ <div class="pan" style="left:468px;top:92px;width:784px;height:590px"><h4>Stage 2</h4>
+  <p style="margin:0 0 6px"><span class="stat">${cleared?"Cleared":"Ready"}</span></p>
+  <h4 style="margin-top:14px">Objectives</h4>${objs}${intel}
+  <div style="position:absolute;right:20px;bottom:20px"><button class="vbtn" data-act="next">${cleared?"Enter next stage":"Enter next stage"}</button></div></div>`;
+}
+/* ---------- explore ---------- */
+function exploreView(o){
+ // o: kind, px,py (party), mx,my (marker), state: found|done , mode: toast|decide|none, found count, doneFirst
+ let g="";
+ for(let y=0;y<6;y++)for(let x=0;x<10;x++){
+  let c=(x*7+y*3)%4;let inner="",cls="t"+c;
+  if(o.trail&&o.trail.some(t=>t[0]===x&&t[1]===y))cls="tp";
+  if(o.done1&&x===5&&y===3){cls="mk done";inner="&#10003;"}
+  if(x===o.mx&&y===o.my){cls="mk"+(o.mstate==="new"?" new":"");inner=o.kind==="recover"?"&#9670;":"&#10005;"}
+  if(x===o.px&&y===o.py){cls="tok";inner="&#9679;"}
+  g+=`<div class="${cls}" aria-hidden="true">${inner}</div>`;
+ }
+ const toast=o.mode==="toast"?`<div class="toast" role="status"><b>Objective found</b><p>${o.kind==="recover"?"A lost keepsake lies beneath the old well.":"Something guards the way ahead. The party must hold the ground."}</p></div>`:"";
+ const dec=o.mode==="decide"?`<div class="decide"><button class="vbtn" data-act="next">Advance &rarr;</button><button class="vbtn sec" data-act="sub:home">Return Home</button></div>`:"";
+ return `<div class="hd"><span class="t">Stage 2</span><span class="s">Exploring &middot; Objectives found: ${o.found}</span></div>
+ <div class="grid">${g}</div>
+ <div class="side"><h4 style="margin:0;color:#D4AF37;font-size:12px;letter-spacing:1px;text-transform:uppercase">Steps</h4><div class="bar"><i style="width:${o.steps}%"></i></div><span class="stat">Directive</span></div>${toast}${dec}`;
+}
+/* ---------- cards ---------- */
+const echoRows=(opts)=>ECH.map((x,i)=>`<div class="echo rise" style="--d:${.15+i*.1}s"><span class="av">${x[0][0]}</span><span class="n">${x[0]}</span><span class="st2">${x[1]}</span><span class="ar ${x[2]}">${x[3]}</span></div>`).join("");
+function cardSQmid(){
+ return `<div class="rc" role="region" aria-label="Fight result"><div class="body">
+ <div class="hdr"><span class="banner">Victory</span><span class="sum">Stage 2</span></div>
+ <div class="chips"><span class="chip rank">Rank <b>A</b></span><span class="chip">Enemies defeated <b>3</b></span><span class="chip">Echoes alive <b>4</b></span><span class="chip">Rounds <b>5</b></span></div>
+ <div class="sect"><span>Echo emotion</span></div>${echoRows()}</div>
+ <div class="footer"><button class="btn p" data-act="next">Continue</button></div></div>`;
+}
+function cardE(glow,dim){
+ return `<div class="rc${glow?" glow":""}${dim?" dimmed":""}" role="region" aria-label="Fight result">${glow?`<svg class="ember" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c3 4 7 6 7 11a7 7 0 0 1-14 0c0-3 2-5 3-7 1 2 2 3 4-4z" fill="currentColor"/></svg>`:""}
+ <div class="body">
+ <div class="hdr"><span class="banner">Victory</span><span class="sum">Stage 2</span><span class="why">The way ahead is open.</span></div>
+ <div class="sect"><span>The party</span><span>4 of 4 with the party</span></div>${echoRows()}
+ <div class="line rise" style="--d:.6s">Kofi froze. Adwoa went back for him.</div>
+ <div class="srow rise" style="--d:.75s">${IC.seal}<span><b>Found and overcome.</b> A lost keepsake is recovered.</span></div>
+ <div class="srow rise" style="--d:.85s">${IC.eye}<span><b>Learned.</b> Another task waits further on, past the old well.</span></div>
+ <div class="srow thr rise" style="--d:.95s">${IC.thread}<span>The Thread is whole so far.</span></div></div>
+ <div class="footer"><button class="btn rise" style="--d:1.2s" data-act="sub:home">Go home</button><button class="btn p rise" style="--d:1.3s" data-act="next">Go on</button></div></div>`;
+}
+function cardEnd(vi){
+ const n=ECH.length,lose=S.lose,home=lose?n-1:n,stip=2*home,total=55+stip;
+ const rows=ECH.map((x,i)=>{const lost=lose&&i===LOST;
+  return `<div class="echo${lost?" lost":""}" data-i="${i}" ${lost?'data-lost="1"':""}><span class="av">${x[0][0]}</span><span class="n"><span class="nm">${x[0]}</span><span class="lostline">${x[0]} did not come home.</span></span><span class="st2">${x[1]}</span><span class="ar ${x[2]}">${x[3]}</span><span class="hm">&#10003; home</span></div>`}).join("");
+ const open=!!S.ledger[vi];
+ return `<div class="rc" role="region" aria-label="Stage result"><div class="body">
+ <div class="hdr"><span class="banner">Victory</span><span class="sum">Stage 2 &middot; Stage cleared</span></div>
+ <div class="chips"><span class="chip rank">Rank <b>${lose?"B":"A"}</b></span><span class="chip">Enemies defeated <b>5</b></span><span class="chip">Rounds <b>7</b></span></div>
+ <div class="homeseq" data-home="${home}" data-n="${n}">
+  <div class="sect"><span>Echoes</span><span class="hcount" data-final="home ${home} of ${n}">home ${home} of ${n}</span></div>
+  ${rows}
+  <div class="homeline">${lose?"":"All four came home."}</div>
+  <span class="sr" role="status">${home} of ${n} came home.</span>
+ </div>
+ <button class="pay after" data-act="ledger" aria-expanded="${open}"><span class="a">+${total} Ase</span><span class="e">+14 Ekwan</span><span class="sp"></span><span class="hint">How it was earned</span><span class="chev">${open?"&#9652;":"&#9662;"}</span></button>
+ <div class="ledger after" ${open?"":"hidden"}>
+  <div class="grp"><span>Stage</span><i>Stage cleared</i></div>
+  <div class="entry"><span class="l">Objectives overcome</span><span class="d">+55 Ase</span>${ibtn("objectives","Objectives overcome")}</div>
+  <div class="entry"><span class="l">${home} of ${n} Echoes home</span><span class="d">+${stip} Ase</span>${ibtn("echoes","Echoes home")}</div>
+  <div class="tot"><span>Total earned</span><span>= ${total} Ase</span></div>
+  <div class="entry" style="border:0"><span class="l" style="color:#7a4a00">Ekwan earned</span><span class="d ekw">+14 Ekwan</span><span class="sp48"></span></div>
+ </div></div>
+ <div class="footer"><button class="btn p" data-act="next">Continue</button></div></div>`;
+}
+/* ---------- decision dialog ---------- */
+function dialog(vi,kind){
+ const v=vi, retreat=kind==="retreat";
+ if(S.ended)return `<div class="dim"><div class="dlg"><h3>${retreat?"The party withdraws.":"The party goes home."}</h3><p>The sequence would end here. Use Back to continue the demo.</p></div></div>`;
+ if(v===1){
+  return `<div class="dim"><div class="dlg" role="dialog" aria-modal="true" aria-label="Confirm"><h3>${retreat?"Retreat?":"Return home?"}</h3>
+  <p>${retreat?"A retreat costs 10 Ase.":"The party leaves the stage."}</p>
+  <div class="bt"><button class="btn" data-act="sub:choice">${retreat?"Fight on":"Stay"}</button><button class="btn p" data-act="done">${retreat?"Retreat":"Go home"}</button></div></div></div>`;
+ }
+ const z=S.zero;
+ return `<div class="dim"><div class="dlg" role="dialog" aria-modal="true" aria-label="Confirm"><h3>${retreat?"Retreat from this fight?":"Go home now?"}</h3>
+ <ul class="cmp">
+  <li>${IC.safe}<span class="ix"><b>Everyone is safe.</b><span class="mini">${ECH.map(x=>`<span>${x[0]}: ${x[1].split("→").pop().trim()}</span>`).join("")}</span></span></li>
+  ${z?"":`<li>${IC.eye}<span class="ix"><b>Learned.</b> Another task waits further on.</span></li>`}
+  <li>${IC.wait}<span class="ix"><b>The stage waits.</b> The party can come back to it. What it learned stays.${asm}</span></li>
+  ${z?"":`<li>${IC.ase}<span class="ix"><b>Carried home.</b> 4 Ase</span>${ibtn("carried","Carried home")}</li>`}
+  <li>${IC.cost}<span class="ix"><b>Cost.</b> ${retreat?"A retreat costs 10 Ase.":"Going home costs nothing."}</span></li>
+ </ul>
+ <div class="bt"><button class="btn" data-act="sub:choice">${retreat?"Fight on":"Stay"}</button><button class="btn p" data-act="done">${retreat?"Retreat":"Go home"}</button></div></div></div>`;
+}
+/* ---------- scene ---------- */
+function scene(vi){
+ const st=S.step;let inner="";
+ const base=(o)=>exploreView(o);
+ if(st===1)inner=mapView(false);
+ else if(st===2)inner=base({kind:"recover",px:4,py:3,mx:5,my:3,mstate:"new",found:1,steps:30,mode:"toast",trail:[[1,3],[2,3],[3,3]]});
+ else if(st===3){
+  inner=base({kind:"recover",px:5,py:3,mx:-1,my:-1,found:1,steps:45,trail:[[1,3],[2,3],[3,3],[4,3]]})+(vi===1?cardSQmid():cardE(vi===3,false));
+ }else if(st===4){
+  if(vi===1){
+   inner=base({kind:"recover",px:5,py:3,mx:-1,my:-1,found:1,done1:false,steps:45,mode:"decide",trail:[[1,3],[2,3],[3,3],[4,3]]});
+   if(S.sub!=="choice")inner+=dialog(vi,S.sub);
+  }else{
+   inner=base({kind:"recover",px:5,py:3,mx:-1,my:-1,found:1,steps:45,trail:[[1,3],[2,3],[3,3],[4,3]]})+cardE(false,S.sub!=="choice").replace(/ rise/g,"").replace(/style="--d:[^"]*"/g,"");
+   if(S.sub!=="choice")inner+=dialog(vi,S.sub);
+  }
+ }else if(st===5)inner=base({kind:"combat",px:7,py:2,mx:8,my:2,mstate:"new",found:2,steps:70,mode:"toast",trail:[[1,3],[2,3],[3,3],[4,3],[5,3],[6,3],[6,2]],done1:true});
+ else if(st===6)inner=base({kind:"combat",px:8,py:2,mx:-1,my:-1,found:2,steps:100,trail:[[6,3],[6,2],[7,2]],done1:true})+cardEnd(vi);
+ else inner=mapView(true);
+ return `<div class="vp" data-v="${vi}"><span class="pp">PROPOSAL wording &middot; example amounts</span>${inner}<div class="tip" role="tooltip" hidden></div></div>`;
+}
+/* ---------- motion for step 6 ---------- */
+let timers=[];
+const at=(ms,fn)=>timers.push(setTimeout(fn,ms));
+function playHome(vp){
+ const seq=vp.querySelector(".homeseq");if(!seq||REDUCED)return;
+ const rows=[...seq.querySelectorAll(".echo")],cnt=seq.querySelector(".hcount"),line=seq.querySelector(".homeline");
+ const after=vp.querySelectorAll(".after"),n=+seq.dataset.n;
+ let c=0;
+ rows.forEach(r=>{r.classList.add("pend")});
+ cnt.textContent=`home 0 of ${n}`;cnt.classList.remove("whole");
+ line.classList.add("pre");after.forEach(a=>a.classList.add("pre"));
+ const lostRow=seq.querySelector("[data-lost]");
+ if(lostRow)lostRow.classList.remove("lost");
+ let t=500;
+ rows.forEach(r=>{
+  if(r===lostRow){
+   at(t,()=>{r.classList.add("hold","lost")});t+=550;
+  }else{
+   at(t,()=>{r.classList.remove("pend");c++;cnt.textContent=`home ${c} of ${n}`});t+=130;
+  }
+ });
+ at(t+150,()=>{cnt.textContent=cnt.dataset.final;cnt.classList.add("whole");line.classList.remove("pre")});
+ at(t+800,()=>{after.forEach(a=>a.classList.remove("pre"))});
+}
+function clearT(){timers.forEach(clearTimeout);timers=[]}
+/* ---------- render ---------- */
+const $=s=>document.querySelector(s);
+function fit(){
+ const avail=document.querySelector("main").clientWidth;
+ const s=S.side?Math.min(.75,(avail-24)/2/1280):Math.min(1,avail/1280);
+ document.querySelectorAll(".frame").forEach(f=>{f.style.width=1280*s+"px";f.style.height=720*s+"px";f.querySelector(".vp").style.transform=`scale(${s})`;f.dataset.s=s});
+}
+function render(){
+ clearT();
+ const list=S.side?[S.v,S.v2]:[S.v];
+ $("#scenes").innerHTML=list.map(vi=>`<div class="scn"><p class="cap">Variant ${vi}: ${VN[vi]}</p><div class="frame">${scene(vi)}</div></div>`).join("");
+ document.querySelectorAll(".vp").forEach(vp=>{wire(vp);playHome(vp)});
+ fit();
+ document.querySelectorAll("[data-var]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.var===S.v)));
+ document.querySelectorAll("[data-cmp]").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.cmp===S.v2)));
+ $("#cmpg").hidden=!S.side;
+ document.querySelectorAll("[data-sub]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.sub===S.sub)));
+ $("#subctl").hidden=S.step!==4;
+ $("#back").disabled=S.step===1;$("#next").disabled=S.step===7;
+ $("#steps").innerHTML=STEPS.map((n,i)=>`<li><button data-step="${i+1}" ${i+1===S.step?'aria-current="step"':""}><b>${i+1}</b>${n}</button></li>`).join("");
+ document.querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>go(+b.dataset.step));
+ $("#cap").innerHTML=caption();
+}
+function caption(){
+ const v=S.v,e=v!==1;
+ const m={
+  1:"The stage map. The objectives are hidden: one line says \"Not yet known\", with no count.",
+  2:"An objective is found. The marker pops in and a short note names it. No Ase is shown.",
+  3:v===1?"Status quo: chips and the Echo emotion list. No ledger, no Ase, nothing about the stakes. The space below the list is empty.":"Direction E: the party and their state first, then one line about what the fight changed, the objective as a mark, intel gained, the Thread, then the choice. Each part rises in turn; the choice buttons come last. No Ase number."+(v===3?" Variant 3 adds a wordless glow and an ember mark (RISKY).":""),
+  4:v===1?"Status quo: Advance and Return Home on the explore screen. The confirmation has no carried figure. Use the step 4 view buttons.":"Direction E: the confirmation shows safe Echoes, intel, whether the stage waits, \"carried\" only above 0, and the cost. Try the retreat view and the \"before any objective\" box (the Ase line disappears).",
+  5:"The next objective is found. Same in all variants.",
+  6:"Stage-ending card. Watch the sequence: party first, each Echo marked home, the count completes, then a quiet Ase figure fades in. Turn on \"Lose an Echo\" and press Replay motion: it holds on that Echo.",
+  7:"Back on the stage map. The stage reads as cleared, both objectives are found and overcome, and the recovery cord has one more segment."
+ };
+ return `<b>Step ${S.step}: ${STEPS[S.step-1]}.</b> ${m[S.step]}`;
+}
+function go(n){S.step=Math.max(1,Math.min(7,n));if(S.step!==4){S.sub="choice";S.ended=false}render()}
+/* ---------- in-scene wiring ---------- */
+function showTip(vp,b){
+ const tip=vp.querySelector(".tip"),s=vp.getBoundingClientRect().width/1280,c=COPY[b.dataset.c];
+ vp.querySelectorAll(".ibtn[aria-expanded=true]").forEach(x=>x.setAttribute("aria-expanded","false"));
+ b.setAttribute("aria-expanded","true");
+ tip.innerHTML=`<b>${c[0]}</b>${c[1]}`;tip.hidden=false;
+ const vr=vp.getBoundingClientRect(),r=b.getBoundingClientRect();
+ const w=tip.offsetWidth,h=tip.offsetHeight,cx=(r.left+r.width/2-vr.left)/s,top=(r.top-vr.top)/s,bot=(r.bottom-vr.top)/s;
+ const left=Math.min(Math.max(cx-w/2,8),1280-w-8),below=bot+h+14<720;
+ tip.className="tip "+(below?"below":"above");tip.style.left=left+"px";tip.style.top=(below?bot+8:top-h-8)+"px";tip.style.setProperty("--ax",(cx-left)+"px");
+}
+function hideTip(vp){const t=vp.querySelector(".tip");t.hidden=true;vp.querySelectorAll(".ibtn[aria-expanded=true]").forEach(x=>x.setAttribute("aria-expanded","false"))}
+function wire(vp){
+ const vi=+vp.dataset.v;
+ vp.addEventListener("click",ev=>{
+  const ib=ev.target.closest(".ibtn");
+  if(ib){ev.stopPropagation();const open=ib.getAttribute("aria-expanded")==="true";open?hideTip(vp):showTip(vp,ib);return}
+  hideTip(vp);
+  const a=ev.target.closest("[data-act]");if(!a)return;
+  const act=a.dataset.act;
+  if(act==="next")go(S.step+1);
+  else if(act.startsWith("sub:")){S.sub=act.slice(4);S.ended=false;render()}
+  else if(act==="done"){S.ended=true;render()}
+  else if(act==="ledger"){
+   S.ledger[vi]=!S.ledger[vi];const open=S.ledger[vi];
+   const l=vp.querySelector(".ledger");l.hidden=!open;a.setAttribute("aria-expanded",String(open));a.querySelector(".chev").innerHTML=open?"&#9652;":"&#9662;";
+  }
+ });
+ vp.querySelectorAll(".ibtn").forEach(b=>{
+  b.addEventListener("mouseenter",()=>showTip(vp,b));
+  b.addEventListener("mouseleave",()=>{if(matchMedia("(hover:hover)").matches)hideTip(vp)});
+  b.addEventListener("focus",()=>showTip(vp,b));
+  b.addEventListener("blur",()=>hideTip(vp));
+ });
+}
+/* ---------- page controls ---------- */
+document.querySelectorAll("[data-var]").forEach(b=>b.onclick=()=>{S.v=+b.dataset.var;if(S.v2===S.v)S.v2=S.v===1?2:1;render()});
+document.querySelectorAll("[data-cmp]").forEach(b=>b.onclick=()=>{S.v2=+b.dataset.cmp;render()});
+document.querySelectorAll("[data-sub]").forEach(b=>b.onclick=()=>{S.sub=b.dataset.sub;S.ended=false;render()});
+$("#side").onchange=e=>{S.side=e.target.checked;if(S.v2===S.v)S.v2=S.v===1?2:1;render()};
+$("#lose").onchange=e=>{S.lose=e.target.checked;render()};
+$("#zero").onchange=e=>{S.zero=e.target.checked;render()};
+$("#replay").onclick=()=>render();
+$("#back").onclick=()=>go(S.step-1);
+$("#next").onclick=()=>go(S.step+1);
+document.addEventListener("keydown",ev=>{
+ if(ev.key==="Escape")document.querySelectorAll(".vp").forEach(hideTip);
+ if(ev.altKey||ev.ctrlKey||ev.metaKey)return;
+ if(ev.key==="ArrowRight"){go(S.step+1);ev.preventDefault()}
+ else if(ev.key==="ArrowLeft"){go(S.step-1);ev.preventDefault()}
+});
+addEventListener("resize",fit);
+render();
+</script>
+</body>
+</html>

@@ -337,7 +337,7 @@ static func break_vow(
 	var fear_d      := int(costs.get("fear_delta", 0))
 	var bond_d      := int(costs.get("bond_score_delta", 0))
 
-	# Economy penalties — spend what we can (clamp to zero if broke)
+	# Economy penalties. A spend that exceeds the balance is denied whole (nothing is taken); the result is ignored.
 	if econ != null and ase_cost > 0:
 		econ.spend_ase(ase_cost, "vow.break", logger, t)
 	if econ != null and ekwan_cost > 0:

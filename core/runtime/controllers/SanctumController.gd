@@ -134,8 +134,13 @@ func handle_summon(action: Dictionary, t: int) -> FlowActionOutcome:
 	var count := int(action.get("count", 1))
 	if count < 1:
 		count = 1
-	if count > 10:
-		count = 10
+	if count > SummonService.MAX_BATCH:
+		count = SummonService.MAX_BATCH
+
+	# A locked grade is refused before settling, so the denial changes no state.
+	var lock_cfg := _summoning_cfg()
+	if not SummonService.grade_enabled(lock_cfg, flow_ctx.selected_summon_grade):
+		return _grade_locked_outcome(flow_ctx.selected_summon_grade, t)
 
 	# 1) settle before spend
 	# V2-INFRA-003 Phase 4 Slice 7: routed to EconomySettlementService.settle() — the private
@@ -153,20 +158,19 @@ func handle_summon(action: Dictionary, t: int) -> FlowActionOutcome:
 			"source": "sanctum.summon.before_spend"
 		}, t)
 
-	# 2) read cost (grade-based; fall back to flat key if grade missing)
+	# 2) read cost: summon i of the action pays for the Echo after the i-1 before it
 	var balance := config_service.get_balance()
 	var data_v: Variant = balance.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var summ_v: Variant = data.get("summoning", {})
 	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
 
-	var fallback_flat_cost := int(summ_cfg.get("ase_cost_per_summon", 60))
-	var grade_costs_v: Variant = summ_cfg.get("ase_cost_per_summon_by_grade", {})
-	var grade_costs: Dictionary = grade_costs_v if grade_costs_v is Dictionary else {}
 	var grade := flow_ctx.selected_summon_grade
-	var cost_each := int(grade_costs.get(grade, fallback_flat_cost))
-
-	var total_cost := cost_each * count
+	var living := SummonService.living_count(flow_ctx.save_data)
+	var prices := SummonService.batch_prices(summ_cfg, grade, living, count)
+	var total_cost := 0
+	for p: int in prices:
+		total_cost += p
 
 	# 3) check funds
 	var econ_v: Variant = flow_ctx.save_data.get("economy", {})
@@ -177,11 +181,15 @@ func handle_summon(action: Dictionary, t: int) -> FlowActionOutcome:
 		logger.info(t, "sanctum.summon.denied", "Not enough Ase to summon", {
 			"ase": ase_before,
 			"grade": grade,
-			"cost_each": cost_each,
+			"prices": prices,
 			"count": count,
 			"total_cost": total_cost
 		})
-		return FlowActionOutcome.handled_outcome()
+		var denied := FlowSummonState.build_snapshot(flow_ctx, t)
+		(denied["data"] as Dictionary)["summon_denied"] = {
+			"reason": "insufficient_ase", "count": count, "total_cost": total_cost, "ase_balance": ase_before
+		}
+		return FlowActionOutcome.snapshot_outcome(denied)
 
 	# 4) spend once
 	var spend_reason := "summon.cost." + grade
@@ -247,6 +255,21 @@ func handle_summon(action: Dictionary, t: int) -> FlowActionOutcome:
 	return FlowActionOutcome.snapshot_outcome(FlowSummonState.build_snapshot(flow_ctx, t)).with_save_reason("sanctum.summon")
 
 
+func _summoning_cfg() -> Dictionary:
+	var data_v: Variant = config_service.get_balance().get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var summ_v: Variant = data.get("summoning", {})
+	return summ_v if summ_v is Dictionary else {}
+
+
+## Refusal for a disabled grade: no spend, no Echo, no change to the selected grade.
+func _grade_locked_outcome(grade: String, t: int) -> FlowActionOutcome:
+	logger.info(t, "sanctum.summon.grade_locked", "Summon grade is locked", { "grade": grade })
+	var denied := FlowSummonState.build_snapshot(flow_ctx, t)
+	(denied["data"] as Dictionary)["summon_denied"] = { "reason": "grade_locked", "grade": grade }
+	return FlowActionOutcome.snapshot_outcome(denied)
+
+
 ## sanctum.grade_select — moved verbatim from FlowRuntime._handle_sanctum_grade_select.
 func handle_grade_select(action: Dictionary, t: int) -> FlowActionOutcome:
 	var grade := str(action.get("grade", "")).strip_edges()
@@ -260,19 +283,19 @@ func handle_grade_select(action: Dictionary, t: int) -> FlowActionOutcome:
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var summ_v: Variant = data.get("summoning", {})
 	var summ_cfg: Dictionary = summ_v if summ_v is Dictionary else {}
-	var grade_costs_v: Variant = summ_cfg.get("ase_cost_per_summon_by_grade", {})
-	var grade_costs: Dictionary = grade_costs_v if grade_costs_v is Dictionary else {}
-
-	if not grade_costs.has(grade):
+	if not SummonService.GRADES.has(grade):
 		logger.debug(t, "economy.summon.grade_select.denied", "Grade select denied (invalid grade key)", {
 			"grade": grade,
-			"valid_grades": grade_costs.keys()
+			"valid_grades": SummonService.GRADES
 		})
 		return FlowActionOutcome.handled_outcome()
 
+	if not SummonService.grade_enabled(summ_cfg, grade):
+		return _grade_locked_outcome(grade, t)
+
 	flow_ctx.selected_summon_grade = grade
 
-	var ase_cost := int(grade_costs.get(grade, 60))
+	var ase_cost := SummonService.price_for(summ_cfg, grade, SummonService.living_count(flow_ctx.save_data) + 1)
 	var econ_v: Variant = flow_ctx.save_data.get("economy", {})
 	var econ_data: Dictionary = econ_v if econ_v is Dictionary else {}
 	var ase_balance := int(econ_data.get("ase", 0))

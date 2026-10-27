@@ -1,0 +1,187 @@
+Godot Engine v4.6.1.stable.official.14d19694e - https://godotengine.org
+
+[t:0][Debug][Core] Boot sequence started
+[t:1][Debug][Config] Loaded config from path: res://data/balance.json
+[t:1][Debug][Config] Config validation OK
+[t:2][Debug][Config] Loaded config from path: res://data/actors.json
+[t:2][Debug][Config] Config validation OK
+[t:3][Debug][Config] Loaded config from path: res://data/realms.json
+[t:3][Debug][Config] Config validation OK
+[t:4][Info][Save] No save artifacts found
+[t:5][Info][Save] Saved transactional snapshot
+[t:6][Info][State] state.flow ∅ → flow.splash
+[t:7][Debug][Core] Snapshot emitted
+RISK_FIGHT directive.scout_carefully | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=6 | par=7.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.17 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | recover | seed=2 | win=true | reason=relic_secured | rounds=4 | par=4.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.82 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.27 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.73 | pace=full | frac=0.82 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.83 | pace=none | frac=0.11 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.91 | pace=none | frac=0.15 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=11 | par=6.82 | pace=none | frac=0.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.scout_carefully | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=10 | par=6.25 | pace=none | frac=0.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=6 | par=7.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.17 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | recover | seed=2 | win=true | reason=relic_secured | rounds=4 | par=4.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.82 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.27 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.73 | pace=full | frac=0.82 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=8 | par=5.83 | pace=none | frac=0.46 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=8 | par=5.91 | pace=none | frac=0.49 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=10 | par=6.82 | pace=none | frac=0.27 | started=5 | dead=0 | answers={}
+RISK_FIGHT directive.seek_signs | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.hold | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=6 | par=7.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":4}
+RISK_FIGHT guidance.hold | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":4}
+RISK_FIGHT guidance.hold | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.17 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":3}
+RISK_FIGHT guidance.hold | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":2}
+RISK_FIGHT guidance.hold | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":4}
+RISK_FIGHT guidance.hold | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":3,"hesitate":10}
+RISK_FIGHT guidance.hold | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":3,"hesitate":11}
+RISK_FIGHT guidance.hold | recover | seed=2 | win=true | reason=relic_secured | rounds=4 | par=4.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":6,"hesitate":12}
+RISK_FIGHT guidance.hold | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.82 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":9}
+RISK_FIGHT guidance.hold | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.27 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":6,"hesitate":9}
+RISK_FIGHT guidance.hold | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.73 | pace=full | frac=0.82 | started=5 | dead=0 | answers={"align":6,"hesitate":4}
+RISK_FIGHT guidance.hold | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.83 | pace=none | frac=0.11 | started=5 | dead=0 | answers={"align":6,"hesitate":5}
+RISK_FIGHT guidance.hold | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.91 | pace=none | frac=0.15 | started=5 | dead=0 | answers={"align":6,"hesitate":5}
+RISK_FIGHT guidance.hold | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=11 | par=6.82 | pace=none | frac=0.00 | started=5 | dead=0 | answers={"align":7,"hesitate":6}
+RISK_FIGHT guidance.hold | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=11 | par=6.25 | pace=none | frac=0.00 | started=5 | dead=0 | answers={"align":14,"hesitate":1}
+RISK_FIGHT guidance.advance | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=6 | par=7.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.advance | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.advance | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.17 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.advance | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.advance | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.advance | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":14}
+RISK_FIGHT guidance.advance | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":14}
+RISK_FIGHT guidance.advance | recover | seed=2 | win=true | reason=relic_secured | rounds=4 | par=4.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":17,"hesitate":2}
+RISK_FIGHT guidance.advance | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.82 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":9}
+RISK_FIGHT guidance.advance | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.27 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":14}
+RISK_FIGHT guidance.advance | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.73 | pace=full | frac=0.82 | started=5 | dead=0 | answers={"refuse":5}
+RISK_FIGHT guidance.advance | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.83 | pace=none | frac=0.11 | started=5 | dead=0 | answers={"refuse":4}
+RISK_FIGHT guidance.advance | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.91 | pace=none | frac=0.15 | started=5 | dead=0 | answers={"refuse":4}
+RISK_FIGHT guidance.advance | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=11 | par=6.82 | pace=none | frac=0.00 | started=5 | dead=0 | answers={"hesitate":1,"refuse":4}
+RISK_FIGHT guidance.advance | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=10 | par=6.25 | pace=none | frac=0.00 | started=5 | dead=0 | answers={"refuse":6}
+RISK_FIGHT guidance.protect | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=6 | par=7.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.17 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | recover | seed=2 | win=true | reason=relic_secured | rounds=4 | par=4.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.82 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.27 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.73 | pace=full | frac=0.82 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.83 | pace=none | frac=0.11 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.91 | pace=none | frac=0.15 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=11 | par=6.82 | pace=none | frac=0.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.protect | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=10 | par=6.25 | pace=none | frac=0.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=6 | par=7.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.17 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":14}
+RISK_FIGHT guidance.withdraw | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":14}
+RISK_FIGHT guidance.withdraw | recover | seed=2 | win=true | reason=relic_secured | rounds=4 | par=4.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":17,"hesitate":2}
+RISK_FIGHT guidance.withdraw | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.82 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":9}
+RISK_FIGHT guidance.withdraw | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.27 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":14}
+RISK_FIGHT guidance.withdraw | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.73 | pace=full | frac=0.82 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.83 | pace=none | frac=0.11 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.91 | pace=none | frac=0.15 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=11 | par=6.82 | pace=none | frac=0.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.withdraw | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=10 | par=6.25 | pace=none | frac=0.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT guidance.engage | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=6 | par=7.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":30}
+RISK_FIGHT guidance.engage | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":30}
+RISK_FIGHT guidance.engage | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.17 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":25}
+RISK_FIGHT guidance.engage | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=5 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":25}
+RISK_FIGHT guidance.engage | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=6.25 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":29}
+RISK_FIGHT guidance.engage | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":15}
+RISK_FIGHT guidance.engage | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":15}
+RISK_FIGHT guidance.engage | recover | seed=2 | win=true | reason=relic_secured | rounds=5 | par=4.00 | pace=full | frac=0.70 | started=5 | dead=0 | answers={"align":1,"hesitate":19,"refuse":4}
+RISK_FIGHT guidance.engage | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.82 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"hesitate":10}
+RISK_FIGHT guidance.engage | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.27 | pace=full | frac=1.00 | started=5 | dead=0 | answers={"align":1,"hesitate":14}
+RISK_FIGHT guidance.engage | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.73 | pace=full | frac=0.82 | started=5 | dead=0 | answers={"align":28,"hesitate":5,"refuse":7}
+RISK_FIGHT guidance.engage | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.83 | pace=none | frac=0.11 | started=5 | dead=0 | answers={"align":28,"hesitate":5,"refuse":8}
+RISK_FIGHT guidance.engage | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.91 | pace=none | frac=0.15 | started=5 | dead=0 | answers={"align":24,"hesitate":7,"refuse":8}
+RISK_FIGHT guidance.engage | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=11 | par=6.82 | pace=none | frac=0.00 | started=5 | dead=0 | answers={"align":27,"hesitate":11,"refuse":16}
+RISK_FIGHT guidance.engage | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=9 | par=6.25 | pace=none | frac=0.32 | started=5 | dead=0 | answers={"align":31,"hesitate":6,"refuse":8}
+RISK_FIGHT party.size_3 | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=7 | par=7.50 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=8 | par=6.43 | pace=full | frac=0.71 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=8 | par=7.50 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=7 | par=6.43 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=8 | par=7.50 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | recover | seed=1 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | recover | seed=2 | win=true | reason=relic_secured | rounds=3 | par=3.50 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.71 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | recover | seed=4 | win=true | reason=relic_secured | rounds=3 | par=3.14 | pace=full | frac=1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=12 | par=6.43 | pace=none | frac=0.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=9 | par=6.00 | pace=none | frac=0.20 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=9 | par=5.57 | pace=none | frac=0.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | purify_shrine | seed=3 | win=false | reason=shrine_destroyed | rounds=43 | par=6.43 | pace=- | frac=-1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.size_3 | purify_shrine | seed=4 | win=false | reason=shrine_destroyed | rounds=29 | par=6.43 | pace=- | frac=-1.00 | started=3 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | combat | seed=0 | win=true | reason=all_enemies_defeated | rounds=5 | par=5.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | combat | seed=1 | win=true | reason=all_enemies_defeated | rounds=5 | par=5.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | combat | seed=2 | win=true | reason=all_enemies_defeated | rounds=4 | par=4.93 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | combat | seed=3 | win=true | reason=all_enemies_defeated | rounds=5 | par=5.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | combat | seed=4 | win=true | reason=all_enemies_defeated | rounds=5 | par=5.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | recover | seed=0 | win=true | reason=relic_secured | rounds=3 | par=2.67 | pace=full | frac=0.95 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | recover | seed=1 | win=true | reason=relic_secured | rounds=2 | par=2.67 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | recover | seed=2 | win=true | reason=relic_secured | rounds=3 | par=3.00 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | recover | seed=3 | win=true | reason=relic_secured | rounds=2 | par=2.33 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | recover | seed=4 | win=true | reason=relic_secured | rounds=2 | par=2.67 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | purify_shrine | seed=0 | win=true | reason=all_enemies_defeated | rounds=5 | par=4.93 | pace=full | frac=1.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | purify_shrine | seed=1 | win=true | reason=all_enemies_defeated | rounds=6 | par=4.67 | pace=full | frac=0.63 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | purify_shrine | seed=2 | win=true | reason=all_enemies_defeated | rounds=7 | par=4.33 | pace=none | frac=0.00 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | purify_shrine | seed=3 | win=true | reason=all_enemies_defeated | rounds=7 | par=5.00 | pace=none | frac=0.40 | started=5 | dead=0 | answers={}
+RISK_FIGHT party.standing_3 | purify_shrine | seed=4 | win=true | reason=all_enemies_defeated | rounds=6 | par=5.00 | pace=full | frac=0.80 | started=5 | dead=0 | answers={}
+RISK_TABLE row | mode | fights | win_rate | mean_rounds | pace full/partial/none | mean_dead | mean_frac
+RISK_TABLE directive.scout_carefully | combat | 5 | 1.00 | 5.6 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE directive.scout_carefully | recover | 5 | 1.00 | 3.0 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE directive.scout_carefully | purify_shrine | 5 | 1.00 | 9.4 | 1/0/4 | 0.00 | 0.22
+RISK_TABLE directive.seek_signs | combat | 5 | 1.00 | 5.8 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE directive.seek_signs | recover | 5 | 1.00 | 3.0 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE directive.seek_signs | purify_shrine | 5 | 1.00 | 8.0 | 2/0/3 | 0.00 | 0.61
+RISK_TABLE guidance.hold | combat | 5 | 1.00 | 5.6 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.hold | recover | 5 | 1.00 | 3.0 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.hold | purify_shrine | 5 | 1.00 | 9.6 | 1/0/4 | 0.00 | 0.22
+RISK_TABLE guidance.advance | combat | 5 | 1.00 | 5.6 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.advance | recover | 5 | 1.00 | 3.0 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.advance | purify_shrine | 5 | 1.00 | 9.4 | 1/0/4 | 0.00 | 0.22
+RISK_TABLE guidance.protect | combat | 5 | 1.00 | 5.6 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.protect | recover | 5 | 1.00 | 3.0 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.protect | purify_shrine | 5 | 1.00 | 9.4 | 1/0/4 | 0.00 | 0.22
+RISK_TABLE guidance.withdraw | combat | 5 | 1.00 | 5.6 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.withdraw | recover | 5 | 1.00 | 3.0 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.withdraw | purify_shrine | 5 | 1.00 | 9.4 | 1/0/4 | 0.00 | 0.22
+RISK_TABLE guidance.engage | combat | 5 | 1.00 | 5.6 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE guidance.engage | recover | 5 | 1.00 | 3.2 | 5/0/0 | 0.00 | 0.94
+RISK_TABLE guidance.engage | purify_shrine | 5 | 1.00 | 9.2 | 1/0/4 | 0.00 | 0.28
+RISK_TABLE party.size_3 | combat | 5 | 1.00 | 7.6 | 5/0/0 | 0.00 | 0.94
+RISK_TABLE party.size_3 | recover | 5 | 1.00 | 2.8 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE party.size_3 | purify_shrine | 5 | 0.60 | 20.4 | 0/0/3 | 0.00 | 0.07
+RISK_TABLE party.standing_3 | combat | 5 | 1.00 | 4.8 | 5/0/0 | 0.00 | 1.00
+RISK_TABLE party.standing_3 | recover | 5 | 1.00 | 2.4 | 5/0/0 | 0.00 | 0.99
+RISK_TABLE party.standing_3 | purify_shrine | 5 | 1.00 | 6.2 | 3/0/2 | 0.00 | 0.57
+RISK_PROBE total fights: 135
+[t:-][Info][DebugCmd] Debug output "Filter '=risk_probe' applied — running 1 suite(s): risk_probe"
+[t:-][Info][DebugCmd] Debug output "Legacy ledger: 0 judged, 0 ignored (recorded before behavior_char/legacy_selector_fallback_is_loud), written to /tmp/echoes-econ004-probe-a/legacy_selector_ledger.json"
+[t:-][Info][DebugCmd] Debug output "Tests: 3 total, 3 passed, 0 failed"
+[t:-][Info][DebugCmd] Debug output "✅ risk_probe — 3 passed"
+[t:-][Info][DebugCmd] Debug output "Timing per suite, slowest first (1 suite(s), 2454407 ms in tests):"
+[t:-][Info][DebugCmd] Debug output "TIMING_SUITE ms=2454407 tests=3 suite=risk_probe"
+[t:-][Info][DebugCmd] Debug output "Slowest 3 test(s):"
+[t:-][Info][DebugCmd] Debug output "TIMING_TEST ms=2416441 name=risk_probe/matrix"
+[t:-][Info][DebugCmd] Debug output "TIMING_TEST ms=25206 name=risk_probe/deterministic"
+[t:-][Info][DebugCmd] Debug output "TIMING_TEST ms=12760 name=risk_probe/mirrors_fingerprint_harness"

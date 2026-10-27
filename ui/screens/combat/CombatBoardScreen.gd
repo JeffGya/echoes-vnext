@@ -22,6 +22,8 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 const PacePresentation := preload("res://ui/components/PacePresentation.gd")
+const StandoffStrings := preload("res://ui/components/StandoffPresentation.gd")
+const CarriedHomePresentation := preload("res://ui/components/CarriedHomePresentation.gd")
 const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.gd")
 
 # WorldLayer.follow_viewport_enabled (in the .tscn) is what lets the Camera2D move the board.
@@ -47,6 +49,8 @@ const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.
 @onready var _objective_label: Label                = $ObjectiveLabel
 # V2-STAGE-004 P5: authored ObjectiveBanner (replaces the bare objective label during combat).
 @onready var _objective_banner: PanelContainer      = %ObjectiveBanner
+@onready var _stall_panel: PanelContainer           = %StallPanel
+@onready var _stall_label: Label                    = %StallLabel
 @onready var _banner_glyph: Label                   = %GlyphLabel
 @onready var _banner_instruction: Label             = %InstructionLabel
 @onready var _banner_progress: Label                = %ProgressLabel
@@ -102,6 +106,11 @@ var _banner_progress_color: Color = Color.WHITE
 # no-pace fight. The blend tween starts only when this value changes between two pace states.
 var _last_pace_state: String = ""
 var _pace_tween: Tween = null
+# Quiet-fight warning: the level on screen (0 = none) and its fade. The bark plays once per fight.
+const _STALL_FADE_TIME: float = 0.4
+var _stall_level: int = 0
+var _stall_tween: Tween = null
+var _stall_bark_done: bool = false
 
 const _SPEED_SLOW:   float = 3.0
 const _SPEED_NORMAL: float = 1.5
@@ -310,6 +319,10 @@ func _reset_presentation_state() -> void:
 	# Fresh encounter → the first pace colour shows with no blend.
 	_kill_pace_tween()
 	_last_pace_state = ""
+	_stall_level = 0
+	_stall_bark_done = false
+	_kill_stall_tween()
+	_stall_panel.visible = false
 	# Fresh encounter → FREE camera at default zoom, nothing selected (ANSWERS.md #76).
 	_camera_needs_reset = true
 	_pointer.reset()
@@ -359,6 +372,7 @@ func _render(data: Dictionary, actions: Dictionary) -> void:
 	_objective_label.visible = false
 	_render_objective_banner(obj_state, obj_type)
 	_apply_pace_color(str(obj_state.get("pace_state", "")))
+	_apply_stall_warning(data)
 
 	# Selection-lock works the same in every objective type — no per-mode camera.
 	_push_camera_follow_target()
@@ -564,6 +578,48 @@ func _set_pace_label_color(c: Color) -> void:
 	_round_label.add_theme_color_override("font_color", c)
 	_banner_glyph.add_theme_color_override("font_color", c)
 	_banner_progress.add_theme_color_override("font_color", c)
+
+
+## The quiet-fight line under the banner. It follows data.stall_level: it fades in when the level
+## rises, and clears at once when progress brings the level back to 0. Info blue, never an alarm colour.
+func _apply_stall_warning(data: Dictionary) -> void:
+	var level := clampi(int(data.get("stall_level", 0)), 0, 2)
+	if level == _stall_level:
+		return
+	_stall_level = level
+	_kill_stall_tween()
+	if level == 0:
+		_stall_panel.visible = false
+		return
+	_stall_label.text = StandoffStrings.WARN_LEVEL_1 if level == 1 else StandoffStrings.WARN_LEVEL_2
+	_stall_panel.visible = true
+	if StopMarkMotion.reduced or not is_inside_tree():
+		_stall_panel.modulate.a = 1.0
+	else:
+		_stall_panel.modulate.a = 0.0
+		_stall_tween = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		_stall_tween.tween_property(_stall_panel, "modulate:a", 1.0, _STALL_FADE_TIME)
+	if level == 2:
+		_stall_bark(str(data.get("stall_froze_name", "")))
+
+
+## One short line from the Echo that froze, through the normal bark layer. No name, no bark.
+func _stall_bark(who: String) -> void:
+	if _stall_bark_done or who.is_empty() or _bark_popup_layer == null:
+		return
+	for actor_v in _last_actors:
+		if actor_v is Dictionary and str(actor_v.get("name", "")) == who and str(actor_v.get("faction", "")) == "echo":
+			_stall_bark_done = true
+			_bark_popup_layer.show_barks([{ "actor_id": str(actor_v.get("id", "")), "bark_line": StandoffStrings.WARN_BARK,
+				"bark_context": "", "bark_tier": "", "bark_target_id": "", "bark_priority": 3, "is_response": false,
+				"screen_pos": _actor_screen_pos(actor_v) }])
+			return
+
+
+func _kill_stall_tween() -> void:
+	if _stall_tween != null and _stall_tween.is_valid():
+		_stall_tween.kill()
+	_stall_tween = null
 
 
 func _kill_pace_tween() -> void:
@@ -1197,19 +1253,21 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 	var retreat_enabled: bool = false
 	var retreat_label: String = "Retreat is not possible"
 	var retreat_eligible: bool = bool(data.get("retreat_eligible", false))
+	# A missing key reads as affordable: only the pre-combat snapshot carries it.
+	var retreat_affordable: bool = bool(data.get("retreat_affordable", true))
+	var ase_cost: int = int(data.get("retreat_ase_cost", 0))
 	if retreat_eligible and actions.has("cta.retreat"):
 		_pending_retreat_action = actions["cta.retreat"]
-		retreat_enabled         = true
-		var tier_label: String  = str(data.get("retreat_tier_label", ""))
-		var ase_cost: int       = int(data.get("retreat_ase_cost", 0))
-		if tier_label == "Guaranteed":
-			retreat_label = "Retreat (%d ase)\nEscape guaranteed" % ase_cost
+		if not retreat_affordable:
+			# Disabled, and the reason is in the text as well as the state (not colour alone).
+			retreat_label = CarriedHomePresentation.retreat_label(ase_cost, CarriedHomePresentation.RETREAT_UNAFFORDABLE)
 		else:
-			retreat_label = "Retreat (%d ase)\nChance of failure: %s" % [ase_cost, tier_label.to_lower()]
+			retreat_enabled = true
+			retreat_label = CarriedHomePresentation.retreat_label(ase_cost)
 	else:
 		_pending_retreat_action = {}
 
-
+	var denied_v: Variant = data.get("retreat_denied", {})
 	modal_requested.emit(&"realm.prebattle", {
 		"objective_label": objective_label,
 		"intro_line": intro_line,
@@ -1217,6 +1275,8 @@ func _show_prebattle_panel(data: Dictionary, actions: Dictionary) -> void:
 		"retreat_action": _pending_retreat_action.duplicate(true),
 		"retreat_enabled": retreat_enabled,
 		"retreat_label": retreat_label,
+		"stalled_before": bool(data.get("stalled_before", false)),
+		"retreat_denied": (denied_v as Dictionary).duplicate(true) if denied_v is Dictionary else {},
 	})
 
 ## Maps objective type string to a player-facing label for the pre-battle modal.
@@ -1437,6 +1497,8 @@ func _apply_responsive_layout() -> void:
 	_round_label.offset_top = 16.0 + top
 	_round_label.offset_bottom = 48.0 + top
 	_objective_banner.offset_top = 68.0 + top
+	_stall_panel.offset_top = 140.0 + top
+	_stall_panel.offset_bottom = 176.0 + top
 	_recenter_button.offset_left = -64.0 - right
 	_recenter_button.offset_right = -16.0 - right
 	_recenter_button.offset_top = 16.0 + top

@@ -25,8 +25,9 @@
 #   build_snapshot()      Producer G — rebuilds the resolve card from the durable result,
 #                         composing through ResolveSnapshotBuilder's existing block library.
 #
-# FOUR OUTCOMES, ONE WRITER. victory / partial / defeat come from the combat resolve (producer
-# A); withdrawal comes from the scout-return card (producer C, both of its call sites). They
+# FIVE OUTCOMES, ONE WRITER. victory / partial / defeat come from the combat resolve (producer
+# A); withdrawal comes from the scout-return card (producer C); standoff comes from the
+# stalemate card (producer H2). They
 # are classified from the PUBLISHED SNAPSHOT rather than from each handler, so there is exactly
 # one writer and no handler had to grow a second responsibility. See classify().
 #
@@ -76,25 +77,25 @@ const OUTCOME_VICTORY:    String = "victory"
 const OUTCOME_DEFEAT:     String = "defeat"
 const OUTCOME_PARTIAL:    String = "partial"
 const OUTCOME_WITHDRAWAL: String = "withdrawal"
+## The standoff card (a stalemate ended the fight, D-116). Durable, so a quit on the card resumes on it.
+const OUTCOME_STANDOFF:   String = "standoff"
 
 ## `status` values the schema documents. Only pending_resolve is produced today —
 ## pending_return is reserved for a result the player must act on from the Sanctum, which no
 ## path creates. Writing a value nothing sets would be an invention.
 const STATUS_PENDING_RESOLVE: String = "pending_resolve"
 
-## `run_type` of the two resolve cards that are MID-STAGE incidents, not run outcomes. A
-## contact conversation and an in-explore situation both return the player straight to
-## flow.stage_explore and neither ends a venture, so neither writes a durable result.
-const _NON_OUTCOME_RUN_TYPES: Array = ["contact_result", "situation_result"]
+## `run_type` of the resolve cards that are MID-STAGE incidents, not run outcomes. A
+## contact conversation, an in-explore situation and a pulled-back retreat all return the player straight to
+## flow.stage_explore and none ends a venture, so none writes a durable result.
+const _NON_OUTCOME_RUN_TYPES: Array = ["contact_result", "situation_result", "retreat_return"]
 
 ## `run_type` of the withdrawal card (producer C).
 const _RUN_TYPE_SCOUT_RETURN: String = "scout_return"
 
-## V2-COMBAT-003: `run_type` of the forced-retreat card — a stalemate no faction's damage could
-## end, resolved by the same withdrawal shape as scout_return but paying nothing. Kept as its
-## own run_type (not merged into _RUN_TYPE_SCOUT_RETURN) so the UI and the logs can never
-## confuse a stalemate with a retreat the player chose.
-const _RUN_TYPE_FORCED_RETREAT: String = "forced_retreat"
+## `run_type` of the standoff card (producer H2). It is not a mid-stage card in the sense of
+## _NON_OUTCOME_RUN_TYPES: it replaces a fight that ended, so it is durable.
+const _RUN_TYPE_STANDOFF: String = "standoff"
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +161,7 @@ static func _flow_dict(save_data: Dictionary) -> Dictionary:
 ##
 ## Read off the snapshot, not off the handler, so all four outcomes have ONE writer:
 ##   run_type "scout_return"                      -> withdrawal   (producer C, both call sites)
-##   run_type "forced_retreat"                     -> withdrawal   (producer C, no-progress stalemate)
+##   run_type "standoff"                           -> standoff     (producer H2, no-progress stalemate)
 ##   run_type "contact_result"/"situation_result"  -> ""            (mid-stage card)
 ##   no run_type, no encounter_id                  -> ""            (producer F, see below)
 ##   no run_type, victory false                    -> defeat       (producer A)
@@ -185,8 +186,10 @@ static func classify(snapshot: Dictionary) -> String:
 	var data_v: Variant = snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var run_type := str(data.get("run_type", ""))
-	if run_type == _RUN_TYPE_SCOUT_RETURN or run_type == _RUN_TYPE_FORCED_RETREAT:
+	if run_type == _RUN_TYPE_SCOUT_RETURN:
 		return OUTCOME_WITHDRAWAL
+	if run_type == _RUN_TYPE_STANDOFF:
+		return OUTCOME_STANDOFF
 	if run_type in _NON_OUTCOME_RUN_TYPES:
 		return ""
 	if not run_type.is_empty():
@@ -332,7 +335,7 @@ static func _build_result(
 		# FlowRuntime._end_round(), in the dispatch that publishes this card, and leave their
 		# summary on flow_ctx.bond_outcome for this read. Empty on a withdrawal: a retreat is
 		# not a fought encounter and fires no bond hook.
-		"bond_outcome": {} if outcome == OUTCOME_WITHDRAWAL else _copy_dict(flow_ctx.bond_outcome),
+		"bond_outcome": {} if outcome in [OUTCOME_WITHDRAWAL, OUTCOME_STANDOFF] else _copy_dict(flow_ctx.bond_outcome),
 
 		# VOW — the break/benefit/compliance outcome and the vows discovered this run. Both are
 		# real at capture time: VowConsequenceService writes them during the encounter and, on
@@ -395,7 +398,7 @@ static func _stage_index(stage_id: String) -> int:
 
 ## The seventh flow.resolve producer (docs/resolve-snapshot-block-spec.md names A–F).
 ##
-## It composes through ResolveSnapshotBuilder's SEVENTEEN-BLOCK LIBRARY, which needed no edit
+## It composes through ResolveSnapshotBuilder's block library, which needed no edit
 ## to accept it — the same claim the spec made for producers A and B (§5) and the same way it
 ## held. G is unusual only in that it does not know in advance which producer's card it is
 ## replaying, so it calls each block if and only if the stored payload carries that block's
@@ -461,6 +464,13 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			int(stored.get("ase_awarded", 0)),
 			_copy_array(stored.get("reward_breakdown", []))
 		)
+	if stored.has("ase_awarded"):
+		# Live value: the stored copy may predate the player's first look at a ledger.
+		ResolveSnapshotBuilder.add_ledger_seen(data, SaveSchema.ledger_seen(flow_ctx.save_data))
+	if stored.has("stage_payout_rows"):
+		ResolveSnapshotBuilder.add_stage_payout(
+			data, _copy_array(stored.get("stage_payout_rows", [])),
+			int(stored.get("stage_payout_ase", 0)), int(stored.get("stage_payout_ekwan", 0)))
 	if stored.has("ekwan_awarded"):
 		ResolveSnapshotBuilder.add_ekwan(data, int(stored.get("ekwan_awarded", 0)))
 	if stored.has("emotion_summary"):
@@ -487,14 +497,33 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			bool(stored.get("guide_spirit_protected", false)),
 			str(stored.get("combat_intro_line", ""))
 		)
+	if stored.has("intel_gained"):
+		ResolveSnapshotBuilder.add_intel_gained(data, int(stored.get("intel_gained", 0)))
+	if stored.has("thread_whole"):
+		ResolveSnapshotBuilder.add_thread_whole(data, bool(stored.get("thread_whole", true)))
+	if stored.has("objective_overcome"):
+		ResolveSnapshotBuilder.add_objective_overcome(data, _copy_dict(stored.get("objective_overcome", {})))
 	if stored.has("intel_count"):
 		ResolveSnapshotBuilder.add_scout_intel(data, int(stored.get("intel_count", 0)))
+	if stored.has("ase_gathered"):
+		ResolveSnapshotBuilder.add_ase_gathered(data, int(stored.get("ase_gathered", 0)))
+	if stored.has("settle_outcome"):
+		ResolveSnapshotBuilder.add_settle_outcome(data, str(stored.get("settle_outcome", "")))
 	if stored.has("pace_state"):
 		ResolveSnapshotBuilder.add_pace(
 			data,
-			int(stored.get("pace_bonus_awarded", 0)),
 			str(stored.get("pace_state", "")),
 			bool(stored.get("pace_changed_rank", false))
+		)
+	if stored.has("standoff_outcome"):
+		ResolveSnapshotBuilder.add_standoff(
+			data,
+			int(stored.get("standoff_count", 1)),
+			bool(stored.get("can_go_sanctum", false)),
+			str(stored.get("cause", "unknown")),
+			_copy_array(stored.get("froze_names", [])),
+			_copy_array(stored.get("calmed_names", [])),
+			bool(stored.get("fight_returns", true))
 		)
 	if stored.has("role"):
 		ResolveSnapshotBuilder.add_contact_outcome(
