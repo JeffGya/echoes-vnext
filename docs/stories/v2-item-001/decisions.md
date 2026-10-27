@@ -71,6 +71,12 @@ A filled pack goes on the next path. The party starts with less free pack room. 
 If the Sanctum inventory AND the pack are both full, the next arriving item is lost (reason `overflow`). D-04 survives for this one case.
 This amends D-04, D-13 and the packs rules. Open for the design rounds: how the pack empties (keeper action? automatically when room appears?), how the pack interacts with the early-leave roll (D-03) when it already holds old items, whether items in the pack from an earlier path are rolled again on a new early leave, and where the player sees the carried-over load.
 
+## D-17 — The pack makes loss at a full cap rare (Jeff, 2026-10-27)
+Confirmed: through the Echo choice, nothing is lost to a full cap, because every gathered item already owns a pack slot. The "Sanctum and pack both full, item lost" rule (D-16) stays as a safety net for arrivals that skip the Echo choice.
+The real pressure is lost room: a full pack limits the Echoes' choices on the next path.
+Jeff: a full pack should also be detrimental to the Echoes' state and cause debuffs. That is for ANOTHER story. This story builds no debuff. It must leave the hook visible (the carried load is readable data), so the later story can read it.
+Source: `design-sr-game-designer-v2.md` section 2 and A1.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
