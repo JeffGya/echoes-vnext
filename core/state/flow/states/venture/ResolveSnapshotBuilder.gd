@@ -212,10 +212,21 @@ static func add_objective_overcome(data: Dictionary, overcome: Dictionary) -> vo
 
 
 ## 14f — Ase found on this card that now waits in the packs. It is NOT in `ase_awarded`: nothing reaches
-## the balance until a leave or the path end. Written only when above 0. Situation and Claimant cards.
+## the balance until a leave or the path end. Written only when above 0. Situation and Claimant cards,
+## and the fight win card (the sum of its `encounter_gathered` rows, see fight_rows_ase).
 static func add_ase_gathered(data: Dictionary, gathered: int) -> void:
 	if gathered > 0:
 		data["ase_gathered"] = gathered
+
+
+## Sum of the base Ase of the `encounter_gathered` rows of a ledger. A card has at most one today;
+## the sum keeps the total right if a path ever puts two on one card.
+static func fight_rows_ase(rows: Array) -> int:
+	var total := 0
+	for row_v in rows:
+		if row_v is Dictionary and str((row_v as Dictionary).get("cause", "")) == "encounter_gathered":
+			total += int((row_v as Dictionary).get("delta", 0))
+	return total
 
 
 ## 14 — %ReasonLabel, "%d situation%s revealed". Producer C.

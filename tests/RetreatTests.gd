@@ -29,6 +29,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("retreat/denied_below_price",                      Callable(RetreatTests, "_t_denied_below_price"))
 	runner.register_test("retreat/allowed_at_exact_price",                  Callable(RetreatTests, "_t_allowed_at_exact_price"))
 	runner.register_test("retreat/allowed_above_price",                     Callable(RetreatTests, "_t_allowed_above_price"))
+	runner.register_test("retreat/ignoring_a_retreat_passed_fight_clears_its_marker", Callable(RetreatTests, "_t_ignore_clears_marker"))
+	runner.register_test("retreat/hand_sent_success_pct_is_ignored",         Callable(RetreatTests, "_t_hand_sent_success_pct_ignored"))
+	runner.register_test("retreat/snapshot_carries_no_chance",              Callable(RetreatTests, "_t_snapshot_carries_no_chance"))
 	runner.register_test("retreat/failed_retreat_still_spends",             Callable(RetreatTests, "_t_failed_retreat_spends"))
 	runner.register_test("retreat/snapshot_affordable_and_price",           Callable(RetreatTests, "_t_snapshot_affordable"))
 	runner.register_test("retreat/return_home_free_at_zero_ase",            Callable(RetreatTests, "_t_return_home_free"))
@@ -200,14 +203,26 @@ static func _t_excludes_dead_and_structures() -> Dictionary:
 
 ## Runs one retreat dispatch at a fixed balance. The action carries a fake price (999) on purpose:
 ## the handler must ignore it and read the config.
+## Test seam: the handler reads the chance from the live actors and data.combat.retreat_agi_tiers,
+## never from the action. This makes the party faster than the enemy and the tier table a single
+## tier of `pct`, so the roll is controlled without a hand-sent field.
+static func force_chance(flow_ctx: FlowContext, pct: int) -> void:
+	var combat_cfg: Dictionary = flow_ctx.config_service._balance["data"]["combat"]
+	combat_cfg["retreat_agi_tiers"] = [{ "min_delta": -9999, "label": "Forced", "success_pct": pct }]
+	for a_v in flow_ctx.encounter_ctx.actors:
+		var a: Dictionary = a_v
+		a["speed"] = 100.0 if str(a.get("faction", "")) == "echo" else 1.0
+
+
 static func _retreat_at(tag: String, ase: int, success_pct: int) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, tag)
 	if env.is_empty():
 		return { "ok": false, "error": "setup failed for %s" % tag }
 	var flow_ctx: FlowContext = env["flow_ctx"]
 	flow_ctx.save_data["economy"]["ase"] = ase
+	force_chance(flow_ctx, success_pct)
 	var snap: Dictionary = (env["runtime"] as FlowRuntime).dispatch(
-		{ "type": "encounter.retreat", "ase_cost": 999, "success_pct": success_pct })
+		{ "type": "encounter.retreat", "ase_cost": 999 })
 	return { "ok": true, "flow_ctx": flow_ctx, "snap": snap, "ase_after": int(flow_ctx.save_data["economy"]["ase"]) }
 
 
@@ -254,6 +269,55 @@ static func _t_allowed_above_price() -> Dictionary:
 		return r
 	if int(r["ase_after"]) != 15:
 		return { "ok": false, "error": "expected balance 15 after retreat from 25, got %d" % int(r["ase_after"]) }
+	return { "ok": true }
+
+
+## Follow-up 56 (D-112 F-C): ignoring the re-offer of a retreat-passed fight removes retreat_pass_turn, so a
+## later Advance does not offer the fight again (a fight with no marker and no objective flag is never re-offered).
+static func _t_ignore_clears_marker() -> Dictionary:
+	var r: Dictionary = _engaged_retreat("rt_ignore_marker", false)
+	if not bool(r.get("ok", false)):
+		return r
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var sit: Dictionary = _sit_of(flow_ctx, str(r["sit_id"]))
+	if not sit.has("retreat_pass_turn"):
+		return { "ok": false, "error": "premise failed: the retreated fight has no retreat_pass_turn" }
+	_explore_map_of(flow_ctx)["pending_situation_id"] = str(r["sit_id"])
+	(r["runtime"] as FlowRuntime).dispatch({ "type": "stage.ignore_situation" })
+	sit = _sit_of(flow_ctx, str(r["sit_id"]))
+	if sit.has("retreat_pass_turn") or not bool(sit.get("passed", false)):
+		return { "ok": false, "error": "after ignore: retreat_pass_turn present=%s passed=%s" % [str(sit.has("retreat_pass_turn")), str(sit.get("passed"))] }
+	return { "ok": true }
+
+
+## Follow-up 33: a hand-sent success_pct of 100 must not change the outcome. The core chance is
+## forced to 0, so the retreat must fail whatever the action says.
+static func _t_hand_sent_success_pct_ignored() -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "rt_hand_pct")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	flow_ctx.save_data["economy"]["ase"] = 50
+	force_chance(flow_ctx, 0)
+	(env["runtime"] as FlowRuntime).dispatch({ "type": "encounter.retreat", "success_pct": 100 })
+	if flow_ctx.encounter_ctx == null:
+		return { "ok": false, "error": "a hand-sent success_pct of 100 turned a 0 percent core chance into a success" }
+	return { "ok": true }
+
+
+## Follow-up 33: neither the pre-combat data nor cta.retreat carries a success percent.
+static func _t_snapshot_carries_no_chance() -> Dictionary:
+	var env: Dictionary = FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, "rt_no_pct")
+	if env.is_empty():
+		return { "ok": false, "error": "setup failed" }
+	var flow_ctx: FlowContext = env["flow_ctx"]
+	force_chance(flow_ctx, 100)
+	var snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 1)
+	var cta: Dictionary = (snap.get("actions", {}) as Dictionary).get("cta.retreat", {})
+	if cta.is_empty():
+		return { "ok": false, "error": "cta.retreat missing for an eligible party" }
+	if cta.has("success_pct") or (snap["data"] as Dictionary).has("retreat_success_pct"):
+		return { "ok": false, "error": "the snapshot still carries a success percent" }
 	return { "ok": true }
 
 
@@ -318,8 +382,8 @@ static func _engaged_retreat(tag: String, objective: bool, success_pct: int = 10
 	for _i in range(pad):
 		(env["runtime"] as FlowRuntime).dispatch({ "type": "debug.seed.show" })
 	var encounter_id: String = flow_ctx.encounter_ctx.encounter_id
-	var card: Dictionary = (env["runtime"] as FlowRuntime).dispatch(
-		{ "type": "encounter.retreat", "success_pct": success_pct })
+	force_chance(flow_ctx, success_pct)
+	var card: Dictionary = (env["runtime"] as FlowRuntime).dispatch({ "type": "encounter.retreat" })
 	return { "ok": true, "encounter_id": encounter_id, "env": env, "runtime": env["runtime"], "flow_ctx": flow_ctx, "card": card, "sit_id": str(sit["id"]) }
 
 

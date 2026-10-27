@@ -482,5 +482,5 @@ func _prebattle(extra: Dictionary) -> Dictionary:
 	snap["data"].merge(extra, true)
 	snap["actions"] = {
 		"cta.combat_init": { "type": "combat.init", "slot": "cta.combat_init", "label": "Start Combat" },
-		"cta.retreat": { "type": "encounter.retreat", "slot": "cta.retreat", "success_pct": 50, "ase_cost": 10 } }
+		"cta.retreat": { "type": "encounter.retreat", "slot": "cta.retreat", "ase_cost": 10 } }
 	return snap

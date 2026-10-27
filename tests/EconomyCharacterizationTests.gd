@@ -101,6 +101,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/stipend_dead_echo_on_real_card", Callable(EconomyCharacterizationTests, "_t_stipend_real_card"))
 	runner.register_test("econ_char/settle_plan_gathered_by_realm_and_run", Callable(EconomyCharacterizationTests, "_t_settle_plan_gathered"))
 	runner.register_test("econ_char/settle_leave_logs_roll_outcome_and_marks", Callable(EconomyCharacterizationTests, "_t_settle_leave_logs"))
+	runner.register_test("econ_char/banner_surface_is_the_fought_objective", func(): return _t_banner_surface())
+	runner.register_test("econ_char/logger_error_level", func(): return _t_logger_error_level())
 	runner.register_test("econ_char/settle_leave_fails_visibly_on_bad_carry_config", Callable(EconomyCharacterizationTests, "_t_settle_leave_bad_carry_config"))
 	runner.register_test("econ_char/settle_odds_come_from_config_and_scout_shifts_them", Callable(EconomyCharacterizationTests, "_t_settle_odds_from_config"))
 	runner.register_test("econ_char/settle_roll_seeded_distribution", Callable(EconomyCharacterizationTests, "_t_settle_roll_seeded_distribution"))
@@ -338,11 +340,17 @@ static func _t_partial_payout() -> Dictionary:
 			objs.append(_obj(k, c[0][k], true))
 		objs.append(ObjectiveModel.make(objs.size(), ObjectiveModel.TYPE_BOSS, 2, {}, false, false))
 		var ctx := _stage_ctx(cfg, objs)
-		var base := ActiveStageService.get_stage_base_reward(ctx, cfg)
+		var base := _stage_base(ctx, cfg)
 		var plan := StageSettlementService.settle_plan(ctx, cfg)
 		if base != int(c[1]) or int(plan["ase"]) != int(c[1]) or int(plan["ekwan"]) != int(c[2]):
 			mismatches.append("%s: base %d gathered %s/%s, expected %d / %d" % [str(c[0]), base, plan["ase"], plan["ekwan"], int(c[1]), int(c[2])])
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
+
+
+## The stage base the way a payer reads it: RewardCalc.base_reward over the current stage's objectives.
+static func _stage_base(ctx: FlowContext, cfg: ConfigService, mode: String = RewardCalc.MODE_COMPLETED) -> int:
+	var objs: Array = FlowStageExploreState._get_current_stage(ctx).get("objectives", [])
+	return RewardCalc.base_reward(objs, ConfigService.get_rewards_cfg(cfg), null, 0, mode, ctx.active_encounter_objective_index)
 
 
 static func _stage_ctx(cfg: ConfigService, objs: Array, fought_index: int = -1) -> FlowContext:
@@ -380,7 +388,7 @@ static func _t_missing_key_logs() -> Dictionary:
 		mismatches.append("expected 2 log lines, got %d" % logs.size())
 	else:
 		var e: Dictionary = logs[0]
-		if str(e["type"]) != "economy.reward.missing_config_key" or int(e["t"]) != 5 \
+		if str(e["type"]) != "economy.reward.missing_config_key" or int(e["t"]) != 5 or str(e["sev"]) != "error" \
 				or str((e["data"] as Dictionary).get("key")) != "realm_scale_step":
 			mismatches.append("log line is %s" % str(e))
 	var quiet := StructuredLogger.new()
@@ -390,6 +398,44 @@ static func _t_missing_key_logs() -> Dictionary:
 	if not quiet.get_logs().is_empty():
 		mismatches.append("a complete config logged %s" % str(quiet.get_logs()))
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
+
+
+## Follow-up 3 (D-08): the banner `surface` is the type of the objective being fought, not the first
+## objective; a fight that belongs to no objective reads "combat".
+static func _t_banner_surface() -> Dictionary:
+	var m: Array = []
+	for c in [[0, "recover"], [1, "shrine"], [-1, "combat"]]:
+		var env := _fight_env("econ_char_surface_%d" % int(c[0]), false, int(c[0]))
+		if env.is_empty():
+			return { "ok": false, "error": "harness did not build an encounter" }
+		(env["stage"] as Dictionary)["objectives"] = [_req(0, "recover", false), _req(1, "shrine", false)]
+		var data: Dictionary = FlowEncounterState.build_final_snapshot(env["flow_ctx"], 6)["data"]
+		if str(data.get("surface", "")) != str(c[1]):
+			m.append("fought index %d: surface '%s', expected '%s'" % [int(c[0]), str(data.get("surface", "")), str(c[1])])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## Follow-up 38: error() stores sev "error", survives the info and debug levels, is silent when off;
+## warn() is unchanged (stored as info); LogFormatter labels it.
+static func _t_logger_error_level() -> Dictionary:
+	var m: Array = []
+	for level in [StructuredLogger.LEVEL_INFO, StructuredLogger.LEVEL_DEBUG]:
+		var l := StructuredLogger.new()
+		l.set_level(level)
+		l.error(1, "x.err", "boom", { "k": 1 })
+		l.warn(2, "x.warn", "careful")
+		var logs := l.get_logs()
+		if logs.size() != 2 or str(logs[0]["sev"]) != "error" or str(logs[1]["sev"]) != "info":
+			m.append("level %s stored %s" % [level, str(logs)])
+	var off := StructuredLogger.new()
+	off.set_level(StructuredLogger.LEVEL_OFF)
+	off.error(1, "x.err", "boom")
+	if not off.get_logs().is_empty():
+		m.append("error() logged while the level was off")
+	var line := LogFormatter.format({ "t": 1, "sev": "error", "type": "economy.x", "msg": "boom", "data": {} })
+	if not line.contains("[Error]") or not LogFormatter.format({ "t": 1, "sev": "info", "type": "x", "msg": "m", "data": {} }).contains("[Info]"):
+		m.append("formatter output: %s" % line)
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
 static func _t_claimant_good_ase() -> Dictionary:
@@ -1079,7 +1125,7 @@ static func _same(a: Variant, b: Variant) -> bool:
 # Phase 3b: completed-only base in every reader (D-11 to D-15)
 # These tests call the pure helper, the settle() payer and compute() directly. They do not
 # dispatch a real retreat or return-home: both need a booted fight or a built explore map, so the
-# two handlers are covered by the formula plus the shared get_stage_base_reward() read.
+# two handlers are covered by the formula plus the shared RewardCalc.base_reward() read.
 # ---------------------------------------------------------------------------
 
 ## (a) The stage payer pays the weights of completed objectives. Stage 0, run 0: combat done
@@ -1123,16 +1169,16 @@ static func _t_pace_base() -> Dictionary:
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var mismatches: Array = []
 	var first := _stage_ctx(cfg, [_obj(0, "guide_spirit", false), _obj(1, "combat", false), boss], 0)
-	var plain := ActiveStageService.get_stage_base_reward(first, cfg)
-	var pace := ActiveStageService.get_stage_base_reward(first, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
+	var plain := _stage_base(first, cfg)
+	var pace := _stage_base(first, cfg, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
 	if plain != 0 or pace != 32:
 		mismatches.append("first fight: completed-only %d (expected 0), pace base %d (expected 32)" % [plain, pace])
 	var second := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], 1)
-	pace = ActiveStageService.get_stage_base_reward(second, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
+	pace = _stage_base(second, cfg, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
 	if pace != 52:
 		mismatches.append("second fight: pace base %d, expected 52 (32 done + 20 fought)" % pace)
 	var none := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], -1)
-	pace = ActiveStageService.get_stage_base_reward(none, cfg, null, 0, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
+	pace = _stage_base(none, cfg, RewardCalc.MODE_COMPLETED_PLUS_FOUGHT)
 	if pace != 32:
 		mismatches.append("no fought objective: pace base %d, expected 32" % pace)
 	return { "ok": mismatches.is_empty(), "error": "; ".join(mismatches) }
@@ -1162,12 +1208,12 @@ static func _t_partials_completed() -> Dictionary:
 	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
 	var mismatches: Array = []
 	var before := _stage_ctx(cfg, [_obj(0, "guide_spirit", false), _obj(1, "combat", false), boss], 0)
-	var base := ActiveStageService.get_stage_base_reward(before, cfg)
+	var base := _stage_base(before, cfg)
 	var plan := StageSettlementService.settle_plan(before, cfg)
 	if base != 0 or int(plan["ase"]) != 0 or not bool(plan["nothing_new"]):
 		mismatches.append("before any completion: base %d plan %s, expected 0 and nothing_new" % [base, str(plan)])
 	var after := _stage_ctx(cfg, [_obj(0, "guide_spirit", true), _obj(1, "combat", false), boss], 1)
-	base = ActiveStageService.get_stage_base_reward(after, cfg)
+	base = _stage_base(after, cfg)
 	plan = StageSettlementService.settle_plan(after, cfg)
 	if base != 32 or int(plan["ase"]) != 32 or int(plan["ekwan"]) != 3 or bool(plan["nothing_new"]):
 		mismatches.append("after one completion: base %d plan %s, expected 32 / 32 / 3" % [base, str(plan)])
@@ -2026,7 +2072,8 @@ static func _t_settle_leave_bad_carry_config() -> Dictionary:
 		var bal := ctx.save_data["economy"] as Dictionary
 		var named := false
 		for e in logger.get_logs():
-			if str(e["type"]) == "economy.settle.config_error" and str((e["data"] as Dictionary).get("parent_key", "")).ends_with(str(c[0])):
+			if str(e["type"]) == "economy.settle.config_error" and str(e["sev"]) == "error" \
+					and str((e["data"] as Dictionary).get("parent_key", "")).ends_with(str(c[0])):
 				named = true
 		if str(got["outcome"]) != "nothing_new" or int(got["ase"]) != 0 or int(got["ekwan"]) != 0:
 			m.append("%s %s: result %s, expected nothing_new 0/0" % [c[0], c[1], str(got)])
@@ -2401,8 +2448,9 @@ static func _t_settle_retreat_pays_nothing() -> Dictionary:
 	flow_ctx.save_data["economy"]["ase"] = 50
 	flow_ctx.save_data["economy"]["ekwan"] = 0
 	var pre_data: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, 1)["data"]
+	RetreatTests.force_chance(flow_ctx, 100)
 	var out: Dictionary = (env["runtime"] as FlowRuntime).dispatch(
-		{ "type": "encounter.retreat", "ase_cost": 999, "success_pct": 100 })
+		{ "type": "encounter.retreat", "ase_cost": 999 })
 	var data: Dictionary = out.get("data", {})
 	var econ: Dictionary = flow_ctx.save_data["economy"]
 	var st := FlowStageExploreState._get_current_stage(flow_ctx)
@@ -2834,7 +2882,7 @@ static func _t_earnings_safety_net() -> Dictionary:
 	var got := StageSettlementService.settle_leave(ctx, ctx.config_service, _carry_econ(ctx), 1.0, "test", logger, 4)
 	var hits := 0
 	for e in logger.get_logs():
-		if str(e["type"]) == "economy.earnings.missing_row":
+		if str(e["type"]) == "economy.earnings.missing_row" and str(e["sev"]) == "error":
 			hits += 1
 	if hits != 2:
 		m.append("%d missing_row logs, expected 2" % hits)
@@ -2931,11 +2979,11 @@ static func _t_earnings_hooks() -> Dictionary:
 		m.append("B: rows %s, expected one combat row of 20" % JSON.stringify(EarningsService.rows_of(stage_b)))
 	_row_invariant(stage_b, "B", m)
 
-	# C: complete_stage re-marks the objective; undo B's result, stamp the receipt, dispatch.
+	# C: complete_stage re-writes the row; clear B's rows and the situation flags, stamp the receipt, dispatch.
+	# The objective stays completed: flow.complete_stage refuses a stage that is not completable.
 	var env_c := _final_card("econ_char_earn_hook_c", [_req(0, "combat", false), boss], true)
 	var rt_c: FlowRuntime = env_c["runtime"]
 	var stage_c: Dictionary = FlowStageExploreState._get_current_stage(env_c["flow_ctx"])
-	(stage_c["objectives"][0] as Dictionary)["completed"] = false
 	stage_c["earnings"] = []
 	stage_c["settlement_receipt"] = { "version": 1, "result_id": "x", "settled": true, "outcome": "cleared", "settled_t": 1 }
 	for sit_v in (stage_c["explore_map"]["situations"] as Array):
@@ -3289,7 +3337,7 @@ static func _t_packs_weight_config() -> Dictionary:
 			m.append("%s did not count 0" % JSON.stringify(bad))
 		var hits := 0
 		for e in loud.get_logs():
-			if str(e["type"]) == "economy.reward.missing_config_key":
+			if str(e["type"]) == "economy.reward.missing_config_key" and str(e["sev"]) == "error":
 				hits += 1
 		if hits != 1:
 			m.append("%s logged %d missing_config_key lines, expected 1" % [JSON.stringify(bad), hits])
@@ -3425,7 +3473,8 @@ static func _t_packs_fight_count_all() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## The cards: a won fight shows an `encounter_gathered` row and pays 0 (same row on a rebuild); an objective fight shows none;
+## The cards: a won fight shows an `encounter_gathered` row, the key `ase_gathered` (its base amount, follow-up 50) and pays 0
+## (same row on a rebuild); an objective fight shows none;
 ## the money and Claimant cards carry `ase_gathered` and `ase_awarded` 0; a stored result replays the rows and the key.
 static func _t_packs_cards() -> Dictionary:
 	var m: Array = []
@@ -3435,7 +3484,7 @@ static func _t_packs_cards() -> Dictionary:
 	var data: Dictionary = env["card"]["data"]
 	var rows: Array = (data["reward_breakdown"] as Array).filter(func(r): return str((r as Dictionary).get("cause", "")) == "encounter_gathered")
 	if rows.size() != 1 or int((rows[0] as Dictionary)["delta"]) != 6 or int((rows[0] as Dictionary)["params"]["gathered_ase"]) != 6 \
-			or str((rows[0] as Dictionary)["params"]["kind"]) != "fight" or int(data["ase_awarded"]) != 0 or data.has("ase_gathered"):
+			or str((rows[0] as Dictionary)["params"]["kind"]) != "fight" or int(data["ase_awarded"]) != 0 or int(data.get("ase_gathered", -1)) != 6:
 		m.append("won fight card: ase_awarded %s, rows %s" % [str(data["ase_awarded"]), JSON.stringify(data["reward_breakdown"])])
 	var again: Dictionary = FlowEncounterState.build_final_snapshot(env["flow_ctx"], 7)["data"]
 	if JSON.stringify(again["reward_breakdown"]) != JSON.stringify(data["reward_breakdown"]):
@@ -3448,7 +3497,19 @@ static func _t_packs_cards() -> Dictionary:
 	if JSON.stringify(back["reward_breakdown"]) != JSON.stringify(data["reward_breakdown"]) or int(back.get("ase_gathered", -1)) != 5:
 		m.append("the stored result did not replay the gathered row and key: %s" % JSON.stringify(back.get("reward_breakdown")))
 
+	var two: Array = [
+		{ "cause": "encounter_gathered", "delta": 6 }, { "cause": "found_gathered", "delta": 12 },
+		{ "cause": "encounter_gathered", "delta": 4 }]
+	var two_data: Dictionary = {}
+	ResolveSnapshotBuilder.add_ase_gathered(two_data, ResolveSnapshotBuilder.fight_rows_ase(two))
+	var none_data: Dictionary = {}
+	ResolveSnapshotBuilder.add_ase_gathered(none_data, ResolveSnapshotBuilder.fight_rows_ase([{ "cause": "found_gathered", "delta": 12 }]))
+	if int(two_data.get("ase_gathered", -1)) != 10 or none_data.has("ase_gathered"):
+		m.append("two fight rows gave %s (expected 10), no fight row gave %s (expected no key)" % [str(two_data), str(none_data)])
+
 	var obj := _fight_build(_fight_env("econ_char_cards_obj", true, 0))
+	if (obj["card"]["data"] as Dictionary).has("ase_gathered"):
+		m.append("an objective fight card carries ase_gathered")
 	for r_v in (obj["card"]["data"]["reward_breakdown"] as Array):
 		if str((r_v as Dictionary).get("cause", "")) == "encounter_gathered":
 			m.append("an objective fight card shows a fight row")

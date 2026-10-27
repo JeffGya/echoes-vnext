@@ -1172,17 +1172,18 @@ func _apply_action_outcome(outcome: FlowActionOutcome, t: int) -> void:
 
 # Helpers
 ## UI-004: Player attempts retreat before round 1.
-## Gate (speed) and tier (agi) were computed at snapshot time and baked into the action dict.
+## The speed gate and the agi tier are computed here from the live actors (RetreatService.chance_tier,
+## the same function that decides whether the snapshot offers cta.retreat). The action carries no chance.
 ## Ase is spent regardless of roll outcome. A balance below the price refuses the action (D-79).
 ## Success → clear encounter, show the pulled-back card (its action returns to the path). Failure → start combat immediately.
-func _handle_encounter_retreat(action: Dictionary, t: int) -> void:
+func _handle_encounter_retreat(_action: Dictionary, t: int) -> void:
 	if flow_ctx.encounter_ctx == null:
 		logger.debug(t, "encounter.retreat.no_op", "Retreat: no active encounter context", {})
 		return
 
 	# The price comes from config, never from the action dict: a UI-built action must not set its own price.
 	var ase_cost:    int = RetreatService.get_ase_cost(config_service)
-	var success_pct: int = int(action.get("success_pct", 0))
+	var success_pct: int = int(RetreatService.chance_tier(flow_ctx.encounter_ctx.actors, config_service).get("success_pct", 0))
 	var encounter_id: String = flow_ctx.encounter_ctx.encounter_id
 
 	# D-79: a short balance refuses the retreat. Nothing changes; the fight stays at pre-combat.

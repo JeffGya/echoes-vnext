@@ -418,6 +418,8 @@ func handle_ignore_situation(_action: Dictionary, t: int) -> FlowActionOutcome:
 			var _ps: Dictionary = _ps_v
 			if str(_ps.get("id", "")) == sit_id:
 				_ps["passed"] = true
+				# A fight a retreat or standoff passed is offered again on a later turn; ignoring that offer ends it.
+				_ps.erase("retreat_pass_turn")
 				break
 		explore_map["situations"] = _pass_sits
 
@@ -572,6 +574,16 @@ func handle_ledger_mark_seen(t: int) -> FlowActionOutcome:
 ## and route to REALM_SELECT. `destination` overrides the non-completed destination (cta.continue
 ## on victory routes to SANCTUM instead of STAGE_MAP); realm completion always wins.
 func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
+	# Re-check the gate the offering snapshot used. A stage with no objectives passes, as it does
+	# on the Resolve card (EncounterSnapshotBuilder._count_remaining_required_objectives).
+	var _gate_stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	var _gate_objs_v: Variant = _gate_stage.get("objectives", [])
+	var _gate_objs: Array = _gate_objs_v if _gate_objs_v is Array else []
+	if not _gate_objs.is_empty() and not ObjectiveModel.stage_completable(_gate_objs):
+		logger.warn(t, "stage.complete.refused", "flow.complete_stage refused: the stage is not completable", {
+			"stage_id": flow_ctx.stage_id,
+		})
+		return FlowActionOutcome.handled_outcome()
 	var destination_override := str(action.get("destination", ""))
 
 	# Fix BUG-003: read outcome BEFORE nulling encounter_ctx so drift reflects the actual result.

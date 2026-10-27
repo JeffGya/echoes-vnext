@@ -406,7 +406,6 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var retreat_eligible:    bool   = false
 	var retreat_ase_cost:    int    = 0
 	var retreat_affordable:  bool   = false
-	var retreat_success_pct: int    = 0
 
 	match round_phase:
 		"pre_combat":
@@ -418,22 +417,13 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# UI-004: compute retreat fields from ectx.actors.
 			var raw_actors_for_retreat: Array = ectx.actors if ectx != null else []
 			retreat_eligible = RetreatService.can_attempt(raw_actors_for_retreat)
-			var combat_cfg_r: Dictionary = {}
-			if flow_ctx.config_service != null:
-				var bal_r: Dictionary   = flow_ctx.config_service.get_balance()
-				var bdata_r: Dictionary = bal_r.get("data", {})
-				combat_cfg_r = bdata_r.get("combat", {})
 			retreat_ase_cost = RetreatService.get_ase_cost(flow_ctx.config_service)
 			retreat_affordable = int(flow_ctx.save_data.get("economy", {}).get("ase", 0)) >= retreat_ase_cost
-			var tier_cfg_r: Array = combat_cfg_r.get("retreat_agi_tiers", [])
-			var tier_r: Dictionary = RetreatService.get_chance_tier(raw_actors_for_retreat, tier_cfg_r)
-			if not tier_r.is_empty():
-				retreat_success_pct = int(tier_r.get("success_pct", 0))
+			if not RetreatService.chance_tier(raw_actors_for_retreat, flow_ctx.config_service).is_empty():
 				actions["cta.retreat"] = {
-					"type":        "encounter.retreat",
-					"slot":        "cta.retreat",
-					"success_pct": retreat_success_pct,
-					"ase_cost":    retreat_ase_cost,
+					"type":     "encounter.retreat",
+					"slot":     "cta.retreat",
+					"ase_cost": retreat_ase_cost,
 				}
 		"actor_turn":
 			actions["cta.next_actor"] = {
@@ -470,7 +460,6 @@ static func build_round_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"retreat_eligible":        retreat_eligible,
 			"retreat_ase_cost":        retreat_ase_cost,
 			"retreat_affordable":      retreat_affordable,
-			"retreat_success_pct":     retreat_success_pct,
 			# Quiet-fight warning (0, 1, 2) and the party Echo that froze last. Words only: no streak, no limit.
 			"stall_level":             StandoffService.level(combat_state, ectx.stalemate_cfg) if ectx != null else 0,
 			"stall_froze_name":        StandoffService.latest_froze_name(ectx) if ectx != null else "",
