@@ -334,7 +334,9 @@ static func test_sanctum_fingerprint() -> Dictionary:
 # the key: the old hash b4c2a6e7...19d9 came back. Nothing else in the payload moved.
 # RE-RECORDED, V2-ECONOMY-004 step 6.1: one new key, data.carry_home_preview.nothing_new (D-106). Attributed
 # by removing the key: the old hash 1728e1fe...df7e came back (2 of 2 passed). Nothing else moved.
-const STAGE_EXPLORE_FINGERPRINT_HASH := "5515ca86c12db802212657908e247060f137b881ff3092b2f7925658a90b5440"
+# RE-RECORDED, V2-ECONOMY-004 step 7.C: one new key, data.carry_home_preview.gathered. Attributed by removing
+# the key: the old hash 5515ca86...5440 came back (2 of 2 passed). Nothing else moved.
+const STAGE_EXPLORE_FINGERPRINT_HASH := "fe7d8a0ee91a221f0c314684ca3acb4bcb11335cadb2510c3cf3da28bd3179c4"
 
 static func test_stage_explore_fingerprint() -> Dictionary:
 	var env := _setup_stage_explore_env("fp_stage_explore")

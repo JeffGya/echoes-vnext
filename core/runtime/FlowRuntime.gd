@@ -1093,8 +1093,7 @@ func _sanctum_controller() -> SanctumController:
 ## V2-INFRA-003 Phase 5 Slice C: builds a fresh ContactController scoped to the current
 ## flow_ctx/config_service/econ/logger. Same per-call construction rationale as
 ## _weave_controller() above. Owns 3 actions: stage.consult_echoes, stage.speak_response,
-## stage.disengage_contact. `econ` is needed by apply_contact_outcome()'s claimant/good branch
-## (econ.add_ase for the Ase reward).
+## stage.disengage_contact. A good Claimant writes a found row in the packs; it does not touch `econ`.
 func _contact_controller() -> ContactController:
 	return ContactController.new(flow_ctx, config_service, econ, logger)
 

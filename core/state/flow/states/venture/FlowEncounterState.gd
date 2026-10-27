@@ -215,12 +215,12 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if not victory:
 		_consolation_eligible = ActiveStageService.claim_situation_defeat_consolation(flow_ctx)
 
-	# D-115: a win adds its fight row to the packs (nothing reaches the balance now); a defeat loses the
-	# unsettled packs once, behind the same stamp as the consolation.
+	# D-115: a win adds its fight row to the packs (nothing reaches the balance now). Every defeat loses
+	# the unsettled packs; only the small consolation above keeps its once-per-situation stamp.
+	var _claimant_fight: bool = ectx != null and ectx.encounter_id.ends_with(EarningsService.CLAIMANT_FIGHT_SUFFIX)
 	if victory:
-		ActiveStageService.record_fight_earnings(flow_ctx,
-			ectx != null and ectx.encounter_id.ends_with(EarningsService.CLAIMANT_FIGHT_SUFFIX), t)
-	elif _consolation_eligible:
+		ActiveStageService.record_fight_earnings(flow_ctx, _claimant_fight, t)
+	else:
 		ActiveStageService.lose_unsettled_packs(flow_ctx, t)
 
 	var economy_svc := EconomyService.new(flow_ctx.save_data)
@@ -385,7 +385,12 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	#   3. The roster emotion write-back — the fear/morale THIS encounter accumulated.
 	# All three are encounter cadence. This function is smaller and honest now, but it is still
 	# not pure, so it stays a flow-state method.
-	var _breakdown: Array = reward_result.get("breakdown", [])
+	var _breakdown: Array = (reward_result.get("breakdown", []) as Array).duplicate()
+	var _fight_row: Dictionary = ActiveStageService.fight_row(flow_ctx, _claimant_fight) if victory else {}
+	if not _fight_row.is_empty():
+		_breakdown.append({ "label": "Fight won", "delta": int(_fight_row.get("ase", 0)), "currency": "ase",
+			"cause": "encounter_gathered",
+			"params": { "kind": str(_fight_row.get("kind", "")), "gathered_ase": int(_fight_row.get("ase", 0)) } })
 	var _vow_outcome: Dictionary = flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {}
 
 	# A defeat shows nothing about pace (design §7): no colour on the result round line.

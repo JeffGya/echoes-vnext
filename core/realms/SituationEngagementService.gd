@@ -100,7 +100,7 @@ func _contact_conversation_service() -> ContactConversationService:
 ##                carries "situation_id" / "type" / "choices" for data.situation_overlay
 ##   "resolved" — acknowledge / take / leave applied           → situation resolve card +
 ##                transition to RESOLVE; carries "sit", "emotion_summary", "effects",
-##                "summary_line", "ase_awarded"
+##                "summary_line", "ase_gathered" (found Ase, now in the packs)
 ##
 ## The async-vs-in-explore decision is NOT reimplemented here: SituationResolutionService.route()
 ## makes it, exactly as before.
@@ -387,7 +387,7 @@ func engage_situation(sit_id: String, econ: EconomyService, t: int) -> Dictionar
 		"emotion_summary": _in_emotion_summary,
 		"effects":         _in_effects,
 		"summary_line":    str(_r.get("result_text", "")),
-		"ase_awarded":     int(_r.get("ase_delta", 0)),
+		"ase_gathered":    int(_r.get("ase_delta", 0)),
 	}
 
 
@@ -545,5 +545,5 @@ func resolve_situation_choice(sit_id: String, choice_id: String, t: int) -> Dict
 		"emotion_summary": _rc_emotion_summary,
 		"effects":         _rc_effects,
 		"summary_line":    str(_c.get("result_text", "")),
-		"ase_awarded":     0,
+		"ase_gathered":    0,
 	}

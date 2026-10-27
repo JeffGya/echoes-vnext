@@ -79,13 +79,16 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int, run_t
 	var _settle := flow_ctx_arg.pending_scout_return_settle_outcome
 	var breakdown: Array = []
 	# A forced retreat pays nothing by design, so it gets no row. A return home names its outcome in
-	# a row (`settle_<outcome>`, never a share). Nothing overcome says why (`nothing_overcome_yet`).
+	# a row (`settle_<outcome>`, never a share). `nothing_overcome_yet` shows only when nothing was gathered,
+	# overcome or settled on this stage (a won fight or found Ase is a gathered row).
 	if run_type != "forced_retreat":
 		var _counts := ActiveStageService.get_objective_counts(flow_ctx_arg, flow_ctx_arg.config_service)
+		var _settled_before := int(StageSettlementService.settle_plan(
+			flow_ctx_arg, flow_ctx_arg.config_service)["settle_count"]) > 0
 		if _settle in ["none", "some", "all"]:
 			breakdown.append({ "label": "Settled when you left", "delta": _ase, "currency": "ase",
 				"cause": "settle_" + _settle, "params": _counts.duplicate() })
-		elif _settle == "nothing_new" and int(_counts.get("overcome", 0)) > 0:
+		elif _settle == "nothing_new" and (int(_counts.get("overcome", 0)) > 0 or _settled_before):
 			breakdown.append({ "label": "Settled when you left", "delta": 0, "currency": "ase",
 				"cause": "settle_nothing_new", "params": _counts.duplicate() })
 		elif int(_counts.get("overcome", 0)) == 0:
@@ -172,7 +175,7 @@ static func build_situation_resolve_snapshot(
 		summary_line: String,
 		emotion_summary: Array,
 		effects: Array,
-		ase_awarded: int,
+		ase_gathered: int,
 		t: int
 ) -> Dictionary:
 	var sit_type := str(sit.get("type", ""))
@@ -186,9 +189,11 @@ static func build_situation_resolve_snapshot(
 		_:
 			_verdict = "passed"
 
+	# Found Ase waits in the packs: the card pays the balance nothing, so `ase_awarded` is 0.
 	var _breakdown: Array = []
-	if ase_awarded > 0:
-		_breakdown.append({ "label": "Found", "delta": ase_awarded, "currency": "ase" })
+	if ase_gathered > 0:
+		_breakdown.append({ "label": "Found", "delta": ase_gathered, "currency": "ase",
+			"cause": "found_gathered", "params": { "kind": sit_type } })
 
 	# V2-INFRA-003 Phase 5 Slice B: producer E, composed through ResolveSnapshotBuilder.
 	# Same nine keys as before. tests/UnifiedResolveTests.gd pins this producer end to end and
@@ -208,6 +213,7 @@ static func build_situation_resolve_snapshot(
 	ResolveSnapshotBuilder.add_grade_verdict(_data, _verdict)
 	ResolveSnapshotBuilder.add_emotion(_data, emotion_summary)
 	ResolveSnapshotBuilder.add_effects(_data, effects)
-	ResolveSnapshotBuilder.add_ledger(_data, ase_awarded, _breakdown)
+	ResolveSnapshotBuilder.add_ledger(_data, 0, _breakdown)
+	ResolveSnapshotBuilder.add_ase_gathered(_data, ase_gathered)
 	ResolveSnapshotBuilder.add_ekwan(_data, 0)
 	return _snap

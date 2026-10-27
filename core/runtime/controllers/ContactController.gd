@@ -151,7 +151,7 @@ var econ: EconomyService
 var logger: StructuredLogger
 
 
-## Ase for a good Claimant contact. A missing key logs and pays 0.
+## Base Ase of a good Claimant contact, written as a found row in the packs. A missing key logs and counts 0.
 static func claimant_good_ase(reward_cfg: Dictionary, log: StructuredLogger, t: int) -> int:
 	return int(RewardCalc.cfg_num(reward_cfg, "contact_claimant_good_ase", 0.0, log, t))
 
@@ -526,6 +526,7 @@ func apply_contact_outcome(
 			sit_ref_idx = _si
 			break
 
+	var found_ase := 0
 	match role:
 		"witness":
 			if outcome == "good":
@@ -618,8 +619,9 @@ func apply_contact_outcome(
 
 		"claimant":
 			if outcome == "good":
-				EarningsService.record_found(stage, sit_id, "claimant_good",
-					claimant_good_ase(ConfigService.get_rewards_cfg(config_service), logger, t))
+				found_ase = claimant_good_ase(ConfigService.get_rewards_cfg(config_service), logger, t)
+				if not EarningsService.record_found(stage, sit_id, "claimant_good", found_ase):
+					found_ase = 0
 				_emotion_consequence_service().apply_morale_to_party(+5, "contact.claimant.good", t)
 			elif outcome == "partial":
 				_emotion_consequence_service().apply_morale_to_party(+3, "contact.claimant.partial", t)
@@ -730,7 +732,7 @@ func apply_contact_outcome(
 	})
 
 	return _resolve_transition_outcome(
-		_build_contact_resolve_snapshot(contact, outcome, true, t),
+		_build_contact_resolve_snapshot(contact, outcome, true, t, found_ase),
 		"stage.contact.resolve_screen")
 
 
@@ -759,7 +761,8 @@ func _build_contact_resolve_snapshot(
 	contact: Dictionary,
 	outcome: String,
 	go_back_to_stage: bool,
-	t: int
+	t: int,
+	found_ase: int = 0
 ) -> Dictionary:
 	var role := str(contact.get("role", ""))
 	var role_label := role.capitalize().replace("_", " ")
@@ -799,6 +802,7 @@ func _build_contact_resolve_snapshot(
 	# P1 CLOSE: additive fields for unified Resolve component.
 	ResolveSnapshotBuilder.add_banner(_data, "npc_contact", outcome_text)
 	ResolveSnapshotBuilder.add_grade_verdict(_data, _contact_verdict)
+	ResolveSnapshotBuilder.add_ase_gathered(_data, found_ase)
 	return _snap
 # Maps a turn_score to a reaction word that keys into npc_followup in contact_responses.json.
 func _derive_contact_reaction_word(turn_score: float) -> String:

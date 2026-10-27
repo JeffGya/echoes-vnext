@@ -211,6 +211,13 @@ static func add_objective_overcome(data: Dictionary, overcome: Dictionary) -> vo
 		data["objective_overcome"] = overcome
 
 
+## 14f — Ase found on this card that now waits in the packs. It is NOT in `ase_awarded`: nothing reaches
+## the balance until a leave or the path end. Written only when above 0. Situation and Claimant cards.
+static func add_ase_gathered(data: Dictionary, gathered: int) -> void:
+	if gathered > 0:
+		data["ase_gathered"] = gathered
+
+
 ## 14 — %ReasonLabel, "%d situation%s revealed". Producer C.
 static func add_scout_intel(data: Dictionary, intel_count: int) -> void:
 	data["intel_count"] = intel_count

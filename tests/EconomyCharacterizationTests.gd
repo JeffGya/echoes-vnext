@@ -131,6 +131,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/packs_realm01_worked_total_matches_design", Callable(EconomyCharacterizationTests, "_t_packs_worked_total"))
 	runner.register_test("econ_char/packs_fight_weight_reads_config_and_fails_visibly", Callable(EconomyCharacterizationTests, "_t_packs_weight_config"))
 	runner.register_test("econ_char/packs_rows_survive_save_and_reload", Callable(EconomyCharacterizationTests, "_t_packs_reload"))
+	runner.register_test("econ_char/packs_gathered_block_uses_the_leave_plan", Callable(EconomyCharacterizationTests, "_t_packs_gathered_block"))
+	runner.register_test("econ_char/packs_path_end_rows_add_to_the_payout", Callable(EconomyCharacterizationTests, "_t_packs_ledger_sums"))
+	runner.register_test("econ_char/packs_cards_carry_gathered_causes_and_replay", Callable(EconomyCharacterizationTests, "_t_packs_cards"))
 	runner.register_test("econ_char/intel_gained_absent_zero_present_count_absent_on_defeat", Callable(EconomyCharacterizationTests, "_t_intel_gained"))
 	runner.register_test("econ_char/intel_gained_replays_from_stored_result", Callable(EconomyCharacterizationTests, "_t_intel_gained_replay"))
 	runner.register_test("econ_char/death_record_carries_to_later_fight", Callable(EconomyCharacterizationTests, "_t_death_record"))
@@ -2354,8 +2357,9 @@ static func _t_settle_return_home_dispatch() -> Dictionary:
 	var bad: Array = []
 	_forbidden_in(snap_pre, "explore", bad)
 	if int(pre["ase"]) != 54 or int(pre["ekwan"]) != 11 or int(pre["overcome"]) != 2 or int(pre["total"]) != 2 \
-			or bool(pre["nothing_new"]) or pre.size() != 5:
-		m.append("preview %s, expected the gathered 54/11, 2 of 2, nothing_new false and no other key" % str(pre))
+			or bool(pre["nothing_new"]) or pre.size() != 6 or str(pre["gathered"]) != str({ "ase": 54, "ekwan": 11, "rows": 2,
+				"has_fight_rows": false, "has_found_rows": false }):
+		m.append("preview %s, expected the gathered 54/11, 2 of 2, nothing_new false, the gathered block and no other key" % str(pre))
 	var out: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
 	var data: Dictionary = out.get("data", {})
 	var econ: Dictionary = runtime.get_save_data()["economy"]
@@ -3060,9 +3064,9 @@ static func _t_packs_retreat_standoff() -> Dictionary:
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## A defeat loses the unsettled rows. A settled row and a keep_on_defeat row stay. It happens once per
-## situation, behind the consolation stamp: a repeat defeat there loses nothing more. An objective
-## fight still pays its small consolation to the balance, as before.
+## A defeat loses the unsettled rows. A settled row and a keep_on_defeat row stay. EVERY defeat does it, so a
+## second defeat at the same situation loses the rows gathered since the first. Building the same defeat card
+## twice loses once. Only the small objective consolation keeps its once-per-situation stamp.
 static func _t_packs_defeat() -> Dictionary:
 	var m: Array = []
 	var env := _fight_env("econ_char_packs_defeat", false)
@@ -3087,10 +3091,16 @@ static func _t_packs_defeat() -> Dictionary:
 		m.append("a defeat changed the settled marks")
 	if int(EarningsService.plan(stage, cfg)["scaled_ase"]) != 5 or _balance_ase(env) != 0:
 		m.append("after the defeat the packs hold %s and the balance %d, expected 5 and 0" % [str(EarningsService.plan(stage, cfg)["scaled_ase"]), _balance_ase(env)])
+	var lost_before := EarningsService.rows_of(stage).filter(func(r): return bool((r as Dictionary)["lost"])).size()
+	FlowEncounterState.build_final_snapshot(env["flow_ctx"], 6)
+	if EarningsService.rows_of(stage).filter(func(r): return bool((r as Dictionary)["lost"])).size() != lost_before:
+		m.append("building the same defeat card twice lost a row again")
 	EarningsService.add_row(stage, EarningsService.make_row("found:y", "found", "money", 7, 0))
 	FlowEncounterState.build_final_snapshot(env["flow_ctx"], 7)
-	if bool((EarningsService.rows_of(stage)[-1] as Dictionary)["lost"]):
-		m.append("a second defeat at the same situation lost a row again (the stamp must hold)")
+	if not bool((EarningsService.rows_of(stage)[-1] as Dictionary)["lost"]):
+		m.append("a second defeat at the same situation kept a row gathered since the first")
+	if ActiveStageService.lose_unsettled_packs(env["flow_ctx"], 8) != 0:
+		m.append("a repeat loss marked a row")
 
 	var obj_env := _fight_env("econ_char_packs_defeat_obj", false, 0)
 	EarningsService.add_row(obj_env["stage"], EarningsService.make_row("found:z", "found", "money", 9, 0))
@@ -3098,6 +3108,10 @@ static func _t_packs_defeat() -> Dictionary:
 	var z: Dictionary = EarningsService.rows_of(obj_env["stage"])[0]
 	if not bool(z["lost"]) or _balance_ase(obj_env) != 5:
 		m.append("objective fight defeat: row lost=%s, balance %d, expected lost and the 5 Ase consolation" % [str(z["lost"]), _balance_ase(obj_env)])
+	EarningsService.add_row(obj_env["stage"], EarningsService.make_row("found:w", "found", "money", 4, 0))
+	FlowEncounterState.build_final_snapshot(obj_env["flow_ctx"], 7)
+	if not bool((EarningsService.rows_of(obj_env["stage"])[-1] as Dictionary)["lost"]) or _balance_ase(obj_env) != 5:
+		m.append("objective fight, second defeat: the new row must be lost and the consolation must not repeat (balance %d)" % _balance_ase(obj_env))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
@@ -3120,7 +3134,9 @@ static func _t_packs_found() -> Dictionary:
 	emap["situations"] = sits
 	var res := SituationEngagementService.new(rt.flow_ctx, rt.config_service, _logger()).engage_situation(
 		"sit.money", EconomyService.new(rt.flow_ctx.save_data), 5)
-	var paid := int(res.get("ase_awarded", 0))
+	var paid := int(res.get("ase_gathered", 0))
+	if int(res.get("ase_awarded", 0)) != 0:
+		m.append("the money verdict still reports ase_awarded %s" % str(res.get("ase_awarded")))
 	var rows := EarningsService.rows_of(stage)
 	if str(res.get("outcome", "")) != "resolved" or paid < 8 or paid > 20 or rows.size() != 1 \
 			or str((rows[0] as Dictionary)["id"]) != "found:sit.money" or int((rows[0] as Dictionary)["ase"]) != paid \
@@ -3180,21 +3196,25 @@ static func _t_packs_leave() -> Dictionary:
 ## the payer rounds ONCE on the sum.
 static func _t_packs_path_end() -> Dictionary:
 	var m: Array = []
-	# [realm, run_count, base row, ase (with the 10 / 5 stipend), redo row]
-	for c in [["realm.01", 0, 48, 58, 0], ["realm.02", 0, 60, 70, 0], ["realm.01", 1, 48, 22, -31]]:
+	# [realm, run_count, objectives row, fights row, found row, ase (with the 10 / 5 stipend), redo row].
+	# The three source rows add to the rounded sum (48, 60, 48); the last row takes the rounding remainder.
+	for c in [["realm.01", 0, 30, 6, 12, 58, 0], ["realm.02", 0, 38, 8, 14, 70, 0], ["realm.01", 1, 30, 6, 12, 22, -31]]:
 		var ctx := _carry_ctx(c[0], c[1], [_obj(0, "shrine", true), _carry_boss()])
 		_gather(ctx, 1, 12)
 		var pv := StageSettlementService.new(ctx, ctx.config_service, _carry_econ(ctx), null).preview()
-		var base := _row_by_cause(pv["rows"], "objectives_overcome")
-		var redo := _row_by_cause(pv["rows"], "replay")
-		if int(pv["ase"]) != c[3] or int(base.get("delta", -1)) != c[2] or int(redo.get("delta", 0)) != c[4]:
-			m.append("%s run %s: pays %s, base %s, redo %s; expected %d, %d, %d" % [c[0], c[1], str(pv["ase"]), str(base.get("delta")), str(redo.get("delta")), c[3], c[2], c[4]])
+		var got := [int(_row_by_cause(pv["rows"], "objectives_overcome").get("delta", -1)),
+			int(_row_by_cause(pv["rows"], "encounters_overcome").get("delta", -1)),
+			int(_row_by_cause(pv["rows"], "found_banked").get("delta", -1)), int(pv["ase"]),
+			int(_row_by_cause(pv["rows"], "replay").get("delta", 0))]
+		if got != c.slice(2):
+			m.append("%s run %s: rows %s, expected %s" % [c[0], c[1], str(got), str(c.slice(2))])
 	var ctx2 := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], _seed_for("all"))
 	_gather(ctx2, 1, 12)
 	_leave(ctx2)
 	_gather(ctx2, 2, 0)
 	var end := StageSettlementService.new(ctx2, ctx2.config_service, _carry_econ(ctx2), null).preview()
-	if int(_row_by_cause(end["rows"], "objectives_overcome").get("delta", -1)) != 6 or int(end["ase"]) != 16 or int(end["ekwan"]) != 0:
+	if int(_row_by_cause(end["rows"], "encounters_overcome").get("delta", -1)) != 6 or int(end["ase"]) != 16 or int(end["ekwan"]) != 0 \
+			or not _row_by_cause(end["rows"], "found_banked").is_empty():
 		m.append("leave, then a fight, then the path end: pays %s/%s, expected the new fight (6) + stipend 10 and no Ekwan" % [str(end["ase"]), str(end["ekwan"])])
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
@@ -3262,3 +3282,115 @@ static func _t_packs_reload() -> Dictionary:
 		m.append("settled fight and found rows paid again after a second reload")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
+
+## `carry_home_preview.gathered` is built from the plan the leave uses: same Ase and Ekwan, a row count and two
+## booleans, no odds. A leave empties it; a fight won after the leave fills it again.
+static func _t_packs_gathered_block() -> Dictionary:
+	var m: Array = []
+	var ctx := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], _seed_for("all"))
+	var cases := [[0, 0, 1, false, false, 30, 6], [1, 0, 2, true, false, 36, 6], [1, 12, 3, true, true, 48, 6]]
+	for c in cases:
+		_gather(ctx, 1 if int(c[0]) > 0 else 0, int(c[1]))
+		var pre: Dictionary = StageExploreSnapshotBuilder._carry_preview(ctx)
+		var g: Dictionary = pre["gathered"]
+		var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
+		if g.keys().size() != 5 or int(g["rows"]) != c[2] or bool(g["has_fight_rows"]) != c[3] or bool(g["has_found_rows"]) != c[4] \
+				or int(g["ase"]) != c[5] or int(g["ekwan"]) != c[6] or int(g["ase"]) != int(plan["ase"]) or int(g["ekwan"]) != int(plan["ekwan"]) \
+				or int(pre["ase"]) != int(g["ase"]) or bool(pre["nothing_new"]):
+			m.append("gathered %s, expected rows %d fight %s found %s ase %d ekwan %d" % [str(g), c[2], str(c[3]), str(c[4]), c[5], c[6]])
+	var paid := _leave(ctx)
+	if int(paid["ase"]) != 48:
+		m.append("the leave paid %s, expected the gathered 48" % str(paid["ase"]))
+	var after: Dictionary = StageExploreSnapshotBuilder._carry_preview(ctx)
+	if str(after["gathered"]) != str({ "ase": 0, "ekwan": 0, "rows": 0, "has_fight_rows": false, "has_found_rows": false }) or not bool(after["nothing_new"]):
+		m.append("after the leave: %s" % str(after))
+	var replay := _carry_ctx("realm.01", 1, [_obj(0, "shrine", true), _carry_boss()])
+	_gather(replay, 1, 12)
+	var rp: Dictionary = StageExploreSnapshotBuilder._carry_preview(replay)
+	if int(rp["gathered"]["ase"]) != 17 or int(rp["ase"]) != 17:
+		m.append("replay run: gathered %s, expected 48 x 0.35 = 17" % str(rp))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## At the path end the source rows (objectives, fights, found) plus the redo row and the stipend add to the payout,
+## whatever the rounding does, for every realm scale and replay.
+static func _t_packs_ledger_sums() -> Dictionary:
+	var m: Array = []
+	for realm in ["realm.01", "realm.02"]:
+		for run in [0, 1]:
+			for fights in [0, 1, 3]:
+				for found in [0, 1, 5, 9, 13]:
+					for objs in [[_carry_boss()], [_obj(0, "shrine", true), _carry_boss()], [_obj(0, "recover", true), _obj(1, "protect", true), _carry_boss()]]:
+						var ctx := _carry_ctx(realm, run, objs)
+						_gather(ctx, fights, found)
+						var pv := StageSettlementService.new(ctx, ctx.config_service, _carry_econ(ctx), null).preview()
+						var sum := 0
+						for row_v in pv["rows"]:
+							sum += int((row_v as Dictionary)["delta"])
+						if sum != int(pv["ase"]):
+							m.append("%s run %d fights %d found %d objs %d: rows add to %d, payout %d" % [realm, run, fights, found, objs.size() - 1, sum, int(pv["ase"])])
+	return { "ok": m.is_empty(), "error": "; ".join(m.slice(0, 6)) }
+
+
+## The cards: a won fight shows an `encounter_gathered` row and pays 0 (same row on a rebuild); an objective fight shows none;
+## the money and Claimant cards carry `ase_gathered` and `ase_awarded` 0; a stored result replays the rows and the key.
+static func _t_packs_cards() -> Dictionary:
+	var m: Array = []
+	var env := _fight_build(_fight_env("econ_char_cards_win", true))
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var data: Dictionary = env["card"]["data"]
+	var rows: Array = (data["reward_breakdown"] as Array).filter(func(r): return str((r as Dictionary).get("cause", "")) == "encounter_gathered")
+	if rows.size() != 1 or int((rows[0] as Dictionary)["delta"]) != 6 or int((rows[0] as Dictionary)["params"]["gathered_ase"]) != 6 \
+			or str((rows[0] as Dictionary)["params"]["kind"]) != "fight" or int(data["ase_awarded"]) != 0 or data.has("ase_gathered"):
+		m.append("won fight card: ase_awarded %s, rows %s" % [str(data["ase_awarded"]), JSON.stringify(data["reward_breakdown"])])
+	var again: Dictionary = FlowEncounterState.build_final_snapshot(env["flow_ctx"], 7)["data"]
+	if JSON.stringify(again["reward_breakdown"]) != JSON.stringify(data["reward_breakdown"]):
+		m.append("a rebuilt card shows other rows: %s" % JSON.stringify(again["reward_breakdown"]))
+
+	var fc: FlowContext = env["flow_ctx"]
+	(env["card"]["data"] as Dictionary)["ase_gathered"] = 5
+	PendingResultService.capture_or_consume(fc, env["card"], 7)
+	var back: Dictionary = PendingResultService.build_snapshot(fc, 8)["data"]
+	if JSON.stringify(back["reward_breakdown"]) != JSON.stringify(data["reward_breakdown"]) or int(back.get("ase_gathered", -1)) != 5:
+		m.append("the stored result did not replay the gathered row and key: %s" % JSON.stringify(back.get("reward_breakdown")))
+
+	var obj := _fight_build(_fight_env("econ_char_cards_obj", true, 0))
+	for r_v in (obj["card"]["data"]["reward_breakdown"] as Array):
+		if str((r_v as Dictionary).get("cause", "")) == "encounter_gathered":
+			m.append("an objective fight card shows a fight row")
+	var lose := _fight_build(_fight_env("econ_char_cards_lose", false))
+	for r_v in (lose["card"]["data"]["reward_breakdown"] as Array):
+		if str((r_v as Dictionary).get("cause", "")) == "encounter_gathered":
+			m.append("a defeat card shows a fight row")
+
+	var sit := VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "money" }, "line", [], [], 12, 5)
+	var sd: Dictionary = sit["data"]
+	var sr: Array = sd["reward_breakdown"]
+	if int(sd["ase_awarded"]) != 0 or int(sd.get("ase_gathered", 0)) != 12 or sr.size() != 1 \
+			or str((sr[0] as Dictionary)["cause"]) != "found_gathered" or int((sr[0] as Dictionary)["delta"]) != 12 \
+			or str((sr[0] as Dictionary)["params"]["kind"]) != "money":
+		m.append("money card: %s" % JSON.stringify(sd))
+	if JSON.stringify(VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "money" }, "line", [], [], 12, 5)) != JSON.stringify(sit):
+		m.append("the money card builder is not pure")
+	var none: Dictionary = VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "omen" }, "line", [], [], 0, 5)["data"]
+	if none.has("ase_gathered") or not (none["reward_breakdown"] as Array).is_empty() or int(none["ase_awarded"]) != 0:
+		m.append("a card that found nothing carries a gathered key or row")
+
+	var genv := VentureCharacterizationTests._setup_stage_env("econ_char_cards_claim")
+	if not bool(genv.get("ok", false)):
+		return genv
+	var rt: FlowRuntime = genv["runtime"]
+	rt.flow_ctx.realm_id = "realm.01"
+	rt.flow_ctx.stage_id = "stage.0"
+	var stage: Dictionary = FlowStageExploreState._get_current_stage(rt.flow_ctx)
+	stage["earnings"] = []
+	var sits: Array = stage["explore_map"].get("situations", [])
+	sits.append({ "id": "sit.claim", "type": "npc", "revealed": true, "resolved": false, "is_objective": false, "objective_index": -1 })
+	stage["explore_map"]["situations"] = sits
+	var out: FlowActionOutcome = rt._contact_controller().apply_contact_outcome(
+		{ "id": "sit.claim", "role": "claimant", "outcome": "good" }, stage, stage["explore_map"], 6)
+	var cd: Dictionary = out.replacement_snapshot.get("data", {})
+	if int(cd.get("ase_gathered", -1)) != 20 or cd.has("ase_awarded"):
+		m.append("good Claimant card: %s" % JSON.stringify(cd))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }

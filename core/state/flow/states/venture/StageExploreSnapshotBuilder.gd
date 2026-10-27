@@ -475,7 +475,7 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"commitment_depth":        _commitment_depth(explore_map, _step_budget_snap),
 			"presentation":            ConfigService.get_stage_presentation_cfg(flow_ctx.config_service),
 			# What the party has gathered and has not yet settled: { ase, ekwan, overcome, total,
-			# nothing_new }. No odds. Read only.
+			# nothing_new, gathered: { ase, ekwan, rows, has_fight_rows, has_found_rows } }. No odds. Read only.
 			"carry_home_preview":      _carry_preview(flow_ctx),
 		},
 		"actions": actions,
@@ -487,7 +487,9 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 static func _carry_preview(flow_ctx: FlowContext) -> Dictionary:
 	var plan := StageSettlementService.settle_plan(flow_ctx, flow_ctx.config_service)
 	return { "ase": plan["ase"], "ekwan": plan["ekwan"], "overcome": plan["overcome"], "total": plan["total"],
-		"nothing_new": plan["nothing_new"] }
+		"nothing_new": plan["nothing_new"],
+		"gathered": { "ase": plan["ase"], "ekwan": plan["ekwan"], "rows": plan["rows"],
+			"has_fight_rows": int(plan["fight_rows"]) > 0, "has_found_rows": int(plan["found_rows"]) > 0 } }
 
 
 static func _commitment_depth(explore_map: Dictionary, step_budget: int) -> int:

@@ -95,7 +95,7 @@ func spend_ase(amount: int, reason: String, logger: StructuredLogger, t: int) ->
 #
 # Two payers, one per cadence:
 #   reward_encounter_complete()  — once per ENCOUNTER, at combat end.
-#       Victory: pays nothing (the Echoes stipend is a stage payout row).
+#       Victory: pays nothing. A won fight is a row in the packs (`EarningsService`), banked by the stage payer.
 #       Defeat:  the 25% consolation, paid ONCE per situation (the caller's `consolation_eligible`).
 #   settle_stage_complete()      — once per STAGE, in `flow.complete_stage`, behind the stage's
 #       `settlement_receipt` stamp. Objective weights (and Ekwan), realm-scaled and replay-scaled,
@@ -183,10 +183,11 @@ func settle_stage_complete(
 	ekwan_base: int = 0,
 	echo_home: Dictionary = {},
 	settled_ase: int = 0,
-	settled_ekwan: int = 0
+	settled_ekwan: int = 0,
+	sources: Dictionary = {}
 ) -> Dictionary:
 	var rows := stage_payout_rows(base_reward, realm_scale, replay_factor, objective_counts, ekwan_base,
-		echo_home, settled_ase, settled_ekwan)
+		echo_home, settled_ase, settled_ekwan, sources)
 	var total: int = rows["ase"]
 	var breakdown: Array = rows["breakdown"]
 
@@ -217,20 +218,20 @@ func settle_stage_complete(
 ## `objective_counts` still counts every completed one. `settled_ase`, `settled_ekwan`: what the leave
 ## already paid. They change no total; a zero-delta `settled_on_leave` memo row shows them, only when
 ## either is above 0.
+## `sources` = `EarningsService.plan().sources`. It splits the base row by source: objectives, fights
+## (`encounters_overcome`) and found Ase (`found_banked`). A part shows when it has an open row; the
+## objectives row also shows when no part does. Each part is rounded alone, the LAST part shown takes the
+## remainder, so the rows still add to the payout. Empty `sources` gives the one objectives row.
 ## Pure. Returns { breakdown: Array, ase: int, ekwan: int }.
 static func stage_payout_rows(base_reward: int, realm_scale: float, replay_factor: float,
 		objective_counts: Dictionary = {}, ekwan_base: int = 0,
-		echo_home: Dictionary = {}, settled_ase: int = 0, settled_ekwan: int = 0) -> Dictionary:
+		echo_home: Dictionary = {}, settled_ase: int = 0, settled_ekwan: int = 0,
+		sources: Dictionary = {}) -> Dictionary:
 	var scaled := float(base_reward) * realm_scale
 	var base_row := RewardCalc.round_payout(scaled)
 	var objective_ase := RewardCalc.round_payout(scaled * replay_factor)
 	var replay_delta := objective_ase - base_row  # negative or 0
-	var breakdown: Array = []
-	breakdown.append(_row("Base objectives", base_row, "objectives_overcome", {
-		"overcome": int(objective_counts.get("overcome", 0)),
-		"total": int(objective_counts.get("total", 0)),
-		"realm_scale": realm_scale,
-	}))
+	var breakdown: Array = _base_rows(base_row, realm_scale, objective_counts, sources)
 	if replay_delta < 0:
 		breakdown.append(_row("Redo penalty", replay_delta, "replay", { "factor": replay_factor }))
 	var stipend := 0
@@ -252,6 +253,33 @@ static func stage_payout_rows(base_reward: int, realm_scale: float, replay_facto
 		"ase": objective_ase + stipend,
 		"ekwan": ekwan_gross,
 	}
+
+
+## The rows that add up to `base_row`, one per source (see `stage_payout_rows`).
+static func _base_rows(base_row: int, realm_scale: float, objective_counts: Dictionary,
+		sources: Dictionary) -> Array:
+	var fights: Dictionary = sources.get(EarningsService.SOURCE_ENCOUNTER, {})
+	var found: Dictionary = sources.get(EarningsService.SOURCE_FOUND, {})
+	var objectives: Dictionary = sources.get(EarningsService.SOURCE_OBJECTIVE, {})
+	var shown: Array = []
+	if int(objectives.get("rows", 0)) > 0 or (int(fights.get("rows", 0)) <= 0 and int(found.get("rows", 0)) <= 0):
+		shown.append({ "label": "Base objectives", "cause": "objectives_overcome", "ase": int(objectives.get("ase", 0)),
+			"params": { "overcome": int(objective_counts.get("overcome", 0)),
+				"total": int(objective_counts.get("total", 0)), "realm_scale": realm_scale } })
+	if int(fights.get("rows", 0)) > 0:
+		shown.append({ "label": "Fights won", "cause": "encounters_overcome", "ase": int(fights.get("ase", 0)),
+			"params": { "count": int(fights.get("rows", 0)) } })
+	if int(found.get("rows", 0)) > 0:
+		shown.append({ "label": "Found on the path", "cause": "found_banked", "ase": int(found.get("ase", 0)),
+			"params": { "count": int(found.get("rows", 0)) } })
+	var out: Array = []
+	var given := 0
+	for i in shown.size():
+		var part: Dictionary = shown[i]
+		var delta := base_row - given if i == shown.size() - 1 else RewardCalc.round_payout(float(part["ase"]) * realm_scale)
+		given += delta
+		out.append(_row(str(part["label"]), delta, str(part["cause"]), part["params"]))
+	return out
 
 
 # ---- Mutation API (Ekwan) ----

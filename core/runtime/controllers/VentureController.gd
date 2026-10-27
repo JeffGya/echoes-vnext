@@ -305,7 +305,7 @@ func _situation_resolve_outcome(verdict: Dictionary, t: int) -> FlowActionOutcom
 		str(verdict.get("summary_line", "")),
 		emo_v if emo_v is Array else [],
 		eff_v if eff_v is Array else [],
-		int(verdict.get("ase_awarded", 0)),
+		int(verdict.get("ase_gathered", 0)),
 		t
 	)
 	var outcome := FlowActionOutcome.snapshot_outcome_no_refresh(_snap)

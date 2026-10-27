@@ -437,8 +437,7 @@ static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: 
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty():
 		return false
-	var emap_v: Variant = stage.get("explore_map", {})
-	var sit_id := str((emap_v as Dictionary).get("last_situation_id", "")) if emap_v is Dictionary else ""
+	var sit_id := _last_situation_id(stage)
 	var wrote := EarningsService.record_fight(stage, sit_id, claimant,
 		ConfigService.get_rewards_cfg(flow_ctx_arg.config_service), flow_ctx_arg.logger, t)
 	if wrote and flow_ctx_arg.logger != null:
@@ -447,9 +446,26 @@ static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: 
 	return wrote
 
 
+## The fight row of the situation being fought, or {} when there is none. Read only: a rebuilt final card
+## shows the same row as the first build, because it reads the row and not the act of writing it.
+static func fight_row(flow_ctx_arg: FlowContext, claimant: bool) -> Dictionary:
+	if flow_ctx_arg.active_encounter_objective_index >= 0:
+		return {}
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if stage.is_empty():
+		return {}
+	return EarningsService.row_of(stage, EarningsService.fight_id(_last_situation_id(stage), claimant))
+
+
+static func _last_situation_id(stage: Dictionary) -> String:
+	var emap_v: Variant = stage.get("explore_map", {})
+	return str((emap_v as Dictionary).get("last_situation_id", "")) if emap_v is Dictionary else ""
+
+
 ## D-115: a defeat loses every unsettled row of the active stage's packs (rows kept on defeat stay).
 ## A completed objective with no row gets its row first, so the safety net cannot add it back later.
-## Returns how many rows were lost. The caller guards the exactly-once stamp and requests the save.
+## Runs on every defeat. It is idempotent: a lost row is not unsettled, so a repeat marks nothing.
+## Returns how many rows were lost. The caller requests the save.
 static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty():

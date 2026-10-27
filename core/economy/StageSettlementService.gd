@@ -127,7 +127,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 	var payout: Dictionary = econ.settle_stage_complete(
 		base, plan["realm_scale"], plan["replay_factor"], logger, t,
 		plan["counts"], plan["ekwan_base"], plan["echo_home"],
-		plan["settled_ase"], plan["settled_ekwan"]
+		plan["settled_ase"], plan["settled_ekwan"], plan["sources"]
 	)
 	flow_ctx.request_save("stage.reward")
 
@@ -185,7 +185,7 @@ func preview() -> Dictionary:
 	var plan := _plan(realm_model, stage_ref, stage_index, null, 0)
 	var rows := EconomyService.stage_payout_rows(
 		plan["base"], plan["realm_scale"], plan["replay_factor"], plan["counts"],
-		plan["ekwan_base"], plan["echo_home"], plan["settled_ase"], plan["settled_ekwan"])
+		plan["ekwan_base"], plan["echo_home"], plan["settled_ase"], plan["settled_ekwan"], plan["sources"])
 	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
 
 
@@ -209,6 +209,7 @@ func _plan(realm_model: Dictionary, stage_ref: Dictionary, stage_index: int,
 		"echo_home":      _echo_home(realm_model, reward_cfg, log, t),
 		"settled_ase":    maxi(0, int(stage_ref.get("settled_ase", 0))),
 		"settled_ekwan":  maxi(0, int(stage_ref.get("settled_ekwan", 0))),
+		"sources":        packs["sources"],
 	}
 
 
@@ -258,11 +259,15 @@ const OUTCOME_NOTHING_NEW := "nothing_new"
 ## factor as the stage payout. Pure and read-only; no roll, no odds.
 ## `ase`, `ekwan` = the gathered amount before the roll. `ids` = the rows it would mark.
 ## `nothing_new` = no gathered Ase or Ekwan (so the payer draws no roll).
-## Returns { ase, ekwan, overcome, total, ids, nothing_new, settled_ase, settled_ekwan }.
+## `rows`, `fight_rows`, `found_rows` = how many unsettled rows, and how many of them are fights and found Ase.
+## `settle_count` = how many leaves already settled this stage.
+## Returns { ase, ekwan, overcome, total, ids, nothing_new, settled_ase, settled_ekwan, rows, fight_rows,
+## found_rows, settle_count }.
 static func settle_plan(ctx: FlowContext, cfg_service: ConfigService,
 		logger: StructuredLogger = null, t: int = 0) -> Dictionary:
 	var plan := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "ids": [],
-		"nothing_new": true, "settled_ase": 0, "settled_ekwan": 0 }
+		"nothing_new": true, "settled_ase": 0, "settled_ekwan": 0, "rows": 0, "fight_rows": 0, "found_rows": 0,
+		"settle_count": 0 }
 	if ctx.realm_id.is_empty() or ctx.stage_id.is_empty():
 		return plan
 	var stage_ref := _live_stage(ctx)
@@ -276,9 +281,13 @@ static func settle_plan(ctx: FlowContext, cfg_service: ConfigService,
 	plan["total"] = int(counts.get("total", 0))
 	plan["settled_ase"] = maxi(0, int(stage_ref.get("settled_ase", 0)))
 	plan["settled_ekwan"] = maxi(0, int(stage_ref.get("settled_ekwan", 0)))
+	plan["settle_count"] = maxi(0, int(stage_ref.get("settle_count", 0)))
 
 	var packs := EarningsService.plan(stage_ref, reward_cfg)
 	plan["ids"] = packs["ids"]
+	plan["rows"] = (packs["ids"] as Array).size()
+	plan["fight_rows"] = int(packs["sources"][EarningsService.SOURCE_ENCOUNTER]["rows"])
+	plan["found_rows"] = int(packs["sources"][EarningsService.SOURCE_FOUND]["rows"])
 	var fx := ActiveStageService.get_payout_factors(ctx, cfg_service, logger, t)
 	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"])
 	plan["ase"] = RewardCalc.round_payout(float(packs["scaled_ase"]) * k)

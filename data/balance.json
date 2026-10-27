@@ -1566,7 +1566,7 @@
 				"shrine": 6,
 				"boss": 0
 			},
-			"_encounter_weights_comment": "Base Ase per encounter kind, before the realm scale and the replay factor (D-115). fight = one won normal fight, for the whole party. Read through RewardCalc.cfg_num; not paid yet.",
+			"_encounter_weights_comment": "Base Ase per encounter kind, before the realm scale and the replay factor (D-115). fight = one won normal fight, for the whole party. Read through RewardCalc.cfg_num. A won fight adds one row to the packs; the leave roll or the path end pays it.",
 			"encounter_weights": {
 				"fight": 6
 			},
@@ -1607,7 +1607,7 @@
 				"some": 0.5,
 				"all": 1.0
 			},
-			"_contact_claimant_good_comment": "Ase paid once for a good Claimant contact (V2-ECONOMY-004 5.15). Outside the realm scale and the replay factor.",
+			"_contact_claimant_good_comment": "Base Ase of a good Claimant contact (V2-ECONOMY-004 5.15). It goes in the packs as a found row and takes the realm scale and the replay factor like every other row (D-115).",
 			"contact_claimant_good_ase": 20
 		},
 		"grid": {
