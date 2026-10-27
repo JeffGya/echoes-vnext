@@ -46,6 +46,15 @@ This amends D-08: that one discard action is in scope. Equip, recycle and sell s
 Consequences to design: the save write for the discard, the action path through the single choke point, a confirmation, and the exact rule (unique pieces only? stacks?). Round 2 and the build plan settle these.
 Source: `design-round1-sr-game-designer.md` section 7 and the options table.
 
+## D-12 — Echoes choose what to take at pickup (Jeff, 2026-10-27) — DESIGN DIRECTION, details open
+After each encounter, the Echoes decide which finds go into the packs and which stay on the path. A higher Standing or a "smarter" Calling chooses better. Jeff also sees a link to Storyweight, Standing, vectors and emotion.
+The keeper's one intervention is the swap (see D-11; the exact form is still being clarified).
+This design round 1 and round 2 were written BEFORE D-12. Both need a pass 3 that adds the Echo choice. D-03 (per-item draw on an early leave) and D-04 stay until Jeff says otherwise.
+Scope risk: an Echo decision model touches Echo behavior, vectors and Calling data. One story, one subject: Jeff decides whether the full model is this story or a follow-up. This story would build the selection seam.
+
+## D-13 — The packs have their own small capacity (Jeff, 2026-10-27)
+The party carries a limited number of item slots on the path (a config number, not set yet). Echoes choose which finds fill them. The Sanctum cap (D-05) still applies when items arrive.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
