@@ -867,3 +867,6 @@ D-116 addendum (Jeff, 2026-10-27): (a) quiet two-step warning before the standof
 
 ## D-117 — Phase 7 copy is agent-written in Jeff's tone (2026-10-27)
 Jeff: "For any text let an agent write the copy in the tone I have chosen." File: `phase7-copy-final.md` (AGENT-WRITTEN; one final line per slot; Jeff may edit after the play test). The build uses these lines exactly. Slots: standoff card, warning lines and bark, prebattle line, packs and ledger causes, defeat line, money and claimant situation lines, empty-packs panel line. Word rules (ANSWERS #86) were checked by reading.
+
+## D-118 — A standoff writes the fight's fear and morale back (orchestrator default, for Jeff's play test; 2026-10-27)
+Finding (step 7.S): a forced retreat never wrote the fight's final fear/morale back to the roster (every ending fight does). The first-standoff fear drop (D-116 addendum c, "small and visible") would then act on the old saved fear and be weak. Jeff said not to pause, so the orchestrator chose: the standoff writes the final fear and morale back through the same code as an ending fight; the one-time drop acts on the written-back value. Jeff can reverse this after the play test. Facts from 7.S: a path has no turn limit; passive time income pays by clock time (capped 3600 s per settle), not by turns; a stalled fight rerun gives the same trace unless an input changes.
