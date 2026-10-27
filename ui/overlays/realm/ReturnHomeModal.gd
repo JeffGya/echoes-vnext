@@ -96,6 +96,11 @@ func _on_cancel_pressed() -> void:
 		return
 	dismiss_requested.emit()
 
+## Hardware Back is Cancel in confirm mode, like Esc. The result display ignores it.
+func handle_go_back() -> void:
+	if _confirm_mode:
+		_on_cancel_pressed()
+
 ## Esc is Cancel in confirm mode.
 func _input(event: InputEvent) -> void:
 	if _confirm_mode and is_visible_in_tree() and event.is_action_pressed("ui_cancel"):

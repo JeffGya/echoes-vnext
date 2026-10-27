@@ -69,6 +69,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/final_win_card_total_is_the_stage_payout_without_double_count", Callable(ResolvePayoutUITests, "_t_final_win_no_double_count"))
 	runner.register_test("payout_ui/packs_cause_names_and_tooltips_are_exact", Callable(ResolvePayoutUITests, "_t_packs_causes"))
 	runner.register_test("payout_ui/phase7_strings_no_home_stage_percent_or_leave", Callable(ResolvePayoutUITests, "_t_phase7_scan"))
+	runner.register_test("payout_ui/back_closes_the_confirmation_and_ignores_the_result_and_cards", Callable(ResolvePayoutUITests, "_t_hardware_back"))
+	runner.register_test("payout_ui/back_with_no_modal_still_reads_the_snapshot_back_slot", Callable(ResolvePayoutUITests, "_t_back_no_modal"))
+	runner.register_test("payout_ui/ekwan_only_return_card_opens_a_ledger_with_total_and_ekwan_line", Callable(ResolvePayoutUITests, "_t_ekwan_only_ledger"))
+	runner.register_test("payout_ui/gathered_total_reads_the_core_key_over_two_rows", Callable(ResolvePayoutUITests, "_t_gathered_core_key"))
+	runner.register_test("payout_ui/fight_card_banner_ignores_the_surface_word", Callable(ResolvePayoutUITests, "_t_fight_banner_surface"))
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -2163,3 +2168,133 @@ static func _t_phase7_scan() -> Dictionary:
 	if not bad.is_empty():
 		return { "ok": false, "error": "confirmation: " + bad }
 	return { "ok": true }
+
+
+# ── Technical debt round, step 8.B ──────────────────────────────────────────
+
+## Hardware Back while a modal is open (D-121). The confirmation closes like Stay. The failed-escape
+## display, the retreat card and the standoff card do nothing. Nothing dispatches in any case.
+static func _t_hardware_back() -> Dictionary:
+	var fx := StageCameraSelectTests._make_fixture("payout_back")
+	if fx.is_empty():
+		return { "ok": false, "error": "could not build the real stage fixture" }
+	var vp: SubViewport = fx["viewport"]
+	var realm: RealmShell = fx["realm"]
+	var host := preload("res://ui/components/ModalHost.tscn").instantiate() as ModalHost
+	vp.add_child(host)
+	var root := (load("res://ui/Approot.tscn") as PackedScene).instantiate() as Control
+	root.set("modal_host", host)
+	var actions: Array = []
+	host.action_requested.connect(func(a: Dictionary) -> void: actions.append(a))
+	var err := ""
+	# The confirmation: Back closes it, nothing dispatches.
+	host.present_modal_for_id(&"realm.return_home", ReturnHomeScene, _confirm_payload({ "ase": 4, "ekwan": 0, "overcome": 1, "total": 3 }))
+	root.call("_handle_go_back_request")
+	if host.has_active_modal() or not actions.is_empty():
+		err = "confirmation: open=%s actions=%s" % [host.has_active_modal(), str(actions)]
+	# The failed-escape display has no Stay button: Back changes nothing.
+	if err.is_empty():
+		host.present_modal_for_id(&"realm.return_home", ReturnHomeScene, { "result": { "success": false, "message": "The way is blocked." } })
+		root.call("_handle_go_back_request")
+		if not host.has_active_modal() or not actions.is_empty():
+			err = "failed escape: open=%s actions=%s" % [host.has_active_modal(), str(actions)]
+		host.dismiss_modal()
+	# The retreat card and the standoff card: Back changes nothing.
+	for card in [_retreat_card(true), _standoff_card(2, true)]:
+		if not err.is_empty():
+			break
+		realm.modal_requested.connect(func(id: StringName, payload: Dictionary) -> void:
+			host.present_modal_for_id(id, realm.modal_scene_for(id), payload), CONNECT_ONE_SHOT)
+		realm.set_snapshot(card)
+		SanctumLayoutTests._force_control_layout(realm)
+		if not host.has_active_modal():
+			err = "the card did not open"
+			break
+		var before := host.active_modal_id()
+		root.call("_handle_go_back_request")
+		if not host.has_active_modal() or host.active_modal_id() != before or not actions.is_empty():
+			err = "%s card: open=%s actions=%s" % [str(before), host.has_active_modal(), str(actions)]
+		host.dismiss_modal()
+	root.free()
+	vp.free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+## With no modal the handler behaves as before: no back slot, or a disabled one, does nothing.
+## The enabled case needs a live FlowRuntime and is not driven here.
+static func _t_back_no_modal() -> Dictionary:
+	var vp := SubViewport.new()
+	(Engine.get_main_loop() as SceneTree).current_scene.get_node("UISnapshotRenderer").add_child(vp)
+	var host := preload("res://ui/components/ModalHost.tscn").instantiate() as ModalHost
+	vp.add_child(host)
+	var root := (load("res://ui/Approot.tscn") as PackedScene).instantiate() as Control
+	root.set("modal_host", host)
+	var err := ""
+	for snap in [{}, { "actions": {} }, { "actions": { "nav.back": { "type": "flow.go_back", "disabled": true } } }]:
+		root.set("_last_snapshot", snap)
+		root.call("_handle_go_back_request")  # a dispatch would crash on the null runtime
+	if host.has_active_modal():
+		err = "Back opened a modal"
+	root.free()
+	vp.free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+## Follow-up 45: Ekwan above 0 and no other row. The ledger opens with the total and the Ekwan line only,
+## and its button is a full-width target of at least 48 high.
+static func _t_ekwan_only_ledger() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 3 }, "actions": {}, "data": {
+		"run_type": "scout_return", "intel_count": 1, "ase_awarded": 0, "ekwan_awarded": 5, "ledger_seen": false,
+		"reward_breakdown": [_row("Settled when you left", 0, "settle_some")], "actors": [] } })
+	StopMarkMotion.reduced = before
+	var button := screen.get_node("%EarningsSummary") as Button
+	if not (screen.get_node("%Ledger") as Control).visible or not button.visible or button.disabled:
+		return _fail(m, "the ledger did not open for an Ekwan-only card")
+	if not _rows_in(screen, "%BreakdownSection").is_empty() or not _rows_in(screen, "%StageSection").is_empty():
+		return _fail(m, "a row shows beside the Ekwan line")
+	if not (screen.get_node("%EkwanLine") as Control).visible or _label(screen, "%EkwanLineValue").text != "+5 Ekwan" \
+			or _label(screen, "%TotalValue").text != "= 0 Ase":
+		return _fail(m, "total or Ekwan line wrong")
+	var size := button.get_combined_minimum_size()
+	if size.y < 48.0:
+		return _fail(m, "ledger button %s is under 48 high" % str(size))
+	return _pass(m)
+
+
+## Follow-up 50: the core key `ase_gathered` is the total in the packs. With two `encounter_gathered`
+## rows the total is the key, not the first row. One row with no key keeps its delta.
+static func _t_gathered_core_key() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var rows := [_row("Fight won", 6, "encounter_gathered", { "kind": "combat", "gathered_ase": 6 }),
+		_row("Fight won", 4, "encounter_gathered", { "kind": "combat", "gathered_ase": 4 })]
+	screen.set_snapshot(_midstage({ "reward_breakdown": rows, "ase_awarded": 0, "ase_gathered": 10, "ledger_seen": false }))
+	if _label(screen, "%AseTotalLabel").text != "+10 Ase":
+		return _fail(m, "two rows with the key: \"%s\"" % _label(screen, "%AseTotalLabel").text)
+	screen.set_snapshot(_midstage({ "reward_breakdown": [rows[0]], "ase_awarded": 0, "ledger_seen": false }))
+	StopMarkMotion.reduced = before
+	if _label(screen, "%AseTotalLabel").text != "+6 Ase":
+		return _fail(m, "one row without the key: \"%s\"" % _label(screen, "%AseTotalLabel").text)
+	return _pass(m)
+
+
+## The core `surface` of a fight card is the fought objective type or "combat". A fight card shows
+## VICTORY or DEFEAT: no card text carries the word.
+static func _t_fight_banner_surface() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	for surface in ["combat", "recover", "purify_shrine"]:
+		for victory in [true, false]:
+			screen.set_snapshot(_snap([], { "surface": surface, "victory": victory, "ledger_seen": true }, victory))
+			var banner := _label(screen, "%BannerLabel").text
+			if banner != ("VICTORY" if victory else "DEFEAT"):
+				return _fail(m, "banner \"%s\" for surface %s" % [banner, surface])
+			for text in _visible_texts(screen):
+				var low := str(text).to_lower()
+				if low.contains("combat") or low.contains("shrine"):
+					return _fail(m, "the surface word shows: \"%s\"" % str(text))
+	return _pass(m)
