@@ -21,7 +21,7 @@ Written in STE. One line per item: what, why, source decision. No Notion row exi
 | 15 | Hard-coded 0.25 defeat consolation factor (`EconomyService.gd`) while `data.rewards.defeat_factor` exists | Tunable in code. | Phase 3 proposal |
 | 16 | Stale block-count comments ("SIXTEEN BLOCKS", "SEVENTEEN-BLOCK") | Doc hygiene. | Phase 3c/4 reports |
 | 17 | `VowService.gd:340` comment says "clamp to zero if broke"; `spend_*` denies the whole spend | Comment disagrees with code. | Phase 1/4 reports |
-| 18 | Notion: ECONOMY-004 depends on ECONOMY-001 only; ECONOMY-003 gains ECONOMY-004; part B (item costs) waits for ITEM-001 | Dependency errors. | D-01 |
+| 18 | DONE 2026-10-27 (Jeff said yes): Notion dependencies changed. ECONOMY-004 now depends on ECONOMY-001 only; ECONOMY-003 gained ECONOMY-004. Part B (item costs) still waits for ITEM-001 | Dependency errors. | D-01, D-120 |
 | 19 | ITEM-001 opening prompt for the other chat (when due) | Part B needs it. | D-01 |
 | 20 | Village dwellings or rooms paid with Ekwan, as a literal capacity limit beside the rising summon price | Jeff wants population regulated and an Ekwan sink (GDD §19.2 lists rooms as an Ekwan use). Owner: an open Sanctum story or a new story. | D-55, D-64 |
 | 21 | Copy: fiction frame for the rising price ("the price of holding one more life in the village" is a proposal), wording of every tooltip, "village" not "house" | Copy is Jeff's. | D-57 |

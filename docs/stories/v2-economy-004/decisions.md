@@ -879,3 +879,9 @@ QA (`qa-verifier`, opus, 893de79..95d54bd): packs, defeat, standoff rules, no-le
 - **F5 (fix):** the "Fights won" count tooltip counts only unsettled fight rows; it must count all fight rows of the path.
 - **F2 (default kept, Jeff to decide after the play test):** event cards (fight, money, Claimant) show the BASE amount; the leave panel, the defeat line and the payment use the scaled amount. On a replay the card shows +6 while the packs hold 2. Noted as a play test question.
 - F6 to F9 and the QA bloat notes: follow-ups (F6 mid-path won-fight card still says "Return to Exploration", no banned word; F7 debug Claimant id; F8 screenshot fixture `rows` shape; F9 Keeper trial standoff probably unreachable).
+
+## D-120 — Notion dependency edits made (Jeff said yes, 2026-10-27)
+Two Notion backlog rows changed, properties only (no page text, no status):
+- V2-ECONOMY-004 (339c3d1ede9281018fd2e58507871e0d): Dependencies "V2-ECONOMY-001, V2-ECONOMY-003, V2-ITEM-001" -> "V2-ECONOMY-001".
+- V2-ECONOMY-003 (339c3d1ede928118a5a1c81a35f276c0): Dependencies "V2-ITEM-001, V2-ITEM-003, V2-ECONOMY-002, V2-CONTINUITY-001" -> the same list plus "V2-ECONOMY-004".
+Not changed: statuses (ECONOMY-004 stays "Ready"; Part B waits for ITEM-001). Two rows with code V2-ECONOMY-001 exist (one Superseded, one Done); neither was touched.
