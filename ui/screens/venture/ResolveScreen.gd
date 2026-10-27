@@ -1005,6 +1005,7 @@ func _render_standoff(data: Dictionary, actions: Dictionary) -> void:
 	_reason.text = StandoffPresentation.body(str(data.get("cause", "")), _names_of(data.get("froze_names", [])))
 	_packs_line.text = StandoffPresentation.PACKS_LINE
 	_open_fight_line.text = StandoffPresentation.OPEN_FIGHT_LINE
+	_open_fight_line.visible = bool(data.get("fight_returns", true))
 	_calm_line.text = StandoffPresentation.calm_line(_names_of(data.get("calmed_names", [])))
 	_calm_line.visible = not _calm_line.text.is_empty()
 	_repeat_line.text = StandoffPresentation.repeat_hint(int(data.get("standoff_count", 0)))

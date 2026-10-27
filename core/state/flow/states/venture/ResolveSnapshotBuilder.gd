@@ -254,10 +254,11 @@ static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bo
 ## 17 — The standoff card (D-116). Producers H2 and G. Words and names only: no amount, no percent, no odds.
 ## `cause` is "froze", "blocked" or "unknown". Names are display names, at most two each.
 static func add_standoff(data: Dictionary, standoff_count: int, can_go_sanctum: bool, cause: String,
-		froze_names: Array, calmed_names: Array) -> void:
+		froze_names: Array, calmed_names: Array, fight_returns: bool = true) -> void:
 	data["standoff_outcome"] = "nobody_moved"
 	data["standoff_count"]   = standoff_count
 	data["can_go_sanctum"]   = can_go_sanctum
 	data["cause"]            = cause
 	data["froze_names"]      = froze_names
 	data["calmed_names"]     = calmed_names
+	data["fight_returns"]    = fight_returns

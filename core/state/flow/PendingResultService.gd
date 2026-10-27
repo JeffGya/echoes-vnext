@@ -522,7 +522,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			bool(stored.get("can_go_sanctum", false)),
 			str(stored.get("cause", "unknown")),
 			_copy_array(stored.get("froze_names", [])),
-			_copy_array(stored.get("calmed_names", []))
+			_copy_array(stored.get("calmed_names", [])),
+			bool(stored.get("fight_returns", true))
 		)
 	if stored.has("role"):
 		ResolveSnapshotBuilder.add_contact_outcome(

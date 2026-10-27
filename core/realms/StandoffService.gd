@@ -94,7 +94,8 @@ static func _engaged_situation(stage: Dictionary) -> Dictionary:
 ## Costs one turn, marks the fight open for a later turn (normal AND objective fight), counts the
 ## standoff on the situation, and on the first standoff eases the fear of every party Echo that
 ## refused. It writes no earnings row, spends nothing and marks no pack row lost.
-## Returns the card facts: { standoff_count, can_go_sanctum, cause, froze_names, calmed_names }.
+## Returns the card facts: { standoff_count, can_go_sanctum, cause, froze_names, calmed_names, fight_returns }.
+## `fight_returns` is false when the fight cannot come back (a hostile-Claimant fight: its situation is resolved).
 static func resolve(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	var refused: Array = ectx.stall_record.get("refused", [])
@@ -127,6 +128,7 @@ static func resolve(flow_ctx: FlowContext, t: int) -> Dictionary:
 		"cause": cause,
 		"froze_names": froze.slice(0, MAX_NAMES),
 		"calmed_names": calmed.slice(0, MAX_NAMES),
+		"fight_returns": bool(back.get("returns", false)),
 	}
 
 

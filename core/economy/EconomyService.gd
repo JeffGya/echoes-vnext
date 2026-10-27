@@ -221,7 +221,7 @@ func settle_stage_complete(
 ## `sources` = `EarningsService.plan().sources`. It splits the base row by source: objectives, fights
 ## (`encounters_overcome`) and found Ase (`found_banked`). A part shows when it has an open row; the
 ## objectives row also shows when no part does. Each part is rounded alone, the LAST part shown takes the
-## remainder, so the rows still add to the payout. Empty `sources` gives the one objectives row.
+## remainder, so the rows still add to the payout. The fights count text uses `all` (settled fights too). Empty `sources` gives the one objectives row.
 ## Pure. Returns { breakdown: Array, ase: int, ekwan: int }.
 static func stage_payout_rows(base_reward: int, realm_scale: float, replay_factor: float,
 		objective_counts: Dictionary = {}, ekwan_base: int = 0,
@@ -268,7 +268,7 @@ static func _base_rows(base_row: int, realm_scale: float, objective_counts: Dict
 				"total": int(objective_counts.get("total", 0)), "realm_scale": realm_scale } })
 	if int(fights.get("rows", 0)) > 0:
 		shown.append({ "label": "Fights won", "cause": "encounters_overcome", "ase": int(fights.get("ase", 0)),
-			"params": { "count": int(fights.get("rows", 0)) } })
+			"params": { "count": maxi(int(fights.get("all", 0)), int(fights.get("rows", 0))) } })
 	if int(found.get("rows", 0)) > 0:
 		shown.append({ "label": "Found on the path", "cause": "found_banked", "ase": int(found.get("ase", 0)),
 			"params": { "count": int(found.get("rows", 0)) } })

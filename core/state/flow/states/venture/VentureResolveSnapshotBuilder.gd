@@ -71,7 +71,8 @@ static func build_standoff_snapshot(facts: Dictionary, t: int) -> Dictionary:
 	var _snap: Dictionary = ResolveSnapshotBuilder.build(t, _actions, "standoff")
 	ResolveSnapshotBuilder.add_standoff(_snap["data"], int(facts.get("standoff_count", 1)), _can_sanctum,
 		str(facts.get("cause", StandoffService.CAUSE_UNKNOWN)),
-		(facts.get("froze_names", []) as Array).duplicate(), (facts.get("calmed_names", []) as Array).duplicate())
+		(facts.get("froze_names", []) as Array).duplicate(), (facts.get("calmed_names", []) as Array).duplicate(),
+		bool(facts.get("fight_returns", true)))
 	return _snap
 
 

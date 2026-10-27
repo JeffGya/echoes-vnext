@@ -65,6 +65,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/found_ase_cards_show_the_packs_line_and_total", Callable(ResolvePayoutUITests, "_t_found_cards"))
 	runner.register_test("payout_ui/defeat_card_shows_packs_lost_line_only_with_the_row", Callable(ResolvePayoutUITests, "_t_packs_lost"))
 	runner.register_test("payout_ui/won_fight_with_gathered_row_keeps_the_midstage_layout", Callable(ResolvePayoutUITests, "_t_won_fight_midstage"))
+	runner.register_test("payout_ui/standoff_open_fight_line_only_when_the_fight_returns", Callable(ResolvePayoutUITests, "_t_standoff_fight_returns"))
+	runner.register_test("payout_ui/final_win_card_total_is_the_stage_payout_without_double_count", Callable(ResolvePayoutUITests, "_t_final_win_no_double_count"))
 	runner.register_test("payout_ui/packs_cause_names_and_tooltips_are_exact", Callable(ResolvePayoutUITests, "_t_packs_causes"))
 	runner.register_test("payout_ui/phase7_strings_no_home_stage_percent_or_leave", Callable(ResolvePayoutUITests, "_t_phase7_scan"))
 
@@ -1569,9 +1571,9 @@ const INFO_BLUE := Color("#7AB5C8")
 
 
 ## The real producer, so the keys cannot drift from the card the core sends.
-static func _standoff_card(count: int, can_sanctum: bool, cause: String = "unknown", froze: Array = [], calmed: Array = []) -> Dictionary:
+static func _standoff_card(count: int, can_sanctum: bool, cause: String = "unknown", froze: Array = [], calmed: Array = [], fight_returns: bool = true) -> Dictionary:
 	return VentureResolveSnapshotBuilder.build_standoff_snapshot({ "standoff_count": count, "can_go_sanctum": can_sanctum,
-		"cause": cause, "froze_names": froze, "calmed_names": calmed }, 3)
+		"cause": cause, "froze_names": froze, "calmed_names": calmed, "fight_returns": fight_returns }, 3)
 
 
 ## Written out from phase7-copy-final.md on purpose: a changed character must fail this test.
@@ -2032,6 +2034,45 @@ static func _t_won_fight_midstage() -> Dictionary:
 	screen.set_snapshot(_snap([row, _row("Bonus", 2, "objectives_overcome", { "overcome": 1, "total": 2 })], { "ledger_seen": true }))
 	if not (screen.get_node("%FightHeader") as Control).visible:
 		return _fail(m, "a win with another row must show the chips")
+	return _pass(m)
+
+
+static func _t_standoff_fight_returns() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var line := screen.get_node("%OpenFightLine") as Label
+	screen.set_snapshot(_standoff_card(2, true, "froze", ["Ama"], ["Ama"], true))
+	if not line.visible or line.text != "The task is still there.":
+		return _fail(m, "fight_returns true: open-fight line missing")
+	screen.set_snapshot(_standoff_card(2, true, "froze", ["Ama"], ["Ama"], false))
+	if line.visible:
+		return _fail(m, "fight_returns false: open-fight line still shows")
+	if _label(screen, "%PacksLine").text != "Their packs are as they were." or not (screen.get_node("%CalmLine") as Control).visible:
+		return _fail(m, "packs line or calm line lost when the fight does not return")
+	# A card without the key (old stored card) reads as true.
+	var old := _standoff_card(1, false)
+	(old["data"] as Dictionary).erase("fight_returns")
+	screen.set_snapshot(old)
+	if not line.visible:
+		return _fail(m, "a card without the key must show the line")
+	return _pass(m)
+
+
+## F1 shape: objectives done, then a normal fight won. Core sends the stage payout (which holds the
+## fight) and no encounter_gathered row. The total is the payout, the mid-stage layout is not used.
+static func _t_final_win_no_double_count() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var stage := [_row("Fights won", 6, "encounters_overcome", { "count": 2 }), _row("Objectives", 20, "objectives_overcome", { "overcome": 2, "total": 2 })]
+	screen.set_snapshot(_snap([], { "ledger_seen": true, "ase_awarded": 0, "stage_payout_rows": stage, "stage_payout_ase": 26, "stage_payout_ekwan": 0 }))
+	StopMarkMotion.reduced = before
+	if _label(screen, "%AseTotalLabel").text != "+26 Ase":
+		return _fail(m, "total: \"%s\"" % _label(screen, "%AseTotalLabel").text)
+	if not (screen.get_node("%StageGroup") as Control).visible or _rows_in(screen, "%StageSection").size() != 2:
+		return _fail(m, "stage rows missing")
+	if not _rows_in(screen, "%BreakdownSection").is_empty():
+		return _fail(m, "a fight row shows on the final card")
 	return _pass(m)
 
 

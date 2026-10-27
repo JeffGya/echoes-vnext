@@ -79,7 +79,8 @@ static func sums(rows: Array) -> Dictionary:
 ## What the payers would pay now: the sums of the unsettled rows plus `ids`, the rows they cover. A
 ## completed objective with no row is counted from a row built on the fly, so a preview equals the
 ## payout after `ensure_objective_rows`. `sources` splits the open rows by source: { rows, ase } with
-## the BASE Ase of the scaled rows, so a payer can split its ledger without a second formula. Pure.
+## the BASE Ase of the scaled rows, so a payer can split its ledger without a second formula. `all` counts
+## every row of the source, settled and lost too: it feeds a count text, never an amount. Pure.
 static func plan(stage: Dictionary, reward_cfg: Dictionary) -> Dictionary:
 	var rows := rows_of(stage).duplicate()
 	rows.append_array(_missing_objective_rows(stage, reward_cfg, null, 0))
@@ -88,7 +89,11 @@ static func plan(stage: Dictionary, reward_cfg: Dictionary) -> Dictionary:
 	var ids: Array = []
 	var sources := {}
 	for source in [SOURCE_OBJECTIVE, SOURCE_ENCOUNTER, SOURCE_FOUND]:
-		sources[source] = { "rows": 0, "ase": 0 }
+		sources[source] = { "rows": 0, "ase": 0, "all": 0 }
+	for r_v in rows:
+		var any_part: Dictionary = sources.get(str((r_v as Dictionary).get("source", "")) if r_v is Dictionary else "", {})
+		if not any_part.is_empty():
+			any_part["all"] = int(any_part["all"]) + 1
 	for r_v in open:
 		var r: Dictionary = r_v
 		ids.append(str(r.get("id", "")))

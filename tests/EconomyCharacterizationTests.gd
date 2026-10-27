@@ -135,6 +135,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("econ_char/packs_gathered_block_uses_the_leave_plan", Callable(EconomyCharacterizationTests, "_t_packs_gathered_block"))
 	runner.register_test("econ_char/packs_path_end_rows_add_to_the_payout", Callable(EconomyCharacterizationTests, "_t_packs_ledger_sums"))
 	runner.register_test("econ_char/packs_cards_carry_gathered_causes_and_replay", Callable(EconomyCharacterizationTests, "_t_packs_cards"))
+	runner.register_test("econ_char/packs_fight_after_last_objective_counts_once_on_the_card", Callable(EconomyCharacterizationTests, "_t_packs_card_total_once"))
+	runner.register_test("econ_char/packs_fights_count_covers_settled_rows", Callable(EconomyCharacterizationTests, "_t_packs_fight_count_all"))
 	runner.register_test("econ_char/intel_gained_absent_zero_present_count_absent_on_defeat", Callable(EconomyCharacterizationTests, "_t_intel_gained"))
 	runner.register_test("econ_char/intel_gained_replays_from_stored_result", Callable(EconomyCharacterizationTests, "_t_intel_gained_replay"))
 	runner.register_test("econ_char/death_record_carries_to_later_fight", Callable(EconomyCharacterizationTests, "_t_death_record"))
@@ -3363,6 +3365,64 @@ static func _t_packs_ledger_sums() -> Dictionary:
 						if sum != int(pv["ase"]):
 							m.append("%s run %d fights %d found %d objs %d: rows add to %d, payout %d" % [realm, run, fights, found, objs.size() - 1, sum, int(pv["ase"])])
 	return { "ok": m.is_empty(), "error": "; ".join(m.slice(0, 6)) }
+
+
+## F1 (final QA): a normal fight won AFTER every required objective is done. The card carries the stage payout, which
+## already holds the fight, so it must not also carry the gathered row. What the UI sums (ase_awarded + gathered rows +
+## stage_payout_ase) equals what flow.complete_stage pays. A mid-stage win keeps its gathered row.
+static func _t_packs_card_total_once() -> Dictionary:
+	var m: Array = []
+	var env := _fight_env("econ_char_card_total", true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var stage: Dictionary = env["stage"]
+	(stage["objectives"][0] as Dictionary)["completed"] = true
+	EarningsService.record_objective(stage, 0, _rewards_cfg())
+	env = _fight_build(env)
+	var data: Dictionary = env["card"]["data"]
+	var gathered := 0
+	for r_v in (data["reward_breakdown"] as Array):
+		if str((r_v as Dictionary).get("cause", "")) == "encounter_gathered":
+			gathered += int((r_v as Dictionary)["delta"])
+	if int(data.get("objectives_remaining", -1)) != 0 or not data.has("stage_payout_ase"):
+		m.append("fixture: objectives_remaining %s, keys %s" % [str(data.get("objectives_remaining")), str(data.keys())])
+	if gathered != 0:
+		m.append("the card with the stage payout also carries %d gathered Ase" % gathered)
+	var runtime: FlowRuntime = env["runtime"]
+	var before := _balance_ase(env)
+	runtime.dispatch({ "type": "flow.complete_stage" })
+	var paid := _balance_ase(env) - before
+	var shown := int(data["ase_awarded"]) + gathered + int(data["stage_payout_ase"])
+	if paid != shown:
+		m.append("the card total is %d, flow.complete_stage paid %d" % [shown, paid])
+	if _row_by_cause(data["stage_payout_rows"], "encounters_overcome").is_empty():
+		m.append("the stage payout does not hold the fight")
+	if EarningsService.rows_of(stage).filter(func(r): return str((r as Dictionary)["id"]) == "enc:sit.fight").size() != 1:
+		m.append("the fight row is not in the earnings list")
+	var mid := _fight_build(_fight_env("econ_char_card_total_mid", true))
+	var mid_rows: Array = (mid["card"]["data"]["reward_breakdown"] as Array).filter(
+		func(r): return str((r as Dictionary).get("cause", "")) == "encounter_gathered")
+	if mid_rows.size() != 1:
+		m.append("a mid-stage win lost its gathered row")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## F5 (final QA): the "Fights won" count covers every fight row of the path, settled ones too. The amount stays
+## the unsettled part. Win 3, leave, win 1, finish: count 4, amount 6.
+static func _t_packs_fight_count_all() -> Dictionary:
+	var m: Array = []
+	var ctx := _carry_ctx("realm.01", 0, [_obj(0, "shrine", true), _carry_boss()], _seed_for("all"))
+	_gather(ctx, 3, 0)
+	_leave(ctx)
+	_gather(ctx, 4, 0)
+	var pv := StageSettlementService.new(ctx, ctx.config_service, _carry_econ(ctx), null).preview()
+	var row := _row_by_cause(pv["rows"], "encounters_overcome")
+	if int((row.get("params", {}) as Dictionary).get("count", -1)) != 4 or int(row.get("delta", -1)) != 6:
+		m.append("fights row %s, expected count 4 and amount 6" % JSON.stringify(row))
+	var plan := EarningsService.plan(_carry_stage(ctx), _rewards_cfg())
+	if int(plan["sources"]["encounter"]["rows"]) != 1 or int(plan["sources"]["encounter"]["all"]) != 4:
+		m.append("sources %s, expected 1 open of 4" % JSON.stringify(plan["sources"]))
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
 ## The cards: a won fight shows an `encounter_gathered` row and pays 0 (same row on a rebuild); an objective fight shows none;

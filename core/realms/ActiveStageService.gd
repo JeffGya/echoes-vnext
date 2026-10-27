@@ -655,12 +655,12 @@ static func next_retreat_roll_key(flow_ctx_arg: FlowContext, encounter_id: Strin
 ## A normal fight is marked passed, as stage.ignore_situation does, and gets `retreat_pass_turn` so Tier 4
 ## of find_explore_target offers it again on a later turn (ignore_situation sets no marker: never again).
 ## An objective fight (objective_index >= 0) stays open: FlowStageExploreState offers it again on entry.
-## Caller reads objective_index before the encounter state exits. Returns { situation_id, can_reenter }.
+## Caller reads objective_index before the encounter state exits. Returns { situation_id, can_reenter, returns }.
 ## `standoff` (a stalemate, D-116): objective and normal fights alike get `passed` and `retreat_pass_turn`,
 ## so neither returns at once, and the situation's saved `standoff_count` rises. Returns it too.
 static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int, t: int,
 		standoff: bool = false) -> Dictionary:
-	var out := { "situation_id": "", "can_reenter": false }
+	var out := { "situation_id": "", "can_reenter": false, "returns": false }
 	var stage := FlowStageExploreStateScript._get_current_stage(flow_ctx_arg)
 	var map_v: Variant = stage.get("explore_map", {})
 	if not (map_v is Dictionary) or (map_v as Dictionary).is_empty():
@@ -679,6 +679,10 @@ static func apply_retreat_return(flow_ctx_arg: FlowContext, objective_index: int
 		else:
 			(s_v as Dictionary)["passed"] = true
 			(s_v as Dictionary)["retreat_pass_turn"] = int(explore_map["turn_count"])
+		# `returns`: find_explore_target can offer this fight again (Tier 4). A resolved situation
+		# (the hostile Claimant, resolved before the fight) never returns.
+		out["returns"] = out["can_reenter"] or (not bool((s_v as Dictionary).get("resolved", false))
+			and bool((s_v as Dictionary).get("revealed", false)) and (s_v as Dictionary).has("retreat_pass_turn"))
 		if standoff:
 			out["standoff_count"] = int((s_v as Dictionary).get("standoff_count", 0)) + 1
 			(s_v as Dictionary)["standoff_count"] = out["standoff_count"]

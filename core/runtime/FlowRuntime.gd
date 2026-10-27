@@ -752,8 +752,13 @@ func dispatch(action: Dictionary) -> Dictionary:
 		flow_ctx.pending_scout_return_settle_outcome = ""
 
 	# The standoff card's Sanctum button asked the stage_explore snapshot to carry
-	# return_confirm_requested; once that snapshot is out the request is spent.
+	# return_confirm_requested; once that snapshot is out the request is spent. The caller gets a copy
+	# that still carries the key; last_snapshot loses it, or a later dispatch that does not rebuild
+	# (handled_outcome, refresh_outcome, economy.settle_time) would publish it again.
 	if str(out.get("type", "")) == FlowStateIds.STAGE_EXPLORE:
+		if flow_ctx.pending_return_confirm and out.get("data") is Dictionary:
+			out = out.duplicate(true)
+			(flow_ctx.last_snapshot["data"] as Dictionary).erase("return_confirm_requested")
 		flow_ctx.pending_return_confirm = false
 
 	# V2-INFRA-003 Phase 3 (slice C): consume _bark_line here, exactly once, AFTER the snapshot

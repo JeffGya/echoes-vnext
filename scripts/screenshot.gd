@@ -140,6 +140,7 @@ func _fixtures() -> Dictionary:
 		"standoff_second": [_combat(6, recover), _standoff_card(2, true, "blocked", [], [])],
 		"standoff_froze_two": [_combat(6, recover), _standoff_card(2, true, "froze", ["Ama", "Kofi"], [])],
 		"standoff_calm": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"])],
+		"standoff_fight_gone": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"], false)],
 		"warning_level_1": [_combat_stall(1, "")],
 		"warning_level_2": [_combat_stall(2, "Ama")],
 		"prebattle_stalled": [_prebattle({ "stalled_before": true })],
@@ -392,9 +393,9 @@ func _payout_retreat_zero() -> Dictionary:
 
 
 ## The standoff card, built by the real producer so the fixture follows the contract.
-func _standoff_card(count: int, can_sanctum: bool, cause: String, froze: Array, calmed: Array) -> Dictionary:
+func _standoff_card(count: int, can_sanctum: bool, cause: String, froze: Array, calmed: Array, fight_returns: bool = true) -> Dictionary:
 	return VentureResolveSnapshotBuilder.build_standoff_snapshot({ "standoff_count": count, "can_go_sanctum": can_sanctum,
-		"cause": cause, "froze_names": froze, "calmed_names": calmed }, 3)
+		"cause": cause, "froze_names": froze, "calmed_names": calmed, "fight_returns": fight_returns }, 3)
 
 
 ## A quiet fight: the round snapshot with stall_level (and the Echo that froze at level 2).

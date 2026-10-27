@@ -370,8 +370,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	# All three are encounter cadence. This function is smaller and honest now, but it is still
 	# not pure, so it stays a flow-state method.
 	var _breakdown: Array = (reward_result.get("breakdown", []) as Array).duplicate()
+	# The stage payout preview already holds this fight (its encounters_overcome part), so a card
+	# that carries the preview must not also show the gathered row: the UI sums both.
+	var _stage_preview: Dictionary = {}
+	if victory and objectives_remaining == 0:
+		_stage_preview = StageSettlementService.new(flow_ctx, flow_ctx.config_service, null, null).preview()
 	var _fight_row: Dictionary = ActiveStageService.fight_row(flow_ctx, _claimant_fight) if victory else {}
-	if not _fight_row.is_empty():
+	if not _fight_row.is_empty() and _stage_preview.is_empty():
 		_breakdown.append({ "label": "Fight won", "delta": int(_fight_row.get("ase", 0)), "currency": "ase",
 			"cause": "encounter_gathered",
 			"params": { "kind": str(_fight_row.get("kind", "")), "gathered_ase": int(_fight_row.get("ase", 0)) } })
@@ -404,11 +409,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	ResolveSnapshotBuilder.add_ledger(_data, int(reward_result.get("ase_awarded", 0)), _breakdown)
 	ResolveSnapshotBuilder.add_ledger_seen(_data, SaveSchema.ledger_seen(flow_ctx.save_data))
 	# Same condition as the `flow.complete_stage` action in _build_resolve_actions.
-	if victory and objectives_remaining == 0:
-		var _stage_preview := StageSettlementService.new(flow_ctx, flow_ctx.config_service, null, null).preview()
-		if not _stage_preview.is_empty():
-			ResolveSnapshotBuilder.add_stage_payout(
-				_data, _stage_preview["rows"], int(_stage_preview["ase"]), int(_stage_preview["ekwan"]))
+	if not _stage_preview.is_empty():
+		ResolveSnapshotBuilder.add_stage_payout(
+			_data, _stage_preview["rows"], int(_stage_preview["ase"]), int(_stage_preview["ekwan"]))
 	if victory and flow_ctx.encounter_start_revealed_count >= 0:
 		ResolveSnapshotBuilder.add_intel_gained(_data, maxi(0,
 			ActiveStageService.count_revealed_situations(flow_ctx) - flow_ctx.encounter_start_revealed_count))

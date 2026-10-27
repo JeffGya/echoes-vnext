@@ -43,6 +43,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("retreat/standoff_sanctum_button_from_second",     Callable(RetreatTests, "_t_standoff_sanctum_button"))
 	runner.register_test("retreat/standoff_records_deaths_before_the_stall", Callable(RetreatTests, "_t_standoff_records_deaths"))
 	runner.register_test("retreat/standoff_cause_only_from_recorded_events", Callable(RetreatTests, "_t_standoff_cause"))
+	runner.register_test("retreat/standoff_card_says_if_the_fight_returns",  Callable(RetreatTests, "_t_standoff_fight_returns"))
+	runner.register_test("retreat/return_confirm_is_one_shot_on_a_non_rebuilding_action", Callable(RetreatTests, "_t_return_confirm_one_shot"))
 	runner.register_test("retreat/standoff_fear_drop_first_standoff_only",  Callable(RetreatTests, "_t_standoff_fear_drop"))
 	runner.register_test("retreat/standoff_rerun_applies_no_second_drop",   Callable(RetreatTests, "_t_standoff_rerun_no_second_drop"))
 	runner.register_test("retreat/stall_level_from_streak_no_numbers",      Callable(RetreatTests, "_t_stall_level"))
@@ -479,7 +481,8 @@ static func _roster_entry(flow_ctx: FlowContext, id: String) -> Dictionary:
 
 ## An engaged fight (normal or objective) that then stalls and ends as a standoff, with one earlier
 ## unsettled pack row on the stage. Returns the harness dict plus the card and the pack rows before.
-static func _standoff(tag: String, objective: bool, refuse: bool = true, prior_count: int = 0) -> Dictionary:
+static func _standoff(tag: String, objective: bool, refuse: bool = true, prior_count: int = 0,
+		claimant: bool = false) -> Dictionary:
 	var r: Dictionary = _engaged_retreat(tag, objective, 0, 50)
 	if not bool(r.get("ok", false)):
 		return r
@@ -488,6 +491,8 @@ static func _standoff(tag: String, objective: bool, refuse: bool = true, prior_c
 	EarningsService.add_row(stage, EarningsService.make_row("enc:old", "encounter", "fight", 6, 0))
 	if prior_count > 0:
 		_sit_of(flow_ctx, str(r["sit_id"]))["standoff_count"] = prior_count
+	if claimant:
+		_sit_of(flow_ctx, str(r["sit_id"]))["resolved"] = true  # as ContactController does before a hostile-Claimant fight
 	r["rows_before"] = JSON.stringify(EarningsService.rows_of(stage))
 	r["ase_before"] = int(flow_ctx.save_data["economy"]["ase"])
 	if refuse:
@@ -517,7 +522,7 @@ static func _t_standoff_steps_back() -> Dictionary:
 		m.append("expected a flow.resolve card with run_type standoff, got %s / %s" % [card.get("type"), data.get("run_type")])
 	var keys: Array = data.keys()
 	keys.sort()
-	if keys != ["calmed_names", "can_go_sanctum", "cause", "froze_names", "run_type", "standoff_count", "standoff_outcome"]:
+	if keys != ["calmed_names", "can_go_sanctum", "cause", "fight_returns", "froze_names", "run_type", "standoff_count", "standoff_outcome"]:
 		m.append("card data keys: %s" % str(keys))
 	if str(data.get("standoff_outcome", "")) != "nobody_moved" or int(data.get("standoff_count", 0)) != 1 \
 			or data.get("can_go_sanctum", null) != false or str(data.get("cause", "")) != "froze" \
@@ -542,6 +547,66 @@ static func _t_standoff_steps_back() -> Dictionary:
 		m.append("a standoff settled or re-offered at once")
 	if flow_ctx.encounter_ctx != null:
 		m.append("the encounter was not dropped")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## F3 (final QA): `fight_returns` is true only when find_explore_target can offer the fight again later.
+## A hostile-Claimant fight has a resolved situation, so it never returns.
+static func _t_standoff_fight_returns() -> Dictionary:
+	var m: Array = []
+	var cs := ConfigService.new()
+	cs.load_balance()
+	var ctx := FlowContext.new()
+	ctx.realm_id = "realm.01"
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	var session := ActiveStageService.new(ctx, cs, logger)
+	var directive: Dictionary = ConfigService.get_directives_cfg(cs).get("directive.scout_carefully", {})
+	var walkable: Dictionary = {}
+	for c in 30:
+		for rw in 30:
+			walkable["%d,%d" % [c, rw]] = true
+	for case in [["normal", false, false, true], ["objective", true, false, true], ["claimant", false, true, false]]:
+		var r: Dictionary = _standoff("rt_returns_" + case[0], case[1], true, 0, case[2])
+		if not bool(r.get("ok", false)):
+			return r
+		var flow_ctx: FlowContext = r["flow_ctx"]
+		var flag: Variant = (r["card"] as Dictionary).get("data", {}).get("fight_returns", null)
+		if flag != case[3]:
+			m.append("%s: fight_returns %s, expected %s" % [case[0], str(flag), case[3]])
+		var em: Dictionary = _explore_map_of(flow_ctx).duplicate(true)
+		em["turn_count"] = int(em["turn_count"]) + 1
+		em["party_pos"] = { "col": 0, "row": 0 }
+		em["situations"] = [_sit_of(flow_ctx, str(r["sit_id"])).duplicate(true)]
+		var pick := session.find_explore_target(em, directive, walkable, walkable, { "index": 0 })
+		var offered := str(pick.get("id", "")) == str(r["sit_id"])
+		if offered != bool(case[3]):
+			m.append("%s: find_explore_target offered=%s, expected %s" % [case[0], offered, case[3]])
+	var built := VentureResolveSnapshotBuilder.build_standoff_snapshot({ "standoff_count": 1, "fight_returns": false }, 1)
+	if (built["data"] as Dictionary).get("fight_returns", null) != false:
+		m.append("the builder did not carry fight_returns false")
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
+
+
+## F4 (final QA): return_confirm_requested reaches the caller once. A later dispatch that does not rebuild
+## the snapshot (economy.settle_time) must not publish it again, and last_snapshot must not hold it.
+static func _t_return_confirm_one_shot() -> Dictionary:
+	var r: Dictionary = _standoff("rt_confirm_once", false, true, 1)
+	if not bool(r.get("ok", false)):
+		return r
+	var runtime: FlowRuntime = r["runtime"]
+	var flow_ctx: FlowContext = r["flow_ctx"]
+	var m: Array = []
+	var first: Dictionary = runtime.dispatch({ "type": "stage.standoff_return", "to_sanctum": true })
+	if first.get("data", {}).get("return_confirm_requested", null) != true:
+		m.append("the Sanctum button did not deliver return_confirm_requested")
+	if (flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("return_confirm_requested"):
+		m.append("last_snapshot still holds the one-shot key")
+	var later: Dictionary = runtime.dispatch({ "type": "economy.settle_time", "now_unix": 1000600 })
+	if str(later.get("type", "")) != FlowStateIds.STAGE_EXPLORE:
+		m.append("settle_time left stage_explore: %s" % str(later.get("type", "")))
+	if (later.get("data", {}) as Dictionary).has("return_confirm_requested"):
+		m.append("a non-rebuilding dispatch published return_confirm_requested again")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
