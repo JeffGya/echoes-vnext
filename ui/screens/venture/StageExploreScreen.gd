@@ -86,6 +86,8 @@ var _cached_stage_complete_action: Dictionary = {}
 var _cached_advance_action: Dictionary = {}
 var _cached_return_action:  Dictionary = {}
 var _cached_carry_preview:  Dictionary = {}
+# The standoff card asked for the return confirmation: it opens once per request, not on every refresh.
+var _return_confirm_opened := false
 var _cached_overlay_action: Dictionary = {}
 var _cached_ignore_action:  Dictionary = {}
 
@@ -634,6 +636,7 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_back_btn.hide()
 	_directive_overlay.hide()
 	_apply_responsive_layout()
+	_sync_return_confirm(data)
 	if not _explore_requests_modal(data, actions):
 		if _stage_complete_btn.visible and not _stage_complete_btn.disabled:
 			_stage_complete_btn.grab_focus()
@@ -1069,6 +1072,15 @@ func _on_advance_pressed() -> void:
 	await RenderingServer.frame_post_draw
 	if is_inside_tree():
 		action_requested.emit(_cached_advance_action)
+
+
+## data.return_confirm_requested is a one-shot from the standoff card: open the same confirmation the
+## Return button opens. A refresh that still carries the flag does not open it again.
+func _sync_return_confirm(data: Dictionary) -> void:
+	var requested := bool(data.get("return_confirm_requested", false))
+	if requested and not _return_confirm_opened:
+		_on_return_pressed()
+	_return_confirm_opened = requested
 
 
 ## The Return button only opens the confirmation. The modal's Confirm button sends the action.
@@ -1668,6 +1680,8 @@ func _apply_responsive_layout() -> void:
 	_directive_badge.offset_bottom = _directive_badge.offset_top + _DIRECTIVE_BADGE_HEIGHT
 
 func _explore_requests_modal(data: Dictionary, actions: Dictionary) -> bool:
+	if bool(data.get("return_confirm_requested", false)):
+		return true
 	var contact_v: Variant = data.get("contact_pending", {})
 	if contact_v is Dictionary and not (contact_v as Dictionary).is_empty():
 		return true

@@ -136,6 +136,18 @@ func _fixtures() -> Dictionary:
 		"resolve_defeat_tooltip": [_combat(7, recover), _payout_defeat(), "focus_cause:0"],
 		"return_card_empty_leave": [_combat(6, recover), _return_card_empty_leave()],
 		"resolve_tooltip_open": [_combat(6, recover), _payout_stage_end(false), "skip_motion", "focus_cause:2"],
+		"standoff_first": [_combat(6, recover), _standoff_card(1, false, "unknown", [], [])],
+		"standoff_second": [_combat(6, recover), _standoff_card(2, true, "blocked", [], [])],
+		"standoff_froze_two": [_combat(6, recover), _standoff_card(2, true, "froze", ["Ama", "Kofi"], [])],
+		"standoff_calm": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"])],
+		"warning_level_1": [_combat_stall(1, "")],
+		"warning_level_2": [_combat_stall(2, "Ama")],
+		"prebattle_stalled": [_prebattle({ "stalled_before": true })],
+		"fight_won_packs": [_combat(6, recover), _payout_fight_won_packs(), "skip_motion"],
+		"found_money_card": [_combat(6, recover), _found_money_card()],
+		"defeat_packs_lost": [_combat(7, recover), _payout_defeat_packs_lost()],
+		"carry_packs_gathered": [_combat(6, recover), _return_home_modal(_preview(12, 3))],
+		"carry_packs_empty": [_combat(6, recover), _return_home_modal(_preview(0, 0))],
 		"summon_price_rising":   [_summon({})],
 		"summon_price_flat":     [_summon({ "living_count": 14, "price_flat": true, "batch_affordable_max": 1,
 			"batch_prices": [430, 430, 430, 430, 430, 430, 430, 430, 430, 430],
@@ -377,6 +389,46 @@ func _payout_retreat_zero() -> Dictionary:
 	data["intel_count"] = 0
 	data["actors"] = _actors()
 	return _payout_snap(data)
+
+
+## The standoff card, built by the real producer so the fixture follows the contract.
+func _standoff_card(count: int, can_sanctum: bool, cause: String, froze: Array, calmed: Array) -> Dictionary:
+	return VentureResolveSnapshotBuilder.build_standoff_snapshot({ "standoff_count": count, "can_go_sanctum": can_sanctum,
+		"cause": cause, "froze_names": froze, "calmed_names": calmed }, 3)
+
+
+## A quiet fight: the round snapshot with stall_level (and the Echo that froze at level 2).
+func _combat_stall(level: int, froze_name: String) -> Dictionary:
+	var snap := _combat(11, { "type": "combat" })
+	snap["data"]["stall_level"] = level
+	snap["data"]["stall_froze_name"] = froze_name
+	return snap
+
+
+func _preview(ase: int, ekwan: int) -> Dictionary:
+	return { "ase": ase, "ekwan": ekwan, "overcome": 1, "total": 3, "nothing_new": ase + ekwan == 0,
+		"gathered": { "ase": ase, "ekwan": ekwan, "rows": [], "has_fight_rows": ase > 0, "has_found_rows": false } }
+
+
+## A mid-path fight win: the mid-stage card plus the one encounter_gathered row.
+func _payout_fight_won_packs() -> Dictionary:
+	var snap := _payout_midstage_win()
+	snap["data"]["reward_breakdown"] = [_row("Fight won", 6, "encounter_gathered", { "kind": "combat", "gathered_ase": 6 })]
+	snap["data"]["ase_awarded"] = 0
+	snap["data"]["ledger_seen"] = false
+	return snap
+
+
+func _found_money_card() -> Dictionary:
+	var snap := VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "money" }, "A small purse lay in the grass.", [], [], 12, 2)
+	snap["data"]["actors"] = _actors()
+	return snap
+
+
+func _payout_defeat_packs_lost() -> Dictionary:
+	var snap := _payout_defeat()
+	snap["data"]["reward_breakdown"].append(_row("Packs lost", 0, "packs_lost", { "lost_ase": 12, "lost_ekwan": 0 }))
+	return snap
 
 
 ## The confirmation opens before the action. `failed` builds the failed-escape display instead.

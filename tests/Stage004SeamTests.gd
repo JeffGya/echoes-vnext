@@ -3410,6 +3410,7 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	combat.set("_distance_layer", combat.get_node("%DistanceLayer"))
 	combat.set("_round_label", combat.get_node("RoundLabel"))
 	combat.set("_objective_banner", combat.get_node("%ObjectiveBanner"))
+	combat.set("_stall_panel", combat.get_node("%StallPanel"))  # _apply_responsive_layout now places it
 	combat.set("_recenter_button", combat.get_node("%RecenterButton"))
 	combat.set("_cta_button", combat.get_node("StartCombatButton"))
 	combat.set("_manual_toggle", combat.get_node("AutoToggleButton"))

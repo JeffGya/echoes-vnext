@@ -112,6 +112,44 @@ theme_override_font_sizes/font_size = 17
 horizontal_alignment = 1
 autowrap_mode = 3
 
+[node name="StandoffLines" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PacksLine" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection/StandoffLines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
+theme_override_font_sizes/font_size = 17
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="OpenFightLine" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection/StandoffLines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
+theme_override_font_sizes/font_size = 17
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="CalmLine" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection/StandoffLines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
+theme_override_font_sizes/font_size = 17
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="RepeatLine" type="Label" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/HeaderSection/StandoffLines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"RealmWarmMeta"
+theme_override_font_sizes/font_size = 17
+horizontal_alignment = 1
+autowrap_mode = 3
+
 [node name="HeaderSeparator" type="HSeparator" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout"]
 unique_name_in_owner = true
 layout_mode = 2

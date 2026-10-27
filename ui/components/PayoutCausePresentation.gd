@@ -8,6 +8,9 @@ extends RefCounted
 const SCOPE_FIGHT := "fight"
 const SCOPE_STAGE := "stage"
 
+## The empty leave row. It replaces the older "Nothing overcome yet" (phase7-copy-final.md section 4).
+const NOTHING_GATHERED := "Nothing was gathered."
+
 ## Row names. A cause that is not listed keeps its backend label.
 const ROW_NAMES: Dictionary = {
 	"replay": "Replay",
@@ -16,6 +19,11 @@ const ROW_NAMES: Dictionary = {
 	"objectives_overcome": "Objectives overcome",
 	"echoes_alive": "Echoes safe",
 	"settled_on_leave": "Settled when you left",
+	"encounter_gathered": "Fight won",
+	"found_gathered": "Found",
+	"encounters_overcome": "Fights won",
+	"found_banked": "Found on the path",
+	"nothing_overcome_yet": NOTHING_GATHERED,
 }
 
 ## PROPOSAL placeholders, not approved copy: echoes_alive and the lost-names note
@@ -24,9 +32,19 @@ const TEXT: Dictionary = {
 	"echoes_alive": "Each Echo that stays alive earns Ase.",
 	"settled_on_leave": "These were already taken when the party left earlier.",
 	"defeat_consolation": "This one was lost, but we still earn a small part.",
-	"nothing_overcome_yet": "The party has not overcome anything yet. Nothing is earned.",
+	"nothing_overcome_yet": NOTHING_GATHERED,
+	"encounter_gathered": "It goes in their packs. It is safe only when the party gets out.",
+	"found_gathered": "Found along the way. It goes in their packs.",
+	"found_banked": "Gathered along the way and carried to the Sanctum.",
 	"repeat_defeat": "The party already earned the consolation for this. Another loss earns nothing.",
 }
+
+## Count line of the path-end "Fights won" row.
+const ENCOUNTERS_COUNT := "Fights won on this path: %d."
+## Defeat card line when the packs were lost, and the lines of the found-Ase cards (%d is the base amount).
+const PACKS_LOST_LINE := "The party fell, and the packs were lost."
+const SITUATION_MONEY := "They found %d Ase. It goes in the packs."
+const SITUATION_CLAIMANT_GOOD := "The party was given %d Ase for the way. It goes in the packs."
 
 const REPLAY_FIGHT := "The party has been here before. It earns less."
 const REPLAY_STAGE := "The party has been here before. All of it earns less."
@@ -34,7 +52,7 @@ const OBJECTIVES := "Only objectives the party found and overcame earn Ase."
 
 
 static func has_cause(cause: String) -> bool:
-	return cause == "replay" or cause == "objectives_overcome" or TEXT.has(cause)
+	return cause == "replay" or cause == "objectives_overcome" or cause == "encounters_overcome" or TEXT.has(cause)
 
 
 ## The row name for a cause, or `fallback` (the backend label) when the cause keeps its label.
@@ -50,6 +68,8 @@ static func tooltip(cause: String, params: Dictionary = {}, scope: String = SCOP
 		if params.has("overcome") and params.has("total"):
 			return "%s %d of %d so far." % [OBJECTIVES, int(params["overcome"]), int(params["total"])]
 		return OBJECTIVES
+	if cause == "encounters_overcome":
+		return ENCOUNTERS_COUNT % int(params["count"]) if params.has("count") else ""
 	return str(TEXT.get(cause, ""))
 
 

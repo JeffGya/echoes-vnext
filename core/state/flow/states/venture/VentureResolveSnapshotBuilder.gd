@@ -206,7 +206,7 @@ static func build_situation_resolve_snapshot(
 		"cta.continue": {
 			"type":  "flow.go_state",
 			"to":    FlowStateIds.STAGE_EXPLORE,
-			"label": "Return to Stage",
+			"label": "Back to the path",
 			"slot":  "cta.continue",
 		},
 	}

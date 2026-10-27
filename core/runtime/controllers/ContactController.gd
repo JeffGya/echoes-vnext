@@ -774,7 +774,7 @@ func _build_contact_resolve_snapshot(
 	var outcome_text := str(outcome_texts.get(role + "/" + outcome, _contact_outcome_text(role, outcome)))
 
 	var continue_to := FlowStateIds.STAGE_EXPLORE if go_back_to_stage else FlowStateIds.SANCTUM
-	var continue_label := "Return to Stage" if go_back_to_stage else "Return to Sanctum"
+	var continue_label := "Back to the path" if go_back_to_stage else "Return to Sanctum"
 
 	var _contact_verdict: String
 	match outcome:

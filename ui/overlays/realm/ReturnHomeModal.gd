@@ -49,13 +49,15 @@ func present(payload: Dictionary) -> void:
 		_confirm_button.text = Strings.CONFIRM_LABEL
 		_cancel_button.text = Strings.CANCEL_LABEL
 		_confirm_button.disabled = _action.is_empty()
-		# Nothing gathered (or nothing new) leaves the question, the escape line and the keeps line.
+		# The gathered block sums every source in the packs. Nothing in them shows the empty line, and
+		# then the risk line has nothing to warn about.
 		var carry_v: Variant = payload.get("carry", {})
 		var carry: Dictionary = carry_v if carry_v is Dictionary else {}
-		var gathered := "" if bool(carry.get("nothing_new", false)) \
-			else Strings.gathered_line(int(carry.get("ase", 0)), int(carry.get("ekwan", 0)))
-		_gathered.text = gathered
-		_gathered.visible = not gathered.is_empty()
+		var packs_v: Variant = carry.get("gathered", {})
+		var packs: Dictionary = packs_v if packs_v is Dictionary else {}
+		var gathered := Strings.gathered_line(int(packs.get("ase", 0)), int(packs.get("ekwan", 0)))
+		_gathered.text = gathered if not gathered.is_empty() else Strings.GATHERED_EMPTY
+		_gathered.visible = true
 		_risk.text = Strings.RISK_LINE
 		_risk.visible = not gathered.is_empty()
 		_keeps.text = Strings.KEEPS_LINE

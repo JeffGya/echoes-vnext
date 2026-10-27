@@ -1143,8 +1143,8 @@ static func _t_contact_resolve_to_stage() -> Dictionary:
 		mismatches.append("expected cta.continue.type 'flow.go_state', got '%s'" % str(cta.get("type", "")))
 	if str(cta.get("to", "")) != FlowStateIds.STAGE_EXPLORE:
 		mismatches.append("expected cta.continue.to %s for go_back_to_stage=true, got '%s'" % [FlowStateIds.STAGE_EXPLORE, str(cta.get("to", ""))])
-	if str(cta.get("label", "")) != "Return to Stage":
-		mismatches.append("expected cta.continue.label 'Return to Stage', got '%s'" % str(cta.get("label", "")))
+	if str(cta.get("label", "")) != "Back to the path":
+		mismatches.append("expected cta.continue.label 'Back to the path', got '%s'" % str(cta.get("label", "")))
 	if str(cta.get("slot", "")) != "cta.continue":
 		mismatches.append("expected cta.continue.slot 'cta.continue', got '%s'" % str(cta.get("slot", "")))
 

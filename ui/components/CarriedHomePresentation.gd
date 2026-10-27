@@ -8,6 +8,8 @@ const CONFIRM_TITLE := "Return to the Sanctum"
 const CONFIRM_QUESTION := "Take the party back to the Sanctum?"
 const RISK_LINE := "Not all of it will survive the escape. What cannot be carried will be lost."
 const CONFIRM_WARNING := "Escaping might be more difficult than expected. It might not be possible."
+## Confirmation line when the packs hold nothing (phase7-copy-final.md section 7).
+const GATHERED_EMPTY := "Nothing is in their packs."
 const KEEPS_LINE := "The path still waits."
 const CONFIRM_LABEL := "To the Sanctum"
 const CANCEL_LABEL := "Stay"

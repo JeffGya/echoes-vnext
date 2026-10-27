@@ -54,6 +54,19 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("payout_ui/other_cards_keep_working", Callable(ResolvePayoutUITests, "_t_other_cards"))
 	runner.register_test("payout_ui/effects_rail_has_no_ase_ekwan_or_defeated_chip", Callable(ResolvePayoutUITests, "_t_rail_chips"))
 	runner.register_test("payout_ui/scenes_hold_no_amount_text", Callable(ResolvePayoutUITests, "_t_no_hard_coded_amounts"))
+	runner.register_test("payout_ui/standoff_strings_match_the_copy_file_exactly", Callable(ResolvePayoutUITests, "_t_standoff_strings"))
+	runner.register_test("payout_ui/standoff_card_first_has_one_button_second_has_two", Callable(ResolvePayoutUITests, "_t_standoff_buttons"))
+	runner.register_test("payout_ui/standoff_body_by_cause_and_calm_line_only_with_names", Callable(ResolvePayoutUITests, "_t_standoff_causes"))
+	runner.register_test("payout_ui/standoff_card_through_real_shell_and_host", Callable(ResolvePayoutUITests, "_t_standoff_real_host"))
+	runner.register_test("payout_ui/board_warning_levels_fade_clear_and_bark_once", Callable(ResolvePayoutUITests, "_t_warning_levels"))
+	runner.register_test("payout_ui/prebattle_shows_the_stalled_line_only_when_flagged", Callable(ResolvePayoutUITests, "_t_prebattle_stalled"))
+	runner.register_test("payout_ui/return_confirm_requested_opens_the_confirmation_once", Callable(ResolvePayoutUITests, "_t_confirm_requested_once"))
+	runner.register_test("payout_ui/confirmation_shows_the_gathered_block_or_the_empty_line", Callable(ResolvePayoutUITests, "_t_gathered_block"))
+	runner.register_test("payout_ui/found_ase_cards_show_the_packs_line_and_total", Callable(ResolvePayoutUITests, "_t_found_cards"))
+	runner.register_test("payout_ui/defeat_card_shows_packs_lost_line_only_with_the_row", Callable(ResolvePayoutUITests, "_t_packs_lost"))
+	runner.register_test("payout_ui/won_fight_with_gathered_row_keeps_the_midstage_layout", Callable(ResolvePayoutUITests, "_t_won_fight_midstage"))
+	runner.register_test("payout_ui/packs_cause_names_and_tooltips_are_exact", Callable(ResolvePayoutUITests, "_t_packs_causes"))
+	runner.register_test("payout_ui/phase7_strings_no_home_stage_percent_or_leave", Callable(ResolvePayoutUITests, "_t_phase7_scan"))
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -285,7 +298,7 @@ static func _t_wording() -> Dictionary:
 		"echoes_alive": "Each Echo that stays alive earns Ase.",
 		"settled_on_leave": "These were already taken when the party left earlier.",
 		"defeat_consolation": "This one was lost, but we still earn a small part.",
-		"nothing_overcome_yet": "The party has not overcome anything yet. Nothing is earned.",
+		"nothing_overcome_yet": "Nothing was gathered.",
 		"repeat_defeat": "The party already earned the consolation for this. Another loss earns nothing.",
 	}
 	for cause in want:
@@ -771,7 +784,7 @@ static func _t_carried_ekwan() -> Dictionary:
 	if not (screen.get_node("%EarningsSummary") as Control).visible:
 		return _fail(m, "summary hidden while Ekwan is carried")
 	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 4 }, "actions": {}, "data": {
-		"run_type": "forced_retreat", "ase_awarded": 0, "ekwan_awarded": 0, "ledger_seen": true,
+		"run_type": "scout_return", "ase_awarded": 0, "ekwan_awarded": 0, "ledger_seen": true,
 		"reward_breakdown": [], "actors": [] } })
 	if line.visible or (screen.get_node("%EarningsSummary") as Control).visible:
 		return _fail(m, "Ekwan line shows at 0")
@@ -1055,7 +1068,7 @@ static func _t_return_card() -> Dictionary:
 	return _pass(m)
 
 
-## D-110 F1: a leave with nothing completed shows only the "Nothing overcome yet" row, even though the
+## D-110 F1: a leave with nothing completed shows only the "Nothing was gathered." row (the UI replaces the core label), even though the
 ## core still sends settle_outcome "nothing_new". The line returns once something was completed earlier.
 static func _t_return_card_empty_leave() -> Dictionary:
 	var m := _mount()
@@ -1066,7 +1079,7 @@ static func _t_return_card_empty_leave() -> Dictionary:
 	screen.set_snapshot(empty)
 	if outcome_line.visible or not outcome_line.text.is_empty():
 		return _fail(m, "empty leave shows the line \"%s\"" % outcome_line.text)
-	if _names(_rows_in(screen, "%BreakdownSection")) != ["Nothing overcome yet"]:
+	if _names(_rows_in(screen, "%BreakdownSection")) != ["Nothing was gathered."]:
 		return _fail(m, "empty leave rows: %s" % str(_names(_rows_in(screen, "%BreakdownSection"))))
 	screen.set_snapshot(_scout_card("nothing_new", 0, 0))
 	if not outcome_line.visible or outcome_line.text != "Nothing was gathered since the last time.":
@@ -1146,8 +1159,13 @@ static func _t_retreat_real_host() -> Dictionary:
 const RETURN_ACTION := { "type": "stage.return_home" }
 
 
+## A fixture may give the amounts as { ase, ekwan }: they become the `gathered` block of carry_home_preview,
+## which is what the panel reads (it sums every source in the packs).
 static func _confirm_payload(carry: Dictionary) -> Dictionary:
-	return { "confirm": true, "action": RETURN_ACTION.duplicate(), "carry": carry }
+	var preview := carry.duplicate(true)
+	if carry.has("ase") and not carry.has("gathered"):
+		preview["gathered"] = { "ase": carry["ase"], "ekwan": carry.get("ekwan", 0), "rows": [], "has_fight_rows": false, "has_found_rows": false }
+	return { "confirm": true, "action": RETURN_ACTION.duplicate(), "carry": preview }
 
 
 ## The core writes return_home_result only on a FAILED escape. A success goes to the scout-return
@@ -1216,12 +1234,12 @@ static func _t_return_confirm_zero_and_failure() -> Dictionary:
 	var risk := modal.get_node("%RiskLabel") as Label
 	var warning := modal.get_node("%WarningLabel") as Label
 	var keeps := modal.get_node("%KeepsLabel") as Label
-	# Nothing gathered, nothing new, or no preview: the question, the escape line and the keeps line only.
+	# Nothing in the packs (D-110 F1 kept: no risk line): the empty line, the question, the escape line and the keeps line.
 	for carry in [{ "ase": 0, "ekwan": 0, "overcome": 0, "total": 2, "nothing_new": false }, {},
-			{ "ase": 4, "ekwan": 1, "overcome": 1, "total": 2, "nothing_new": true }]:
+			{ "ase": 0, "ekwan": 0, "overcome": 1, "total": 2, "nothing_new": true }]:
 		modal.present(_confirm_payload(carry))
-		if gathered.visible or risk.visible or not warning.visible or not keeps.visible:
-			return _fail(m, "no gathered amount %s: gathered=%s risk=%s" % [str(carry), gathered.visible, risk.visible])
+		if gathered.text != CarriedStrings.GATHERED_EMPTY or not gathered.visible or risk.visible or not warning.visible or not keeps.visible:
+			return _fail(m, "empty packs %s: gathered=\"%s\" risk=%s" % [str(carry), gathered.text, risk.visible])
 	# The subtitle stays hidden in confirm mode.
 	if (modal.get_node("%SubtitleLabel") as Control).visible:
 		return _fail(m, "confirmation shows a subtitle")
@@ -1541,3 +1559,566 @@ static func _t_return_real_host() -> Dictionary:
 					err = "failed escape Continue sent %s" % str(actions)
 	vp.free()
 	return { "ok": err.is_empty(), "error": err }
+
+
+# ── Phase 7: the standoff card, the warning, the packs ──────────────────────
+
+const StandoffStrings := preload("res://ui/components/StandoffPresentation.gd")
+const CombatScene := preload("res://ui/screens/combat/CombatBoardScreen.tscn")
+const INFO_BLUE := Color("#7AB5C8")
+
+
+## The real producer, so the keys cannot drift from the card the core sends.
+static func _standoff_card(count: int, can_sanctum: bool, cause: String = "unknown", froze: Array = [], calmed: Array = []) -> Dictionary:
+	return VentureResolveSnapshotBuilder.build_standoff_snapshot({ "standoff_count": count, "can_go_sanctum": can_sanctum,
+		"cause": cause, "froze_names": froze, "calmed_names": calmed }, 3)
+
+
+## Written out from phase7-copy-final.md on purpose: a changed character must fail this test.
+static func _t_standoff_strings() -> Dictionary:
+	var want := {
+		"TITLE": "Nobody moved",
+		"BODY_GENERIC": "Neither side would strike. The party stepped back.",
+		"BODY_FROZE_ONE": "%s could not move. The party stepped back.",
+		"BODY_FROZE_TWO": "%s and %s could not move. The party stepped back.",
+		"BODY_BLOCKED": "No one could get through. The party stepped back.",
+		"PACKS_LINE": "Their packs are as they were.",
+		"OPEN_FIGHT_LINE": "The task is still there.",
+		"CALM_LINE": "%s breathed out.",
+		"REPEAT_HINT_1": "It went the same way last time.",
+		"REPEAT_HINT_2": "Maybe they need rest.",
+		"BTN_PATH": "Back to the path",
+		"BTN_SANCTUM": "To the Sanctum",
+		"WARN_LEVEL_1": "Nobody is moving.",
+		"WARN_LEVEL_2": "Nobody wants to go first.",
+		"WARN_BARK": "Not yet. I can't.",
+		"PREBATTLE_STALLED": "They stalled here before.",
+	}
+	var consts: Dictionary = (StandoffStrings as Script).get_script_constant_map()
+	for key in want:
+		if str(consts.get(key, "<missing>")) != want[key]:
+			return { "ok": false, "error": "%s is \"%s\"" % [key, str(consts.get(key, "<missing>"))] }
+	var cards := {
+		"PayoutCausePresentation.PACKS_LOST_LINE": [PayoutCausePresentation.PACKS_LOST_LINE, "The party fell, and the packs were lost."],
+		"SITUATION_MONEY": [PayoutCausePresentation.SITUATION_MONEY % 12, "They found 12 Ase. It goes in the packs."],
+		"SITUATION_CLAIMANT_GOOD": [PayoutCausePresentation.SITUATION_CLAIMANT_GOOD % 20, "The party was given 20 Ase for the way. It goes in the packs."],
+		"ENCOUNTERS_COUNT": [PayoutCausePresentation.ENCOUNTERS_COUNT % 3, "Fights won on this path: 3."],
+		"GATHERED_EMPTY": [CarriedStrings.GATHERED_EMPTY, "Nothing is in their packs."],
+		"NOTHING_GATHERED": [PayoutCausePresentation.NOTHING_GATHERED, "Nothing was gathered."],
+	}
+	for key in cards:
+		if cards[key][0] != cards[key][1]:
+			return { "ok": false, "error": "%s is \"%s\"" % [key, cards[key][0]] }
+	if StandoffStrings.repeat_hint(1) != "" or StandoffStrings.repeat_hint(2) != want["REPEAT_HINT_1"] \
+			or StandoffStrings.repeat_hint(3) != want["REPEAT_HINT_2"] or StandoffStrings.repeat_hint(9) != want["REPEAT_HINT_2"]:
+		return { "ok": false, "error": "repeat hint by standoff_count" }
+	return { "ok": true }
+
+
+static func _button_error(button: Button, what: String) -> String:
+	if not button.visible or button.disabled or button.custom_minimum_size.y < 56.0 or button.custom_minimum_size.x < 48.0:
+		return "%s: visible=%s disabled=%s min=%s" % [what, button.visible, button.disabled, str(button.custom_minimum_size)]
+	return ""
+
+
+## First standoff: one button, back to the path. Second on: the Sanctum button joins. Each button sends its
+## slot's action whole (the Sanctum one carries to_sanctum), once per press.
+static func _t_standoff_buttons() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var sent: Array = []
+	var dismissed: Array = []
+	screen.action_requested.connect(func(a: Dictionary) -> void: sent.append(a))
+	screen.dismiss_requested.connect(func() -> void: dismissed.append(1))
+	var path := screen.get_node("%NextStageButton") as Button
+	var sanctum := screen.get_node("%SanctumButton") as Button
+	var first := _standoff_card(1, false)
+	screen.set_snapshot(first)
+	if _label(screen, "%BannerLabel").text != "Nobody moved" or _label(screen, "%ReasonLabel").text != StandoffStrings.BODY_GENERIC:
+		return _fail(m, "first card title or body: %s / %s" % [_label(screen, "%BannerLabel").text, _label(screen, "%ReasonLabel").text])
+	if _label(screen, "%PacksLine").text != "Their packs are as they were." or _label(screen, "%OpenFightLine").text != "The task is still there.":
+		return _fail(m, "packs or open-fight line wrong")
+	if (screen.get_node("%CalmLine") as Control).visible or (screen.get_node("%RepeatLine") as Control).visible:
+		return _fail(m, "the first standoff shows a calm or repeat line")
+	var err := _button_error(path, "path button")
+	if not err.is_empty():
+		return _fail(m, err)
+	if path.text != "Back to the path" or sanctum.visible:
+		return _fail(m, "first card buttons: path=\"%s\" sanctum visible=%s" % [path.text, sanctum.visible])
+	for hidden in ["%FightHeader", "%EarningsSummary", "%Ledger", "%BodyViewport"]:
+		if (screen.get_node(hidden) as Control).visible:
+			return _fail(m, "standoff card shows %s" % hidden)
+	for t in _visible_texts(screen):
+		if str(t) in ["VICTORY", "DEFEAT", "Leave"]:
+			return _fail(m, "standoff card shows \"%s\"" % str(t))
+	path.pressed.emit()
+	if sent != [first["actions"]["cta.continue"]] or dismissed.size() != 1:
+		return _fail(m, "path button sent %s" % str(sent))
+	# Second standoff: both buttons, the first repeat hint.
+	sent.clear()
+	var second := _standoff_card(2, true)
+	screen.set_snapshot(second)
+	if _label(screen, "%RepeatLine").text != "It went the same way last time." or not (screen.get_node("%RepeatLine") as Control).visible:
+		return _fail(m, "second card repeat hint: \"%s\"" % _label(screen, "%RepeatLine").text)
+	err = _button_error(path, "path button (second)") + _button_error(sanctum, "sanctum button")
+	if not err.is_empty():
+		return _fail(m, err)
+	if sanctum.text != "To the Sanctum" or path.text != "Back to the path":
+		return _fail(m, "second card button texts: %s / %s" % [sanctum.text, path.text])
+	var gap: int = sanctum.get_parent().get_theme_constant("separation")
+	if gap < 8:
+		return _fail(m, "gap between the two buttons is %d" % gap)
+	sanctum.pressed.emit()
+	if sent != [second["actions"]["cta.sanctum"]] or not bool(sent[0].get("to_sanctum", false)):
+		return _fail(m, "sanctum button sent %s" % str(sent))
+	sent.clear()
+	path.pressed.emit()
+	if sent != [second["actions"]["cta.continue"]] or sent[0].has("to_sanctum"):
+		return _fail(m, "path button (second) sent %s" % str(sent))
+	# A third standoff reads the second hint; the next normal card gets its body back.
+	screen.set_snapshot(_standoff_card(3, true))
+	if _label(screen, "%RepeatLine").text != "Maybe they need rest.":
+		return _fail(m, "third card repeat hint: \"%s\"" % _label(screen, "%RepeatLine").text)
+	screen.set_snapshot(_snap([], { "ledger_seen": true }))
+	if not (screen.get_node("%BodyViewport") as Control).visible or (screen.get_node("%StandoffLines") as Control).visible or sanctum.visible:
+		return _fail(m, "the standoff layout leaked into the next card")
+	return _pass(m)
+
+
+static func _t_standoff_causes() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var body := _label(screen, "%ReasonLabel")
+	var cases := [
+		["froze", ["Ama"], "Ama could not move. The party stepped back."],
+		["froze", ["Ama", "Kofi"], "Ama and Kofi could not move. The party stepped back."],
+		["froze", [], "Neither side would strike. The party stepped back."],
+		["blocked", [], "No one could get through. The party stepped back."],
+		["unknown", ["Ama"], "Neither side would strike. The party stepped back."],
+		["", [], "Neither side would strike. The party stepped back."],
+	]
+	for c in cases:
+		screen.set_snapshot(_standoff_card(1, false, c[0], c[1]))
+		if body.text != c[2]:
+			return _fail(m, "cause %s %s: body \"%s\"" % [c[0], str(c[1]), body.text])
+	var calm := _label(screen, "%CalmLine")
+	screen.set_snapshot(_standoff_card(1, false, "froze", ["Ama"], ["Ama"]))
+	if not (calm as Control).visible or calm.text != "Ama breathed out.":
+		return _fail(m, "one calm name: \"%s\"" % calm.text)
+	screen.set_snapshot(_standoff_card(1, false, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"]))
+	if calm.text != "Ama and Kofi breathed out.":
+		return _fail(m, "two calm names: \"%s\"" % calm.text)
+	screen.set_snapshot(_standoff_card(1, false, "froze", ["Ama"], []))
+	if (calm as Control).visible:
+		return _fail(m, "the calm line shows with no names")
+	return _pass(m)
+
+
+## Real chain: a real RealmShell, a real ModalHost, the real producer, the real buttons.
+static func _t_standoff_real_host() -> Dictionary:
+	var fx := StageCameraSelectTests._make_fixture("payout_standoff")
+	if fx.is_empty():
+		return { "ok": false, "error": "could not build the real stage fixture" }
+	var vp: SubViewport = fx["viewport"]
+	var realm: RealmShell = fx["realm"]
+	var host := preload("res://ui/components/ModalHost.tscn").instantiate() as ModalHost
+	vp.add_child(host)
+	var actions: Array = []
+	realm.modal_requested.connect(func(id: StringName, payload: Dictionary) -> void:
+		host.present_modal_for_id(id, realm.modal_scene_for(id), payload))
+	host.action_requested.connect(func(a: Dictionary) -> void: actions.append(a))
+	var err := ""
+	var first := _standoff_card(1, false, "froze", ["Ama"], ["Ama"])
+	realm.set_snapshot(first)
+	SanctumLayoutTests._force_control_layout(realm)
+	var card := host.get("_active_modal") as ResolveScreen
+	if card == null or not host.has_active_modal():
+		err = "the standoff card did not open in the host"
+	elif _label(card, "%BannerLabel").text != "Nobody moved" or _label(card, "%ReasonLabel").text != "Ama could not move. The party stepped back.":
+		err = "card text: %s / %s" % [_label(card, "%BannerLabel").text, _label(card, "%ReasonLabel").text]
+	elif (card.get_node("%SanctumButton") as Control).visible:
+		err = "the first card shows the Sanctum button"
+	else:
+		(card.get_node("%NextStageButton") as Button).pressed.emit()
+		if actions != [first["actions"]["cta.continue"]] or host.has_active_modal():
+			err = "the path button sent %s (open=%s)" % [str(actions), host.has_active_modal()]
+	if err.is_empty():
+		actions.clear()
+		var second := _standoff_card(2, true)
+		realm.set_snapshot(second)
+		SanctumLayoutTests._force_control_layout(realm)
+		card = host.get("_active_modal") as ResolveScreen
+		if card == null or not host.has_active_modal() or not (card.get_node("%SanctumButton") as Control).visible:
+			err = "the second card did not open with the Sanctum button"
+		else:
+			(card.get_node("%SanctumButton") as Button).pressed.emit()
+			if actions != [second["actions"]["cta.sanctum"]] or not bool(actions[0].get("to_sanctum", false)) or host.has_active_modal():
+				err = "the Sanctum button sent %s" % str(actions)
+	vp.free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+static func _board_actor(who: String, col: int) -> Dictionary:
+	return { "id": "id_" + who, "name": who, "faction": "echo", "grid_pos": { "col": col, "row": 1 },
+		"hp": 10, "current_hp": 10, "max_hp": 10, "emotional_status": "grounded" }
+
+
+static func _board_snap(extra: Dictionary) -> Dictionary:
+	var data := { "encounter_id": "stall_ui", "board_cols": 4, "board_rows": 4, "round": 9, "round_phase": "actor_turn",
+		"combat_over": false, "actors": [_board_actor("Ama", 1), _board_actor("Kofi", 2)],
+		"objective_state": { "type": "combat" } }
+	data.merge(extra, true)
+	return { "type": "flow.encounter", "meta": { "t": 1 }, "data": data, "actions": {} }
+
+
+## The warning: Info blue, a 0.4 s fade in, a second line at level 2 with one bark, gone at once on progress.
+static func _t_warning_levels() -> Dictionary:
+	var before := _set_reduced(false)
+	var m := _mount_scene(CombatScene)
+	var screen: CombatBoardScreen = m[1]
+	var line := screen.get_node("%StallLabel") as Label
+	var panel := screen.get_node("%StallPanel") as Control
+	var err := ""
+	screen.set_snapshot(_board_snap({}))
+	if panel.visible:
+		err = "the warning shows at level 0"
+	if err.is_empty():
+		screen.set_snapshot(_board_snap({ "stall_level": 1 }))
+		var tween := screen.get("_stall_tween") as Tween
+		if not panel.visible or line.text != "Nobody is moving." or tween == null or panel.modulate.a != 0.0:
+			err = "level 1: visible=%s text=\"%s\" alpha=%s" % [panel.visible, line.text, panel.modulate.a]
+		else:
+			tween.custom_step(0.2)
+			var half := panel.modulate.a
+			tween.custom_step(0.3)
+			if half <= 0.0 or half >= 1.0 or not is_equal_approx(panel.modulate.a, 1.0):
+				err = "fade: half=%s end=%s" % [half, panel.modulate.a]
+		var colour := line.get_theme_color("font_color")
+		if err.is_empty() and (colour.r > colour.b or not colour.is_equal_approx(INFO_BLUE)):
+			err = "the line is not Info blue: %s" % str(colour)
+	if err.is_empty():
+		screen.set_snapshot(_board_snap({ "stall_level": 1 }))
+		if not panel.visible or not is_equal_approx(panel.modulate.a, 1.0):
+			err = "a repeat snapshot at the same level restarted the fade (alpha %s)" % panel.modulate.a
+	if err.is_empty():
+		# Level 2 with no name: the second line only, no bark.
+		screen.set_snapshot(_board_snap({ "stall_level": 2, "stall_froze_name": "" }))
+		var popups := (screen.get_node("%BarkPopupLayer") as Node).get("_active_popups") as Dictionary
+		if line.text != "Nobody wants to go first." or not popups.is_empty():
+			err = "level 2 without a name: text=\"%s\" popups=%d" % [line.text, popups.size()]
+	if err.is_empty():
+		screen.set_snapshot(_board_snap({ "stall_level": 0 }))
+		if panel.visible:
+			err = "the line did not clear at once on progress"
+	if err.is_empty():
+		# Level 2 with the Echo that froze: one bark from that Echo, once per fight.
+		screen.set_snapshot(_board_snap({ "stall_level": 2, "stall_froze_name": "Ama" }))
+		var popups2 := (screen.get_node("%BarkPopupLayer") as Node).get("_active_popups") as Dictionary
+		if line.text != "Nobody wants to go first." or not popups2.has("id_Ama") or popups2.size() != 1:
+			err = "level 2 bark: text=\"%s\" popups=%s" % [line.text, str(popups2.keys())]
+		else:
+			var label := ((popups2["id_Ama"] as Dictionary)["node"] as Node).find_children("*", "Label", true, false)
+			if label.is_empty() or (label[0] as Label).text != "Not yet. I can't.":
+				err = "the bark text is wrong"
+	if err.is_empty():
+		screen.set_snapshot(_board_snap({ "stall_level": 0 }))
+		screen.set_snapshot(_board_snap({ "stall_level": 2, "stall_froze_name": "Kofi" }))
+		var popups3 := (screen.get_node("%BarkPopupLayer") as Node).get("_active_popups") as Dictionary
+		if popups3.has("id_Kofi"):
+			err = "a second bark played in the same fight"
+	StopMarkMotion.reduced = before
+	m[0].free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+static func _t_prebattle_stalled() -> Dictionary:
+	var m := _mount_scene(PrebattleScene)
+	var pre: PrebattleModal = m[1]
+	var line := pre.get_node("%StalledLabel") as Label
+	pre.present(_prebattle_payload({}))
+	if line.visible:
+		return _fail(m, "the stalled line shows without the flag")
+	pre.present(_prebattle_payload({ "stalled_before": true }))
+	if not line.visible or line.text != "They stalled here before.":
+		return _fail(m, "stalled line: visible=%s \"%s\"" % [line.visible, line.text])
+	pre.present(_prebattle_payload({ "stalled_before": false }))
+	if line.visible:
+		return _fail(m, "the stalled line stayed after the flag fell")
+	for b in [pre.get_node("%RetreatButton"), pre.get_node("%EnterCombatButton")]:
+		if (b as Button).custom_minimum_size.y < 56.0:
+			return _fail(m, "a pre-battle button is under 56 high")
+	return _pass(m)
+
+
+## data.return_confirm_requested opens the same confirmation as the Return button, once per request.
+static func _t_confirm_requested_once() -> Dictionary:
+	var fx := StageCameraSelectTests._make_fixture("payout_confirm_requested")
+	if fx.is_empty():
+		return { "ok": false, "error": "could not build the real stage fixture" }
+	var vp: SubViewport = fx["viewport"]
+	var realm: RealmShell = fx["realm"]
+	var snap: Dictionary = fx["snap"]
+	var host := preload("res://ui/components/ModalHost.tscn").instantiate() as ModalHost
+	vp.add_child(host)
+	var modals: Array = []
+	var actions: Array = []
+	realm.modal_requested.connect(func(id: StringName, payload: Dictionary) -> void:
+		modals.append([id, payload.duplicate(true)])
+		host.present_modal_for_id(id, realm.modal_scene_for(id), payload))
+	host.action_requested.connect(func(a: Dictionary) -> void: actions.append(a))
+	var flagged := snap.duplicate(true)
+	flagged["data"]["return_confirm_requested"] = true
+	var err := ""
+	realm.set_snapshot(snap)
+	if not modals.is_empty():
+		err = "a snapshot without the flag opened a modal"
+	if err.is_empty():
+		realm.set_snapshot(flagged)
+		if modals.size() != 1 or modals[0][0] != &"realm.return_home" or not bool(modals[0][1].get("confirm", false)) or not actions.is_empty():
+			err = "first flagged snapshot: modals=%d actions=%d" % [modals.size(), actions.size()]
+	if err.is_empty():
+		var preview: Dictionary = flagged["data"]["carry_home_preview"]
+		if modals[0][1].get("carry") != preview or not preview.has("gathered"):
+			err = "the confirmation carry is not the snapshot's carry_home_preview"
+	if err.is_empty():
+		realm.set_snapshot(flagged)
+		realm.set_snapshot(flagged)
+		if modals.size() != 1:
+			err = "a refresh re-opened the confirmation (%d opens)" % modals.size()
+	if err.is_empty():
+		# Cancel sends nothing; a refresh while the flag is still set does not bring it back.
+		var cancel := (host.get("_active_modal") as Node).get_node("%CancelButton") as Button
+		cancel.pressed.emit()
+		realm.set_snapshot(flagged)
+		if not actions.is_empty() or modals.size() != 1 or host.has_active_modal():
+			err = "Cancel: actions=%d opens=%d open=%s" % [actions.size(), modals.size(), host.has_active_modal()]
+	if err.is_empty():
+		# A snapshot without the flag, then a new request: opens again, and Confirm sends the action once.
+		realm.set_snapshot(snap)
+		realm.set_snapshot(flagged)
+		if modals.size() != 2 or not host.has_active_modal():
+			err = "a new request did not open (opens=%d)" % modals.size()
+		else:
+			var confirm := (host.get("_active_modal") as Node).get_node("%ConfirmButton") as Button
+			confirm.pressed.emit()
+			confirm.pressed.emit()
+			if actions != [{ "type": "stage.return_home" }]:
+				err = "Confirm sent %s" % str(actions)
+	vp.free()
+	return { "ok": err.is_empty(), "error": err }
+
+
+static func _gathered_preview(ase: int, ekwan: int) -> Dictionary:
+	return { "ase": ase, "ekwan": ekwan, "overcome": 1, "total": 3, "nothing_new": ase + ekwan == 0,
+		"gathered": { "ase": ase, "ekwan": ekwan, "rows": [], "has_fight_rows": ase > 0, "has_found_rows": false } }
+
+
+static func _t_gathered_block() -> Dictionary:
+	var m := _mount_scene(ReturnHomeScene)
+	var modal: ReturnHomeModal = m[1]
+	var gathered := modal.get_node("%GatheredLabel") as Label
+	var risk := modal.get_node("%RiskLabel") as Label
+	var keeps := modal.get_node("%KeepsLabel") as Label
+	var actions: Array = []
+	modal.action_requested.connect(func(a: Dictionary) -> void: actions.append(a))
+	var cases := [[12, 3, "In their packs: 12 Ase and 3 Ekwan."], [12, 0, "In their packs: 12 Ase."],
+		[0, 3, "In their packs: 3 Ekwan."], [0, 0, "Nothing is in their packs."]]
+	for c in cases:
+		modal.present({ "confirm": true, "action": RETURN_ACTION.duplicate(), "carry": _gathered_preview(c[0], c[1]) })
+		if not gathered.visible or gathered.text != c[2]:
+			return _fail(m, "gathered %d/%d: \"%s\"" % [c[0], c[1], gathered.text])
+		# Jeff's lines stay: the risk line with an amount, the keeps line always.
+		if risk.visible != (c[0] + c[1] > 0) or (c[0] + c[1] > 0 and risk.text != "Not all of it will survive the escape. What cannot be carried will be lost."):
+			return _fail(m, "risk line for %d/%d: visible=%s" % [c[0], c[1], risk.visible])
+		if not keeps.visible or keeps.text != "The path still waits.":
+			return _fail(m, "keeps line missing")
+	# The block reads `gathered`, not the older top-level amounts.
+	modal.present({ "confirm": true, "action": RETURN_ACTION.duplicate(), "carry": { "ase": 99, "ekwan": 99,
+		"gathered": { "ase": 6, "ekwan": 0 } } })
+	if gathered.text != "In their packs: 6 Ase.":
+		return _fail(m, "the block did not read gathered: \"%s\"" % gathered.text)
+	# Cancel sends nothing, Confirm sends the action once.
+	(modal.get_node("%CancelButton") as Button).pressed.emit()
+	if not actions.is_empty():
+		return _fail(m, "Cancel sent an action")
+	modal.present({ "confirm": true, "action": RETURN_ACTION.duplicate(), "carry": _gathered_preview(12, 3) })
+	(modal.get_node("%ConfirmButton") as Button).pressed.emit()
+	(modal.get_node("%ConfirmButton") as Button).pressed.emit()
+	if actions != [RETURN_ACTION]:
+		return _fail(m, "Confirm sent %s" % str(actions))
+	return _pass(m)
+
+
+## Found Ase waits in the packs. The money card total is the found amount (not +0), with the Found row and
+## its line; the good-Claimant contact card shows its line from ase_gathered.
+static func _t_found_cards() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var money := VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "money" }, "", [], [], 12, 2)
+	screen.set_snapshot(money)
+	if _label(screen, "%AseTotalLabel").text != "+12 Ase" or not (screen.get_node("%EarningsSummary") as Control).visible:
+		return _fail(m, "money total: \"%s\"" % _label(screen, "%AseTotalLabel").text)
+	var rows := _rows_in(screen, "%BreakdownSection")
+	if _names(rows) != ["Found"] or (rows[0] as RewardEntryItem).delta_label.text != "+12 Ase" or not (rows[0] as RewardEntryItem).cause_button.visible:
+		return _fail(m, "money rows %s" % str(_names(rows)))
+	if _label(screen, "%OutcomeLine").text != "They found 12 Ase. It goes in the packs." or not (screen.get_node("%OutcomeLine") as Control).visible:
+		return _fail(m, "money line: \"%s\"" % _label(screen, "%OutcomeLine").text)
+	(rows[0] as RewardEntryItem).cause_button.pressed.emit()
+	var tip := screen.get_node("%CauseTooltip") as CauseTooltip
+	if not tip.is_open() or (tip.get_node("%BodyLabel") as Label).text != "Found along the way. It goes in their packs.":
+		return _fail(m, "Found tooltip wrong")
+	# Another situation (loot) carries no found Ase: no line, no earnings.
+	screen.set_snapshot(VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "loot" }, "", [], [], 0, 2))
+	if (screen.get_node("%OutcomeLine") as Control).visible or (screen.get_node("%EarningsSummary") as Control).visible:
+		return _fail(m, "a loot card shows a found line or earnings")
+	# The good Claimant.
+	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 2 }, "actions": {}, "data": { "run_type": "contact_result",
+		"outcome": "good", "role_label": "Claimant", "outcome_text": "Done.", "ase_gathered": 20 } })
+	if _label(screen, "%OutcomeLine").text != "The party was given 20 Ase for the way. It goes in the packs.":
+		return _fail(m, "claimant line: \"%s\"" % _label(screen, "%OutcomeLine").text)
+	screen.set_snapshot({ "type": "flow.resolve", "meta": { "t": 2 }, "actions": {}, "data": { "run_type": "contact_result",
+		"outcome": "good", "role_label": "Claimant", "outcome_text": "Done." } })
+	if (screen.get_node("%OutcomeLine") as Control).visible:
+		return _fail(m, "the claimant line shows without ase_gathered")
+	return _pass(m)
+
+
+static func _t_packs_lost() -> Dictionary:
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var lost := _row("Packs lost", 0, "packs_lost", { "lost_ase": 12, "lost_ekwan": 0 })
+	var consolation := [_row("Base objectives", 13, "defeat_consolation", { "part": "base" }),
+		_row("Defeat penalty", -9, "defeat_consolation", { "part": "penalty" })]
+	screen.set_snapshot(_snap(consolation + [lost], { "ledger_seen": true }, false))
+	var line := screen.get_node("%OutcomeLine") as Label
+	if not line.visible or line.text != "The party fell, and the packs were lost.":
+		return _fail(m, "defeat line: visible=%s \"%s\"" % [line.visible, line.text])
+	if _names(_rows_in(screen, "%BreakdownSection")) != ["Consolation"]:
+		return _fail(m, "the packs_lost row shows in the ledger: %s" % str(_names(_rows_in(screen, "%BreakdownSection"))))
+	if _label(screen, "%BannerLabel").text != "DEFEAT":
+		return _fail(m, "the defeat banner changed")
+	screen.set_snapshot(_snap(consolation, { "ledger_seen": true }, false))
+	if line.visible:
+		return _fail(m, "the packs line shows without the packs_lost row")
+	screen.set_snapshot(_snap([lost], { "ledger_seen": true }, true))
+	if _label(screen, "%OutcomeLine").text != "The party fell, and the packs were lost.":
+		return _fail(m, "the line keys on the row, so it shows whenever the row is present")
+	return _pass(m)
+
+
+## A normal fight win now carries one encounter_gathered row. The card stays the mid-stage card (party,
+## story lines, no chips) and shows the row and the base amount.
+static func _t_won_fight_midstage() -> Dictionary:
+	var before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var row := _row("Fight won", 6, "encounter_gathered", { "kind": "combat", "gathered_ase": 6 })
+	screen.set_snapshot(_midstage({ "reward_breakdown": [row], "ase_awarded": 0, "ledger_seen": false }))
+	StopMarkMotion.reduced = before
+	if (screen.get_node("%FightHeader") as Control).visible:
+		return _fail(m, "the won fight left the mid-stage layout (chips show)")
+	if (screen.get_node("%EmotionList") as Control).get_child_count() != 3:
+		return _fail(m, "the party rows are missing")
+	if not (screen.get_node("%StoryLines") as Control).visible:
+		return _fail(m, "the story lines are missing on the mid-stage card")
+	var rows := _rows_in(screen, "%BreakdownSection")
+	if _names(rows) != ["Fight won"] or (rows[0] as RewardEntryItem).delta_label.text != "+6 Ase":
+		return _fail(m, "gathered row: %s" % str(_names(rows)))
+	if _label(screen, "%AseTotalLabel").text != "+6 Ase" or not (screen.get_node("%EarningsSummary") as Control).visible:
+		return _fail(m, "total: \"%s\"" % _label(screen, "%AseTotalLabel").text)
+	if PayoutCausePresentation.tooltip("encounter_gathered") != "It goes in their packs. It is safe only when the party gets out.":
+		return _fail(m, "fight row tooltip wrong")
+	# A win with any other row is a ledger card with chips, as before.
+	screen.set_snapshot(_snap([row, _row("Bonus", 2, "objectives_overcome", { "overcome": 1, "total": 2 })], { "ledger_seen": true }))
+	if not (screen.get_node("%FightHeader") as Control).visible:
+		return _fail(m, "a win with another row must show the chips")
+	return _pass(m)
+
+
+static func _t_packs_causes() -> Dictionary:
+	var names := { "encounter_gathered": "Fight won", "found_gathered": "Found", "encounters_overcome": "Fights won",
+		"found_banked": "Found on the path", "nothing_overcome_yet": "Nothing was gathered." }
+	for cause in names:
+		if PayoutCausePresentation.row_name(cause, "x") != names[cause]:
+			return { "ok": false, "error": "row name of %s is \"%s\"" % [cause, PayoutCausePresentation.row_name(cause, "x")] }
+	var tips := { "encounter_gathered": "It goes in their packs. It is safe only when the party gets out.",
+		"found_gathered": "Found along the way. It goes in their packs.",
+		"found_banked": "Gathered along the way and carried to the Sanctum.", "nothing_overcome_yet": "Nothing was gathered." }
+	for cause in tips:
+		if PayoutCausePresentation.tooltip(cause) != tips[cause] or not PayoutCausePresentation.has_cause(cause):
+			return { "ok": false, "error": "tooltip of %s is \"%s\"" % [cause, PayoutCausePresentation.tooltip(cause)] }
+	for n in [1, 3]:
+		if PayoutCausePresentation.tooltip("encounters_overcome", { "count": n }) != "Fights won on this path: %d." % n:
+			return { "ok": false, "error": "encounters_overcome count line for %d" % n }
+	if not PayoutCausePresentation.has_cause("encounters_overcome"):
+		return { "ok": false, "error": "encounters_overcome has no tooltip" }
+	# The path-end rows render with their names and the count line.
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var stage := [_row("Base objectives", 20, "objectives_overcome", { "overcome": 2, "total": 3 }),
+		_row("Fights won", 12, "encounters_overcome", { "count": 2 }), _row("Found on the path", 6, "found_banked", { "count": 1 })]
+	screen.set_snapshot(_snap([], { "ledger_seen": true, "stage_payout_rows": stage, "stage_payout_ase": 38 }))
+	var shown := _rows_in(screen, "%StageSection")
+	if _names(shown) != ["Objectives overcome", "Fights won", "Found on the path"]:
+		return _fail(m, "path-end rows %s" % str(_names(shown)))
+	(shown[1] as RewardEntryItem).cause_button.pressed.emit()
+	var tip := screen.get_node("%CauseTooltip") as CauseTooltip
+	if not tip.is_open() or (tip.get_node("%BodyLabel") as Label).text != "Fights won on this path: 2.":
+		return _fail(m, "Fights won tooltip wrong")
+	return _pass(m)
+
+
+## Every new player string: no "home", no "stage", no percent (apart from %s and %d), no odds word, no fraction.
+## The standoff card never says "Leave".
+static func _t_phase7_scan() -> Dictionary:
+	var texts: Array = []
+	for v in (StandoffStrings as Script).get_script_constant_map().values():
+		if v is String:
+			texts.append(v)
+	texts.append_array([PayoutCausePresentation.PACKS_LOST_LINE, PayoutCausePresentation.SITUATION_MONEY,
+		PayoutCausePresentation.SITUATION_CLAIMANT_GOOD, PayoutCausePresentation.ENCOUNTERS_COUNT,
+		PayoutCausePresentation.NOTHING_GATHERED, CarriedStrings.GATHERED_EMPTY])
+	for cause in ["encounter_gathered", "found_gathered", "encounters_overcome", "found_banked", "nothing_overcome_yet"]:
+		texts.append(PayoutCausePresentation.row_name(cause, ""))
+		texts.append(PayoutCausePresentation.tooltip(cause, { "count": 2 }))
+	var bad := _first_banned(texts.map(func(t: Variant) -> String: return str(t).replace("%s", "").replace("%d", "")))
+	if not bad.is_empty():
+		return { "ok": false, "error": "string tables: " + bad }
+	for t in texts:
+		var low := str(t).to_lower()
+		for word in ["banked", "settled", "roll"]:
+			if word in low and not (str(t) == "Found on the path"):
+				return { "ok": false, "error": "\"%s\" holds \"%s\"" % [str(t), word] }
+	# What the player sees on each new card.
+	var reduced_before := _set_reduced(true)
+	var m := _mount()
+	var screen: ResolveScreen = m[1]
+	var shown: Array = []
+	for card in [_standoff_card(1, false), _standoff_card(2, true, "froze", ["Ama", "Kofi"], ["Ama"]),
+			_standoff_card(3, true, "blocked"), VentureResolveSnapshotBuilder.build_situation_resolve_snapshot({ "type": "money" }, "", [], [], 12, 2),
+			{ "type": "flow.resolve", "meta": { "t": 2 }, "actions": {}, "data": { "run_type": "contact_result", "outcome": "good",
+				"role_label": "Claimant", "outcome_text": "Done.", "ase_gathered": 20 } },
+			_snap([_row("Packs lost", 0, "packs_lost")], { "ledger_seen": true }, false),
+			_midstage({ "reward_breakdown": [_row("Fight won", 6, "encounter_gathered")], "ase_awarded": 0 })]:
+		screen.set_snapshot(card)
+		shown.append_array(_visible_texts(screen))
+		if str(card["data"].get("run_type", "")) == "standoff":
+			for t in _visible_texts(screen):
+				if "leave" in str(t).to_lower():
+					return _fail(m, "the standoff card shows \"%s\"" % str(t))
+	StopMarkMotion.reduced = reduced_before
+	bad = _first_banned(shown)
+	m[0].free()
+	if not bad.is_empty():
+		return { "ok": false, "error": "cards: " + bad }
+	var m2 := _mount_scene(ReturnHomeScene)
+	var modal: ReturnHomeModal = m2[1]
+	shown = []
+	for c in [[12, 3], [0, 0]]:
+		modal.present({ "confirm": true, "action": RETURN_ACTION.duplicate(), "carry": _gathered_preview(c[0], c[1]) })
+		shown.append_array(_visible_texts(modal))
+	bad = _first_banned(shown)
+	m2[0].free()
+	if not bad.is_empty():
+		return { "ok": false, "error": "confirmation: " + bad }
+	return { "ok": true }
