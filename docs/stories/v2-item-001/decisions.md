@@ -65,6 +65,12 @@ This story builds: the packs capacity (D-13), the pickup decision point (a selec
 Calling, vectors and emotion are reserved inputs. They are not used yet.
 A follow-up story builds the full Echo decision model. It needs a new Notion row (Jeff's yes first).
 
+## D-16 — The party pack is separate from the Sanctum inventory (Jeff, 2026-10-27)
+The party pack and the Sanctum inventory are two containers. The pack can be filled while the party is in the Sanctum. It works as overflow: when the Sanctum inventory is full, an arriving item stays in the pack and is not lost.
+A filled pack goes on the next path. The party starts with less free pack room. This is a deliberate disadvantage.
+If the Sanctum inventory AND the pack are both full, the next arriving item is lost (reason `overflow`). D-04 survives for this one case.
+This amends D-04, D-13 and the packs rules. Open for the design rounds: how the pack empties (keeper action? automatically when room appears?), how the pack interacts with the early-leave roll (D-03) when it already holds old items, whether items in the pack from an earlier path are rolled again on a new early leave, and where the player sees the carried-over load.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
