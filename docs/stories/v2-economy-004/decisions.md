@@ -870,3 +870,12 @@ Jeff: "For any text let an agent write the copy in the tone I have chosen." File
 
 ## D-118 — A standoff writes the fight's fear and morale back (orchestrator default, for Jeff's play test; 2026-10-27)
 Finding (step 7.S): a forced retreat never wrote the fight's final fear/morale back to the roster (every ending fight does). The first-standoff fear drop (D-116 addendum c, "small and visible") would then act on the old saved fear and be weak. Jeff said not to pause, so the orchestrator chose: the standoff writes the final fear and morale back through the same code as an ending fight; the one-time drop acts on the written-back value. Jeff can reverse this after the play test. Facts from 7.S: a path has no turn limit; passive time income pays by clock time (capped 3600 s per settle), not by turns; a stalled fight rerun gives the same trace unless an input changes.
+
+## D-119 — Final QA of Phase 7: fixes before the play test (orchestrator defaults; 2026-10-27)
+QA (`qa-verifier`, opus, 893de79..95d54bd): packs, defeat, standoff rules, no-leak, recorded values and exploits hold; copy matches the copy file exactly. Jeff said not to pause until the play test, so the orchestrator chose defaults:
+- **F1 (fix):** the path-end card counted a normal fight won AFTER all required objectives twice in its Ase total (card 32, paid 26). Core must not write the "Fight won" row into `reward_breakdown` on a card that already carries the stage payout.
+- **F3 (fix):** a standoff on a hostile-Claimant fight removes that fight for good (the Claimant situation is already resolved), but the card says "The task is still there." Core sends `fight_returns` (bool); the UI shows the open-fight line only when true.
+- **F4 (fix):** `return_confirm_requested` stays in `last_snapshot` after core clears the flag; clear it from the published snapshot too and test a non-rebuilding action.
+- **F5 (fix):** the "Fights won" count tooltip counts only unsettled fight rows; it must count all fight rows of the path.
+- **F2 (default kept, Jeff to decide after the play test):** event cards (fight, money, Claimant) show the BASE amount; the leave panel, the defeat line and the payment use the scaled amount. On a replay the card shows +6 while the packs hold 2. Noted as a play test question.
+- F6 to F9 and the QA bloat notes: follow-ups (F6 mid-path won-fight card still says "Return to Exploration", no banned word; F7 debug Claimant id; F8 screenshot fixture `rows` shape; F9 Keeper trial standoff probably unreachable).
