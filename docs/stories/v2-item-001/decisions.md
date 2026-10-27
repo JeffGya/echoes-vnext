@@ -39,6 +39,13 @@ Each gear record carries `held_by: ""`. It is reserved and unused here. ITEM-003
 ## D-10 — Comparison research before the design round (Jeff, 2026-10-27)
 Before the design round, research how Gears Tactics, XCOM, Tomodachi Life and similar games handle shared inventory, loot, loss and cap pressure. Output: `research-comparison.md`.
 
+## D-11 — Cap relief: one "free a slot" action (Jeff, 2026-10-27)
+Finding (design round 1): D-04 plus D-08 left the player no way to free a slot. Junk could fill the cap for good.
+Jeff chose option D: one pre-departure action in the Sanctum inventory view that discards one unique piece.
+This amends D-08: that one discard action is in scope. Equip, recycle and sell stay out of scope.
+Consequences to design: the save write for the discard, the action path through the single choke point, a confirmation, and the exact rule (unique pieces only? stacks?). Round 2 and the build plan settle these.
+Source: `design-round1-sr-game-designer.md` section 7 and the options table.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
