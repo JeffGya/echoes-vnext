@@ -77,6 +77,17 @@ The real pressure is lost room: a full pack limits the Echoes' choices on the ne
 Jeff: a full pack should also be detrimental to the Echoes' state and cause debuffs. That is for ANOTHER story. This story builds no debuff. It must leave the hook visible (the carried load is readable data), so the later story can read it.
 Source: `design-sr-game-designer-v2.md` section 2 and A1.
 
+## D-18 — Story split into V2-ITEM-001a and V2-ITEM-001b (Jeff, 2026-10-28)
+001a: containers (Sanctum inventory and party pack), intake, item rows in the packs, per-item early-leave draws, the Sanctum discard, and the Sanctum inventory view. In 001a the pack fills in find order through a default seam function.
+001b: the Echo choice (`standing_v1`), the left list, the keeper swap, and the packs view on the path.
+001a is played and verified before 001b starts. A Notion row for 001b needs Jeff's yes.
+Source: `design-sr-game-designer-v2.md` section 10.
+
+## D-19 — Held pieces are rolled again on an early leave (Jeff, 2026-10-28)
+Held pieces are items carried in the pack from an earlier path because the Sanctum was full. Jeff chose: they ARE rolled again on an early leave (each draws alone, as D-03).
+This reverses the designer's recommendation (A2: held pieces safe). A full pack now risks lost pieces, not only lost room.
+Open: defeat and path end for held pieces; the designer's invariant and the feel design (lit "safe" tiles, no lift on carried pieces) must be redone.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
