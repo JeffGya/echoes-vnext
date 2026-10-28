@@ -3745,6 +3745,8 @@
 			"_warn_comment": "Cap pressure thresholds for the path view warnings (D-04, D-08). warn_room_at: warn when Sanctum room is this many pieces or fewer. warn_pack_free_at: warn when free pack slots are this many or fewer.",
 			"warn_room_at": 2,
 			"warn_pack_free_at": 1,
+			"_mark_count_comment": "How many different marks the UI shows to tell twin pieces apart. A piece row carries mark_index = (number part of its id) modulo mark_count. Below 1 or missing reads as 6.",
+			"mark_count": 6,
 			"_kinds_enabled_comment": "Kinds that intake accepts (D-06). A kind set to false is refused with reason kind_disabled. A kind with no key is unknown_kind. Same pattern as data.summoning.grade_enabled.",
 			"kinds_enabled": { "gear": true, "relic": true, "consumable": true, "material": true },
 			"_grades_comment": "Ordered list of grade ids, lowest first. Empty in shipping: the catalogue story fills it.",

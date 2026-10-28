@@ -52,6 +52,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("item_packs/rejected_intake_is_lost_with_its_reason", Callable(ItemPacksTests, "_t_rejected_mapping"))
 	runner.register_test("item_packs/held_only_leave_returns_items_and_currency_keys", Callable(ItemPacksTests, "_t_held_only_result"))
 	runner.register_test("item_packs/defeat_log_counts_items_and_keeps_the_item_free_payload", Callable(ItemPacksTests, "_t_defeat_log"))
+	runner.register_test("item_packs/report_rows_carry_source_and_mark_index", Callable(ItemPacksTests, "_t_report_rows"))
+	runner.register_test("item_packs/card_items_keeps_only_a_non_empty_report", Callable(ItemPacksTests, "_t_card_items"))
+	runner.register_test("item_packs/carry_preview_lists_items_at_risk_only_when_any", Callable(ItemPacksTests, "_t_items_at_risk"))
+	runner.register_test("item_packs/defeat_card_carries_the_lost_items", Callable(ItemPacksTests, "_t_defeat_card_items"))
+	runner.register_test("item_packs/a_repeated_find_id_in_one_call_is_refused", Callable(ItemPacksTests, "_t_duplicate_find"))
+	runner.register_test("item_packs/pack_room_counts_open_rows_in_every_realm", Callable(ItemPacksTests, "_t_room_across_realms"))
 	runner.register_test("item_packs/no_placeholder_id_in_config_or_core", Callable(ItemPacksTests, "_t_no_placeholder"))
 
 
@@ -428,7 +434,7 @@ static func _t_held_rolled() -> Dictionary:
 	if str(_held_fates(ctx)) != str(want):
 		m.append("held fates %s" % str(_held_fates(ctx)))
 	if int(r["items"]["kept_count"]) != 1 or int(r["items"]["lost_count"]) != 3 or _has_id_key(r["items"]) \
-			or str((r["items"]["kept"] as Array)[0]) != str({ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "reason_key": "to_pack" }):
+			or str((r["items"]["kept"] as Array)[0]) != str({ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 2, "reason_key": "to_pack" }):
 		m.append("items report %s" % str(r["items"]))
 	var item_logs := _logs(got, "economy.settle.items")
 	if item_logs.size() != 1 or int(item_logs[0]["draws"]) != 4 or int(item_logs[0]["held"]) != 4:
@@ -819,7 +825,7 @@ static func _t_find_order() -> Dictionary:
 static func _t_partial_stack() -> Dictionary:
 	var m: Array = []
 	var want_row := { "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 3,
-		"reason_key": "stack_limit", "lost_quantity": 5 }
+		"source": "gathered", "mark_index": -1, "reason_key": "stack_limit", "lost_quantity": 5 }
 	for c in ["leave", "path"]:
 		var ctx := _ctx(_SEED_ALL, 8, 4)
 		EarningsService.record_item(_stage(ctx), "s0", "a", _entry("ph_consumable_a", 8))
@@ -918,4 +924,259 @@ static func _t_defeat_log() -> Dictionary:
 	if n != 4 or plain_logs.size() != 1 or str((plain_logs[0] as Dictionary).keys()) != str(["stage_id", "rows", "ase", "ekwan"]) \
 			or int(plain_logs[0]["rows"]) != 4:
 		m.append("item-free log %s" % str(plain_logs))
+	return _result(m)
+
+
+# ---------------------------------------------------------------------------
+# 7. Step 6 fixes: report rows, card data, room across Realms
+# ---------------------------------------------------------------------------
+
+## The row a report holds, written out as a literal (key order is part of the shape).
+static func _xrow(type_id: String, qty: int, source: String, mark: int, reason: String) -> Dictionary:
+	return { "type_id": type_id, "kind": InventoryServiceTests._kind_of(type_id), "grade": "g1", "quantity": qty,
+		"source": source, "mark_index": mark, "reason_key": reason }
+
+
+## A leave report row has `source` ("held" or "gathered") and `mark_index` (the piece mark; -1 for an item with
+## no piece id: a stack or a lost item row). A kept unique row takes the mark of the piece intake made.
+## Cap 2 and pack 2, the Sanctum full, one held piece it.3, an armor row (becomes it.4, in the pack) and a stack.
+static func _t_report_rows() -> Dictionary:
+	var m: Array = []
+	for mc in [0, 4]:
+		var ctx := _ctx(_SEED_ALL, 2, 2)
+		var cfg: Dictionary = (ctx.config_service as _Cfg).inv
+		if mc > 0:
+			cfg["mark_count"] = mc
+		for ty in ["ph_weapon_a", "ph_charm_a", "ph_relic_a"]:
+			InventoryServiceTests._direct(ctx.save_data, cfg, ty)
+		EarningsService.record_item(_stage(ctx), "s0", "a", _entry("ph_armor_a"))
+		EarningsService.record_item(_stage(ctx), "s0", "b", _entry("ph_consumable_a", 2))
+		var r: Dictionary = _leave(ctx)["result"]
+		var items: Dictionary = r["items"]
+		var modulo: int = mc if mc > 0 else 6
+		var want_kept: Array = [_xrow("ph_relic_a", 1, "held", 3 % modulo, "to_pack"),
+			_xrow("ph_armor_a", 1, "gathered", 4 % modulo, "to_pack"), _xrow("ph_consumable_a", 2, "gathered", -1, "ok")]
+		if str(r["outcome"]) != "all" or str(items["kept"]) != str(want_kept) or not (items["lost"] as Array).is_empty() \
+				or _has_id_key(items):
+			m.append("mark_count %d: outcome %s, items %s, expected kept %s" % [mc, str(r["outcome"]), str(items), str(want_kept)])
+	# Everything lost: held row keeps its mark, gathered rows have none.
+	var ctx2 := _ctx(_SEED_NONE, 2, 2)
+	var cfg2: Dictionary = (ctx2.config_service as _Cfg).inv
+	for ty in ["ph_weapon_a", "ph_charm_a", "ph_relic_a"]:
+		InventoryServiceTests._direct(ctx2.save_data, cfg2, ty)
+	EarningsService.record_item(_stage(ctx2), "s0", "a", _entry("ph_armor_a"))
+	var lost: Dictionary = _leave(ctx2)["result"]["items"]
+	var want_lost: Array = [_xrow("ph_relic_a", 1, "held", 3, "leave_none"), _xrow("ph_armor_a", 1, "gathered", -1, "leave_none")]
+	if not (lost["kept"] as Array).is_empty() or str(lost["lost"]) != str(want_lost):
+		m.append("none: items %s, expected lost %s" % [str(lost), str(want_lost)])
+	return _result(m)
+
+
+## `card_items` turns a report into the `{ kept, lost }` block a card carries, as a copy; an empty report is {}.
+static func _t_card_items() -> Dictionary:
+	var m: Array = []
+	var report := { "kept": [{ "type_id": "x" }], "lost": [], "kept_count": 1, "lost_count": 0 }
+	var card := StageSettlementService.card_items(report)
+	if str(card.keys()) != str(["kept", "lost"]) or int(card["kept"].size()) != 1:
+		m.append("card %s" % str(card))
+	(card["kept"] as Array)[0]["type_id"] = "changed"
+	if str(report["kept"][0]["type_id"]) != "x":
+		m.append("the card shares rows with the report")
+	if not StageSettlementService.card_items({ "kept": [], "lost": [], "kept_count": 0, "lost_count": 0 }).is_empty() \
+			or not StageSettlementService.card_items({}).is_empty() or not StageSettlementService.card_items({ "kept": 5 }).is_empty():
+		m.append("an empty or malformed report did not give {}")
+	var only_lost := StageSettlementService.card_items({ "kept": [], "lost": [{ "type_id": "y" }] })
+	if str(only_lost) != str({ "kept": [], "lost": [{ "type_id": "y" }] }):
+		m.append("lost only: %s" % str(only_lost))
+	return _result(m)
+
+
+## B3: `carry_home_preview.items_at_risk` is in the preview only when an open item row or a held piece exists.
+## Rows first, then held pieces. `nothing_new` is false with 0 Ase and 0 Ekwan. An item-free preview has the exact
+## old keys. The call changes nothing.
+static func _t_items_at_risk() -> Dictionary:
+	var m: Array = []
+	var old_keys := str(["ase", "ekwan", "gathered", "nothing_new", "overcome", "total"])
+	var ctx := _ctx(_SEED_ALL, 8, 4)
+	var plain := StageExploreSnapshotBuilder._carry_preview(ctx)
+	var plain_keys := plain.keys()
+	plain_keys.sort()
+	if str(plain_keys) != old_keys or not bool(plain["nothing_new"]) or int(plain["ase"]) != 0 or int(plain["ekwan"]) != 0 \
+			or str(plain["gathered"]) != str({ "ase": 0, "ekwan": 0, "rows": 0, "has_fight_rows": false, "has_found_rows": false }):
+		m.append("item-free preview %s" % str(plain))
+	EarningsService.record_item(_stage(ctx), "s0", "0", _entry("ph_weapon_a"))
+	EarningsService.record_item(_stage(ctx), "s0", "1", _entry("ph_consumable_a", 2))
+	_hold(ctx, 1, 1, "ph_relic_a")
+	var save_before := JSON.stringify(ctx.save_data)
+	var pre := StageExploreSnapshotBuilder._carry_preview(ctx)
+	var want: Array = [
+		{ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "gathered", "mark_index": -1 },
+		{ "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 2, "source": "gathered", "mark_index": -1 },
+		{ "type_id": "ph_relic_a", "kind": "relic", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 1 }]
+	var keys := pre.keys()
+	keys.sort()
+	if str(keys) != str(["ase", "ekwan", "gathered", "items_at_risk", "nothing_new", "overcome", "total"]) \
+			or str(pre["items_at_risk"]) != str(want) or bool(pre["nothing_new"]) or int(pre["ase"]) != 0 or int(pre["ekwan"]) != 0:
+		m.append("preview %s, expected items_at_risk %s and nothing_new false" % [str(pre), str(want)])
+	if int((pre["gathered"] as Dictionary)["rows"]) != 2:
+		m.append("gathered.rows %s counts the item rows" % str(pre["gathered"]))
+	if JSON.stringify(ctx.save_data) != save_before or str(StageExploreSnapshotBuilder._carry_preview(ctx)) != str(pre):
+		m.append("the preview changed the save or is not stable")
+	# A settled row is not at risk any more; held pieces only; rows only.
+	EarningsService.mark_settled(_stage(ctx), ["item:s0:0"], 100)
+	(EarningsService.row_of(_stage(ctx), "item:s0:0"))["settled"] = true
+	var after: Array = StageExploreSnapshotBuilder._carry_preview(ctx)["items_at_risk"]
+	if after.size() != 2 or str((after[0] as Dictionary)["type_id"]) != "ph_consumable_a":
+		m.append("settled row still at risk: %s" % str(after))
+	var held_only := _ctx(_SEED_ALL, 8, 4)
+	_hold(held_only, 2)
+	var h: Dictionary = StageExploreSnapshotBuilder._carry_preview(held_only)
+	if str((h["items_at_risk"] as Array).map(func(r): return "%s/%d" % [r["source"], r["mark_index"]])) != str(["held/1", "held/2"]) \
+			or bool(h["nothing_new"]):
+		m.append("held only: %s" % str(h))
+	var rows_only := _ctx(_SEED_ALL, 8, 4)
+	_add_rows(rows_only, "s0", [0])
+	var ro: Dictionary = StageExploreSnapshotBuilder._carry_preview(rows_only)
+	if (ro["items_at_risk"] as Array).size() != 1 or bool(ro["nothing_new"]):
+		m.append("rows only: %s" % str(ro))
+	return _result(m)
+
+
+## The packs_lost card block of a defeat. B2: rows only, held only, both with Ase, and Ase only. A defeat with no
+## item keeps `{ lost_ase, lost_ekwan }` exactly, and a defeat with nothing lost has no packs_lost row at all.
+static func _t_defeat_card_items() -> Dictionary:
+	var m: Array = []
+	var row_a := _xrow("ph_armor_a", 1, "gathered", -1, "defeat")
+	# 1. Item row only: packs_lost appears with 0 Ase and 0 Ekwan.
+	var e1 := EconomyCharacterizationTests._fight_env("item_packs_defeat_rows", false)
+	if e1.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	EarningsService.record_item(e1["stage"], "s0", "a", _entry("ph_armor_a"))
+	EconomyCharacterizationTests._fight_build(e1)
+	var p1 := _packs_lost_params(e1)
+	if str(p1) != str({ "lost_ase": 0, "lost_ekwan": 0, "items": [row_a] }):
+		m.append("rows only: params %s" % str(p1))
+	var ectx1: EncounterContext = e1["ectx"]
+	if str(ectx1.packs_lost) != str(p1):
+		m.append("rows only: packs_lost %s differs from the card params" % str(ectx1.packs_lost))
+	# 2. Held pieces only (two pieces; marks 1 and 2).
+	var e2 := EconomyCharacterizationTests._fight_env("item_packs_defeat_held", false)
+	_hold(e2["flow_ctx"], 2)
+	EconomyCharacterizationTests._fight_build(e2)
+	var p2 := _packs_lost_params(e2)
+	var want2: Array = [_xrow("ph_weapon_a", 1, "held", 1, "defeat"), _xrow("ph_weapon_a", 1, "held", 2, "defeat")]
+	if str(p2) != str({ "lost_ase": 0, "lost_ekwan": 0, "items": want2 }):
+		m.append("held only: params %s" % str(p2))
+	# 3. Both, with Ase and Ekwan in the packs: rows first, then held; the amounts stay.
+	var e3 := EconomyCharacterizationTests._fight_env("item_packs_defeat_both", false)
+	EarningsService.add_row(e3["stage"], EarningsService.make_row("found:b", "found", "money", 9, 2))
+	EarningsService.record_item(e3["stage"], "s0", "a", _entry("ph_armor_a"))
+	_hold(e3["flow_ctx"], 1)
+	EconomyCharacterizationTests._fight_build(e3)
+	var p3 := _packs_lost_params(e3)
+	if str(p3) != str({ "lost_ase": 9, "lost_ekwan": 2, "items": [row_a, _xrow("ph_weapon_a", 1, "held", 1, "defeat")] }):
+		m.append("both: params %s" % str(p3))
+	# The stored card survives a JSON round trip with the same block.
+	var card_data: Dictionary = e3["card"]["data"]
+	var again: Variant = JSON.parse_string(JSON.stringify(card_data))
+	var again_rows: Array = ((again as Dictionary)["reward_breakdown"] as Array).filter(func(r): return str(r["cause"]) == "packs_lost")
+	var norm_items: String = JSON.stringify(JSON.parse_string(JSON.stringify(p3["items"])))
+	if again_rows.size() != 1 or JSON.stringify(again_rows[0]["params"]["items"]) != norm_items:
+		m.append("the items block did not survive the JSON round trip")
+	# 4. Ase only: the old shape, exactly.
+	var e4 := EconomyCharacterizationTests._fight_env("item_packs_defeat_ase", false)
+	EarningsService.add_row(e4["stage"], EarningsService.make_row("found:b", "found", "money", 9, 2))
+	EconomyCharacterizationTests._fight_build(e4)
+	var p4 := _packs_lost_params(e4)
+	var ectx4: EncounterContext = e4["ectx"]
+	if str(p4) != str({ "lost_ase": 9, "lost_ekwan": 2 }) or str(ectx4.packs_lost) != str({ "lost_ase": 9, "lost_ekwan": 2 }):
+		m.append("ase only: params %s, packs_lost %s" % [str(p4), str(ectx4.packs_lost)])
+	# 5. Nothing lost: no packs_lost row and an empty packs_lost.
+	var e5 := EconomyCharacterizationTests._fight_env("item_packs_defeat_none", false)
+	EconomyCharacterizationTests._fight_build(e5)
+	var ectx5: EncounterContext = e5["ectx"]
+	if not _packs_lost_params(e5).is_empty() or not ectx5.packs_lost.is_empty():
+		m.append("nothing lost: a packs_lost block exists")
+	return _result(m)
+
+
+## The `params` of the packs_lost row of the defeat card, or {}.
+static func _packs_lost_params(env: Dictionary) -> Dictionary:
+	for r_v in (env["card"]["data"]["reward_breakdown"] as Array):
+		if str((r_v as Dictionary).get("cause", "")) == "packs_lost":
+			return (r_v as Dictionary)["params"]
+	return {}
+
+
+## L6: a `find_id` that appears twice in one call is refused with `duplicate_find` (the first copy stands). A repeat
+## in a later call is still skipped without a refusal (the row exists).
+static func _t_duplicate_find() -> Dictionary:
+	var m: Array = []
+	var ctx := _ctx(_SEED_ALL, 8, 4)
+	var got := ActiveStageService.record_found_items(ctx, "s0", [_find("a", "ph_weapon_a"), _find("a", "ph_charm_a"),
+		_find("b", "ph_relic_a"), _find("b", "ph_relic_a")], 3)
+	var want := { "taken": ["a", "b"], "left": [], "refused": [{ "find_id": "a", "reason_key": "duplicate_find" },
+		{ "find_id": "b", "reason_key": "duplicate_find" }] }
+	if str(got) != str(want):
+		m.append("result %s, expected %s" % [str(got), str(want)])
+	var row := EarningsService.row_of(_stage(ctx), "item:s0:a")
+	if EarningsService.rows_of(_stage(ctx)).size() != 2 or str((row["items"] as Array)[0]["type_id"]) != "ph_weapon_a":
+		m.append("rows %s: the first copy must stand" % str(_ids_of_rows(ctx)))
+	var again := ActiveStageService.record_found_items(ctx, "s0", [_find("a", "ph_weapon_a"), _find("a", "ph_weapon_a")], 4)
+	if str(again) != str({ "taken": [], "left": [], "refused": [] }):
+		m.append("a repeat call: %s" % str(again))
+	# A duplicate that is also invalid keeps its own reason; a duplicate of a left find is a duplicate too.
+	var ctx2 := _ctx(_SEED_ALL, 8, 1)
+	var got2 := ActiveStageService.record_found_items(ctx2, "s0", [_find("a", "ph_weapon_a"), _find("b", "ph_charm_a"),
+		_find("b", "ph_charm_a"), _find("c", "nope")], 3)
+	if str(got2["taken"]) != str(["a"]) or str(got2["left"]) != str(["b"]) \
+			or str(got2["refused"]) != str([{ "find_id": "b", "reason_key": "duplicate_find" }, { "find_id": "c", "reason_key": "unknown_kind" }]):
+		m.append("second case: %s" % str(got2))
+	return _result(m)
+
+
+static func _ids_of_rows(ctx: FlowContext) -> Array:
+	return EarningsService.rows_of(_stage(ctx)).map(func(r): return str((r as Dictionary)["id"]))
+
+
+## M2: pack room counts the open item rows of EVERY Realm and stage in the save. Settled and lost rows, and a
+## malformed Realm entry, count nothing. A row left open in Realm A takes a slot when the party gathers in Realm B.
+static func _t_room_across_realms() -> Dictionary:
+	var m: Array = []
+	var ctx := _ctx(_SEED_ALL, 8, 2)
+	var save := ctx.save_data
+	if EarningsService.open_item_rows_in_save(save) != 0 or EarningsService.open_item_rows_in_save({}) != 0:
+		m.append("an empty save counts rows")
+	var other := { "run_count": 0, "seed": 1, "stages": [{ "index": 0, "earnings": [] }, { "index": 1, "earnings": [] }] }
+	(save["realms"] as Dictionary)["realm.02"] = other
+	(save["realms"] as Dictionary)["broken"] = 5
+	(save["realms"] as Dictionary)["no_stages"] = { "stages": "x" }
+	var s0: Dictionary = (other["stages"] as Array)[0]
+	var s1: Dictionary = (other["stages"] as Array)[1]
+	EarningsService.record_item(s0, "r2", "open", _entry("ph_weapon_a"))
+	EarningsService.record_item(s1, "r2", "open2", _entry("ph_charm_a"))
+	EarningsService.record_item(s1, "r2", "done", _entry("ph_relic_a"))
+	EarningsService.record_item(s1, "r2", "gone", _entry("ph_armor_a"))
+	(EarningsService.row_of(s1, "item:r2:done"))["settled"] = true
+	(EarningsService.row_of(s1, "item:r2:gone"))["lost"] = true
+	EarningsService.record_item(_stage(ctx), "s0", "mine", _entry("ph_weapon_a"))
+	if EarningsService.open_item_rows_in_save(save) != 3:
+		m.append("open rows in the save: %d, expected 3" % EarningsService.open_item_rows_in_save(save))
+	# Pack capacity 4: 3 open rows in the save leave 1 slot for a new find in the live stage.
+	var ctx4 := _ctx(_SEED_ALL, 8, 4)
+	(ctx4.save_data["realms"] as Dictionary)["realm.02"] = other
+	var got := ActiveStageService.record_found_items(ctx4, "s1", [_find("x", "ph_weapon_a"), _find("y", "ph_charm_a")], 5)
+	if str(got["taken"]) != str(["x", "y"]):
+		m.append("two open rows elsewhere in a pack of 4 should leave 2 slots: %s" % str(got))
+	var full := ActiveStageService.record_found_items(ctx4, "s2", [_find("z", "ph_armor_a")], 6)
+	if str(full["taken"]) != "[]" or str(full["left"]) != str(["z"]):
+		m.append("a full pack (2 elsewhere + 2 here) took another find: %s" % str(full))
+	# A held piece takes a slot too; settling the row elsewhere gives the slot back.
+	var ctx2 := _ctx(_SEED_ALL, 8, 2)
+	var single := { "run_count": 0, "seed": 1, "stages": [{ "index": 0, "earnings": [] }] }
+	EarningsService.record_item((single["stages"] as Array)[0], "r2", "open", _entry("ph_weapon_a"))
+	(ctx2.save_data["realms"] as Dictionary)["realm.02"] = single
+	var in_b := ActiveStageService.record_found_items(ctx2, "s5", [_find("p", "ph_armor_a"), _find("q", "ph_charm_a")], 7)
+	if str(in_b["taken"]) != str(["p"]) or str(in_b["left"]) != str(["q"]):
+		m.append("realm B gather with one row open in realm A and room 2: %s" % str(in_b))
 	return _result(m)

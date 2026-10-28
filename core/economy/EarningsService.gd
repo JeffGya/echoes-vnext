@@ -68,6 +68,25 @@ static func open_item_rows(stage: Dictionary) -> Array:
 	return unsettled(rows_of(stage)).filter(func(r): return is_item_row(r))
 
 
+## How many open item rows (not settled, not lost) the whole save holds, over every Realm and every stage.
+## Pack room counts this number, because a row left open in one Realm still owns a pack slot. Read only.
+static func open_item_rows_in_save(save: Dictionary) -> int:
+	var realms_v: Variant = save.get("realms", {})
+	if not (realms_v is Dictionary):
+		return 0
+	var total := 0
+	for realm_v in (realms_v as Dictionary).values():
+		if not (realm_v is Dictionary):
+			continue
+		var stages_v: Variant = (realm_v as Dictionary).get("stages", [])
+		if not (stages_v is Array):
+			continue
+		for stage_v in (stages_v as Array):
+			if stage_v is Dictionary:
+				total += open_item_rows(stage_v as Dictionary).size()
+	return total
+
+
 ## Rows a payer may still pay: not settled by a leave and not lost.
 static func unsettled(rows: Array) -> Array:
 	var out: Array = []
@@ -209,6 +228,24 @@ static func put_held_fate(stage: Dictionary, record: Dictionary) -> void:
 static func held_record(piece: Dictionary, token: String, fate: String, reason_key: String) -> Dictionary:
 	return { "id": piece["id"], "type_id": piece["type_id"], "kind": piece["kind"], "grade": piece["grade"],
 		"token": token, "fate": fate, "reason_key": reason_key }
+
+
+## One item as the result screens and the leave confirmation show it. No id. `source` is "gathered" (an item row
+## on the path) or "held" (a piece carried from an earlier path). `mark_index` is the piece mark
+## (`InventoryService.mark_index_of`), or -1 when the item has no piece id yet.
+static func at_risk_row(e: Dictionary, source: String, mark_index: int) -> Dictionary:
+	return { "type_id": str(e.get("type_id", "")), "kind": str(e.get("kind", "")), "grade": str(e.get("grade", "")),
+		"quantity": int(e.get("quantity", 1)), "source": source, "mark_index": mark_index }
+
+
+## A row of a leave, defeat or path-end item report: `at_risk_row` plus the `reason_key`, and `lost_quantity`
+## when a stack surplus was lost. The one builder for all three reports.
+static func report_row(e: Dictionary, reason: String, source: String, mark_index: int) -> Dictionary:
+	var out := at_risk_row(e, source, mark_index)
+	out["reason_key"] = reason
+	if int(e.get("lost_quantity", 0)) > 0:
+		out["lost_quantity"] = int(e["lost_quantity"])
+	return out
 
 
 ## Row id of one find. It is the exactly-once stamp of that find.

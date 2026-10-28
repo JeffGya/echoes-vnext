@@ -33,6 +33,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_service/invariants_hold_after_every_mutation", Callable(InventoryServiceTests, "_t_invariants"))
 	runner.register_test("inventory_service/take_in_order_shape", Callable(InventoryServiceTests, "_t_take_in_order"))
 	runner.register_test("inventory_service/logger_gets_one_line", Callable(InventoryServiceTests, "_t_logger"))
+	runner.register_test("inventory_service/mark_count_comes_from_the_config", Callable(InventoryServiceTests, "_t_mark_count"))
 	runner.register_test("inventory_service/no_placeholder_in_config_or_new_save", Callable(InventoryServiceTests, "_t_no_placeholder"))
 
 
@@ -969,4 +970,44 @@ static func _t_no_placeholder() -> Dictionary:
 			m.append("%s cost is not { ekwan: 0, ase: 0 }" % id)
 	if defs.size() != 6:
 		m.append("fixture holds %d definitions, expected 6" % defs.size())
+	return _result(m)
+
+
+## L1: `mark_index` = id number modulo `data.inventory.mark_count`. A missing, zero, negative or wrong-type value
+## reads as 6. The shipping balance.json must carry the key (its value is not pinned). One function (`mark_index_of`) serves the snapshot and the reports.
+static func _t_mark_count() -> Dictionary:
+	var m: Array = []
+	var save := _fresh()
+	var cfg := _cfg(20, 4)
+	for i in 8:
+		InventoryService.intake(save, cfg, _e("ph_weapon_a"), InventoryService.MODE_DIRECT)
+	var default_marks: Array = []
+	for row in InventoryService.snapshot(save, cfg)["items"]:
+		default_marks.append(int((row as Dictionary)["mark_index"]))
+	if str(default_marks) != str([1, 2, 3, 4, 5, 0, 1, 2]):
+		m.append("no mark_count key: marks %s" % str(default_marks))
+	var cfg4 := _cfg(20, 4)
+	cfg4["mark_count"] = 4
+	var marks4: Array = []
+	for row in InventoryService.snapshot(save, cfg4)["items"]:
+		marks4.append(int((row as Dictionary)["mark_index"]))
+	if str(marks4) != str([1, 2, 3, 0, 1, 2, 3, 0]):
+		m.append("mark_count 4: marks %s" % str(marks4))
+	for bad in [0, -3, "x", null, 0.4]:
+		var c := _cfg(20, 4)
+		c["mark_count"] = bad
+		if InventoryService.mark_count(c) != 6:
+			m.append("mark_count %s reads as %d, expected 6" % [str(bad), InventoryService.mark_count(c)])
+	var c1 := _cfg(20, 4)
+	c1["mark_count"] = 1
+	if InventoryService.mark_index_of(c1, "it.7") != 0 or InventoryService.mark_index_of(cfg4, "it.7") != 3 \
+			or InventoryService.mark_index_of(cfg4, "bad") != 0 or InventoryService.mark_index_of(cfg, "it.7") != 1:
+		m.append("mark_index_of: %d %d %d %d" % [InventoryService.mark_index_of(c1, "it.7"),
+			InventoryService.mark_index_of(cfg4, "it.7"), InventoryService.mark_index_of(cfg4, "bad"),
+			InventoryService.mark_index_of(cfg, "it.7")])
+	var shipping: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://data/balance.json"))
+	var inv_cfg: Variant = ((shipping as Dictionary).get("data", {}) as Dictionary).get("inventory", {}) if shipping is Dictionary else {}
+	if not (inv_cfg is Dictionary) or not ((inv_cfg as Dictionary).get("mark_count", null) is float) \
+			or int((inv_cfg as Dictionary)["mark_count"]) < 1 or not (inv_cfg as Dictionary).has("_mark_count_comment"):
+		m.append("balance.json data.inventory.mark_count must be a positive number with a comment (the value is not pinned)")
 	return _result(m)

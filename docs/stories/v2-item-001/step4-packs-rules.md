@@ -14,12 +14,12 @@ Opus review needed (determinism and draw order).
 | same | `plan` | `sources["item"]` added (`rows`, `ase`, `all`). The sums are unchanged. |
 | `core/economy/StageSettlementService.gd` | `settle_plan` | New keys `item_rows` and `held_pieces`. `nothing_new` is true only with no Ase, no Ekwan, no open item row and no held piece. Doc comment updated. |
 | same | `settle_leave` | Outcome roll code and stream are unchanged. Currency rows are marked from `currency_ids` (plan ids minus item rows). Item handling runs after the currency mark (`_settle_leave_items`). The result gains `items`. The `economy.settle.leave` log has the same fields; `marked_ids` is `currency_ids`. A new log `economy.settle.items` is written only when an entry exists. |
-| same | `_settle_leave_items`, `_keeps`, `_settle_item_row`, `_held_record`, `_report_row`, `_item_report`, `_finish_report` | New helpers. `_settle_item_row` is shared with the path end. |
+| same | `_settle_leave_items`, `_keeps`, `_settle_item_row`, `_item_report`, `_finish_report` (the held-record and report-row builders are `EarningsService.held_record` and `EarningsService.report_row`, one owner each) | New helpers. `_settle_item_row` is shared with the path end. |
 | same | `settle` and new `_bank_item_rows` | After the currency payout and `request_save`: open item rows go to `intake` (`gathered`) in row order, rows are marked settled with share 100, then `move_pack_to_sanctum`. The payout gains `items`. Log `economy.stage.items` when a row exists. |
 | `core/realms/ActiveStageService.gd` | `record_found_items` | New seam (ITEM-002 calls it). |
 | same | `lose_unsettled_packs` | Item entries get `fate: lost`, `reason_key: defeat`. Every held piece leaves the pack through `remove_held` and gets a `held_fates` record (`token: "defeat"`). Return value is still the number of rows lost (item rows included). The log `economy.earnings.lost` gains `items` and `held`, and is also written when only held pieces were removed. |
 | `tests/ItemPacksCharacterizationTests.gd` | see below | Two defects inverted, whole-dict assertions extended. |
-| `tests/ItemPacksTests.gd` (+ `.uid`) | new suite `item_packs`, 16 tests | |
+| `tests/ItemPacksTests.gd` (+ `.uid`) | new suite `item_packs`, 16 tests at step 4 (22 after the review fixes, 28 after step 6) | |
 | `ui/AppRoot.gd` | one line after `inventory_service` | registers the suite |
 | `scripts/test-shard-map.sh` | shard12 | `item_packs` added (24 suites, est 102 s) |
 | `AGENTS.md` | counts | 140 to 141 (two places), name in the list and in the "added since" sentence |
@@ -43,7 +43,7 @@ Opus review needed (determinism and draw order).
 2. A find whose row already exists is skipped (exactly-once by row id).
 3. `free = pack_free(save, cfg, open item rows)`. `take_in_order(fresh, free)` picks the first `free` fresh finds.
 4. Each taken find becomes one row through `record_item`. Finds beyond the room are not gathered and not lost by a cap.
-5. Returns `{ taken, left }` with the caller's `find_id` values. One `economy.earnings.items` log line (`taken`, `left`, `free`) per call that has a fresh find. `request_save` only when a row was written.
+5. Returns `{ taken, left, refused }` with the caller's `find_id` values (`refused` is `[{ find_id, reason_key }]`, see the contract at the end). One `economy.earnings.items` log line (`taken`, `left`, `refused`, `free`) per call that has a fresh find or a refusal; a call with refusals only logs it too. `request_save` only when a row was written.
 
 ### Leave (after the unchanged outcome roll)
 1. Entries = open item rows in row order, then held pieces in pack order. A held piece with a `held_fates` record of this settle's token (`<run_count>.<settle_count>`) is left out.
@@ -51,7 +51,7 @@ Opus review needed (determinism and draw order).
 3. Draw: `CampaignSeed.get_rng_from(realm.seed, "inventory.leave.<stage_id>.<run_count>.<settle_count>.<row|held>.<id>").randi_range(0, 99) < roundi(share * 100)`. `settle_count` is the value read before the increment. One new rng per entry, one draw each. No draw for `none`, `all`, or when there is no entry.
 4. Order of effects: lost held pieces are removed (`remove_held`) and recorded; `move_pack_to_sanctum`; held survivors are recorded `carried` with reason `ok` (now in the Sanctum) or `to_pack` (still held); open item rows in row order: kept rows go to `intake` (`gathered`), lost rows get `fate: lost`. Each row ends `settled: true` with `settled_share` 100 or 0.
 5. Intake result to entry fate: `stored` -> `carried`/`ok`; `packed` -> `carried`/`to_pack`; `partial` -> `carried`/`stack_limit`; `lost` or `rejected` -> `lost` with the intake reason.
-6. Result `items` = `{ kept, lost, kept_count, lost_count }`. A row is `{ type_id, kind, grade, quantity, reason_key }`. No id.
+6. Result `items` = `{ kept, lost, kept_count, lost_count }`. A row is `{ type_id, kind, grade, quantity, source, mark_index, reason_key }` (`source` "held" or "gathered"; `mark_index` -1 for an item with no piece id; `lost_quantity` only for a stack surplus). No id. (Step 4 had no `source` and `mark_index`; step 6 added them.)
 
 ### Defeat, path end
 Defeat and path end are as in the table above. Path end draws nothing and writes no `held_fates`.
@@ -82,7 +82,7 @@ Environment: `/tmp/claude-0/godot-bin/godot`, `ECHOES_TEST_SAVE_DIR=/tmp/claude-
 
 Not run (by instruction): `reward`, `combat_*`, `fingerprint_*`, `maturity_baseline`, the full and sharded suites.
 
-### `item_packs` tests (16)
+### `item_packs` tests (16 at step 4)
 `earnings_item_rows`; `found_items_fit_and_exceed_the_room` (fits, exceeds, row ids by index, repeat writes nothing, held piece takes a slot, full pack, empty situation id, log line, save request); `plan_counts_items_and_held_pieces`; `item_only_pack_draws_the_outcome_roll` (seeds 0, 1, 2: rolls 0, 57, 90); `outcome_stream_equals_the_item_free_value` (rolls and pays 0/0, 39/7, 78/14 with item rows and a held piece present; `marked_ids` hold no item id); `some_draws_do_not_depend_on_order_or_other_entries`; `held_pieces_are_rolled` (only held pieces; none; all); `repeat_leave_draws_held_pieces_again`; `survivor_stays_held_when_the_sanctum_is_full`; `retry_after_a_partial_state_does_not_redraw`; `defeat_loses_item_rows_and_held_pieces_once`; `path_end_banks_item_rows_once`; `path_end_with_a_full_sanctum_keeps_pieces_held`; `json_round_trip_between_phases_gives_the_same_result` (six phases, JSON between each phase, final save and phase results equal; a leave replayed from a saved state equals the first); `item_free_results_equal_step_1`; `no_placeholder_id_in_config_or_core`.
 
 Pinned draws (written as literals in the tests and recomputed from the stream names):

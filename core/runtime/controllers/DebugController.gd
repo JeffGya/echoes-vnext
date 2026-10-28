@@ -625,7 +625,7 @@ func handle_inventory_produce(action: Dictionary, t: int) -> FlowActionOutcome:
 		var got := ActiveStageService.record_found_items(flow_ctx, "debug", finds, t)
 		results.append(got)
 	else:
-		var reserved := EarningsService.open_item_rows(stage).size()
+		var reserved := EarningsService.open_item_rows_in_save(flow_ctx.save_data)
 		for entry in entries:
 			results.append(InventoryService.intake(flow_ctx.save_data, cfg, entry, InventoryService.MODE_DIRECT,
 				reserved, logger, t))

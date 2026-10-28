@@ -464,7 +464,8 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 	for p_v in removed:
 		var p: Dictionary = p_v
 		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "lost", lost_reason))
-		(report["lost"] as Array).append(_report_row(p, lost_reason))
+		(report["lost"] as Array).append(EarningsService.report_row(
+			p, lost_reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
 	var moved := InventoryService.move_pack_to_sanctum(ctx.save_data, inv_cfg)
 	var still_held := {}
 	for p_v in InventoryService.held_pieces(ctx.save_data):
@@ -473,7 +474,8 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 		var p: Dictionary = p_v
 		var reason := "to_pack" if still_held.has(str(p["id"])) else "ok"
 		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "carried", reason))
-		(report["kept"] as Array).append(_report_row(p, reason))
+		(report["kept"] as Array).append(EarningsService.report_row(
+			p, reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
 
 	var reserved := rows.size()
 	for r_v in rows:
@@ -513,12 +515,15 @@ static func _settle_item_row(save: Dictionary, inv_cfg: Dictionary, row: Diction
 		var e: Dictionary = e_v
 		var reason := lost_reason
 		var fate := "lost"
+		var mark := -1
 		if keep:
 			var res := InventoryService.intake(save, inv_cfg, { "type_id": e.get("type_id", ""), "kind": e.get("kind", ""),
 				"grade": e.get("grade", ""), "quantity": e.get("quantity", 1), "piece_id": "" },
 				InventoryService.MODE_GATHERED, reserved, logger, t)
 			reason = str(res["reason_key"])
 			fate = "lost" if str(res["result"]) in ["lost", "rejected"] else "carried"
+			if fate == "carried" and not str(res["item_id"]).is_empty():
+				mark = InventoryService.mark_index_of(inv_cfg, str(res["item_id"]))
 			if int(res["lost_quantity"]) > 0:
 				e["lost_quantity"] = int(res["lost_quantity"])
 				if str(res["result"]) == "partial":
@@ -527,17 +532,37 @@ static func _settle_item_row(save: Dictionary, inv_cfg: Dictionary, row: Diction
 		e["reason_key"] = reason
 		row_kept = row_kept and fate == "carried"
 		var bucket: Array = report["kept"] if fate == "carried" else report["lost"]
-		bucket.append(_report_row(e, reason))
+		bucket.append(EarningsService.report_row(e, reason, "gathered", mark))
 	row["settled"] = true
 	row["settled_share"] = 100 if row_kept else 0
 
 
-## A copy for the result screens: no id.
-static func _report_row(e: Dictionary, reason: String) -> Dictionary:
-	var out := { "type_id": str(e.get("type_id", "")), "kind": str(e.get("kind", "")), "grade": str(e.get("grade", "")),
-		"quantity": int(e.get("quantity", 1)), "reason_key": reason }
-	if int(e.get("lost_quantity", 0)) > 0:
-		out["lost_quantity"] = int(e["lost_quantity"])
+## The report as the cards carry it: `{ kept, lost }` (copies), or {} when both lists are empty. A card shows an
+## `items` block only when this is not empty. Pure.
+static func card_items(report: Dictionary) -> Dictionary:
+	var kept_v: Variant = report.get("kept", [])
+	var lost_v: Variant = report.get("lost", [])
+	var kept: Array = kept_v if kept_v is Array else []
+	var lost: Array = lost_v if lost_v is Array else []
+	if kept.is_empty() and lost.is_empty():
+		return {}
+	return { "kept": kept.duplicate(true), "lost": lost.duplicate(true) }
+
+
+## What a leave would put at risk now: the open item rows (source "gathered", `mark_index` -1) in row order,
+## then the held pieces (source "held") in pack order, as `EarningsService.at_risk_row` rows. [] when none.
+## Pure and read-only; no roll, no odds.
+static func items_at_risk(ctx: FlowContext, cfg_service: ConfigService) -> Array:
+	var out: Array = []
+	var cfg := ConfigService.get_inventory_cfg(cfg_service)
+	var stage_ref := _live_stage(ctx) if not (ctx.realm_id.is_empty() or ctx.stage_id.is_empty()) else {}
+	for r_v in EarningsService.open_item_rows(stage_ref):
+		for e_v in ((r_v as Dictionary)["items"] as Array):
+			if e_v is Dictionary:
+				out.append(EarningsService.at_risk_row(e_v as Dictionary, "gathered", -1))
+	for p_v in InventoryService.held_pieces(ctx.save_data):
+		var p: Dictionary = p_v
+		out.append(EarningsService.at_risk_row(p, "held", InventoryService.mark_index_of(cfg, str(p["id"]))))
 	return out
 
 
@@ -574,16 +599,7 @@ static func retention_mul(directive: Dictionary) -> float:
 
 ## The LIVE stage dict of the active stage, or {}.
 static func _live_stage(ctx: FlowContext) -> Dictionary:
-	var realm_model: Dictionary = RealmService.get_active(ctx)
-	var stages_v: Variant = realm_model.get("stages", [])
-	if not (stages_v is Array):
-		return {}
-	var sid := str(ctx.stage_id)
-	var index := int(sid.split(".")[-1]) if sid.contains(".") else 0
-	for s_v in (stages_v as Array):
-		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == index:
-			return s_v
-	return {}
+	return FlowStageExploreState._get_current_stage(ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -603,13 +619,7 @@ func _stage_index() -> int:
 ## return value must persist. Matched on the stage's own `index` field, the same way
 ## FlowEncounterState resolved stage objectives before this moved.
 func _stage_ref(realm_model: Dictionary, stage_index: int) -> Dictionary:
-	var stages_v: Variant = realm_model.get("stages", [])
-	if not (stages_v is Array):
-		return {}
-	for s_v in (stages_v as Array):
-		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == stage_index:
-			return s_v
-	return {}
+	return FlowStageExploreState.stage_by_index(realm_model, stage_index)
 
 
 ## Stage-clear Storyweight, moved verbatim from FlowEncounterState.build_final_snapshot().

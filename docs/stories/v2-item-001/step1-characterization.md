@@ -25,12 +25,12 @@ Author role: mechanics-developer. Date: 2026-10-28. No production code under `co
 | Path end | `path_end_pays_unsettled_once` | 54 Ase + 10 stipend = 64, Ekwan 6; receipt `settled`, `realm.01.stage.0`, `cleared`; second settle returns `{}`; `preview()` empty |
 | Path end | `path_end_pays_nothing_for_settled_or_lost_rows` | after a leave (54/6) path end pays the 10 stipend only; after a defeat path end pays the 10 stipend only |
 | Known defect | `add_row_rejects_empty_currency_and_duplicate_id` | empty id and duplicate id rejected; an item-only row rejected |
-| Known defect | `nothing_new_ignores_items` | hand-built row with a `ph_char_item` and 0/0: `ids` lists it, `rows` 1, `nothing_new` true; leave draws no roll and marks nothing; defeat loses the row |
+| Known defect (renamed `nothing_new_counts_items` in step 4) | `nothing_new_ignores_items` | hand-built row with a `ph_char_item` and 0/0: `ids` lists it, `rows` 1, `nothing_new` true; leave draws no roll and marks nothing; defeat loses the row |
 
 ## KNOWN DEFECT lines
 
 1. `# KNOWN DEFECT (V2-ITEM-001a will change this):` `EarningsService.add_row` rejects an item-only row (`EarningsService.gd:49`). Step 4 inverts the item-only assertion in `_t_add_row_rejects`. Empty-id and duplicate-id rejections stay.
-2. `# KNOWN DEFECT (V2-ITEM-001a will change this):` `nothing_new` ignores items (`StageSettlementService.gd:295`). Step 4 inverts the `nothing_new` assertion and the no-roll assertion in `_t_nothing_new_ignores_items`.
+2. `# KNOWN DEFECT (V2-ITEM-001a will change this):` `nothing_new` ignores items (`StageSettlementService.gd:295`). Step 4 inverts the `nothing_new` assertion and the no-roll assertion in `_t_nothing_new_ignores_items` (step 4 renamed it `nothing_new_counts_items`).
 
 ## Existing tests that already pin related behaviour (not duplicated)
 

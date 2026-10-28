@@ -487,13 +487,21 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 	return snap
 
 
-## Steps the last Advance could commit to; the step row crosses out the rest. A malformed value reads as the budget.
+## The carry-home preview. `items_at_risk` is present only when an item is at risk: [{ type_id, kind, grade,
+## quantity, source ("gathered"|"held"), mark_index (-1 for "gathered") }], open item rows first, then held pieces.
+## `nothing_new` is false whenever an item is at risk (even with 0 Ase and 0 Ekwan), so a non-empty `items_at_risk`
+## and `nothing_new == false` always agree; the UI reads `items_at_risk` for the "nothing gathered" wording.
 static func _carry_preview(flow_ctx: FlowContext) -> Dictionary:
 	var plan := StageSettlementService.settle_plan(flow_ctx, flow_ctx.config_service)
-	return { "ase": plan["ase"], "ekwan": plan["ekwan"], "overcome": plan["overcome"], "total": plan["total"],
+	var preview := { "ase": plan["ase"], "ekwan": plan["ekwan"], "overcome": plan["overcome"], "total": plan["total"],
 		"nothing_new": plan["nothing_new"],
 		"gathered": { "ase": plan["ase"], "ekwan": plan["ekwan"], "rows": plan["rows"],
 			"has_fight_rows": int(plan["fight_rows"]) > 0, "has_found_rows": int(plan["found_rows"]) > 0 } }
+	if int(plan["item_rows"]) > 0 or int(plan["held_pieces"]) > 0:
+		var at_risk := StageSettlementService.items_at_risk(flow_ctx, flow_ctx.config_service)
+		if not at_risk.is_empty():
+			preview["items_at_risk"] = at_risk
+	return preview
 
 
 static func _commitment_depth(explore_map: Dictionary, step_budget: int) -> int:

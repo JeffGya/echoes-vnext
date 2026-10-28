@@ -43,6 +43,17 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_actions/snapshot_field_shape", Callable(InventoryActionTests, "_t_snapshot_shape"))
 	runner.register_test("inventory_actions/snapshot_field_is_a_copy", Callable(InventoryActionTests, "_t_snapshot_copy"))
 	runner.register_test("inventory_actions/discard_then_json_round_trip", Callable(InventoryActionTests, "_t_round_trip"))
+	runner.register_test("inventory_actions/leave_item_report_reaches_the_card_and_survives_a_reload", Callable(InventoryActionTests, "_t_leave_chain"))
+	runner.register_test("inventory_actions/item_free_leave_card_has_no_items_key", Callable(InventoryActionTests, "_t_leave_item_free"))
+	runner.register_test("inventory_actions/return_home_is_refused_off_the_path", Callable(InventoryActionTests, "_t_return_home_refused"))
+	runner.register_test("inventory_actions/path_end_item_report_reaches_the_destination_snapshot", Callable(InventoryActionTests, "_t_path_end_report"))
+	runner.register_test("inventory_actions/discard_blocked_key_and_the_live_path_rule", Callable(InventoryActionTests, "_t_discard_blocked"))
+	runner.register_test("inventory_actions/discard_guard_works_from_saved_state_after_a_reload", Callable(InventoryActionTests, "_t_discard_reload"))
+	runner.register_test("inventory_actions/path_end_report_is_not_resent_by_a_later_dispatch", Callable(InventoryActionTests, "_t_clear_items_spent"))
+	runner.register_test("inventory_actions/path_end_report_is_dropped_when_the_party_goes_to_the_stage_map", Callable(InventoryActionTests, "_t_clear_items_stage_map"))
+	runner.register_test("inventory_actions/party_prep_inventory_is_always_present_and_a_copy", Callable(InventoryActionTests, "_t_party_prep_item_free"))
+	runner.register_test("inventory_actions/sanctum_and_party_prep_count_open_rows_of_every_realm", Callable(InventoryActionTests, "_t_reserved_and_party_prep"))
+	runner.register_test("inventory_actions/the_console_producer_is_gated_to_debug_builds", Callable(InventoryActionTests, "_t_console_gate"))
 	runner.register_test("inventory_actions/same_dispatches_give_the_same_json", Callable(InventoryActionTests, "_t_determinism"))
 
 
@@ -383,7 +394,7 @@ static func _live_path(env: Dictionary) -> void:
 	var rt: FlowRuntime = env["rt"]
 	var save := _save(env)
 	(save["realms"] as Dictionary)["realm.01"] = { "run_count": 0, "seed": 1, "stages": [
-		{ "index": 0, "objectives": [], "earnings": [], "settlement_receipt": {}, "explore_map": { "situations": [] } }] }
+		{ "index": 0, "objectives": [], "earnings": [], "settlement_receipt": {}, "explore_map": { "situations": [], "locked": true } }] }
 	rt.flow_ctx.realm_id = "realm.01"
 	rt.flow_ctx.stage_id = "stage.0"
 
@@ -647,4 +658,520 @@ static func _t_determinism() -> Dictionary:
 	var compact := JSON.stringify(JSON.parse_string(a))
 	if compact != _PINNED_FINAL:
 		m.append("pinned literal differs:\n%s" % compact)
+	return _result(m)
+
+
+# ---------------------------------------------------------------------------
+# Step 6 fixes: leave item report, return_home guard, path-end report, discard_blocked, party prep
+# ---------------------------------------------------------------------------
+
+## A real runtime on `flow.stage_explore` (stage.0 of realm.01) with its own inventory cfg. Returns the
+## VentureCharacterizationTests env ({ ok, runtime, logger }) or its failure dictionary.
+static func _explore_env(tag: String, cap: int, pack: int) -> Dictionary:
+	var env := VentureCharacterizationTests._setup_explore_env(tag)
+	if not bool(env.get("ok", false)):
+		return env
+	var rt: FlowRuntime = env["runtime"]
+	((rt.config_service._balance["data"] as Dictionary))["inventory"] = InventoryServiceTests._cfg(cap, pack, 5)
+	env["rt"] = rt
+	env["inv_cfg"] = ConfigService.get_inventory_cfg(rt.config_service)
+	return env
+
+
+static func _stage_of(env: Dictionary) -> Dictionary:
+	return FlowStageExploreState._get_current_stage((env["runtime"] as FlowRuntime).flow_ctx)
+
+
+## Sets the realm seed so the first leave rolls "all" and the escape succeeds. Returns false when none is found.
+static func _force_leave_all(env: Dictionary) -> bool:
+	var rt: FlowRuntime = env["runtime"]
+	var fc := rt.flow_ctx
+	var realm := VentureCharacterizationTests._realm(rt.get_save_data(), "realm.01")
+	var turn := int((_stage_of(env)["explore_map"] as Dictionary).get("turn_count", 0))
+	var mul := StageSettlementService.retention_mul(rt.directive_service.get_active_directive())
+	for s in range(0, 20000):
+		if EconomyCharacterizationTests._expected_outcome(s, int(realm.get("run_count", 0)), 0, mul) == "all" \
+				and CampaignSeed.get_rng_from(s, "stage.escape.%s.%d" % [fc.stage_id, turn]).randi_range(0, 100) > 90:
+			realm["seed"] = s
+			return true
+	return false
+
+
+static func _row_of(type_id: String, qty: int, source: String, mark: int, reason: String = "") -> Dictionary:
+	var out := { "type_id": type_id, "kind": InventoryServiceTests._kind_of(type_id), "grade": "g1", "quantity": qty,
+		"source": source, "mark_index": mark }
+	if not reason.is_empty():
+		out["reason_key"] = reason
+	return out
+
+
+## B1 + B3 + reload. Cap 2, pack 2. The Sanctum holds two pieces, one piece is held (it.3), the path holds an armor
+## row (becomes it.4, in the pack) and a stack row. The outcome is "all". The explore preview lists the three at
+## risk; the scout-return card carries `items`; the context field is spent; a JSON reload replays the same block.
+static func _t_leave_chain() -> Dictionary:
+	var env := _explore_env("leave_chain", 2, 2)
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var rt: FlowRuntime = env["runtime"]
+	var fc := rt.flow_ctx
+	var save := rt.get_save_data()
+	for ty in ["ph_weapon_a", "ph_charm_a", "ph_relic_a"]:
+		InventoryService.intake(save, env["inv_cfg"], InventoryServiceTests._e(ty), "direct")
+	EarningsService.record_item(_stage_of(env), "s0", "a", ItemPacksTests._entry("ph_armor_a"))
+	EarningsService.record_item(_stage_of(env), "s0", "b", ItemPacksTests._entry("ph_consumable_a", 2))
+	if not _force_leave_all(env):
+		return { "ok": false, "error": "test setup failed: no seed rolls all with a successful escape" }
+	# The preview on the path.
+	var pre: Dictionary = StageExploreSnapshotBuilder.build(fc, 5)["data"]["carry_home_preview"]
+	var want_risk: Array = [_row_of("ph_armor_a", 1, "gathered", -1), _row_of("ph_consumable_a", 2, "gathered", -1),
+		_row_of("ph_relic_a", 1, "held", 3)]
+	if str(pre.get("items_at_risk", [])) != str(want_risk) or bool(pre["nothing_new"]) or int(pre["ase"]) != 0:
+		m.append("preview %s" % str(pre))
+	# The leave.
+	var out: Dictionary = rt.dispatch({ "type": "stage.return_home" })
+	var data: Dictionary = out.get("data", {})
+	var want_kept: Array = [_row_of("ph_relic_a", 1, "held", 3, "to_pack"), _row_of("ph_armor_a", 1, "gathered", 4, "to_pack"),
+		_row_of("ph_consumable_a", 2, "gathered", -1, "ok")]
+	var want_items := { "kept": want_kept, "lost": [] }
+	if str(out.get("type", "")) != FlowStateIds.RESOLVE or str(data.get("run_type", "")) != "scout_return" \
+			or str(data.get("settle_outcome", "")) != "all":
+		m.append("card: type %s, run_type %s, outcome %s" % [str(out.get("type")), str(data.get("run_type")), str(data.get("settle_outcome"))])
+	if str(data.get("items", {})) != str(want_items):
+		m.append("card items %s, expected %s" % [str(data.get("items")), str(want_items)])
+	if not fc.pending_scout_return_items.is_empty():
+		m.append("the context field was not spent by the dispatch")
+	# Stored with the durable result, replayed after a JSON reload.
+	var stored := PendingResultService.read(save)
+	if str((stored.get("resolve_data", {}) as Dictionary).get("items", {})) != str(want_items):
+		m.append("the durable result lacks the items block")
+	var fc2 := FlowContext.new()
+	fc2.save_data = JSON.parse_string(JSON.stringify(save))
+	var replay: Dictionary = PendingResultService.build_snapshot(fc2, 9)
+	if _norm((replay.get("data", {}) as Dictionary).get("items", null)) != _norm(want_items):
+		m.append("the reloaded card items %s" % str((replay.get("data", {}) as Dictionary).get("items")))
+	# A second build of the first card is the same (the builder is pure).
+	fc.pending_scout_return_items = StageSettlementService.card_items({ "kept": want_kept, "lost": [] })
+	var b1 := VentureResolveSnapshotBuilder.build_scout_return_snapshot(fc, 20)
+	var b2 := VentureResolveSnapshotBuilder.build_scout_return_snapshot(fc, 20)
+	if _norm(b1) != _norm(b2) or not (b1["data"] as Dictionary).has("items"):
+		m.append("the scout-return builder is not pure or lost items")
+	fc.pending_scout_return_items = {}
+	return _result(m)
+
+
+## The leave card of an item-free pack has no `items` key, and its keys are the step 1 keys.
+static func _t_leave_item_free() -> Dictionary:
+	var env := _explore_env("leave_plain", 2, 2)
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var rt: FlowRuntime = env["runtime"]
+	var pre: Dictionary = StageExploreSnapshotBuilder.build(rt.flow_ctx, 5)["data"]["carry_home_preview"]
+	var pre_keys: Array = pre.keys()
+	pre_keys.sort()
+	if str(pre_keys) != str(["ase", "ekwan", "gathered", "nothing_new", "overcome", "total"]):
+		m.append("item-free preview keys %s" % str(pre_keys))
+	if not _force_leave_all(env):
+		return { "ok": false, "error": "test setup failed: no seed rolls all with a successful escape" }
+	var out: Dictionary = rt.dispatch({ "type": "stage.return_home" })
+	var data: Dictionary = out.get("data", {})
+	if str(data.get("run_type", "")) != "scout_return" or data.has("items"):
+		m.append("item-free card: run_type %s, has items %s" % [str(data.get("run_type")), str(data.has("items"))])
+	var keys: Array = data.keys()
+	keys.sort()
+	var want_keys := ["actors", "ase_awarded", "ekwan_awarded", "intel_count", "ledger_seen", "rank", "reward_breakdown",
+		"run_type", "settle_outcome", "summary_line", "surface", "verdict", "victory"]
+	if str(keys) != str(want_keys):
+		m.append("item-free card keys %s" % str(keys))
+	return _result(m)
+
+
+## M1: `stage.return_home` is refused unless the last snapshot is the path. Refusals: after the first leave (the
+## scout-return card), in the Sanctum. A refusal does not settle, draw, save or change the snapshot, and it logs
+## `stage.return.denied`. The held pieces are drawn once.
+static func _t_return_home_refused() -> Dictionary:
+	var env := _explore_env("return_twice", 2, 4)
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var rt: FlowRuntime = env["runtime"]
+	var logger: StructuredLogger = env["logger"]
+	var save := rt.get_save_data()
+	for ty in ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_armor_a"]:
+		InventoryService.intake(save, env["inv_cfg"], InventoryServiceTests._e(ty), "direct")
+	if not _force_leave_all(env):
+		return { "ok": false, "error": "test setup failed: no seed rolls all with a successful escape" }
+	rt.dispatch({ "type": "stage.return_home" })
+	var settle_count := int(_stage_of(env).get("settle_count", -1))
+	if settle_count != 1:
+		m.append("the first leave settled %d times, expected 1" % settle_count)
+	var after_first := JSON.stringify(save, "", true)
+	var type_first := str(rt.flow_ctx.last_snapshot.get("type", ""))
+	# (a) Again, from the scout-return card.
+	logger.clear()
+	rt.dispatch({ "type": "stage.return_home" })
+	if JSON.stringify(save, "", true) != after_first or _flushes(logger) != 0 or int(_stage_of(env).get("settle_count", -1)) != 1:
+		m.append("a second return_home changed the save, flushed or settled again")
+	if _log_count(logger, "stage.return.denied") != 1 or _log_count(logger, "economy.settle.leave") != 0 \
+			or _log_count(logger, "stage.return_home") != 0:
+		m.append("denied log %d, settle logs %d, attempt logs %d" % [_log_count(logger, "stage.return.denied"),
+			_log_count(logger, "economy.settle.leave"), _log_count(logger, "stage.return_home")])
+	if str(rt.flow_ctx.last_snapshot.get("type", "")) != type_first:
+		m.append("a refusal replaced the snapshot")
+	var outcome := rt._venture_controller().handle_return_home({ "type": "stage.return_home" }, 30)
+	if outcome.error_code != "not_on_path" or not outcome.save_reasons.is_empty() or outcome.has_replacement_snapshot:
+		m.append("outcome error '%s', reasons %s" % [outcome.error_code, str(outcome.save_reasons)])
+	# (b) From the Sanctum.
+	rt.dispatch({ "type": "flow.go_state", "to": "flow.sanctum" })
+	var in_sanctum := JSON.stringify(save, "", true)
+	if str(rt.flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.SANCTUM:
+		m.append("test setup failed: not in the Sanctum")
+	logger.clear()
+	rt.dispatch({ "type": "stage.return_home" })
+	if JSON.stringify(save, "", true) != in_sanctum or _log_count(logger, "stage.return.denied") != 1 \
+			or _log_count(logger, "economy.settle.leave") != 0:
+		m.append("a return_home in the Sanctum was not refused cleanly")
+	return _result(m)
+
+
+## L8: the path-end item report is carried to the snapshot of the complete_stage dispatch, only when an item was
+## banked or lost, and is spent after that dispatch. An item-free path end adds no key.
+static func _t_path_end_report() -> Dictionary:
+	var rows: Array = []
+	for with_item in [true, false]:
+		var env := _explore_env("path_end_%s" % str(with_item), 2, 2)
+		if not bool(env.get("ok", false)):
+			return env
+		var rt: FlowRuntime = env["runtime"]
+		var realm := VentureCharacterizationTests._realm(rt.get_save_data(), "realm.01")
+		if int(realm.get("stage_count", 0)) < 2:
+			realm["stage_count"] = 2
+		realm["current_stage_index"] = 0
+		if with_item:
+			EarningsService.record_item(_stage_of(env), "s0", "a", ItemPacksTests._entry("ph_armor_a"))
+		var out: Dictionary = rt.dispatch({ "type": "flow.complete_stage", "destination": FlowStateIds.SANCTUM })
+		rows.append({ "with_item": with_item, "out": out, "env": env })
+	var m: Array = []
+	var with_row: Dictionary = rows[0]
+	var plain: Dictionary = rows[1]
+	var data: Dictionary = (with_row["out"] as Dictionary).get("data", {})
+	var want := { "kept": [_row_of("ph_armor_a", 1, "gathered", 1, "ok")], "lost": [] }
+	if str((with_row["out"] as Dictionary).get("type", "")) != FlowStateIds.SANCTUM or str(data.get("stage_clear_items", {})) != str(want):
+		m.append("path end with an item: type %s, stage_clear_items %s, expected %s" % [
+			str((with_row["out"] as Dictionary).get("type")), str(data.get("stage_clear_items")), str(want)])
+	if not ((with_row["env"] as Dictionary)["runtime"] as FlowRuntime).flow_ctx.pending_stage_clear_items.is_empty():
+		m.append("the field was not spent")
+	var plain_data: Dictionary = (plain["out"] as Dictionary).get("data", {})
+	if str((plain["out"] as Dictionary).get("type", "")) != FlowStateIds.SANCTUM or plain_data.has("stage_clear_items"):
+		m.append("an item-free path end: type %s, has the key %s" % [str((plain["out"] as Dictionary).get("type")), str(plain_data.has("stage_clear_items"))])
+	# The next Sanctum build has no key (one-shot).
+	var rt2: FlowRuntime = (with_row["env"] as Dictionary)["runtime"]
+	rt2.flow_machine.reenter(rt2.flow_ctx, (with_row["env"] as Dictionary)["logger"], 40)
+	if (rt2.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
+		m.append("the key stayed after the dispatch that set it")
+	return _result(m)
+
+
+## M3 + M4: `data.inventory.discard_blocked` is "path_open" only when the controller would refuse for the live path,
+## and the controller uses the same function. Cases: no live stage; open row; held piece on an unsettled path;
+## the same path after the party left it (escaped), after the path end (receipt), with nothing held.
+static func _t_discard_blocked() -> Dictionary:
+	var m: Array = []
+	var base_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "sanctum_room",
+		"stacks", "unique_cap", "unique_count", "warn"])
+	var with_key := str(["discard_blocked", "items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load",
+		"sanctum_room", "stacks", "unique_cap", "unique_count", "warn"])
+	# (a) No live stage: no key, the discard of a held piece works.
+	var a := _env("blocked_a", 2, 2)
+	_seed(a, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
+	(a["rt"] as FlowRuntime).flow_machine.reenter((a["rt"] as FlowRuntime).flow_ctx, a["logger"], 3)
+	if _sorted_keys(_inv_snap(a)) != base_keys:
+		m.append("(a) keys %s" % _sorted_keys(_inv_snap(a)))
+	_dispatch(a, _discard("it.3"))
+	if not _ids(a, "pack").is_empty():
+		m.append("(a) no live stage: the held piece was not discarded")
+	_done(a)
+	# (b) Back-route: a live unsettled path, a held piece, no open row.
+	var b := _env("blocked_b", 2, 2)
+	_seed(b, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
+	_live_path(b)
+	var rt: FlowRuntime = b["rt"]
+	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 3)
+	var snap := _inv_snap(b)
+	if _sorted_keys(snap) != with_key or str(snap.get("discard_blocked", "")) != "path_open" \
+			or ActiveStageService.discard_block_reason(rt.flow_ctx) != "path_open":
+		m.append("(b) keys %s, discard_blocked '%s'" % [_sorted_keys(snap), str(snap.get("discard_blocked"))])
+	_dispatch(b, { "type": "debug.seed.show" })  # flushes the layout save the re-entry queued
+	var before := JSON.stringify(_save(b), "", true)
+	for id in ["it.3", "it.1"]:
+		var flushes := _dispatch(b, _discard(id))
+		var key := _refusal_key(b, _discard(id))
+		if flushes != 0 or JSON.stringify(_save(b), "", true) != before or key != "path_open":
+			m.append("(b) a discard of %s: flushes %d, save changed %s, reason '%s'" % [id, flushes,
+				str(JSON.stringify(_save(b), "", true) != before), key])
+	# (c) The party left the path (escaped): the draw already happened, so the discard is allowed.
+	var stage: Dictionary = (((_save(b)["realms"] as Dictionary)["realm.01"] as Dictionary)["stages"] as Array)[0]
+	(stage["explore_map"] as Dictionary)["party_state"] = "escaped"
+	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 4)
+	if (_inv_snap(b)).has("discard_blocked") or ActiveStageService.discard_block_reason(rt.flow_ctx) != "":
+		m.append("(c) an escaped path still blocks")
+	(stage["explore_map"] as Dictionary)["party_state"] = ""
+	# (d) The path end stamped the receipt: allowed.
+	stage["settlement_receipt"] = { "settled": true }
+	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 5)
+	if (_inv_snap(b)).has("discard_blocked") or ActiveStageService.discard_block_reason(rt.flow_ctx) != "":
+		m.append("(d) a settled path still blocks")
+	stage["settlement_receipt"] = {}
+	# (e) An open row blocks with no held piece (D-27); the room counts the row.
+	_dispatch(b, _discard("it.99"))
+	EarningsService.record_item(stage, "s0", "a", ItemPacksTests._entry("ph_armor_a"))
+	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 6)
+	if str(_inv_snap(b).get("discard_blocked", "")) != "path_open" or int((_inv_snap(b)["pack_load"] as Dictionary)["carried"]) != 2:
+		m.append("(e) open row: %s" % str(_inv_snap(b)))
+	_done(b)
+	# (f) A live path with nothing held and no row: nothing to dodge, allowed.
+	var f := _env("blocked_f", 2, 2)
+	_seed(f, ["ph_weapon_a", "ph_charm_a"])
+	_live_path(f)
+	(f["rt"] as FlowRuntime).flow_machine.reenter((f["rt"] as FlowRuntime).flow_ctx, f["logger"], 3)
+	if (_inv_snap(f)).has("discard_blocked") or _refusal_key(f, _discard("it.99")) != "not_found":
+		m.append("(f) a live path with an empty pack blocks")
+	_done(f)
+	return _result(m)
+
+
+## A realm record as the save holds it, with stage 0 as the current stage.
+static func _saved_realm(locked: bool, party_state: String, settled: bool) -> Dictionary:
+	return { "run_count": 0, "seed": 1, "status": "active", "current_stage_index": 0, "stage_count": 2, "stages": [
+		{ "index": 0, "objectives": [], "earnings": [], "settlement_receipt": { "settled": settled },
+			"explore_map": { "situations": [], "locked": locked, "party_state": party_state } }] }
+
+
+## Writes the save of `env`, then boots a NEW runtime from the file, the way Continue does, and puts it in the
+## Sanctum. `boot()` restores the active realm but not `stage_id`.
+static func _reload(env: Dictionary) -> Dictionary:
+	var rt: FlowRuntime = env["rt"]
+	rt.flow_ctx.request_save("test.reload")
+	rt.dispatch({ "type": "debug.seed.show" })
+	var logger := StructuredLogger.new()
+	logger.set_level(StructuredLogger.LEVEL_DEBUG)
+	var rt2 := FlowRuntime.new(logger, env["cfg"], str(env["path"]))
+	rt2.boot()
+	rt2.flow_machine.transition(FlowStateIds.SANCTUM, rt2.flow_ctx, logger, 1, "test")
+	rt2.dispatch({ "type": "debug.seed.show" })
+	return { "rt": rt2, "logger": logger, "cfg": env["cfg"], "inv_cfg": env["inv_cfg"], "path": env["path"] }
+
+
+## The discard guard reads saved state, so a quit and Continue does not open it (`flow_ctx.stage_id` is empty after
+## `boot()`). Each case: a save with one held piece (it.3), the runtime rebuilt from the file by `_reload`.
+## Blocked: an entered, unsettled path; an open item row with nothing held. Allowed: a stage never entered (the
+## player selected it and went back), an escaped party, a settled path. The last case is the same never-entered
+## stage in a live session, where `stage_id` is set.
+static func _t_discard_reload() -> Dictionary:
+	var m: Array = []
+	var cases := [
+		{ "name": "entered", "realm": _saved_realm(true, "exploring", false), "row": false, "held": true, "want": "path_open" },
+		{ "name": "open_row_only", "realm": _saved_realm(false, "exploring", false), "row": true, "held": false, "want": "path_open" },
+		{ "name": "never_entered", "realm": _saved_realm(false, "exploring", false), "row": false, "held": true, "want": "" },
+		{ "name": "escaped", "realm": _saved_realm(true, "escaped", false), "row": false, "held": true, "want": "" },
+		{ "name": "settled", "realm": _saved_realm(true, "exploring", true), "row": false, "held": true, "want": "" },
+	]
+	for c_v in cases:
+		var c: Dictionary = c_v
+		var name := str(c["name"])
+		var env := _env("reload_" + name, 2, 2)
+		_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"] if bool(c["held"]) else ["ph_weapon_a", "ph_charm_a"])
+		var realm: Dictionary = (c["realm"] as Dictionary).duplicate(true)
+		(_save(env)["realms"] as Dictionary)["realm.01"] = realm
+		if bool(c["row"]):
+			EarningsService.record_item((realm["stages"] as Array)[0], "s0", "a", ItemPacksTests._entry("ph_armor_a"))
+		var re := _reload(env)
+		var rt2: FlowRuntime = re["rt"]
+		if rt2.flow_ctx.realm_id != "realm.01" or not rt2.flow_ctx.stage_id.is_empty():
+			m.append("%s: setup: realm_id '%s', stage_id '%s' after boot" % [name, rt2.flow_ctx.realm_id, rt2.flow_ctx.stage_id])
+		var reason := ActiveStageService.discard_block_reason(rt2.flow_ctx)
+		var shown := str(_inv_snap(re).get("discard_blocked", ""))
+		if reason != str(c["want"]) or shown != str(c["want"]):
+			m.append("%s: reason '%s', snapshot '%s', expected '%s'" % [name, reason, shown, str(c["want"])])
+		var target := "it.3" if bool(c["held"]) else "it.1"
+		var before := JSON.stringify(_save(re), "", true)
+		var flushes := _dispatch(re, _discard(target))
+		var changed := JSON.stringify(_save(re), "", true) != before
+		if str(c["want"]) == "path_open" and (flushes != 0 or changed or _refusal_key(re, _discard(target)) != "path_open"):
+			m.append("%s: the discard was not refused (flushes %d, changed %s)" % [name, flushes, str(changed)])
+		if str(c["want"]) == "" and not changed:
+			m.append("%s: the discard was refused" % name)
+		_done(re)
+		_done(env)
+	# The same never-entered stage in a live session: stage_id is set, the stage is not entered.
+	var live := _env("reload_live", 2, 2)
+	_seed(live, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
+	_live_path(live)
+	var stage: Dictionary = (((_save(live)["realms"] as Dictionary)["realm.01"] as Dictionary)["stages"] as Array)[0]
+	(stage["explore_map"] as Dictionary)["locked"] = false
+	if ActiveStageService.discard_block_reason((live["rt"] as FlowRuntime).flow_ctx) != "":
+		m.append("live session: a stage that was selected and never entered blocks the discard")
+	_done(live)
+	return _result(m)
+
+
+## Runs complete_stage on a one-item path with `destination` ("" = the default) and returns { out, rt, logger }.
+static func _path_end_env(tag: String, destination: String) -> Dictionary:
+	var env := _explore_env(tag, 2, 2)
+	if not bool(env.get("ok", false)):
+		return env
+	var rt: FlowRuntime = env["runtime"]
+	var realm := VentureCharacterizationTests._realm(rt.get_save_data(), "realm.01")
+	if int(realm.get("stage_count", 0)) < 2:
+		realm["stage_count"] = 2
+	realm["current_stage_index"] = 0
+	EarningsService.record_item(_stage_of(env), "s0", "a", ItemPacksTests._entry("ph_armor_a"))
+	var action := { "type": "flow.complete_stage" }
+	if not destination.is_empty():
+		action["destination"] = destination
+	env["out"] = rt.dispatch(action)
+	env["ok"] = true
+	return env
+
+
+## `stage_clear_items` is spent by the dispatch that publishes it: a later dispatch that does not rebuild the
+## snapshot (a refused discard) returns a snapshot without the key, and so does `last_snapshot`.
+static func _t_clear_items_spent() -> Dictionary:
+	var env := _path_end_env("clear_spent", FlowStateIds.SANCTUM)
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var rt: FlowRuntime = env["runtime"]
+	var first: Dictionary = env["out"]
+	if not (first.get("data", {}) as Dictionary).has("stage_clear_items"):
+		m.append("the dispatch that ended the path did not return the report")
+	if (rt.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
+		m.append("last_snapshot kept the report after it was published")
+	var later: Dictionary = rt.dispatch(_discard("it.99"))
+	if str(later.get("type", "")) != FlowStateIds.SANCTUM or (later.get("data", {}) as Dictionary).has("stage_clear_items") \
+			or (rt.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
+		m.append("a later dispatch that does not rebuild the snapshot sent the report again")
+	return _result(m)
+
+
+## Pinned behaviour: when the path ends to `flow.stage_map` (the default destination), the report is not shown
+## and not kept. The dispatch clears `pending_stage_clear_items`, the stage map snapshot has no
+## `stage_clear_items` key, and a Sanctum shown later has none either. The settled rows stay in the save.
+## Where this report shows for the stage map is a decision for the UI step (decisions.md, D-29).
+static func _t_clear_items_stage_map() -> Dictionary:
+	var env := _path_end_env("clear_map", "")
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var rt: FlowRuntime = env["runtime"]
+	var out: Dictionary = env["out"]
+	if str(out.get("type", "")) != FlowStateIds.STAGE_MAP or (out.get("data", {}) as Dictionary).has("stage_clear_items"):
+		m.append("stage map: type %s, has the key %s" % [str(out.get("type")), str((out.get("data", {}) as Dictionary).has("stage_clear_items"))])
+	if not rt.flow_ctx.pending_stage_clear_items.is_empty():
+		m.append("the report stayed in the context after the dispatch")
+	rt.flow_machine.transition(FlowStateIds.SANCTUM, rt.flow_ctx, env["logger"], 50, "test")
+	if (rt.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
+		m.append("a later Sanctum showed the dropped report")
+	var settled := 0
+	for r_v in EarningsService.rows_of(_stage_of(env)):
+		if EarningsService.is_item_row(r_v) and bool((r_v as Dictionary).get("settled", false)):
+			settled += 1
+	if settled != 1:
+		m.append("expected the item row settled in the save, found %d" % settled)
+	return _result(m)
+
+
+## D-29: `flow.echo_party` `data.inventory` is present for an item-free save, with the Sanctum projection's shape
+## and the test config's numbers, and it is a copy.
+static func _t_party_prep_item_free() -> Dictionary:
+	var m: Array = []
+	var env := _env("party_free", 4, 3)
+	var rt: FlowRuntime = env["rt"]
+	var inv_before := JSON.stringify(_save(env)["inventory"], "", true)
+	var data: Dictionary = FlowEchoPartyState.build_snapshot(rt.flow_ctx, 4)["data"]
+	var inv_v: Variant = data.get("inventory", null)
+	if not (inv_v is Dictionary):
+		_done(env)
+		return { "ok": false, "error": "flow.echo_party data has no inventory for an item-free save" }
+	var inv: Dictionary = inv_v
+	var want_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "sanctum_room",
+		"stacks", "unique_cap", "unique_count", "warn"])
+	if _sorted_keys(inv) != want_keys:
+		m.append("keys %s" % _sorted_keys(inv))
+	if int(inv["unique_cap"]) != 4 or int(inv["pack_capacity"]) != 3 or int(inv["pack_free"]) != 3 \
+			or int(inv["pack_count"]) != 0 or int(inv["sanctum_room"]) != 4 or not (inv["items"] as Array).is_empty() \
+			or not (inv["pack"] as Array).is_empty() or int((inv["pack_load"] as Dictionary)["level"]) != 0:
+		m.append("values %s" % str(inv))
+	if _norm(inv) != _norm(InventoryService.snapshot(_save(env), env["inv_cfg"], 0)):
+		m.append("not the Sanctum projection")
+	# A copy: writing into it changes neither the save nor a second build.
+	inv["pack_free"] = 99
+	(inv["pack_load"] as Dictionary)["level"] = 3
+	(inv["items"] as Array).append({ "id": "x" })
+	var again: Dictionary = (FlowEchoPartyState.build_snapshot(rt.flow_ctx, 5)["data"] as Dictionary)["inventory"]
+	if int(again["pack_free"]) != 3 or int((again["pack_load"] as Dictionary)["level"]) != 0 or not (again["items"] as Array).is_empty() \
+			or JSON.stringify(_save(env)["inventory"], "", true) != inv_before:
+		m.append("the projection reaches the save or a later build")
+	_done(env)
+	return _result(m)
+
+
+## M2 + B4: the Sanctum `reserved` and the party prep projection count the open item rows of every Realm. The
+## `flow.echo_party` data gains `inventory` (the same projection) and no other key.
+static func _t_reserved_and_party_prep() -> Dictionary:
+	var m: Array = []
+	var env := _env("reserved", 4, 3)
+	var rt: FlowRuntime = env["rt"]
+	var other := { "run_count": 0, "seed": 1, "stages": [{ "index": 0, "earnings": [] }] }
+	(_save(env)["realms"] as Dictionary)["realm.02"] = other
+	var plain := _inv_snap(env)
+	var plain_pack_load := str(plain["pack_load"])
+	EarningsService.record_item((other["stages"] as Array)[0], "r2", "open", ItemPacksTests._entry("ph_weapon_a"))
+	rt.flow_machine.reenter(rt.flow_ctx, env["logger"], 3)
+	var snap := _inv_snap(env)
+	if int((snap["pack_load"] as Dictionary)["carried"]) != 1 or int(snap["pack_free"]) != 2 or int(snap["pack_count"]) != 0 \
+			or plain_pack_load == str(snap["pack_load"]):
+		m.append("sanctum: pack_load %s, pack_free %s" % [str(snap["pack_load"]), str(snap["pack_free"])])
+	if str(snap.get("discard_blocked", "")) != "path_open":
+		m.append("an open row in another realm must block the discard, got '%s'" % str(snap.get("discard_blocked")))
+	# Party prep.
+	var party: Dictionary = FlowEchoPartyState.build_snapshot(rt.flow_ctx, 4)
+	var data: Dictionary = party["data"]
+	var keys: Array = data.keys()
+	keys.sort()
+	if str(keys) != str(["active_party_ids", "echo_count", "echoes", "inventory", "max_party_size", "party_count", "thread_count", "title"]):
+		m.append("echo_party data keys %s" % str(keys))
+	var want := InventoryService.snapshot(_save(env), env["inv_cfg"], 1)
+	if _norm(data.get("inventory", null)) != _norm(want):
+		m.append("echo_party inventory %s, expected %s" % [str(data.get("inventory")), str(want)])
+	var bad: Array = []
+	_forbidden_keys(data.get("inventory", {}), "inventory", bad)
+	if not bad.is_empty():
+		m.append("forbidden keys %s" % str(bad))
+	# The projection is a copy.
+	((data["inventory"] as Dictionary)["pack_load"] as Dictionary)["free"] = 99
+	if int(InventoryService.snapshot(_save(env), env["inv_cfg"], 1)["pack_load"]["free"]) == 99:
+		m.append("the party prep projection reaches the save")
+	_done(env)
+	return _result(m)
+
+
+## L5: the F1 console command refuses outside a debug build. The check comes before the dispatch. (The core
+## action is unchanged and not gated.)
+static func _t_console_gate() -> Dictionary:
+	var src := FileAccess.get_file_as_string("res://ui/AppRoot.gd")
+	var start := src.find("func _run_inventory_command(")
+	if start < 0:
+		return { "ok": false, "error": "_run_inventory_command not found" }
+	var end := src.find("\nfunc ", start + 10)
+	var body := src.substr(start, end - start if end > 0 else src.length() - start)
+	var gate := body.find("OS.is_debug_build()")
+	var dispatch := body.find("runtime.dispatch")
+	var m: Array = []
+	if gate < 0 or dispatch < 0 or gate > dispatch:
+		m.append("the OS.is_debug_build() check must come before runtime.dispatch (gate %d, dispatch %d)" % [gate, dispatch])
+	var core := FileAccess.get_file_as_string("res://core/runtime/controllers/DebugController.gd")
+	if core.contains("is_debug_build"):
+		m.append("the core action must stay as it is (no build gate in core/)")
 	return _result(m)

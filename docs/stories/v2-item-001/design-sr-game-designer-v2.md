@@ -7,12 +7,12 @@ Written in STE. Design only. D-01 to D-21 bind this design. Every player line is
 
 | Fact (checked in code, not comments) | Source |
 |---|---|
-| `add_row` rejects a row with no Ase and no Ekwan. An item-only row cannot be written. | `EarningsService.gd:49` |
+| Before step 4, `add_row` rejected a row with no Ase and no Ekwan. Step 4 fixed it: `add_row` accepts a row with a non-empty `items` array. | `EarningsService.gd` (`add_row`) |
 | `items: []` is reserved on every row. | `EarningsService.gd:23` |
-| `nothing_new` looks at Ase and Ekwan only. An item-only pack draws no leave roll. | `StageSettlementService.gd:295`, `:344` |
+| Before step 4, `nothing_new` looked at Ase and Ekwan only. Step 4 fixed it: `nothing_new` is false when an open item row or a held piece exists, so such a pack draws the leave roll. | `StageSettlementService.gd` (`settle_plan`) |
 | The outcome roll is one draw on `stage.settle.<stage_id>.<run_count>.<settle_count>`. `settle_count` is read before it increments. | `StageSettlementService.gd:361-364`, `:384` |
 | `mark_settled` gives every listed row the same share (0, 50 or 100). Item rows need their own mark. | `EarningsService.gd:111-117` |
-| Defeat: `mark_lost` marks losable rows. `packs_lost` carries only Ase and Ekwan. A pack in the `inventory` block is not touched. | `ActiveStageService.gd:469-487` |
+| Defeat: `mark_lost` marks losable rows. `packs_lost` carries only Ase and Ekwan. A pack in the `inventory` block is not touched. | `ActiveStageService.gd:551-600` (`lose_unsettled_packs`) |
 | "Some" share is `data.rewards.carry_shares.some` = 0.5. The Scout `retention_mul` changes the outcome weights, not the share. | `data/balance.json:1605-1609`, `StageSettlementService.gd:303-324` |
 
 ## 1. The item journey [CORRECTED D-19 D-20]
@@ -22,7 +22,7 @@ Two locations exist. **Gathered** items sit in item rows of `stage.earnings` (AN
 | Step | Who decides | What can be lost | Reason key | Saved |
 |---|---|---|---|---|
 | Found (won encounter) | The producer (test) now; ITEM-002 later | Nothing yet | none | Nothing. A gathered piece has no instance id yet. `intake` mints the id (`inventory.next_seq`). |
-| Fill the pack (section 3) | `take_in_order` | A find beyond free room is not gathered. It is not saved. | `no_room` (returned, not saved) | One item row per taken find; pick stamp |
+| Fill the pack (section 3) | `take_in_order` | A find beyond free room is not gathered. It is not saved. | No reason key: `left` is returned, not saved | One item row per taken find; pick stamp |
 | Gathered, held | Nobody | Early leave, defeat | see below | Item rows; `inventory.pack` |
 | Early leave | The outcome draw, then one draw per piece (gathered AND held) | "Nothing": all. "Some": each piece at 50%. "Everything": none. | `leave_none`, `leave_some` | Row `settled` plus entry `fate`; `stage.held_fates` |
 | Defeat | The code | All gathered items AND all held pieces | `defeat` | Rows `lost`; `stage.held_fates`; pack emptied |
@@ -75,7 +75,7 @@ Two locations exist. **Gathered** items sit in item rows of `stage.earnings` (AN
 | Output | `{ model: "find_order", chooser_id: "", taken: [find_id], left: [find_id], draws: 0 }` |
 
 **Rule.** `taken` = the first `free_slots` finds. `left` = the rest, in order. `draws` = 0.
-**The writer** applies the output: one item row per taken find (id `item:<situation_id>:<n>`, exactly-once stamp as the fight row). 001a does not save `left` or a pick stamp (D-26: `stage.pick_stamps` belongs to 001b).
+**The writer** applies the output: one item row per taken find (id `item:<situation_id>:<find_id>`, exactly-once stamp as the fight row). 001a does not save `left` or a pick stamp (D-26: `stage.pick_stamps` belongs to 001b).
 **Why 001b needs no change to a saved field.** 001b replaces the function with `standing_v1`. It writes the same output and adds its own pick stamp (001b field). 001b adds two stage fields with safe defaults, `left_items` and `swap_used`. No 001a field changes shape.
 
 ## 4. Leave and defeat draws for items [CORRECTED D-19 D-20]
@@ -97,7 +97,7 @@ The `id` is stable under reload, discard, pack reorder and a move to the Sanctum
 - **Gathered row:** `settled` and `settled_share` (100 kept, 0 lost, written by the item path, not by the shared `mark_settled`), plus entry `fate` and `reason_key`.
 - **Held piece:** one record in `stage.held_fates`: `{ id, type_id, kind, grade, token, fate, reason_key }`. `token` = `<run_count>.<settle_count>`. A lost piece leaves `inventory.pack` in the same mutation. A kept piece goes to intake. The draw skips a piece that has a record with the same token.
 - **One mutation, one save request.** The caller requests the save after the escape succeeds (existing rule, `StageSettlementService.gd:332-334`). A crash before the save repeats the same pure draws and gives the same result.
-- **Defeat** (`lose_unsettled_packs`, `ActiveStageService.gd:469`): item rows go `lost` through `mark_lost` (item rows carry `keep_on_defeat: false`). The same call empties `inventory.pack` through the inventory service and writes `held_fates` with `defeat`. The defeat report adds item counts beside `packs_lost`. A repeat finds nothing to lose.
+- **Defeat** (`lose_unsettled_packs`, `ActiveStageService.gd:551`): item rows go `lost` through `mark_lost` (item rows carry `keep_on_defeat: false`). The same call empties `inventory.pack` through the inventory service and writes `held_fates` with `defeat`. The defeat card data is `packs_lost.items`: one report row for each lost item row and held piece (no id; item rows first, then held pieces). The log `economy.earnings.lost` carries the item counts. A repeat finds nothing to lose.
 
 ## 5. The Sanctum discard (D-11, D-21) [CORRECTED D-21]
 
@@ -114,9 +114,9 @@ The `id` is stable under reload, discard, pack reorder and a move to the Sanctum
 
 **Unique piece** (`inventory.items[]`, `inventory.pack[]`): `id` (`it.<seq>` from `inventory.next_seq`, no RNG), `type_id`, `kind` (`gear`|`relic`), `grade`, `held_by: ""` (D-09).
 **Stack** (`inventory.stacks[]`): `type_id`, `kind` (`consumable`|`material`), `quantity`. No id, no grade.
-**Item row** (`stage.earnings`, source `item`): `ase: 0`, `ekwan: 0`, `scaled: false`, `keep_on_defeat: false`, `id: "item:<situation_id>:<n>"`, `items: [entry]`. One entry per row. The entry adds `fate` (`gathered`, `carried`, `lost`) and `reason_key`.
+**Item row** (`stage.earnings`, source `item`): `ase: 0`, `ekwan: 0`, `scaled: false`, `keep_on_defeat: false`, `id: "item:<situation_id>:<find_id>"`, `items: [entry]`. One entry per row. The entry adds `fate` (`gathered`, `carried`, `lost`) and `reason_key`.
 **Intake result:** `{ result, reason_key, item_id, quantity }` plus `lost_quantity`. `result`: `stored`, `packed`, `partial`, `lost`, `rejected`.
-**Reason keys:** `ok`, `to_pack`, `overflow`, `stack_limit`, `unknown_kind`, `unknown_type`, `kind_disabled`, `duplicate`, `no_room`, `leave_none`, `leave_some`, `defeat`, `not_in_sanctum`, `not_unique`, `not_found`, `equipped`.
+**Reason keys:** `ok`, `to_pack`, `overflow`, `stack_limit`, `unknown_kind`, `unknown_type`, `kind_disabled`, `duplicate`, `duplicate_find`, `bad_entry`, `leave_none`, `leave_some`, `defeat`, `not_in_sanctum`, `not_unique`, `not_found`, `equipped`.
 
 **Cost shape** `cost: { ekwan, ase }` lives only in config definitions. No value is set here (ECONOMY-004 Part B). Not saved.
 **Saved:** the `inventory` block, item rows, `stage.held_fates`. **From config definitions:** display name, `cost`, stack limit overrides, recycle-yield key.
@@ -131,7 +131,7 @@ Set: `ph_weapon_a`, `ph_charm_a`, `ph_relic_a`, `ph_consumable_a`, `ph_material_
 
 - **Sanctum inventory:** count against `unique_cap` and a full state; pieces by kind, icon, grade mark; stacks as tiles with a quantity badge and an at-limit mark; a separate "carried" row; the discard button on a selected Sanctum or carried piece. Keep out: Ase and Ekwan balances, ids, `held_by`, cost, yield, recycle, equip, sell.
 - **Pack before departure:** pack sockets, filled by held pieces or free; a "may be lost" mark on held pieces; the departure chip, quiet by default and gold at `warn_pack_free_at`. Keep out: a material as a number, odds.
-- **Leave confirmation (existing panel):** one added count line of gathered and held pieces that may be lost (A8). Tiles and per-item marks are 001b.
+- **Leave confirmation (existing panel):** one added count line of gathered and held pieces that may be lost (A8). The item tile row (at risk before, kept or lost after) is built in 001a (D-23); 001b's path view reuses it.
 
 Items use tiles in their own region. The line `In their packs: <Ase> Ase and <Ekwan> Ekwan.` stays a number line.
 PROPOSAL lines: `The Sanctum is full. These stay in their packs.` / `They have less room to carry this time.` / `They may lose what they carry.` / `Lost. There was no room.` / `Lost. The party fell.` / `Let this go? It cannot be brought back.`
@@ -176,7 +176,7 @@ PROPOSAL lines: `The Sanctum is full. These stay in their packs.` / `They have l
 
 **Left list and keeper swap (D-14).** `stage.left_items` holds finds the Echoes left; `stage.swap_used` is the one-per-path flag. Action `inventory.swap.apply`, payload `{ take_id, drop_row_id }`; one mutation, one save request. After a leave draw the rows are settled, so a swap fails (`not_gathered`). The swap drop is the only path discard (D-21). Refusal keys: `swap_used`, `not_left`, `not_gathered`, `path_not_live`. A7: held pieces cannot be dropped. D-19 puts them at risk, so Jeff may reconsider.
 
-**Packs view on the path.** Gathered tiles with the chooser portrait, free-room count, left row, swap action, leave confirmation with per-item marks, and path-end marks.
+**Packs view on the path.** Gathered tiles with the chooser portrait, free-room count, left row, swap action, the leave confirmation and result tile rows are built in 001a (D-23) and reused here.
 **Parked questions.** `manner` as a core output; the floor `pack_min_free`; an optional defeat line; discard of left items; fixture grades `ph_g1` to `ph_g3`; config `pick.*`, `grades`, `pick_kind_weight`.
 
 ## OPEN — questions and assumptions

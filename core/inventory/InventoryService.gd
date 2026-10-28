@@ -32,7 +32,8 @@ const MODE_DIRECT := "direct"
 ## Largest whole number a float holds exactly; JSON loads turn ints into floats.
 const _SAFE_INT := 9007199254740992.0
 const _SEQ_MAX_DIGITS := 15
-const _MARK_COUNT := 6
+## Fallback for `data.inventory.mark_count` (a missing, zero or wrong-type value reads as this).
+const _MARK_COUNT_DEFAULT := 6
 
 # ---------------------------------------------------------------------------
 # Reads (no mutation)
@@ -71,6 +72,18 @@ static func pack_load(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> D
 	return { "carried": carried, "capacity": capacity, "free": free, "level": level }
 
 
+## How many different marks the UI has: `data.inventory.mark_count`, or 6 when it is missing or below 1.
+static func mark_count(cfg: Dictionary) -> int:
+	var n := _cfg_int(cfg, "mark_count")
+	return n if n > 0 else _MARK_COUNT_DEFAULT
+
+
+## The `mark_index` of a piece id: its number modulo `mark_count` (0 when the id has no valid number).
+## The snapshot rows and the item report rows use this one function.
+static func mark_index_of(cfg: Dictionary, piece_id: String) -> int:
+	return maxi(0, _seq_of(piece_id)) % mark_count(cfg)
+
+
 ## The valid pieces of `pack` in pack order, as copies `{ id, type_id, kind, grade }`. A malformed piece
 ## and a second piece with a repeated id are left out.
 static func held_pieces(save: Dictionary) -> Array:
@@ -88,8 +101,8 @@ static func held_pieces(save: Dictionary) -> Array:
 
 ## Immutable projection for UI and readiness: a fresh tree built from scalars, so a caller cannot reach
 ## the save through it. Piece rows carry the real `id` for core callers. The UI layer must NOT print it:
-## it tells twins apart with `mark_index`, the number part of the piece id modulo 6 (0 when the id has no
-## valid number). Discarding another piece never changes a mark.
+## it tells twins apart with `mark_index`, the number part of the piece id modulo `mark_count` (config,
+## default 6; 0 when the id has no valid number). Discarding another piece never changes a mark.
 ## It holds no Thread, partial-recovery, Ase or Ekwan key. A malformed piece is left out.
 static func snapshot(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> Dictionary:
 	var items_out: Array = []
@@ -97,7 +110,7 @@ static func snapshot(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> Di
 	for p in _collect_pieces(save):
 		var row := {
 			"id": p["id"], "type_id": p["type_id"], "kind": p["kind"], "grade": p["grade"],
-			"mark_index": maxi(0, p["seq"]) % _MARK_COUNT, "equipped": p["equipped"],
+			"mark_index": maxi(0, p["seq"]) % mark_count(cfg), "equipped": p["equipped"],
 		}
 		if p["in_pack"]:
 			pack_out.append(row)

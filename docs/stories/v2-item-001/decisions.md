@@ -128,6 +128,12 @@ Source: Opus review of step 2 (`step2-config-save.md`).
 - `mark_count` moves into config (`data.inventory.mark_count`, default 6).
 Source: `step6-qa-report.md`.
 
+## D-29 — Amendment to D-28 after the fix-pass review (main chat; Jeff may reverse)
+- `flow.echo_party` `data.inventory` is ALWAYS present (amends D-28). Party prep must draw empty pack sockets and the cap, so the UI needs the data even for an item-free save. No fingerprint hashes that snapshot; the `snapshot.emitted` log field count for that snapshot rises by 1.
+- The discard guard (D-27) must work after a quit and Continue: it finds the live path from saved state, not from `flow_ctx.stage_id` (which `boot()` does not restore).
+- `stage_clear_items` is erased from `last_snapshot` after it is published, so a later dispatch cannot resend it.
+- OPEN for Jeff (UI step): where the path-end item report shows when the party goes to the stage map instead of the Sanctum.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?

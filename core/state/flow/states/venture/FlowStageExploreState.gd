@@ -225,20 +225,23 @@ static func _get_current_stage(flow_ctx: FlowContext) -> Dictionary:
 	var realms: Dictionary = realms_v if realms_v is Dictionary else {}
 	var model_v: Variant = realms.get(flow_ctx.realm_id, {})
 	var model: Dictionary = model_v if model_v is Dictionary else {}
-	var stages_v: Variant = model.get("stages", [])
-	var stages: Array = stages_v if stages_v is Array else []
 
 	var stage_index := 0
 	var sid := str(flow_ctx.stage_id)
 	if sid.contains("."):
 		var parts := sid.split(".")
 		stage_index = int(parts[parts.size() - 1])
+	return stage_by_index(model, stage_index)
 
+
+# The LIVE stage dict of `realm_model` whose own `index` field is `index`, or {}. The one lookup by index.
+static func stage_by_index(realm_model: Dictionary, index: int) -> Dictionary:
+	var stages_v: Variant = realm_model.get("stages", [])
+	var stages: Array = stages_v if stages_v is Array else []
 	for s_v in stages:
 		var s: Dictionary = s_v if s_v is Dictionary else {}
-		if int(s.get("index", -1)) == stage_index:
+		if int(s.get("index", -1)) == index:
 			return s
-
 	return {}
 
 

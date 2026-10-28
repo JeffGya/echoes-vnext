@@ -1096,9 +1096,14 @@ func _run_combat_objective_command(parts: Array) -> void:
 # the debug panel, mirroring the guide_spirit dev-override precedent's determinism.
 # ────────────────────────────────────────────────────────────────────────────
 
-# V2-ITEM-001a: adds placeholder items for a play test. Usage: inventory produce [direct|gather]
+# V2-ITEM-001a: adds placeholder items for a play test (debug builds only). Usage: inventory produce [direct|gather]
 # `direct` puts them in the Sanctum or the pack; `gather` adds them to the packs of a live path.
 func _run_inventory_command(parts: PackedStringArray) -> void:
+	# The producer is a play-test tool. A release build refuses; the core action is unchanged.
+	if not OS.is_debug_build():
+		_debug_print("inventory: this command works in debug builds only.")
+		_flush_logs_to_console()
+		return
 	if parts.size() < 2 or parts[1].to_lower() != "produce":
 		_debug_print("Usage: inventory produce [direct|gather]")
 		_flush_logs_to_console()
