@@ -88,6 +88,15 @@ Held pieces are items carried in the pack from an earlier path because the Sanct
 This reverses the designer's recommendation (A2: held pieces safe). A full pack now risks lost pieces, not only lost room.
 Open: defeat and path end for held pieces; the designer's invariant and the feel design (lit "safe" tiles, no lift on carried pieces) must be redone.
 
+## D-20 — Defeat takes held pieces too (Jeff, 2026-10-28)
+Follows D-19. A defeat empties the pack: gathered items and held pieces are both lost (reason `defeat`). Finishing a path moves held pieces into the Sanctum when room exists.
+
+## D-21 — Discard rules (Jeff, 2026-10-28)
+- In the Sanctum: the player may discard as many times as wanted, with a confirmation each time. It works on Sanctum pieces and on carried (pack) pieces. Only while in the Sanctum.
+- On the path: one discard per path. It is the keeper swap's drop (D-14). There is no separate path discard.
+- Recycling: not built in 001a. D-02 stands (recycle hook only). Jeff's wish "discard or recycle as many times as wanted in the Sanctum" is built when ITEM-004 lands.
+- Unique pieces only (the designer's rule, unchanged). Stacks are not discarded.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
