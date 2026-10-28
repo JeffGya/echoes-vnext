@@ -634,6 +634,7 @@ func _run_tests(parts: Array) -> void:
 	VentureCharacterizationTests.register(runner)  # V2-INFRA-003: characterization guard for complete_stage / retreat / scout-return / contact-resolve
 	EconomyCharacterizationTests.register(runner)  # V2-ECONOMY-004 phase 1: what the stage and encounter payers pay today
 	ItemPacksCharacterizationTests.register(runner)  # V2-ITEM-001a step 1: packs, leave settle, defeat and path-end bank with item-free rows
+	InventorySaveTests.register(runner)  # V2-ITEM-001a step 2: data.inventory config block and the inventory save block (repair, round trip)
 	RiskProbeTests.register(runner)  # V2-ECONOMY-004 phase 5: do player choices change pace outcome and Echo loss (measures, asserts no design number)
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
 	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence

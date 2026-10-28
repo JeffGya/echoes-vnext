@@ -73,8 +73,8 @@ Two locations exist. **Gathered** items sit in item rows of `stage.earnings` (AN
 | Output | `{ model: "find_order", chooser_id: "", taken: [find_id], left: [find_id], draws: 0 }` |
 
 **Rule.** `taken` = the first `free_slots` finds. `left` = the rest, in order. `draws` = 0.
-**The writer** applies the output: one item row per taken find (id `item:<situation_id>:<n>`, exactly-once stamp as the fight row) and one pick stamp `{ situation_id, model, chooser_id }` in `stage.pick_stamps`. 001a does not save `left`.
-**Why 001b needs no change to a saved field.** 001b replaces the function with `standing_v1`. It writes the same output and the same stamp. 001b adds two stage fields with safe defaults, `left_items` and `swap_used`. No 001a field changes shape.
+**The writer** applies the output: one item row per taken find (id `item:<situation_id>:<n>`, exactly-once stamp as the fight row). 001a does not save `left` or a pick stamp (D-26: `stage.pick_stamps` belongs to 001b).
+**Why 001b needs no change to a saved field.** 001b replaces the function with `standing_v1`. It writes the same output and adds its own pick stamp (001b field). 001b adds two stage fields with safe defaults, `left_items` and `swap_used`. No 001a field changes shape.
 
 ## 4. Leave and defeat draws for items [CORRECTED D-19 D-20]
 
@@ -117,7 +117,7 @@ The `id` is stable under reload, discard, pack reorder and a move to the Sanctum
 **Reason keys:** `ok`, `to_pack`, `overflow`, `stack_limit`, `unknown_kind`, `unknown_type`, `kind_disabled`, `duplicate`, `no_room`, `leave_none`, `leave_some`, `defeat`, `not_in_sanctum`, `not_unique`, `not_found`, `equipped`.
 
 **Cost shape** `cost: { ekwan, ase }` lives only in config definitions. No value is set here (ECONOMY-004 Part B). Not saved.
-**Saved:** the `inventory` block, item rows, `stage.pick_stamps`, `stage.held_fates`. **From config definitions:** display name, `cost`, stack limit overrides, recycle-yield key.
+**Saved:** the `inventory` block, item rows, `stage.held_fates`. **From config definitions:** display name, `cost`, stack limit overrides, recycle-yield key.
 **Block** `data.inventory`, numbers unset: `unique_cap`, `pack_capacity`, `stack_limit_default`, `kinds_enabled`, `recycle_yield_ekwan` (keys per grade, empty), `warn_room_at`, `warn_pack_free_at`, `definitions` (empty in shipping). The leave share is read from `data.rewards.carry_shares.some`. A static getter `ConfigService.get_inventory_cfg` reads the block. Save name: `inventory.items`, never `relics`.
 
 ## 7. Placeholder set and the catalogue

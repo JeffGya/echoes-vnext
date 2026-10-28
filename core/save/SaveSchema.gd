@@ -144,6 +144,10 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"intel": {},  # V2-MIG-002 / V2-INTEL-001+: stage-intel persistence stub
 		},
 		"ui_flags": { "result_ledger_seen": false },
+		# V2-ITEM-001a: item containers. items = unique gear/relic pieces in the Sanctum, pack = unique
+		# pieces carried by the party (D-16), stacks = consumables/materials. Ids "it.<seq>" come from
+		# next_seq (no RNG). Additive: an old save gets the block from SaveService repair.
+		"inventory": { "version": 1, "next_seq": 1, "items": [], "stacks": [], "pack": [] },
 		# REALM-001: generated realm models keyed by realm_id (e.g. "realm.01": { ...RealmModel fields })
 		"realms": {}
 	}

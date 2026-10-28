@@ -43,6 +43,7 @@ static func make(index: int, type: String, seed: int, objectives: Array, explore
 		"objectives":  objectives,
 		"explore_map": explore_map,
 		"earnings":    [],
+		"held_fates":  [],   # V2-ITEM-001a: fates of carried pieces at a leave or defeat
 	}
 
 
