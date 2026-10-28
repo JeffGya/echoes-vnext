@@ -109,6 +109,11 @@ A10 answered: a held piece that survives an early-leave draw while the Sanctum i
 ## D-25 — Provisional starting numbers (Jeff, 2026-10-28)
 Jeff chose provisional small values to tune after his play test. They are marked PROVISIONAL in `data/balance.json`: `unique_cap` 8, `pack_capacity` 4, `stack_limit_default` 20, `warn_room_at` 2, `warn_pack_free_at` 1. Tests use their own test config and never depend on these values.
 
+## D-26 — Two small save/config items (Jeff, 2026-10-28)
+- `stage.pick_stamps` is NOT saved in 001a. It belongs to the parked Echo choice (001b). The design text that lists it for 001a is corrected.
+- `data.inventory.grades` (an ordered list, empty in shipping) is approved as an extra config key. The 001b pick rule reads it.
+Source: Opus review of step 2 (`step2-config-save.md`).
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
