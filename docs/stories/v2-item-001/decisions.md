@@ -97,6 +97,15 @@ Follows D-19. A defeat empties the pack: gathered items and held pieces are both
 - Recycling: not built in 001a. D-02 stands (recycle hook only). Jeff's wish "discard or recycle as many times as wanted in the Sanctum" is built when ITEM-004 lands.
 - Unique pieces only (the designer's rule, unchanged). Stacks are not discarded.
 
+## D-22 — Held pieces are drawn at every early leave (Jeff, 2026-10-28)
+A9 answered: every early leave draws the held pieces again, including repeat leaves on the same path. No exemption for a survivor. Rule: carried means at risk.
+
+## D-23 — A tile row shows what is at risk (Jeff, 2026-10-28)
+A8 / C-9 answered: the leave confirmation and the leave and defeat result screens get a small row of item tiles (at risk before, kept or lost after). It is not a count line only. 001b's path view can reuse the row.
+
+## D-24 — A survivor with a full Sanctum stays held (Jeff, 2026-10-28)
+A10 answered: a held piece that survives an early-leave draw while the Sanctum is full stays in the pack as a held piece. It can be drawn again (D-22) and lost on defeat (D-20).
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
