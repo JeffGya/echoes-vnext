@@ -114,6 +114,11 @@ Jeff chose provisional small values to tune after his play test. They are marked
 - `data.inventory.grades` (an ordered list, empty in shipping) is approved as an extra config key. The 001b pick rule reads it.
 Source: Opus review of step 2 (`step2-config-save.md`).
 
+## D-27 — Technical decisions of step 5 (main chat, from the Opus review; Jeff may reverse)
+- The Sanctum fingerprint test (`snapshot_fingerprint/sanctum`) erases `data.inventory` before it hashes, for the Sanctum snapshot only. The recorded hash `a26556e1…` is unchanged. Reason: the key carries tunable numbers from `balance.json` (D-25: tests must not depend on them). The `inventory_actions` suite pins the key's shape with its own config.
+- A discard is refused with reason `path_open` while the live path has unsettled item rows. Reason: the encounter "Back" route reaches the Sanctum with the path still open; a discard there would move held pieces to safety and dodge the early-leave draw (D-22).
+- The play-test producer reads `res://tests/fixtures/inventory_placeholders.json` at runtime. The file ships with the project like all of `res://`. The dependency is documented; a release build may refuse with `fixture_missing`.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?

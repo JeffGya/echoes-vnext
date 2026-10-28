@@ -393,7 +393,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# DECISION, NOT AN UNFINISHED STATE. There is no CombatController, and
 			# there is deliberately not going to be one in this story.
 			# ────────────────────────────────────────────────────────────────────
-			# 67 of the 73 actions dispatch() routes go to a controller in one line.
+			# 75 of the 81 actions dispatch() routes go to a controller in one line.
 			# These six do not, and nothing else in this file would tell you whether
 			# that is a choice or debt. It is a choice. Full write-up and the cost of
 			# reversing it are on the V2-COMBAT-004 Notion page; the decision is also
@@ -564,6 +564,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"sanctum.institution.remove_echo":
 				_apply_action_outcome(_sanctum_controller().handle_institution_remove_echo(action, t), t)
+
+			# V2-ITEM-001a: Sanctum inventory discard, routed to InventoryController.
+			"inventory.discard.apply":
+				_apply_action_outcome(_inventory_controller().handle_discard(action, t), t)
 	
 			# ---- Vows (VOW-001) ----
 			# V2-INFRA-003 Phase 4 Slice 2: VowController owns these 3 actions. Controllers
@@ -605,6 +609,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"debug.stop_short.set":
 				_apply_action_outcome(_debug_controller().handle_stop_short_set(action, t), t)
+
+			# V2-ITEM-001a: placeholder item producer for the play test. Only the F1 debug console sends it.
+			"debug.inventory.produce":
+				_apply_action_outcome(_debug_controller().handle_inventory_produce(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":
@@ -942,6 +950,11 @@ func _vow_controller() -> VowController:
 ## above.
 func _debug_controller() -> DebugController:
 	return DebugController.new(flow_ctx, config_service, logger)
+
+
+## V2-ITEM-001a: builds a fresh InventoryController (inventory.discard.apply). Same per-call rationale.
+func _inventory_controller() -> InventoryController:
+	return InventoryController.new(flow_ctx, config_service, logger)
 
 
 ## V2-INFRA-003 Phase 4 Slice 6b: builds a fresh ProgressionController scoped to the current
