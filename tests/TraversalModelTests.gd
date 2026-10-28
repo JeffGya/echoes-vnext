@@ -1433,7 +1433,10 @@ static func _t_fog_durability_return_home() -> Dictionary:
 
 	# Dispatch return_home (may fail escape — that's OK, test is about data durability).
 	# Then re-enter via FlowStageExploreState.enter().
-	runtime.dispatch({ "type": "stage.return_home" })
+	var left: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
+	var left_data: Dictionary = left.get("data", {}) if left.get("data") is Dictionary else {}
+	if str(left.get("type", "")) != FlowStateIds.RESOLVE and not left_data.has("return_home_result"):
+		return { "ok": false, "error": "stage.return_home did not run (snapshot %s): the leave guard refused it" % str(left.get("type", "")) }
 
 	# Re-enter the stage (simulates coming back after withdrawal or combat re-entry).
 	var explore_state := FlowStageExploreStateScript.new()

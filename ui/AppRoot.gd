@@ -275,6 +275,13 @@ func _on_debug_command(command: String) -> void:
 		return
 		
 	# -------------------------
+	# inventory play-test producer (V2-ITEM-001a / debug only)
+	# -------------------------
+	if head == "inventory":
+		_run_inventory_command(parts)
+		return
+
+	# -------------------------
 	# summon shortcut (SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "summon":
@@ -633,6 +640,11 @@ func _run_tests(parts: Array) -> void:
 	SnapshotContractTests.register(runner)  # V2-INFRA-003 Phase 3 Slice B1: universal snapshot contract (type/meta.t/data/actions)
 	VentureCharacterizationTests.register(runner)  # V2-INFRA-003: characterization guard for complete_stage / retreat / scout-return / contact-resolve
 	EconomyCharacterizationTests.register(runner)  # V2-ECONOMY-004 phase 1: what the stage and encounter payers pay today
+	ItemPacksCharacterizationTests.register(runner)  # V2-ITEM-001a step 1: packs, leave settle, defeat and path-end bank with item-free rows
+	InventorySaveTests.register(runner)  # V2-ITEM-001a step 2: data.inventory config block and the inventory save block (repair, round trip)
+	InventoryServiceTests.register(runner)  # V2-ITEM-001a step 3: InventoryService (intake order, discard, snapshot, validate)
+	ItemPacksTests.register(runner)  # V2-ITEM-001a step 4: item rows in the packs (seam, leave draws, held pieces, defeat, path end)
+	InventoryActionTests.register(runner)  # V2-ITEM-001a step 5: inventory.discard.apply, debug.inventory.produce, data.inventory in the Sanctum snapshot
 	RiskProbeTests.register(runner)  # V2-ECONOMY-004 phase 5: do player choices change pace outcome and Echo loss (measures, asserts no design number)
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
 	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence
@@ -1083,6 +1095,29 @@ func _run_combat_objective_command(parts: Array) -> void:
 # precondition here (before dispatching) so the player-facing message always reaches
 # the debug panel, mirroring the guide_spirit dev-override precedent's determinism.
 # ────────────────────────────────────────────────────────────────────────────
+
+# V2-ITEM-001a: adds placeholder items for a play test (debug builds only). Usage: inventory produce [direct|gather]
+# `direct` puts them in the Sanctum or the pack; `gather` adds them to the packs of a live path.
+func _run_inventory_command(parts: PackedStringArray) -> void:
+	# The producer is a play-test tool. A release build refuses; the core action is unchanged.
+	if not OS.is_debug_build():
+		_debug_print("inventory: this command works in debug builds only.")
+		_flush_logs_to_console()
+		return
+	if parts.size() < 2 or parts[1].to_lower() != "produce":
+		_debug_print("Usage: inventory produce [direct|gather]")
+		_flush_logs_to_console()
+		return
+	var mode := parts[2].to_lower() if parts.size() > 2 else "direct"
+	if mode != "direct" and mode != "gather":
+		_debug_print("inventory produce: mode must be direct or gather.")
+		_flush_logs_to_console()
+		return
+	var snap := runtime.dispatch({ "type": "debug.inventory.produce", "payload": { "mode": mode } })
+	_render_snapshot(snap)
+	_debug_print("inventory produce (%s): see the log lines for what was added or refused." % mode)
+	_flush_logs_to_console()
+
 
 # S12: stages a synthetic temporary_ally contact so the next encounter fought in this
 # stage auto-joins it. Usage: spawn_ally

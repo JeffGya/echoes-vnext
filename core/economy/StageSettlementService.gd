@@ -75,7 +75,7 @@ func _init(
 
 ## Settle the stage the party has just completed.
 ##
-## Returns the payout dict `{ ase_awarded, ekwan_awarded, breakdown, xp_events }` on the one
+## Returns the payout dict `{ ase_awarded, ekwan_awarded, breakdown, xp_events, items }` on the one
 ## call that pays, and `{}` on every later call for the same stage (already settled), on a
 ## stage that cannot be located, and when `stage_cleared` is false.
 ##
@@ -131,6 +131,9 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 	)
 	flow_ctx.request_save("stage.reward")
 
+	# --- the item rows: banked in row order, then held pieces move in. Held pieces are not rolled here.
+	var items := _bank_item_rows(stage_ref, t)
+
 	# --- the stage-cadence Storyweight -------------------------------------
 	var xp_events := _award_stage_clear_xp(realm_model, stage_index, t)
 	if not xp_events.is_empty():
@@ -156,7 +159,26 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 		})
 
 	payout["xp_events"] = xp_events
+	payout["items"] = items
 	return payout
+
+
+## Path end: every open item row goes to intake (`gathered`) in row order and is marked settled with share 100.
+## Then held pieces move into the Sanctum while room exists. No draw. The receipt written by `settle` is the
+## exactly-once stamp; the row marks stop a second pass inside the same stage record. Returns the `_item_report`.
+func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
+	var report := _item_report()
+	var inv_cfg := ConfigService.get_inventory_cfg(config_service)
+	var rows: Array = EarningsService.open_item_rows(stage_ref)
+	for r_v in rows:
+		_settle_item_row(flow_ctx.save_data, inv_cfg, r_v, true, "", rows.size(), report, logger, t)
+	InventoryService.move_pack_to_sanctum(flow_ctx.save_data, inv_cfg)
+	_finish_report(report)
+	if logger != null and not rows.is_empty():
+		logger.info(t, "economy.stage.items", "Path end banked the item rows", {
+			"stage_id": flow_ctx.stage_id, "rows": rows.size(),
+			"kept": int(report["kept_count"]), "lost": int(report["lost_count"]) })
+	return report
 
 
 # ---------------------------------------------------------------------------
@@ -258,16 +280,18 @@ const OUTCOME_NOTHING_NEW := "nothing_new"
 ## What a return home would settle NOW: the unsettled earnings rows, at the same scale and replay
 ## factor as the stage payout. Pure and read-only; no roll, no odds.
 ## `ase`, `ekwan` = the gathered amount before the roll. `ids` = the rows it would mark.
-## `nothing_new` = no gathered Ase or Ekwan (so the payer draws no roll).
+## `nothing_new` = no gathered Ase or Ekwan, no unsettled item row and no held piece in `inventory.pack`
+## (so the payer draws no roll). A leave with only held pieces still draws the outcome roll.
 ## `rows`, `fight_rows`, `found_rows` = how many unsettled rows, and how many of them are fights and found Ase.
+## `item_rows` = how many of the unsettled rows hold an item; `held_pieces` = how many pieces sit in the pack.
 ## `settle_count` = how many leaves already settled this stage.
 ## Returns { ase, ekwan, overcome, total, ids, nothing_new, settled_ase, settled_ekwan, rows, fight_rows,
-## found_rows, settle_count }.
+## found_rows, item_rows, held_pieces, settle_count }.
 static func settle_plan(ctx: FlowContext, cfg_service: ConfigService,
 		logger: StructuredLogger = null, t: int = 0) -> Dictionary:
 	var plan := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "ids": [],
 		"nothing_new": true, "settled_ase": 0, "settled_ekwan": 0, "rows": 0, "fight_rows": 0, "found_rows": 0,
-		"settle_count": 0 }
+		"item_rows": 0, "held_pieces": 0, "settle_count": 0 }
 	if ctx.realm_id.is_empty() or ctx.stage_id.is_empty():
 		return plan
 	var stage_ref := _live_stage(ctx)
@@ -292,7 +316,10 @@ static func settle_plan(ctx: FlowContext, cfg_service: ConfigService,
 	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"])
 	plan["ase"] = RewardCalc.round_payout(float(packs["scaled_ase"]) * k)
 	plan["ekwan"] = RewardCalc.round_payout(float(packs["scaled_ekwan"]) * k)
-	plan["nothing_new"] = int(plan["ase"]) <= 0 and int(plan["ekwan"]) <= 0
+	plan["item_rows"] = EarningsService.open_item_rows(stage_ref).size()
+	plan["held_pieces"] = InventoryService.held_pieces(ctx.save_data).size()
+	plan["nothing_new"] = int(plan["ase"]) <= 0 and int(plan["ekwan"]) <= 0 \
+		and int(plan["item_rows"]) <= 0 and int(plan["held_pieces"]) <= 0
 	return plan
 
 
@@ -330,8 +357,11 @@ static func carry_table(reward_cfg: Dictionary, retention_mul: float,
 ## to settle, so nothing new draws nothing and changes nothing. The `settled` mark on each row is
 ## the re-roll stamp: a cancel, a reload or a retry finds them marked. The caller requests the save and
 ## calls this only after the escape has succeeded.
-## Returns { outcome, ase, ekwan, overcome, total, intel_count }; `outcome` is "none", "some", "all" or
-## "nothing_new".
+## Items follow the same outcome after the roll: "none" loses every entry, "all" carries every entry, "some"
+## draws once per entry on `inventory.leave.<stage_id>.<run>.<settle_count>.<row|held>.<id>` (see `_keeps`).
+## An entry is an open item row or a held piece. Nothing draws when no entry exists.
+## Returns { outcome, ase, ekwan, overcome, total, intel_count, items }; `outcome` is "none", "some", "all" or
+## "nothing_new". `items` is { kept, lost, kept_count, lost_count } (see `_item_report`).
 static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_service: EconomyService,
 		retention_mul: float, reason: String, logger: StructuredLogger, t: int) -> Dictionary:
 	var live := _live_stage(ctx)
@@ -340,7 +370,7 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 	var plan := settle_plan(ctx, cfg_service, logger, t)
 	var result := { "outcome": OUTCOME_NOTHING_NEW, "ase": 0, "ekwan": 0,
 		"overcome": plan["overcome"], "total": plan["total"],
-		"intel_count": ActiveStageService.count_revealed_situations(ctx) }
+		"intel_count": ActiveStageService.count_revealed_situations(ctx), "items": _item_report() }
 	if bool(plan["nothing_new"]):
 		return result
 	var reward_cfg := ConfigService.get_rewards_cfg(cfg_service)
@@ -378,7 +408,13 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 	if ekwan > 0:
 		econ_service.add_ekwan(ekwan, reason, logger, t)
 
-	EarningsService.mark_settled(stage_ref, plan["ids"], roundi(share * 100.0))
+	# Item rows are marked by the item path below, never by `mark_settled`.
+	var item_row_ids := {}
+	for r_v in EarningsService.open_item_rows(stage_ref):
+		item_row_ids[str((r_v as Dictionary).get("id", ""))] = true
+	var currency_ids: Array = (plan["ids"] as Array).filter(func(id): return not item_row_ids.has(str(id)))
+	EarningsService.mark_settled(stage_ref, currency_ids, roundi(share * 100.0))
+	result["items"] = _settle_leave_items(ctx, cfg_service, stage_ref, realm_model, picked, settle_count, logger, t)
 	stage_ref["settled_ase"] = int(plan["settled_ase"]) + ase
 	stage_ref["settled_ekwan"] = int(plan["settled_ekwan"]) + ekwan
 	stage_ref["settle_count"] = settle_count + 1
@@ -386,12 +422,157 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 	logger.info(t, "economy.settle.leave", "Leave settled by one roll", {
 		"stage_id": ctx.stage_id, "settle_count": settle_count, "roll": int(roll),
 		"outcome": picked["outcome"], "share_pct": roundi(share * 100.0), "ase": ase, "ekwan": ekwan,
-		"marked_ids": (plan["ids"] as Array).duplicate(),
+		"marked_ids": currency_ids.duplicate(),
 	})
 	result["outcome"] = picked["outcome"]
 	result["ase"] = ase
 	result["ekwan"] = ekwan
 	return result
+
+
+## Applies the leave outcome to the item entries: open item rows in row order, then held pieces in pack
+## order. Held pieces lost leave the pack and get a `held_fates` record; survivors stay held and then move into
+## the Sanctum while room exists. Surviving gathered entries go to intake. A held piece that already has a
+## record with this settle's token is skipped. Returns the `_item_report`.
+static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, stage_ref: Dictionary,
+		realm_model: Dictionary, picked: Dictionary, settle_count: int, logger: StructuredLogger, t: int) -> Dictionary:
+	var report := _item_report()
+	var run_count := int(realm_model.get("run_count", 0))
+	var token := "%d.%d" % [run_count, settle_count]
+	var rows: Array = EarningsService.open_item_rows(stage_ref)
+	var held: Array = InventoryService.held_pieces(ctx.save_data).filter(
+		func(p): return not EarningsService.has_held_fate(stage_ref, str((p as Dictionary)["id"]), token))
+	if rows.is_empty() and held.is_empty():
+		return report
+	var outcome := str(picked["outcome"])
+	var share_pct := roundi(float(picked["share"]) * 100.0)
+	var lost_reason := "leave_none" if outcome == OUTCOME_NONE else "leave_some"
+	var seed_v := int(realm_model.get("seed", 0))
+	var inv_cfg := ConfigService.get_inventory_cfg(cfg_service)
+	var draws := 0
+
+	var held_lost: Array = []
+	var held_kept: Array = []
+	for p_v in held:
+		var p: Dictionary = p_v
+		var keep := outcome == OUTCOME_ALL
+		if outcome == OUTCOME_SOME:
+			keep = _keeps(seed_v, ctx.stage_id, run_count, settle_count, "held", str(p["id"]), share_pct)
+			draws += 1
+		(held_kept if keep else held_lost).append(p)
+	var removed := InventoryService.remove_held(ctx.save_data, held_lost.map(func(p): return p["id"]))
+	for p_v in removed:
+		var p: Dictionary = p_v
+		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "lost", lost_reason))
+		(report["lost"] as Array).append(EarningsService.report_row(
+			p, lost_reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
+	var moved := InventoryService.move_pack_to_sanctum(ctx.save_data, inv_cfg)
+	var still_held := {}
+	for p_v in InventoryService.held_pieces(ctx.save_data):
+		still_held[str((p_v as Dictionary)["id"])] = true
+	for p_v in held_kept:
+		var p: Dictionary = p_v
+		var reason := "to_pack" if still_held.has(str(p["id"])) else "ok"
+		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "carried", reason))
+		(report["kept"] as Array).append(EarningsService.report_row(
+			p, reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
+
+	var reserved := rows.size()
+	for r_v in rows:
+		var row: Dictionary = r_v
+		var keep := outcome == OUTCOME_ALL
+		if outcome == OUTCOME_SOME:
+			keep = _keeps(seed_v, ctx.stage_id, run_count, settle_count, "row", str(row["id"]), share_pct)
+			draws += 1
+		_settle_item_row(ctx.save_data, inv_cfg, row, keep, lost_reason, reserved, report, logger, t)
+	_finish_report(report)
+	logger.info(t, "economy.settle.items", "Leave settled the item entries", {
+		"stage_id": ctx.stage_id, "settle_count": settle_count, "outcome": outcome, "share_pct": share_pct,
+		"rows": rows.size(), "held": held.size(), "draws": draws, "moved": moved,
+		"kept": int(report["kept_count"]), "lost": int(report["lost_count"]) })
+	return report
+
+
+## One draw for one item entry. The stream is named by the entry id, never by a list position, so the
+## draw does not change when another entry is added, removed or reordered. `kind` is "row" or "held".
+static func _keeps(realm_seed: int, stage_id: String, run_count: int, settle_count: int, kind: String,
+		id: String, share_pct: int) -> bool:
+	var rng := CampaignSeed.get_rng_from(realm_seed,
+		"inventory.leave.%s.%d.%d.%s.%s" % [stage_id, run_count, settle_count, kind, id])
+	return rng.randi_range(0, 99) < share_pct
+
+
+## Settles one open item row. `keep` true: each entry goes to intake (`gathered`) and the row is marked settled
+## with share 100. `keep` false: each entry is lost for `lost_reason` and the row is marked settled with share 0.
+## The entry records `fate` and `reason_key`; a stack surplus lost by intake sets `lost_quantity` and leaves the
+## stored quantity in `quantity`. A row whose entry intake lost gets share 0.
+static func _settle_item_row(save: Dictionary, inv_cfg: Dictionary, row: Dictionary, keep: bool,
+		lost_reason: String, reserved: int, report: Dictionary, logger: StructuredLogger, t: int) -> void:
+	var row_kept := keep
+	for e_v in (row["items"] as Array):
+		if not (e_v is Dictionary):
+			continue
+		var e: Dictionary = e_v
+		var reason := lost_reason
+		var fate := "lost"
+		var mark := -1
+		if keep:
+			var res := InventoryService.intake(save, inv_cfg, { "type_id": e.get("type_id", ""), "kind": e.get("kind", ""),
+				"grade": e.get("grade", ""), "quantity": e.get("quantity", 1), "piece_id": "" },
+				InventoryService.MODE_GATHERED, reserved, logger, t)
+			reason = str(res["reason_key"])
+			fate = "lost" if str(res["result"]) in ["lost", "rejected"] else "carried"
+			if fate == "carried" and not str(res["item_id"]).is_empty():
+				mark = InventoryService.mark_index_of(inv_cfg, str(res["item_id"]))
+			if int(res["lost_quantity"]) > 0:
+				e["lost_quantity"] = int(res["lost_quantity"])
+				if str(res["result"]) == "partial":
+					e["quantity"] = int(res["quantity"])
+		e["fate"] = fate
+		e["reason_key"] = reason
+		row_kept = row_kept and fate == "carried"
+		var bucket: Array = report["kept"] if fate == "carried" else report["lost"]
+		bucket.append(EarningsService.report_row(e, reason, "gathered", mark))
+	row["settled"] = true
+	row["settled_share"] = 100 if row_kept else 0
+
+
+## The report as the cards carry it: `{ kept, lost }` (copies), or {} when both lists are empty. A card shows an
+## `items` block only when this is not empty. Pure.
+static func card_items(report: Dictionary) -> Dictionary:
+	var kept_v: Variant = report.get("kept", [])
+	var lost_v: Variant = report.get("lost", [])
+	var kept: Array = kept_v if kept_v is Array else []
+	var lost: Array = lost_v if lost_v is Array else []
+	if kept.is_empty() and lost.is_empty():
+		return {}
+	return { "kept": kept.duplicate(true), "lost": lost.duplicate(true) }
+
+
+## What a leave would put at risk now: the open item rows (source "gathered", `mark_index` -1) in row order,
+## then the held pieces (source "held") in pack order, as `EarningsService.at_risk_row` rows. [] when none.
+## Pure and read-only; no roll, no odds.
+static func items_at_risk(ctx: FlowContext, cfg_service: ConfigService) -> Array:
+	var out: Array = []
+	var cfg := ConfigService.get_inventory_cfg(cfg_service)
+	var stage_ref := _live_stage(ctx) if not (ctx.realm_id.is_empty() or ctx.stage_id.is_empty()) else {}
+	for r_v in EarningsService.open_item_rows(stage_ref):
+		for e_v in ((r_v as Dictionary)["items"] as Array):
+			if e_v is Dictionary:
+				out.append(EarningsService.at_risk_row(e_v as Dictionary, "gathered", -1))
+	for p_v in InventoryService.held_pieces(ctx.save_data):
+		var p: Dictionary = p_v
+		out.append(EarningsService.at_risk_row(p, "held", InventoryService.mark_index_of(cfg, str(p["id"]))))
+	return out
+
+
+static func _item_report() -> Dictionary:
+	return { "kept": [], "lost": [], "kept_count": 0, "lost_count": 0 }
+
+
+static func _finish_report(report: Dictionary) -> void:
+	report["kept_count"] = (report["kept"] as Array).size()
+	report["lost_count"] = (report["lost"] as Array).size()
 
 
 ## The first of `carry_odds` / `carry_shares` that is not a Dictionary holding a number for each outcome,
@@ -418,16 +599,7 @@ static func retention_mul(directive: Dictionary) -> float:
 
 ## The LIVE stage dict of the active stage, or {}.
 static func _live_stage(ctx: FlowContext) -> Dictionary:
-	var realm_model: Dictionary = RealmService.get_active(ctx)
-	var stages_v: Variant = realm_model.get("stages", [])
-	if not (stages_v is Array):
-		return {}
-	var sid := str(ctx.stage_id)
-	var index := int(sid.split(".")[-1]) if sid.contains(".") else 0
-	for s_v in (stages_v as Array):
-		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == index:
-			return s_v
-	return {}
+	return FlowStageExploreState._get_current_stage(ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -447,13 +619,7 @@ func _stage_index() -> int:
 ## return value must persist. Matched on the stage's own `index` field, the same way
 ## FlowEncounterState resolved stage objectives before this moved.
 func _stage_ref(realm_model: Dictionary, stage_index: int) -> Dictionary:
-	var stages_v: Variant = realm_model.get("stages", [])
-	if not (stages_v is Array):
-		return {}
-	for s_v in (stages_v as Array):
-		if s_v is Dictionary and int((s_v as Dictionary).get("index", -1)) == stage_index:
-			return s_v
-	return {}
+	return FlowStageExploreState.stage_by_index(realm_model, stage_index)
 
 
 ## Stage-clear Storyweight, moved verbatim from FlowEncounterState.build_final_snapshot().

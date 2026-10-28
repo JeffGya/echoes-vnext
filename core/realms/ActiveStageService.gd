@@ -446,6 +446,82 @@ static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: 
 	return wrote
 
 
+## The seam for found items. `finds` = [{ find_id, type_id, kind, grade, quantity }] in find order. `find_id`
+## is a non-empty String, stable for the find: the row id `item:<situation_id>:<find_id>` is the exactly-once
+## stamp, so a repeat with the same finds in any order writes nothing. A find that `InventoryService.check_entry`
+## would reject (or without a `find_id`) is refused: it takes no slot and is never gathered. The pack takes the
+## first finds that fit the free pack room (`take_in_order`); a find beyond the room is not gathered and not lost.
+## Free room = pack capacity minus held pieces minus the open item rows of the WHOLE save (every Realm and stage,
+## `EarningsService.open_item_rows_in_save`). No RNG.
+## Returns { taken, left, refused }: `taken`, `left` = lists of `find_id`; `refused` = [{ find_id, reason_key }].
+## A `find_id` that appears a second time in one call is refused with `duplicate_find` (the first copy stands).
+## Requests the save when it writes a row.
+static func record_found_items(flow_ctx_arg: FlowContext, situation_id: String, finds: Array, t: int) -> Dictionary:
+	var out := { "taken": [], "left": [], "refused": [] }
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
+	if stage.is_empty() or situation_id.is_empty():
+		return out
+	var cfg := ConfigService.get_inventory_cfg(flow_ctx_arg.config_service)
+	var fresh: Array = []
+	var by_id := {}
+	for f_v in finds:
+		var fid: String = str((f_v as Dictionary).get("find_id", "")) \
+			if f_v is Dictionary and (f_v as Dictionary).get("find_id", null) is String else ""
+		var bad := InventoryService.check_entry(cfg, f_v) if f_v is Dictionary else "bad_entry"
+		if fid.is_empty():
+			bad = "bad_entry"
+		if bad == "" and by_id.has(fid):
+			bad = "duplicate_find"
+		if bad != "":
+			(out["refused"] as Array).append({ "find_id": fid, "reason_key": bad })
+		elif not EarningsService.has_row(stage, EarningsService.item_id(situation_id, fid)):
+			by_id[fid] = f_v
+			fresh.append({ "find_id": fid })
+	if fresh.is_empty() and (out["refused"] as Array).is_empty():
+		return out
+	var free := InventoryService.pack_free(flow_ctx_arg.save_data, cfg,
+		EarningsService.open_item_rows_in_save(flow_ctx_arg.save_data))
+	var pick := InventoryService.take_in_order(fresh, free)
+	for fid_v in pick["taken"]:
+		if EarningsService.record_item(stage, situation_id, str(fid_v), by_id[fid_v]):
+			(out["taken"] as Array).append(fid_v)
+	out["left"] = pick["left"]
+	if not (out["taken"] as Array).is_empty():
+		flow_ctx_arg.request_save("economy.earnings.items")
+	if flow_ctx_arg.logger != null:
+		flow_ctx_arg.logger.info(t, "economy.earnings.items", "Found items added to the packs", {
+			"stage_id": flow_ctx_arg.stage_id, "situation_id": situation_id,
+			"taken": (out["taken"] as Array).size(), "left": (out["left"] as Array).size(),
+			"refused": (out["refused"] as Array).size(), "free": free })
+	return out
+
+
+## The reason a Sanctum discard is refused because of an open path, or "". The one rule for the controller and
+## the Sanctum snapshot (`data.inventory.discard_blocked`). A discard would move held pieces to safety and dodge
+## the early-leave draw (D-22), so it is refused with `path_open` when
+##  1. any stage of the save has an open item row, or
+##  2. the pack holds a piece and the live stage is entered (`explore_map.locked`), has no `settlement_receipt.settled`
+##     and its party has not left (`party_state` is not "escaped").
+## It reads saved state only (the active realm's `current_stage_index`), because `flow_ctx.stage_id` is not
+## restored by `boot()`: the answer is the same after a quit and Continue. Pure and read-only.
+static func discard_block_reason(flow_ctx_arg: FlowContext) -> String:
+	var save := flow_ctx_arg.save_data
+	if EarningsService.open_item_rows_in_save(save) > 0:
+		return "path_open"
+	if InventoryService.pack_count(save) == 0:
+		return ""
+	var realm_model := RealmService.get_active(flow_ctx_arg)
+	var stage := FlowStageExploreState.stage_by_index(realm_model, int(realm_model.get("current_stage_index", 0)))
+	var receipt_v: Variant = stage.get("settlement_receipt", {})
+	if receipt_v is Dictionary and bool((receipt_v as Dictionary).get("settled", false)):
+		return ""
+	var map_v: Variant = stage.get("explore_map", {})
+	var map: Dictionary = map_v if map_v is Dictionary else {}
+	if not bool(map.get("locked", false)) or str(map.get("party_state", "")) == StageExploreModel.STATE_ESCAPED:
+		return ""
+	return "path_open"
+
+
 ## The fight row of the situation being fought, or {} when there is none. Read only: a rebuilt final card
 ## shows the same row as the first build, because it reads the row and not the act of writing it.
 static func fight_row(flow_ctx_arg: FlowContext, claimant: bool) -> Dictionary:
@@ -464,8 +540,14 @@ static func _last_situation_id(stage: Dictionary) -> String:
 
 ## D-115: a defeat loses every unsettled row of the active stage's packs (rows kept on defeat stay).
 ## A completed objective with no row gets its row first, so the safety net cannot add it back later.
-## Runs on every defeat. It is idempotent: a lost row is not unsettled, so a repeat marks nothing.
-## Returns how many rows were lost. The caller requests the save.
+## Item rows are lost with their entry marked `defeat`, and every held piece leaves `inventory.pack` with a
+## `held_fates` record (D-20). Runs on every defeat. It is idempotent: a lost row is not unsettled and the pack
+## is empty, so a repeat marks and removes nothing.
+## Returns how many rows were lost (item rows included). The caller requests the save.
+## Item report: when any item row or held piece is lost, `encounter_ctx.packs_lost` also holds `items`, a list of
+## `EarningsService.report_row` rows (reason `defeat`, no id; item rows first in row order, then held pieces in
+## pack order; `source` "gathered"/"held"). If no Ase or Ekwan was lost, `packs_lost` is created with
+## `lost_ase` 0 and `lost_ekwan` 0. A defeat with no item keeps `{ lost_ase, lost_ekwan }` exactly.
 static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty():
@@ -473,17 +555,48 @@ static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 	EarningsService.ensure_objective_rows(stage, ConfigService.get_rewards_cfg(flow_ctx_arg.config_service),
 		flow_ctx_arg.logger, t)
 	# Amounts are read before the marks and use the same scale as the leave panel's gathered line.
-	var sums := EarningsService.sums(EarningsService.losable(EarningsService.rows_of(stage)))
+	var losable := EarningsService.losable(EarningsService.rows_of(stage))
+	var sums := EarningsService.sums(losable)
 	var fx := get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service, flow_ctx_arg.logger, t)
 	var k: float = float(fx["realm_scale"]) * float(fx["replay_factor"])
 	var lost_ase := RewardCalc.round_payout(float(sums["scaled_ase"]) * k)
 	var lost_ekwan := RewardCalc.round_payout(float(sums["scaled_ekwan"]) * k)
+	var lost_items := 0
+	var item_report: Array = []
+	for r_v in losable:
+		if EarningsService.is_item_row(r_v):
+			for e_v in ((r_v as Dictionary)["items"] as Array):
+				if e_v is Dictionary:
+					(e_v as Dictionary)["fate"] = "lost"
+					(e_v as Dictionary)["reason_key"] = "defeat"
+					item_report.append(EarningsService.report_row(e_v as Dictionary, "defeat", "gathered", -1))
+					lost_items += 1
 	var lost := EarningsService.mark_lost(stage)
-	if lost > 0 and (lost_ase > 0 or lost_ekwan > 0) and flow_ctx_arg.encounter_ctx != null:
-		flow_ctx_arg.encounter_ctx.packs_lost = { "lost_ase": lost_ase, "lost_ekwan": lost_ekwan }
-	if lost > 0 and flow_ctx_arg.logger != null:
-		flow_ctx_arg.logger.info(t, "economy.earnings.lost", "Defeat lost the packs", {
-			"stage_id": flow_ctx_arg.stage_id, "rows": lost, "ase": lost_ase, "ekwan": lost_ekwan })
+	var held: Array = InventoryService.held_pieces(flow_ctx_arg.save_data)
+	var removed := InventoryService.remove_held(flow_ctx_arg.save_data, held.map(func(p): return p["id"]))
+	for p_v in removed:
+		var p: Dictionary = p_v
+		EarningsService.put_held_fate(stage, EarningsService.held_record(p, "defeat", "lost", "defeat"))
+		item_report.append(EarningsService.report_row(p, "defeat", "held",
+			InventoryService.mark_index_of(ConfigService.get_inventory_cfg(flow_ctx_arg.config_service), str(p["id"]))))
+	if flow_ctx_arg.encounter_ctx != null:
+		var packs_lost: Dictionary = {}
+		if lost > 0 and (lost_ase > 0 or lost_ekwan > 0):
+			packs_lost = { "lost_ase": lost_ase, "lost_ekwan": lost_ekwan }
+		# `items` appears only when an item was lost; an item-free defeat keeps the exact old shape.
+		if not item_report.is_empty():
+			packs_lost["lost_ase"] = lost_ase
+			packs_lost["lost_ekwan"] = lost_ekwan
+			packs_lost["items"] = item_report
+		if not packs_lost.is_empty():
+			flow_ctx_arg.encounter_ctx.packs_lost = packs_lost
+	if (lost > 0 or not removed.is_empty()) and flow_ctx_arg.logger != null:
+		var data := { "stage_id": flow_ctx_arg.stage_id, "rows": lost, "ase": lost_ase, "ekwan": lost_ekwan }
+		if lost_items > 0:
+			data["items"] = lost_items
+		if not removed.is_empty():
+			data["held"] = removed.size()
+		flow_ctx_arg.logger.info(t, "economy.earnings.lost", "Defeat lost the packs", data)
 	return lost
 
 

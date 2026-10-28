@@ -15,12 +15,13 @@
 #     FlowRuntime.dispatch() via flow_ctx.request_save().
 #   - No UI or scene-tree reference.
 #
-# Owns 9 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
+# Owns 12 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
 # debug.ally.spawn, debug.claimant.force_combat, debug.charge_pressure.set, debug.guidance.set,
 # debug.progression.force_rank_up (temporary instrumentation for the progress.rank_up bark
-# rewrite — see handle_force_rank_up below).
-# All but debug.guidance.set and debug.progression.force_rank_up were moved verbatim
-# (behaviour unchanged) from FlowRuntime.gd: _handle_debug_seed_show, _handle_debug_seed_set,
+# rewrite — see handle_force_rank_up below), debug.emotion.set, debug.stop_short.set and
+# debug.inventory.produce (V2-ITEM-001a play-test producer — see handle_inventory_produce below).
+# All but debug.guidance.set, debug.progression.force_rank_up and debug.inventory.produce were moved
+# verbatim (behaviour unchanged) from FlowRuntime.gd: _handle_debug_seed_show, _handle_debug_seed_set,
 # _handle_debug_echo_gen_test, _echo_fingerprint, _handle_debug_spawn_ally,
 # _handle_debug_force_claimant_combat, _handle_debug_force_charge_pressure.
 #
@@ -555,3 +556,92 @@ func handle_force_rank_up(action: Dictionary, t: int) -> FlowActionOutcome:
 		return FlowActionOutcome.snapshot_outcome_no_refresh(new_sanctum_snapshot).with_save_reason("debug.progression.force_rank_up")
 
 	return FlowActionOutcome.handled_outcome().with_save_reason("debug.progression.force_rank_up")
+
+
+## debug.inventory.produce — play-test producer of placeholder items (V2-ITEM-001a). Payload
+## { ids: Array[String], mode: "gather"|"direct" }; default ids are the four below, default mode "direct".
+## It reads the definitions from the tests fixture and lays them over a COPY of the inventory cfg for this call
+## only: it never writes balance.json and keeps nothing. Every id is checked first; one bad id denies the
+## whole call and changes nothing. `direct` runs InventoryService.intake (mode direct) per id in the order
+## given. `gather` writes item rows through ActiveStageService.record_found_items and needs a live path
+## (realm, stage id and stage record). A missing fixture is denied with a log. One save request.
+## Only the F1 debug console (ui/AppRoot.gd) sends this action; no code in core/ calls this handler.
+const _PRODUCE_FIXTURE := "res://tests/fixtures/inventory_placeholders.json"
+const _PRODUCE_DEFAULT_IDS: Array = ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_consumable_a"]
+## Test seam: a test points this at a missing file to prove the denial. Play never sets it.
+var produce_fixture_path: String = _PRODUCE_FIXTURE
+
+
+func handle_inventory_produce(action: Dictionary, t: int) -> FlowActionOutcome:
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var mode := str(payload.get("mode", "direct"))
+	if mode != "direct" and mode != "gather":
+		return _produce_denied(t, "bad_mode", { "mode": mode })
+	var ids_v: Variant = payload.get("ids", null)
+	var ids: Array = ids_v if ids_v is Array and not (ids_v as Array).is_empty() else _PRODUCE_DEFAULT_IDS
+
+	if not FileAccess.file_exists(produce_fixture_path):
+		return _produce_denied(t, "fixture_missing", { "path": produce_fixture_path })
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(produce_fixture_path))
+	var fixture_defs_v: Variant = (parsed as Dictionary).get("definitions", null) if parsed is Dictionary else null
+	if not (fixture_defs_v is Dictionary):
+		return _produce_denied(t, "fixture_bad", { "path": produce_fixture_path })
+	var fixture_defs: Dictionary = fixture_defs_v
+
+	# The overlay lives in this local copy only.
+	var cfg: Dictionary = ConfigService.get_inventory_cfg(config_service).duplicate(true)
+	var defs_v: Variant = cfg.get("definitions", {})
+	var defs: Dictionary = defs_v if defs_v is Dictionary else {}
+	for key in fixture_defs:
+		defs[key] = (fixture_defs[key] as Dictionary).duplicate(true) if fixture_defs[key] is Dictionary else fixture_defs[key]
+	cfg["definitions"] = defs
+
+	var entries: Array = []
+	for id_v in ids:
+		var type_id := str(id_v) if id_v is String else ""
+		var def_v: Variant = fixture_defs.get(type_id, null)
+		if not (def_v is Dictionary):
+			return _produce_denied(t, "unknown_id", { "type_id": type_id })
+		var def: Dictionary = def_v
+		var entry := { "type_id": type_id, "kind": str(def.get("kind", "")), "grade": str(def.get("grade", "")), "quantity": 1 }
+		var bad := InventoryService.check_entry(cfg, entry)
+		if bad != "":
+			return _produce_denied(t, bad, { "type_id": type_id })
+		entries.append(entry)
+
+	var stage: Dictionary = {}
+	if not flow_ctx.realm_id.is_empty() and not flow_ctx.stage_id.is_empty():
+		stage = FlowStageExploreStateScript._get_current_stage(flow_ctx)
+	var results: Array = []
+	if mode == "gather":
+		if stage.is_empty():
+			return _produce_denied(t, "no_live_path", {})
+		var finds: Array = []
+		for i in entries.size():
+			var f: Dictionary = (entries[i] as Dictionary).duplicate()
+			f["find_id"] = "t%d.%d" % [t, i]
+			finds.append(f)
+		var got := ActiveStageService.record_found_items(flow_ctx, "debug", finds, t)
+		results.append(got)
+	else:
+		var reserved := EarningsService.open_item_rows_in_save(flow_ctx.save_data)
+		for entry in entries:
+			results.append(InventoryService.intake(flow_ctx.save_data, cfg, entry, InventoryService.MODE_DIRECT,
+				reserved, logger, t))
+
+	logger.info(t, "debug.inventory.produce", "Dev placeholder items produced", {
+		"mode": mode, "count": entries.size(), "results": results.size() })
+	var outcome: FlowActionOutcome
+	if str(flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.SANCTUM:
+		outcome = FlowActionOutcome.reenter_outcome()
+	else:
+		outcome = FlowActionOutcome.handled_outcome()
+	return outcome.with_save_reason("debug.inventory.produce")
+
+
+func _produce_denied(t: int, reason_key: String, extra: Dictionary) -> FlowActionOutcome:
+	var data := extra.duplicate()
+	data["reason_key"] = reason_key
+	logger.info(t, "debug.inventory.produce.denied", "Dev item producer denied", data)
+	return FlowActionOutcome.error_outcome(reason_key)

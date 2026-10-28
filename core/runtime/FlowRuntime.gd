@@ -393,7 +393,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# DECISION, NOT AN UNFINISHED STATE. There is no CombatController, and
 			# there is deliberately not going to be one in this story.
 			# ────────────────────────────────────────────────────────────────────
-			# 67 of the 73 actions dispatch() routes go to a controller in one line.
+			# 69 of the 75 actions dispatch() routes go to a controller in one line (81 match arms, minus the six
+			# inline `flow.*` arms: new_game, advance, go_state, continue, settings, quit).
 			# These six do not, and nothing else in this file would tell you whether
 			# that is a choice or debt. It is a choice. Full write-up and the cost of
 			# reversing it are on the V2-COMBAT-004 Notion page; the decision is also
@@ -564,6 +565,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"sanctum.institution.remove_echo":
 				_apply_action_outcome(_sanctum_controller().handle_institution_remove_echo(action, t), t)
+
+			# V2-ITEM-001a: Sanctum inventory discard, routed to InventoryController.
+			"inventory.discard.apply":
+				_apply_action_outcome(_inventory_controller().handle_discard(action, t), t)
 	
 			# ---- Vows (VOW-001) ----
 			# V2-INFRA-003 Phase 4 Slice 2: VowController owns these 3 actions. Controllers
@@ -605,6 +610,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"debug.stop_short.set":
 				_apply_action_outcome(_debug_controller().handle_stop_short_set(action, t), t)
+
+			# V2-ITEM-001a: placeholder item producer for the play test. Only the F1 debug console sends it.
+			"debug.inventory.produce":
+				_apply_action_outcome(_debug_controller().handle_inventory_produce(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":
@@ -750,6 +759,17 @@ func dispatch(action: Dictionary) -> Dictionary:
 		flow_ctx.pending_scout_return_ekwan       = 0
 		flow_ctx.pending_scout_return_intel_count = 0
 		flow_ctx.pending_scout_return_settle_outcome = ""
+		flow_ctx.pending_scout_return_items = {}
+
+	# The path-end item report is shown once, by the snapshot of the dispatch that set it. The caller gets a copy
+	# that still carries `stage_clear_items`; `last_snapshot` loses it (same trap as `return_confirm_requested`
+	# below). With any destination but the Sanctum the report is dropped unseen.
+	if not flow_ctx.pending_stage_clear_items.is_empty():
+		if out.get("data") is Dictionary and (out["data"] as Dictionary).has("stage_clear_items") \
+				and flow_ctx.last_snapshot.get("data") is Dictionary:
+			out = out.duplicate(true)
+			(flow_ctx.last_snapshot["data"] as Dictionary).erase("stage_clear_items")
+		flow_ctx.pending_stage_clear_items = {}
 
 	# The standoff card's Sanctum button asked the stage_explore snapshot to carry
 	# return_confirm_requested; once that snapshot is out the request is spent. The caller gets a copy
@@ -942,6 +962,11 @@ func _vow_controller() -> VowController:
 ## above.
 func _debug_controller() -> DebugController:
 	return DebugController.new(flow_ctx, config_service, logger)
+
+
+## V2-ITEM-001a: builds a fresh InventoryController (inventory.discard.apply). Same per-call rationale.
+func _inventory_controller() -> InventoryController:
+	return InventoryController.new(flow_ctx, config_service, logger)
 
 
 ## V2-INFRA-003 Phase 4 Slice 6b: builds a fresh ProgressionController scoped to the current

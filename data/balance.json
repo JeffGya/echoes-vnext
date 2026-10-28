@@ -3732,6 +3732,29 @@
 				"vector_seed_secondary": 20.0,
 				"companion_bond_debuff": -30
 			}
+		},
+		"inventory": {
+			"_comment": "V2-ITEM-001a: item containers (Sanctum inventory and party pack). Read by ConfigService.get_inventory_cfg. All values tunable without code changes (ANSWERS #83). The leave share is NOT here: it is data.rewards.carry_shares.some.",
+			"_numbers_comment": "PROVISIONAL (D-25): unique_cap, pack_capacity, stack_limit_default, warn_room_at and warn_pack_free_at are starting values chosen by Jeff to tune after his play test. Tests use their own config and never depend on them.",
+			"_unique_cap_comment": "Total count of unique pieces (gear and relics together) in the Sanctum inventory (D-05).",
+			"unique_cap": 8,
+			"_pack_capacity_comment": "Item slots the party carries on a path. Held pieces from an earlier path use slots too (D-13, D-16).",
+			"pack_capacity": 4,
+			"_stack_limit_comment": "Per-stack limit for consumables and materials. A definition may override it. Surplus above the limit is lost.",
+			"stack_limit_default": 20,
+			"_warn_comment": "Cap pressure thresholds for the path view warnings (D-04, D-08). warn_room_at: warn when Sanctum room is this many pieces or fewer. warn_pack_free_at: warn when free pack slots are this many or fewer.",
+			"warn_room_at": 2,
+			"warn_pack_free_at": 1,
+			"_mark_count_comment": "How many different marks the UI shows to tell twin pieces apart. A piece row carries mark_index = (number part of its id) modulo mark_count. Below 1 or missing reads as 6.",
+			"mark_count": 6,
+			"_kinds_enabled_comment": "Kinds that intake accepts (D-06). A kind set to false is refused with reason kind_disabled. A kind with no key is unknown_kind. Same pattern as data.summoning.grade_enabled.",
+			"kinds_enabled": { "gear": true, "relic": true, "consumable": true, "material": true },
+			"_grades_comment": "Ordered list of grade ids, lowest first. Empty in shipping: the catalogue story fills it.",
+			"grades": [],
+			"_recycle_yield_comment": "Recycle yield in Ekwan, one key per grade (D-02, D-06). Empty in shipping. ITEM-004 and ECONOMY-004 Part B fill it. Recycling returns Ekwan only.",
+			"recycle_yield_ekwan": {},
+			"_definitions_comment": "Item definitions keyed by type_id. Empty in shipping: no real item exists yet. Shape of one future entry: { name: String, kind: gear|relic|consumable|material, grade: String, stack_limit: int (optional override), cost: { ekwan: int, ase: int } }. The cost shape is reserved for ECONOMY-004 Part B. Materials are never a price (D-06).",
+			"definitions": {}
 		}
 	}
 }

@@ -382,9 +382,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"params": { "kind": str(_fight_row.get("kind", "")), "gathered_ase": int(_fight_row.get("ase", 0)) } })
 	# A defeat that lost unsettled packs says so, with the amounts. Nothing reaches the balance, so delta is 0.
 	if not victory and ectx != null and not ectx.packs_lost.is_empty():
+		var _lost_params := { "lost_ase": int(ectx.packs_lost.get("lost_ase", 0)),
+			"lost_ekwan": int(ectx.packs_lost.get("lost_ekwan", 0)) }
+		# `items` (report rows, no id) only when an item or held piece was lost.
+		if ectx.packs_lost.get("items", null) is Array and not (ectx.packs_lost["items"] as Array).is_empty():
+			_lost_params["items"] = (ectx.packs_lost["items"] as Array).duplicate(true)
 		_breakdown.append({ "label": "Packs lost", "delta": 0, "currency": "ase", "cause": "packs_lost",
-			"params": { "lost_ase": int(ectx.packs_lost.get("lost_ase", 0)),
-				"lost_ekwan": int(ectx.packs_lost.get("lost_ekwan", 0)) } })
+			"params": _lost_params })
 	var _vow_outcome: Dictionary = flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {}
 
 	# A defeat shows nothing about pace (design §7): no colour on the result round line.

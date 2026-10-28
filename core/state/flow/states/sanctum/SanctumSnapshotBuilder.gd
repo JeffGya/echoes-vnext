@@ -457,6 +457,21 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 	data["active_directive_id"] = DirectiveService.active_id(flow_ctx.save_data if flow_ctx.save_data != null else {})
 	data["available_directives"] = DirectiveService.available_ids(dir_cfg)
 
+	# V2-ITEM-001a: inventory projection (data only). A fresh tree; no Ase, Ekwan or Thread key. The discard
+	# is dispatched by the row (`inventory.discard.apply`), so it is not a slot in `actions`.
+	# `reserved` = open item rows of the whole save. `discard_blocked` ("path_open") is present only when
+	# the discard is refused for an open path; the controller uses the same function.
+	var inv_save: Dictionary = flow_ctx.save_data if flow_ctx.save_data != null else {}
+	data["inventory"] = InventoryService.snapshot(inv_save,
+		ConfigService.get_inventory_cfg(flow_ctx.config_service) if flow_ctx.config_service != null else {},
+		EarningsService.open_item_rows_in_save(inv_save))
+	# One-shot, present only when the path end banked or lost an item: { kept, lost } report rows.
+	if not flow_ctx.pending_stage_clear_items.is_empty():
+		data["stage_clear_items"] = flow_ctx.pending_stage_clear_items.duplicate(true)
+	var blocked := ActiveStageService.discard_block_reason(flow_ctx)
+	if not blocked.is_empty():
+		(data["inventory"] as Dictionary)["discard_blocked"] = blocked
+
 	return {
 		"type": FlowStateIds.SANCTUM,
 		"data": data,

@@ -365,6 +365,91 @@ static func _starter_occupants_need_repair(sanctum: Dictionary) -> bool:
 		found_ids[occupant_id] = true
 	return found_ids.size() != expected_ids.size()
 		
+## Returns v as an int when it is an int or a finite whole float within +-2^53 (a JSON load makes ints floats). Else null.
+static func _safe_whole_int(v: Variant) -> Variant:
+	if typeof(v) == TYPE_INT:
+		return v if absi(v) <= 9007199254740992 else null
+	if typeof(v) == TYPE_FLOAT and is_finite(v) and absf(v) <= 9007199254740992.0 and v == floorf(v):
+		return int(v)
+	return null
+
+
+## V2-ITEM-001a: adds or repairs save.inventory. Returns true if it changed anything.
+## A missing or non-Dictionary block becomes the default block. items, stacks and pack must be Arrays
+## (else []). A piece in items or pack is kept only if InventoryService.piece_problem accepts it and its id
+## is new (the first of a repeated id stays); the others are dropped and counted in one note.
+## A non-Dictionary stack is dropped. A stack is kept only if its quantity is a whole number >= 1
+## (a whole float becomes an int silently); else it is dropped and counted. version and next_seq must be
+## ints in 1..2^53 (else 1). next_seq is raised above the highest "it.<n>" id of at most 15 digits.
+## A longer id keeps its entry, is ignored for next_seq, and adds a note but no change flag (repair stays stable).
+static func _repair_inventory_block(save: Dictionary, repaired_notes: Array) -> bool:
+	var changed := false
+	var inv_v: Variant = save.get("inventory", null)
+	if not (inv_v is Dictionary):
+		save["inventory"] = { "version": 1, "next_seq": 1, "items": [], "stacks": [], "pack": [] }
+		repaired_notes.append("inventory block added (V2-ITEM-001a)")
+		return true
+	var inv: Dictionary = inv_v
+	var max_seq := 0
+	var bad_id_noted := false
+	var seen_ids := {}
+	var dropped_pieces := 0
+	for key in ["items", "stacks", "pack"]:
+		var arr_v: Variant = inv.get(key, null)
+		if not (arr_v is Array):
+			inv[key] = []
+			changed = true
+			repaired_notes.append("inventory.%s defaulted to []" % key)
+			continue
+		var arr: Array = arr_v
+		var kept: Array = []
+		for entry_v in arr:
+			if key == "stacks":
+				if not (entry_v is Dictionary):
+					continue
+				var q: Variant = _safe_whole_int((entry_v as Dictionary).get("quantity", null))
+				if q == null or int(q) < 1:
+					continue
+				(entry_v as Dictionary)["quantity"] = int(q)
+				kept.append(entry_v)
+				continue
+			if InventoryService.piece_problem(entry_v) != "" or seen_ids.has((entry_v as Dictionary)["id"]):
+				continue
+			var id_s: String = (entry_v as Dictionary)["id"]
+			seen_ids[id_s] = true
+			if id_s.begins_with("it.") and id_s.substr(3).is_valid_int():
+				if id_s.length() - 3 > 15:
+					if not bad_id_noted:
+						bad_id_noted = true
+						repaired_notes.append("inventory piece id too long, ignored for next_seq")
+				else:
+					max_seq = maxi(max_seq, id_s.substr(3).to_int())
+			kept.append(entry_v)
+		if kept.size() != arr.size():
+			inv[key] = kept
+			changed = true
+			if key == "stacks":
+				repaired_notes.append("inventory.stacks dropped %d invalid entries" % (arr.size() - kept.size()))
+			else:
+				dropped_pieces += arr.size() - kept.size()
+	if dropped_pieces > 0:
+		repaired_notes.append("inventory dropped %d invalid pieces" % dropped_pieces)
+	for key in ["version", "next_seq"]:
+		var safe: Variant = _safe_whole_int(inv.get(key, null))
+		var fixed: int = 1
+		if safe != null and int(safe) >= 1:
+			fixed = int(safe)
+		else:
+			changed = true
+			repaired_notes.append("inventory.%s repaired invalid value" % key)
+		if key == "next_seq" and fixed <= max_seq:
+			fixed = max_seq + 1
+			changed = true
+			repaired_notes.append("inventory.next_seq raised above the highest piece id")
+		inv[key] = fixed
+	return changed
+
+
 static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: StructuredLogger = null, t: int = -1, directives_cfg: Dictionary = {}) -> bool:
 	if save == null or save.is_empty():
 		return false
@@ -514,6 +599,10 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 		econ["favor"] = 0
 		repaired = true
 		repaired_notes.append("economy.favor set to 0 (V2 stub)")
+
+	# ---- Inventory block (V2-ITEM-001a) ----
+	if _repair_inventory_block(save, repaired_notes):
+		repaired = true
 
 	# ---- Flow repairs ----
 	# Older saves carry dead flow.state / flow.context keys. They are left in place:
@@ -1237,6 +1326,12 @@ static func _apply_additive_defaults_and_repairs(save: Dictionary, logger: Struc
 						_stage["earnings"] = []
 						repaired = true
 						repaired_notes.append("realm.%s.stage.%s.earnings defaulted" % [_realm_id, _stage_label])
+
+					# V2-ITEM-001a: held_fates records the fate of carried (held) pieces at a leave or defeat.
+					if not _stage.has("held_fates") or not (_stage["held_fates"] is Array):
+						_stage["held_fates"] = []
+						repaired = true
+						repaired_notes.append("realm.%s.stage.%s.held_fates defaulted (V2-ITEM-001a)" % [_realm_id, _stage_label])
 
 					# V2-STAGE-002: objective completed + required fields
 					var _objs_repair_v: Variant = _stage.get("objectives", [])

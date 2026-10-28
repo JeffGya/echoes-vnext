@@ -1,0 +1,11 @@
+{
+	"_comment": "Placeholder item definitions for tests only (V2-ITEM-001a). Everything under res:// ships, so no placeholder id may appear in data/balance.json or a new save. Cost values are 0: the shape only (ECONOMY-004 Part B).",
+	"definitions": {
+		"ph_weapon_a": { "name": "Placeholder weapon A", "kind": "gear", "grade": "g1", "cost": { "ekwan": 0, "ase": 0 } },
+		"ph_charm_a": { "name": "Placeholder charm A", "kind": "gear", "grade": "g1", "cost": { "ekwan": 0, "ase": 0 } },
+		"ph_relic_a": { "name": "Placeholder relic A", "kind": "relic", "grade": "g2", "cost": { "ekwan": 0, "ase": 0 } },
+		"ph_consumable_a": { "name": "Placeholder consumable A", "kind": "consumable", "grade": "", "stack_limit": 3, "cost": { "ekwan": 0, "ase": 0 } },
+		"ph_material_a": { "name": "Placeholder material A", "kind": "material", "grade": "", "cost": { "ekwan": 0, "ase": 0 } },
+		"ph_armor_a": { "name": "Placeholder armor A", "kind": "gear", "grade": "g1", "cost": { "ekwan": 0, "ase": 0 } }
+	}
+}
