@@ -376,7 +376,9 @@ static func _safe_whole_int(v: Variant) -> Variant:
 
 ## V2-ITEM-001a: adds or repairs save.inventory. Returns true if it changed anything.
 ## A missing or non-Dictionary block becomes the default block. items, stacks and pack must be Arrays
-## (else []); a non-Dictionary entry is dropped. A stack is kept only if its quantity is a whole number >= 1
+## (else []). A piece in items or pack is kept only if InventoryService.piece_problem accepts it and its id
+## is new (the first of a repeated id stays); the others are dropped and counted in one note.
+## A non-Dictionary stack is dropped. A stack is kept only if its quantity is a whole number >= 1
 ## (a whole float becomes an int silently); else it is dropped and counted. version and next_seq must be
 ## ints in 1..2^53 (else 1). next_seq is raised above the highest "it.<n>" id of at most 15 digits.
 ## A longer id keeps its entry, is ignored for next_seq, and adds a note but no change flag (repair stays stable).
@@ -390,6 +392,8 @@ static func _repair_inventory_block(save: Dictionary, repaired_notes: Array) -> 
 	var inv: Dictionary = inv_v
 	var max_seq := 0
 	var bad_id_noted := false
+	var seen_ids := {}
+	var dropped_pieces := 0
 	for key in ["items", "stacks", "pack"]:
 		var arr_v: Variant = inv.get(key, null)
 		if not (arr_v is Array):
@@ -400,28 +404,36 @@ static func _repair_inventory_block(save: Dictionary, repaired_notes: Array) -> 
 		var arr: Array = arr_v
 		var kept: Array = []
 		for entry_v in arr:
-			if not (entry_v is Dictionary):
-				continue
-			var entry: Dictionary = entry_v
 			if key == "stacks":
-				var q: Variant = _safe_whole_int(entry.get("quantity", null))
+				if not (entry_v is Dictionary):
+					continue
+				var q: Variant = _safe_whole_int((entry_v as Dictionary).get("quantity", null))
 				if q == null or int(q) < 1:
 					continue
-				entry["quantity"] = int(q)
-			else:
-				var id_s: String = str(entry.get("id", ""))
-				if id_s.begins_with("it.") and id_s.substr(3).is_valid_int():
-					if id_s.length() - 3 > 15:
-						if not bad_id_noted:
-							bad_id_noted = true
-							repaired_notes.append("inventory piece id too long, ignored for next_seq")
-					else:
-						max_seq = maxi(max_seq, id_s.substr(3).to_int())
-			kept.append(entry)
+				(entry_v as Dictionary)["quantity"] = int(q)
+				kept.append(entry_v)
+				continue
+			if InventoryService.piece_problem(entry_v) != "" or seen_ids.has((entry_v as Dictionary)["id"]):
+				continue
+			var id_s: String = (entry_v as Dictionary)["id"]
+			seen_ids[id_s] = true
+			if id_s.begins_with("it.") and id_s.substr(3).is_valid_int():
+				if id_s.length() - 3 > 15:
+					if not bad_id_noted:
+						bad_id_noted = true
+						repaired_notes.append("inventory piece id too long, ignored for next_seq")
+				else:
+					max_seq = maxi(max_seq, id_s.substr(3).to_int())
+			kept.append(entry_v)
 		if kept.size() != arr.size():
 			inv[key] = kept
 			changed = true
-			repaired_notes.append("inventory.%s dropped %d invalid entries" % [key, arr.size() - kept.size()])
+			if key == "stacks":
+				repaired_notes.append("inventory.stacks dropped %d invalid entries" % (arr.size() - kept.size()))
+			else:
+				dropped_pieces += arr.size() - kept.size()
+	if dropped_pieces > 0:
+		repaired_notes.append("inventory dropped %d invalid pieces" % dropped_pieces)
 	for key in ["version", "next_seq"]:
 		var safe: Variant = _safe_whole_int(inv.get(key, null))
 		var fixed: int = 1

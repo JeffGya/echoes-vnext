@@ -20,6 +20,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_save/config_shape", Callable(InventorySaveTests, "_t_config_values"))
 	runner.register_test("inventory_save/long_piece_id_is_ignored_for_next_seq", Callable(InventorySaveTests, "_t_long_id"))
 	runner.register_test("inventory_save/bad_stack_quantity_is_dropped", Callable(InventorySaveTests, "_t_bad_quantity"))
+	runner.register_test("inventory_save/repair_drops_pieces_that_fail_the_shape_check", Callable(InventorySaveTests, "_t_bad_pieces"))
 	runner.register_test("inventory_save/huge_or_non_finite_counter_resets", Callable(InventorySaveTests, "_t_huge_counter"))
 	runner.register_test("inventory_save/config_missing_returns_empty", Callable(InventorySaveTests, "_t_config_missing"))
 	runner.register_test("inventory_save/stage_held_fates_default_and_repair", Callable(InventorySaveTests, "_t_held_fates"))
@@ -385,6 +386,67 @@ static func _t_bad_quantity() -> Dictionary:
 		m.append("note lacks the count %d: %s" % [bad.size(), str(notes)])
 	if SaveService._repair_inventory_block(save, []):
 		m.append("second repair reported a change")
+	return _result(m)
+
+
+## A piece that fails InventoryService.piece_problem, or repeats an id, is dropped. One note carries the count.
+static func _t_bad_pieces() -> Dictionary:
+	var m: Array = []
+	var no_held := { "id": "it.6", "type_id": "t_gear", "kind": "gear" }
+	var save := { "inventory": { "version": 1, "next_seq": 1,
+		"items": [
+			_piece(1),
+			{ "id": 5, "type_id": "t_gear", "kind": "gear", "grade": "g0", "held_by": "" },
+			{ "id": "it.2", "kind": "gear", "grade": "g0", "held_by": "" },
+			{ "id": "it.3", "type_id": "t_gear", "kind": "sword", "grade": "g0", "held_by": "" },
+			_piece(4, "t_relic", "relic"),
+			{ "id": "it.7", "type_id": "t_gear", "kind": "gear", "grade": 3, "held_by": "" },
+		],
+		"stacks": [{ "type_id": "t_cons", "kind": "consumable", "quantity": 2 }],
+		"pack": [
+			{ "id": "it.5", "type_id": "t_gear", "kind": "gear", "grade": "g0", "held_by": 9 },
+			{ "id": "it.1", "type_id": "t_relic", "kind": "relic", "grade": "g0", "held_by": "" },
+			no_held,
+			{ "id": "it.8", "type_id": "t_cons", "kind": "consumable", "grade": "g0", "held_by": "" },
+		] } }
+	var notes: Array = []
+	if not SaveService._repair_inventory_block(save, notes):
+		m.append("no change reported")
+	var inv: Dictionary = save["inventory"]
+	var item_ids: Array = []
+	for p in (inv["items"] as Array):
+		item_ids.append((p as Dictionary)["id"])
+	var pack_ids: Array = []
+	for p in (inv["pack"] as Array):
+		pack_ids.append((p as Dictionary)["id"])
+	if item_ids != ["it.1", "it.4"]:
+		m.append("kept items %s, expected [it.1, it.4]" % str(item_ids))
+	if pack_ids != ["it.6"]:
+		m.append("kept pack %s, expected [it.6]" % str(pack_ids))
+	if (inv["stacks"] as Array).size() != 1:
+		m.append("stacks changed: %s" % str(inv["stacks"]))
+	if str(((inv["items"] as Array)[0] as Dictionary)["type_id"]) != "t_gear":
+		m.append("the first piece with a repeated id was not the one kept")
+	if int(inv["next_seq"]) != 7:
+		m.append("next_seq %s, expected 7 (above the kept it.6)" % str(inv["next_seq"]))
+	var count_notes := 0
+	for n in notes:
+		if str(n) == "inventory dropped 7 invalid pieces":
+			count_notes += 1
+	if count_notes != 1:
+		m.append("expected one note with the count 7, got %s" % str(notes))
+	var before := JSON.stringify(save)
+	var notes2: Array = []
+	if SaveService._repair_inventory_block(save, notes2) or not notes2.is_empty() or JSON.stringify(save) != before:
+		m.append("second repair changed the block or left notes: %s" % str(notes2))
+	# A block of valid pieces is left as it is.
+	var good := { "inventory": { "version": 1, "next_seq": 4,
+		"items": [_piece(1), _piece(2, "t_relic", "relic")], "stacks": [], "pack": [_piece(3), no_held.duplicate()] } }
+	(good["inventory"] as Dictionary)["pack"][1]["id"] = "it.3b"
+	var good_before := JSON.stringify(good)
+	var good_notes: Array = []
+	if SaveService._repair_inventory_block(good, good_notes) or not good_notes.is_empty() or JSON.stringify(good) != good_before:
+		m.append("valid pieces were changed: %s" % str(good_notes))
 	return _result(m)
 
 

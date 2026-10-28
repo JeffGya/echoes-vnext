@@ -21,7 +21,7 @@ Two locations exist. **Gathered** items sit in item rows of `stage.earnings` (AN
 
 | Step | Who decides | What can be lost | Reason key | Saved |
 |---|---|---|---|---|
-| Found (won encounter) | The producer (test) now; ITEM-002 later | Nothing yet | none | `inventory.next_seq` (id per unique find) |
+| Found (won encounter) | The producer (test) now; ITEM-002 later | Nothing yet | none | Nothing. A gathered piece has no instance id yet. `intake` mints the id (`inventory.next_seq`). |
 | Fill the pack (section 3) | `take_in_order` | A find beyond free room is not gathered. It is not saved. | `no_room` (returned, not saved) | One item row per taken find; pick stamp |
 | Gathered, held | Nobody | Early leave, defeat | see below | Item rows; `inventory.pack` |
 | Early leave | The outcome draw, then one draw per piece (gathered AND held) | "Nothing": all. "Some": each piece at 50%. "Everything": none. | `leave_none`, `leave_some` | Row `settled` plus entry `fate`; `stage.held_fates` |
@@ -35,6 +35,8 @@ Two locations exist. **Gathered** items sit in item rows of `stage.earnings` (AN
 
 ## 2. The two containers [CORRECTED D-19 D-20]
 
+**Ids.** `intake` mints the piece id `it.<n>` from `inventory.next_seq`. A caller may pass a `piece_id`. A gathered piece has no id before intake.
+
 **Intake order.** One function, one pass. At a path end or after a leave, the order is: (1) held pieces, oldest first, then (2) gathered item rows, in row order. For each piece:
 1. A stack goes to its Sanctum stack. Surplus above `stack_limit` is lost (`stack_limit`). Stacks never enter the pack and have no total cap (D-05).
 2. A unique piece goes to the Sanctum if `items.size() < unique_cap`.
@@ -45,7 +47,7 @@ Two locations exist. **Gathered** items sit in item rows of `stage.earnings` (AN
 **Free pack room** = `pack_capacity` minus `inventory.pack.size()` minus the unsettled, unlost item rows of the live stage.
 
 **How the pack empties: automatic.** A function moves held pieces into the Sanctum, oldest first, while room exists. It runs at four points: path end, leave survivors (intake), after a Sanctum intake, and after a Sanctum-piece discard. No keeper button exists. Defeat empties the pack by loss (D-20).
-**Invariant.** After every mutation, `inventory.pack` is non-empty only while the Sanctum unique count equals `unique_cap`. The Sanctum gains no piece during a path, so the invariant also holds on a path. A test asserts it after every mutation.
+**Invariant.** `intake` never puts a piece in `inventory.items` above `unique_cap`, and never puts a piece in `inventory.pack` while the Sanctum has room. `intake` of a unique piece, `discard` and the move function first move held pieces into the Sanctum. After them, `inventory.pack` is empty or the Sanctum has no room. A raised cap can leave a held piece with room until the next of these calls. A lowered cap can leave more pieces than the cap; no call drops a piece. A `gathered` piece can take the pack above `pack_capacity`; `validate` reports it. A test asserts these after every mutation.
 
 **Early leave and held pieces (D-19).** Each held piece draws alone, as each gathered piece does (section 4). A piece that survives goes to intake. A piece that cannot fit stays in the pack and is held again.
 **New path with items in the pack.** The pack goes with the party. Held pieces fill slots, so free room is smaller. This stays the disadvantage of D-16.
