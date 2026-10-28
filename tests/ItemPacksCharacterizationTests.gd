@@ -2,9 +2,8 @@
 # V2-ITEM-001a step 1: characterization of the packs, the early-leave settle, the defeat loss and the
 # path-end bank when no row holds an item. It pins today's behaviour. It changes no production code.
 #
-# A test marked
-#   # KNOWN DEFECT (V2-ITEM-001a will change this):
-# carries a defect. Step 4 of V2-ITEM-001a inverts that assertion. Do not invert it earlier.
+# The two known defects of step 1 (an item-only row refused; `nothing_new` ignoring items) were inverted in
+# step 4; every other assertion is the unchanged proof that item-free behaviour did not move.
 # Report: docs/stories/v2-item-001/step1-characterization.md
 #
 # Fixtures come from EconomyCharacterizationTests (`_carry_ctx` and friends). Values: realm.01, run 0,
@@ -36,7 +35,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("item_packs_char/path_end_pays_unsettled_once", Callable(ItemPacksCharacterizationTests, "_t_path_end_once"))
 	runner.register_test("item_packs_char/path_end_pays_nothing_for_settled_or_lost_rows", Callable(ItemPacksCharacterizationTests, "_t_path_end_settled_lost"))
 	runner.register_test("item_packs_char/add_row_rejects_empty_currency_and_duplicate_id", Callable(ItemPacksCharacterizationTests, "_t_add_row_rejects"))
-	runner.register_test("item_packs_char/nothing_new_ignores_items", Callable(ItemPacksCharacterizationTests, "_t_nothing_new_ignores_items"))
+	runner.register_test("item_packs_char/nothing_new_counts_items", Callable(ItemPacksCharacterizationTests, "_t_nothing_new_counts_items"))
 
 
 # ---------------------------------------------------------------------------
@@ -83,13 +82,14 @@ static func _t_plan_zero_rows() -> Dictionary:
 	var ctx := EconomyCharacterizationTests._carry_ctx("realm.01", 0, [EconomyCharacterizationTests._carry_boss()])
 	var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
 	var want := { "ase": 0, "ekwan": 0, "overcome": 0, "total": 0, "ids": [], "nothing_new": true, "settled_ase": 0,
-		"settled_ekwan": 0, "rows": 0, "fight_rows": 0, "found_rows": 0, "settle_count": 0 }
+		"settled_ekwan": 0, "rows": 0, "fight_rows": 0, "found_rows": 0, "item_rows": 0, "held_pieces": 0, "settle_count": 0 }
 	if str(plan) != str(want):
 		m.append("settle_plan %s, expected %s" % [str(plan), str(want)])
 	var packs := EarningsService.plan(EconomyCharacterizationTests._carry_stage(ctx), EconomyCharacterizationTests._rewards_cfg())
 	if str(packs["ids"]) != "[]" or int(packs["scaled_ase"]) != 0 or int(packs["flat_ase"]) != 0 \
 			or str(packs["sources"]) != str({ "objective": { "rows": 0, "ase": 0, "all": 0 },
-				"encounter": { "rows": 0, "ase": 0, "all": 0 }, "found": { "rows": 0, "ase": 0, "all": 0 } }):
+				"encounter": { "rows": 0, "ase": 0, "all": 0 }, "found": { "rows": 0, "ase": 0, "all": 0 },
+				"item": { "rows": 0, "ase": 0, "all": 0 } }):
 		m.append("EarningsService.plan %s, expected empty ids, zero sums and zero sources" % str(packs))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
@@ -103,7 +103,7 @@ static func _t_plan_objective_rows() -> Dictionary:
 	var before := JSON.stringify(ctx.save_data)
 	var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
 	var want := { "ase": 54, "ekwan": 11, "overcome": 2, "total": 2, "ids": ["obj:0:0", "obj:0:1"], "nothing_new": false,
-		"settled_ase": 0, "settled_ekwan": 0, "rows": 2, "fight_rows": 0, "found_rows": 0, "settle_count": 0 }
+		"settled_ase": 0, "settled_ekwan": 0, "rows": 2, "fight_rows": 0, "found_rows": 0, "item_rows": 0, "held_pieces": 0, "settle_count": 0 }
 	if str(plan) != str(want):
 		m.append("settle_plan %s, expected %s" % [str(plan), str(want)])
 	var packs := EarningsService.plan(EconomyCharacterizationTests._carry_stage(ctx), EconomyCharacterizationTests._rewards_cfg())
@@ -123,7 +123,8 @@ static func _t_plan_fight_found() -> Dictionary:
 	EconomyCharacterizationTests._gather(ctx, 2, 12)
 	var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
 	var want := { "ase": 54, "ekwan": 6, "overcome": 1, "total": 1, "ids": ["obj:0:0", "enc:f0", "enc:f1", "found:m0"],
-		"nothing_new": false, "settled_ase": 0, "settled_ekwan": 0, "rows": 4, "fight_rows": 2, "found_rows": 1, "settle_count": 0 }
+		"nothing_new": false, "settled_ase": 0, "settled_ekwan": 0, "rows": 4, "fight_rows": 2, "found_rows": 1,
+		"item_rows": 0, "held_pieces": 0, "settle_count": 0 }
 	if str(plan) != str(want):
 		m.append("settle_plan %s, expected %s" % [str(plan), str(want)])
 	var stage := EconomyCharacterizationTests._carry_stage(ctx)
@@ -310,13 +311,11 @@ static func _t_path_end_settled_lost() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# 5 and 6. Known defects
+# 5 and 6. Item rows
 # ---------------------------------------------------------------------------
 
-## `add_row` rejects an empty id, a duplicate id and a row with 0 Ase and 0 Ekwan.
-## KNOWN DEFECT (V2-ITEM-001a will change this): the 0 Ase / 0 Ekwan check (EarningsService.gd:49) also
-## rejects a row that holds items. An item-only row must be accepted later; step 4 inverts the third
-## assertion below. The empty-id and duplicate-id rejections stay.
+## `add_row` rejects an empty id, a duplicate id and a row with no Ase, no Ekwan and no item. A row that holds
+## an item is accepted without currency.
 static func _t_add_row_rejects() -> Dictionary:
 	var m: Array = []
 	var stage := { "index": 0 }
@@ -327,23 +326,23 @@ static func _t_add_row_rejects() -> Dictionary:
 		m.append("a duplicate id was accepted")
 	if EarningsService.add_row(stage, EarningsService.make_row("", "found", "money", 5, 0)):
 		m.append("an empty id was accepted")
-	# KNOWN DEFECT (V2-ITEM-001a will change this): an item-only row is rejected today.
+	if EarningsService.add_row(stage, EarningsService.make_row("x:2", "found", "money", 0, 0)):
+		m.append("a row with no currency and no item was accepted")
 	var item_row := EarningsService.make_row("item:1", "item", "ph_char_item", 0, 0)
 	item_row["items"] = [_PH_ITEM.duplicate()]
-	if EarningsService.add_row(stage, item_row):
-		m.append("an item-only row was accepted; this characterization expects the rejection (step 4 inverts it)")
+	if not EarningsService.add_row(stage, item_row):
+		m.append("an item-only row was rejected")
 	var rows := EarningsService.rows_of(stage)
-	if rows.size() != 1 or str((rows[0] as Dictionary)["id"]) != "x:1" or int((rows[0] as Dictionary)["ase"]) != 5:
-		m.append("rows %s, expected only the first row x:1 with 5 Ase" % JSON.stringify(rows))
+	if rows.size() != 2 or str((rows[0] as Dictionary)["id"]) != "x:1" or int((rows[0] as Dictionary)["ase"]) != 5 \
+			or str((rows[1] as Dictionary)["id"]) != "item:1":
+		m.append("rows %s, expected x:1 with 5 Ase, then item:1" % JSON.stringify(rows))
 	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
-## A row with an item and 0 Ase / 0 Ekwan (built by hand, as `add_row` refuses it) is an unsettled row, so
-## the plan lists its id and counts it in `rows`, but `nothing_new` ignores its items.
-## KNOWN DEFECT (V2-ITEM-001a will change this): StageSettlementService.gd:295 reads only Ase and Ekwan,
-## so a leave with only items gathered returns nothing_new, draws no roll and marks no row. Step 4 makes
-## `nothing_new` count items. A defeat today does lose such a row (it is unsettled and not kept).
-static func _t_nothing_new_ignores_items() -> Dictionary:
+## A row with an item and 0 Ase / 0 Ekwan is an unsettled row: the plan lists its id, counts it in `rows` and
+## `item_rows`, and `nothing_new` is false. A leave then draws the outcome roll and settles the row; a defeat
+## loses the row. (No `inventory` block exists in this fixture, so the intake refuses the entry.)
+static func _t_nothing_new_counts_items() -> Dictionary:
 	var m: Array = []
 	var ctx := EconomyCharacterizationTests._carry_ctx("realm.01", 0, [EconomyCharacterizationTests._carry_boss()], _SEED_ALL)
 	var stage := EconomyCharacterizationTests._carry_stage(ctx)
@@ -351,15 +350,19 @@ static func _t_nothing_new_ignores_items() -> Dictionary:
 	row["items"] = [_PH_ITEM.duplicate()]
 	(stage["earnings"] as Array).append(row)
 	var plan := StageSettlementService.settle_plan(ctx, ctx.config_service)
-	# KNOWN DEFECT (V2-ITEM-001a will change this): nothing_new is true although an unsettled item row exists.
-	if not bool(plan["nothing_new"]) or str(plan["ids"]) != str(["item:1"]) or int(plan["rows"]) != 1 \
-			or int(plan["ase"]) != 0 or int(plan["ekwan"]) != 0:
-		m.append("plan %s, expected nothing_new true, ids [item:1], rows 1, 0/0" % str(plan))
-	var before := JSON.stringify(ctx.save_data)
+	if bool(plan["nothing_new"]) or str(plan["ids"]) != str(["item:1"]) or int(plan["rows"]) != 1 \
+			or int(plan["item_rows"]) != 1 or int(plan["ase"]) != 0 or int(plan["ekwan"]) != 0:
+		m.append("plan %s, expected nothing_new false, ids [item:1], rows 1, item_rows 1, 0/0" % str(plan))
 	var got := _leave_logged(ctx)
-	if str(got["result"]["outcome"]) != "nothing_new" or not (got["leave_logs"] as Array).is_empty() \
-			or JSON.stringify(ctx.save_data) != before or bool(row["settled"]) or int(stage.get("settle_count", 0)) != 0:
-		m.append("leave %s, logs %s: expected nothing_new, no roll, no mark, an equal save" % [str(got["result"]), str(got["leave_logs"])])
-	if ActiveStageService.lose_unsettled_packs(ctx, 3) != 1 or not bool(row["lost"]):
+	var logs: Array = got["leave_logs"]
+	if str(got["result"]["outcome"]) != "all" or logs.size() != 1 or int((logs[0] as Dictionary)["roll"]) != 90 \
+			or not bool(row["settled"]) or int(row["settled_share"]) != 0 or int(stage.get("settle_count", 0)) != 1:
+		m.append("leave %s, logs %s: expected outcome all on roll 90, the row settled at 0 (intake lost the entry), settle_count 1" % [str(got["result"]), str(logs)])
+	var ctx2 := EconomyCharacterizationTests._carry_ctx("realm.01", 0, [EconomyCharacterizationTests._carry_boss()], _SEED_ALL)
+	var stage2 := EconomyCharacterizationTests._carry_stage(ctx2)
+	var row2 := EarningsService.make_row("item:1", "found", "ph_char_item", 0, 0)
+	row2["items"] = [_PH_ITEM.duplicate()]
+	(stage2["earnings"] as Array).append(row2)
+	if ActiveStageService.lose_unsettled_packs(ctx2, 3) != 1 or not bool(row2["lost"]):
 		m.append("defeat did not lose the unsettled item row")
 	return { "ok": m.is_empty(), "error": "; ".join(m) }

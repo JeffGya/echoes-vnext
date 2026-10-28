@@ -300,29 +300,45 @@ static func _row(p: Variant) -> Dictionary:
 	return { "id": d["id"], "type_id": d["type_id"], "kind": d["kind"], "grade": str(d.get("grade", "")) }
 
 
+## The entry checks `intake` runs after the mode check: "" when the entry may enter, else the reason key.
+## Kind known and enabled, type id present and known (when definitions exist), definition kind equal, unique
+## quantity 1 (when given), stack quantity a whole number of 1 or more. Pure.
+static func check_entry(cfg: Dictionary, entry: Dictionary) -> String:
+	var kind: Variant = entry.get("kind", null)
+	var enabled_v: Variant = cfg.get("kinds_enabled", null)
+	var enabled: Dictionary = enabled_v if enabled_v is Dictionary else {}
+	if not (kind is String) or not (UNIQUE_KINDS.has(kind) or STACK_KINDS.has(kind)) or not enabled.has(kind):
+		return "unknown_kind"
+	if not (enabled[kind] is bool and enabled[kind]):
+		return "kind_disabled"
+	var type_v: Variant = entry.get("type_id", null)
+	if not (type_v is String) or (type_v as String).is_empty():
+		return "bad_entry"
+	var defs: Variant = cfg.get("definitions", null)
+	if defs is Dictionary and not (defs as Dictionary).is_empty():
+		var def := _def_of(cfg, type_v as String)
+		if def.is_empty():
+			return "unknown_type"
+		if not _is_str(def.get("kind", null), kind):
+			return "bad_entry"
+	if STACK_KINDS.has(kind):
+		if _to_int(entry.get("quantity", 0)) < 1:
+			return "bad_entry"
+	elif entry.has("quantity") and _to_int(entry["quantity"], -1) != 1:
+		return "bad_entry"
+	return ""
+
+
 static func _intake(save: Dictionary, cfg: Dictionary, entry: Dictionary, mode: String, reserved: int) -> Dictionary:
 	if not _block_ok(save):
 		return _res("rejected", "bad_state")
 	if mode != MODE_GATHERED and mode != MODE_DIRECT:
 		return _res("rejected", "bad_entry")
-	var kind: Variant = entry.get("kind", null)
-	var enabled_v: Variant = cfg.get("kinds_enabled", null)
-	var enabled: Dictionary = enabled_v if enabled_v is Dictionary else {}
-	if not (kind is String) or not (UNIQUE_KINDS.has(kind) or STACK_KINDS.has(kind)) or not enabled.has(kind):
-		return _res("rejected", "unknown_kind")
-	if not (enabled[kind] is bool and enabled[kind]):
-		return _res("rejected", "kind_disabled")
-	var type_v: Variant = entry.get("type_id", null)
-	if not (type_v is String) or (type_v as String).is_empty():
-		return _res("rejected", "bad_entry")
-	var type_id: String = type_v
-	var defs: Variant = cfg.get("definitions", null)
-	if defs is Dictionary and not (defs as Dictionary).is_empty():
-		var def := _def_of(cfg, type_id)
-		if def.is_empty():
-			return _res("rejected", "unknown_type")
-		if not _is_str(def.get("kind", null), kind):
-			return _res("rejected", "bad_entry")
+	var bad := check_entry(cfg, entry)
+	if bad != "":
+		return _res("rejected", bad)
+	var kind: String = entry["kind"]
+	var type_id: String = entry["type_id"]
 	if STACK_KINDS.has(kind):
 		return _intake_stack(save, cfg, entry, kind, type_id)
 	return _intake_unique(save, cfg, entry, kind, type_id, mode == MODE_GATHERED, reserved)
@@ -330,8 +346,6 @@ static func _intake(save: Dictionary, cfg: Dictionary, entry: Dictionary, mode: 
 
 static func _intake_stack(save: Dictionary, cfg: Dictionary, entry: Dictionary, kind: String, type_id: String) -> Dictionary:
 	var qty := _to_int(entry.get("quantity", 0))
-	if qty < 1:
-		return _res("rejected", "bad_entry")
 	var stacks: Array = (save["inventory"] as Dictionary)["stacks"]
 	var limit := _stack_limit(cfg, _def_of(cfg, type_id))
 	var found: Variant = null
@@ -355,8 +369,6 @@ static func _intake_stack(save: Dictionary, cfg: Dictionary, entry: Dictionary, 
 static func _intake_unique(save: Dictionary, cfg: Dictionary, entry: Dictionary, kind: String, type_id: String,
 		gathered: bool, reserved: int) -> Dictionary:
 	var inv: Dictionary = save["inventory"]
-	if entry.has("quantity") and _to_int(entry["quantity"], -1) != 1:
-		return _res("rejected", "bad_entry")
 	var supplied: Variant = entry.get("piece_id", "")
 	if supplied != null and not (supplied is String):
 		return _res("rejected", "bad_entry")
