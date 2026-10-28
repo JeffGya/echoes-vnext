@@ -119,6 +119,15 @@ Source: Opus review of step 2 (`step2-config-save.md`).
 - A discard is refused with reason `path_open` while the live path has unsettled item rows. Reason: the encounter "Back" route reaches the Sanctum with the path still open; a discard there would move held pieces to safety and dodge the early-leave draw (D-22).
 - The play-test producer reads `res://tests/fixtures/inventory_placeholders.json` at runtime. The file ships with the project like all of `res://`. The dependency is documented; a release build may refuse with `fixture_missing`.
 
+## D-28 — Step 6 fix pass (main chat decisions from the combined QA; Jeff may reverse)
+- New snapshot keys (leave item report, defeat item report, `items_at_risk`, party-prep inventory) appear ONLY when they hold something, so item-free snapshots stay byte-identical and no recorded hash moves.
+- Pack room counts open item rows across all Realms.
+- `stage.return_home` is refused unless the party is on a path (stops a repeated draw of held pieces).
+- A discard is also refused while a live, unsettled path holds held pieces (M4), with the reason key in the snapshot as `discard_blocked`.
+- The F1 producer command works in debug builds only.
+- `mark_count` moves into config (`data.inventory.mark_count`, default 6).
+Source: `step6-qa-report.md`.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
