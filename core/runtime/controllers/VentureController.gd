@@ -692,9 +692,7 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	# nothing and stamps nothing — and cannot reach here anyway, because the defeat Resolve
 	# screen offers no `flow.complete_stage` action.
 	var _stage_cleared := is_combat_victory or not has_encounter
-	var _payout := StageSettlementService.new(flow_ctx, config_service, econ, logger).settle(_stage_cleared, t)
-	# The path-end item report: carried to the destination snapshot, only when an item was banked or lost.
-	flow_ctx.pending_stage_clear_items = StageSettlementService.card_items(_payout.get("items", {}))
+	StageSettlementService.new(flow_ctx, config_service, econ, logger).settle(_stage_cleared, t)
 
 	flow_ctx.encounter_ctx     = null
 	flow_ctx.encounter_machine = null

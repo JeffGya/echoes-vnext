@@ -167,17 +167,25 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 ## Then held pieces move into the Sanctum while room exists. No draw. The receipt written by `settle` is the
 ## exactly-once stamp; the row marks stop a second pass inside the same stage record. Returns the `_item_report`.
 func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
-	var report := _item_report()
-	var inv_cfg := ConfigService.get_inventory_cfg(config_service)
 	var rows: Array = EarningsService.open_item_rows(stage_ref)
-	for r_v in rows:
-		_settle_item_row(flow_ctx.save_data, inv_cfg, r_v, true, "", rows.size(), report, logger, t)
-	InventoryService.move_pack_to_sanctum(flow_ctx.save_data, inv_cfg)
-	_finish_report(report)
+	var report := _bank_rows(flow_ctx.save_data, ConfigService.get_inventory_cfg(config_service), rows, logger, t)
 	if logger != null and not rows.is_empty():
 		logger.info(t, "economy.stage.items", "Path end banked the item rows", {
 			"stage_id": flow_ctx.stage_id, "rows": rows.size(),
 			"kept": int(report["kept_count"]), "lost": int(report["lost_count"]) })
+	return report
+
+
+## The one path-end bank loop. `settle()` runs it on the live save and rows; `preview()` runs it on copies, so
+## the card shows what the payout does. A held piece that moves into the Sanctum here has no report row: the
+## report lists only item rows (what the party gathered on the path). `logger` may be null.
+static func _bank_rows(save: Dictionary, inv_cfg: Dictionary, rows: Array,
+		log: StructuredLogger, t: int) -> Dictionary:
+	var report := _item_report()
+	for r_v in rows:
+		_settle_item_row(save, inv_cfg, r_v, true, "", rows.size(), report, log, t)
+	InventoryService.move_pack_to_sanctum(save, inv_cfg)
+	_finish_report(report)
 	return report
 
 
@@ -190,7 +198,10 @@ func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
 ## `EconomyService.stage_payout_rows()` that `settle()` pays from, so the two cannot drift.
 ## Earnings settled at a return home are not in it (D-105).
 ## Returns { rows: Array, ase: int, ekwan: int } (rows are Ase only), or {} when the stage
-## cannot be located or is already settled.
+## cannot be located or is already settled. `items` ({ kept, lost }, see `card_items`) is added only when the
+## path-end bank would keep or lose an item row. It comes from `_bank_rows` run on deep copies of the save and
+## of the open item rows, with no logger, so the real save, the rows and `next_seq` do not change.
+## A held piece has no row in it (see `_bank_rows`).
 func preview() -> Dictionary:
 	if flow_ctx.realm_id.is_empty() or flow_ctx.stage_id.is_empty():
 		return {}
@@ -208,7 +219,15 @@ func preview() -> Dictionary:
 	var rows := EconomyService.stage_payout_rows(
 		plan["base"], plan["realm_scale"], plan["replay_factor"], plan["counts"],
 		plan["ekwan_base"], plan["echo_home"], plan["settled_ase"], plan["settled_ekwan"], plan["sources"])
-	return { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
+	var out := { "rows": rows["breakdown"], "ase": rows["ase"], "ekwan": rows["ekwan"] }
+	var open_rows: Array = EarningsService.open_item_rows(stage_ref).duplicate(true)
+	if not open_rows.is_empty():
+		var report := _bank_rows(flow_ctx.save_data.duplicate(true),
+			ConfigService.get_inventory_cfg(config_service), open_rows, null, 0)
+		var items := card_items(report)
+		if not items.is_empty():
+			out["items"] = items
+	return out
 
 
 ## The inputs of the stage payout, shared by `settle()` and `preview()`. Pure apart from the

@@ -1599,7 +1599,7 @@ static func _t_stage_preview() -> Dictionary:
 ## set directly, which is all build_final_snapshot reads. Stage 0 holds `objectives`; objective 0
 ## is the fought one, linked to situation "sit.econ".
 static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false,
-		revealed_during_fight: int = 0) -> Dictionary:
+		revealed_during_fight: int = 0, pre_card: Callable = Callable()) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter("combat", tag)
 	if env.is_empty():
 		return {}
@@ -1631,6 +1631,9 @@ static func _final_card(tag: String, objectives: Array, victory: bool, kill_firs
 	if victory:
 		env["runtime"]._stage_explore_session_service().resolve_combat_situation_and_objective(
 			5, true, true, "stage.combat_resolved", "econ_char pre-snapshot", true)
+	# A caller hook: runs with the env just before the card is built (item rows, inventory config).
+	if pre_card.is_valid():
+		pre_card.call(env)
 	env["card"] = FlowEncounterState.build_final_snapshot(flow_ctx, 6)
 	return env
 

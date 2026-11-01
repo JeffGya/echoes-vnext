@@ -761,16 +761,6 @@ func dispatch(action: Dictionary) -> Dictionary:
 		flow_ctx.pending_scout_return_settle_outcome = ""
 		flow_ctx.pending_scout_return_items = {}
 
-	# The path-end item report is shown once, by the snapshot of the dispatch that set it. The caller gets a copy
-	# that still carries `stage_clear_items`; `last_snapshot` loses it (same trap as `return_confirm_requested`
-	# below). With any destination but the Sanctum the report is dropped unseen.
-	if not flow_ctx.pending_stage_clear_items.is_empty():
-		if out.get("data") is Dictionary and (out["data"] as Dictionary).has("stage_clear_items") \
-				and flow_ctx.last_snapshot.get("data") is Dictionary:
-			out = out.duplicate(true)
-			(flow_ctx.last_snapshot["data"] as Dictionary).erase("stage_clear_items")
-		flow_ctx.pending_stage_clear_items = {}
-
 	# The standoff card's Sanctum button asked the stage_explore snapshot to carry
 	# return_confirm_requested; once that snapshot is out the request is spent. The caller gets a copy
 	# that still carries the key; last_snapshot loses it, or a later dispatch that does not rebuild

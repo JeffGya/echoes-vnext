@@ -58,6 +58,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("item_packs/defeat_card_carries_the_lost_items", Callable(ItemPacksTests, "_t_defeat_card_items"))
 	runner.register_test("item_packs/a_repeated_find_id_in_one_call_is_refused", Callable(ItemPacksTests, "_t_duplicate_find"))
 	runner.register_test("item_packs/pack_room_counts_open_rows_in_every_realm", Callable(ItemPacksTests, "_t_room_across_realms"))
+	runner.register_test("item_packs/path_end_preview_equals_the_payout_report", Callable(ItemPacksTests, "_t_preview_equals_payout"))
+	runner.register_test("item_packs/path_end_preview_is_pure_and_adds_items_only_when_non_empty", Callable(ItemPacksTests, "_t_preview_pure"))
 	runner.register_test("item_packs/no_placeholder_id_in_config_or_core", Callable(ItemPacksTests, "_t_no_placeholder"))
 
 
@@ -644,6 +646,107 @@ static func _t_path_end_full() -> Dictionary:
 		m.append("Sanctum %s, pack %s: both pieces stay held" % [str(_item_ids(ctx)), str(_pack_ids(ctx))])
 	if not EarningsService.held_fates_of(_stage(ctx)).is_empty():
 		m.append("held pieces were rolled at path end")
+	return _result(m)
+
+
+# ---------------------------------------------------------------------------
+# 6b. Path-end preview (D-30)
+# ---------------------------------------------------------------------------
+
+static func _preview(ctx: FlowContext) -> Dictionary:
+	return StageSettlementService.new(ctx, ctx.config_service, null, null).preview()
+
+
+## The preview of the item report equals the report the payout then makes. The state has a full Sanctum
+## (two pieces, cap 2), a stack at its limit (4 of 5, a find of 3 loses 2), a unique relic, a unique armor
+## and one held piece. The kept and lost lists are equal field by field (JSON of every row), with both lists
+## and a `lost_quantity` present so the equality is not empty.
+static func _t_preview_equals_payout() -> Dictionary:
+	var m: Array = []
+	var ctx := _ctx(_SEED_ALL, 2, 4)
+	var cfg := InventoryServiceTests._cfg(2, 4, 5)
+	for id in ["ph_armor_a", "ph_weapon_a"]:
+		InventoryServiceTests._direct(ctx.save_data, cfg, id)
+	InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_consumable_a", 4), InventoryService.MODE_DIRECT)
+	_hold(ctx, 1, 3)
+	var stage := _stage(ctx)
+	EarningsService.record_item(stage, "s0", "0", _entry("ph_relic_a"))
+	EarningsService.record_item(stage, "s0", "1", _entry("ph_armor_a"))
+	EarningsService.record_item(stage, "s0", "2", _entry("ph_consumable_a", 3))
+	var preview_items: Dictionary = _preview(ctx).get("items", {})
+	var paid_items := StageSettlementService.card_items(_settle_path(ctx, 5).get("items", {}))
+	if preview_items.is_empty() or str(preview_items.keys()) != str(["kept", "lost"]):
+		return _result(["the preview has no items block: %s" % str(preview_items)])
+	var all_rows: Array = (preview_items["kept"] as Array) + (preview_items["lost"] as Array)
+	var has_lost_qty := false
+	for r in all_rows:
+		for key in ["type_id", "kind", "grade", "quantity", "reason_key", "source", "mark_index"]:
+			if not (r as Dictionary).has(key):
+				m.append("a preview row lacks '%s': %s" % [key, str(r)])
+		has_lost_qty = has_lost_qty or (r as Dictionary).has("lost_quantity")
+	if not has_lost_qty:
+		m.append("no row has lost_quantity: the stack case did not occur (%s)" % JSON.stringify(preview_items))
+	if (preview_items["kept"] as Array).is_empty():
+		m.append("the kept list is empty")
+	if JSON.stringify(preview_items, "", true) != JSON.stringify(paid_items, "", true):
+		m.append("preview %s, payout %s" % [JSON.stringify(preview_items, "", true), JSON.stringify(paid_items, "", true)])
+	if _has_id_key(preview_items):
+		m.append("a preview row carries an id")
+	# The stage is settled now: the preview is {} as before.
+	if not _preview(ctx).is_empty():
+		m.append("the preview of a settled stage is not {}")
+	return _result(m)
+
+
+## The preview changes nothing (the save and the stage are byte-equal, `next_seq` too; the service gets no logger) and
+## adds `items` only when the report is non-empty. Held piece rule: a held piece that moves into the
+## Sanctum at path end has NO report row, so held pieces with no open row give no `items` key.
+static func _t_preview_pure() -> Dictionary:
+	var m: Array = []
+	# (a) Item-free: the exact old keys.
+	var plain := _ctx(_SEED_ALL, 8, 4)
+	var plain_prev := _preview(plain)
+	if str(plain_prev.keys()) != str(["rows", "ase", "ekwan"]):
+		m.append("item-free keys %s" % str(plain_prev.keys()))
+	# (b) Held pieces only: no items key, and the pieces are not touched.
+	var held := _ctx(_SEED_ALL, 8, 4)
+	_hold(held, 2)
+	var held_before := JSON.stringify(held.save_data, "", true)
+	var held_prev := _preview(held)
+	if held_prev.has("items") or str(held_prev.keys()) != str(["rows", "ase", "ekwan"]):
+		m.append("held pieces only: keys %s" % str(held_prev.keys()))
+	if JSON.stringify(held.save_data, "", true) != held_before:
+		m.append("the held-only preview changed the save")
+	# (c) Open rows: pure.
+	var ctx := _ctx(_SEED_ALL, 8, 4)
+	_hold(ctx, 1)
+	EarningsService.record_item(_stage(ctx), "s0", "0", _entry("ph_relic_a"))
+	EarningsService.record_item(_stage(ctx), "s0", "1", _entry("ph_consumable_a", 2))
+	var save_before := JSON.stringify(ctx.save_data, "", true)
+	var stage_before := JSON.stringify(_stage(ctx), "", true)
+	var seq_before := int(_inv(ctx)["next_seq"])
+	var prev := _preview(ctx)
+	if JSON.stringify(ctx.save_data, "", true) != save_before or JSON.stringify(_stage(ctx), "", true) != stage_before:
+		m.append("the preview changed the save or the stage")
+	if int(_inv(ctx)["next_seq"]) != seq_before:
+		m.append("the preview moved next_seq")
+	var items: Dictionary = prev.get("items", {})
+	if (items.get("kept", []) as Array).size() != 2 or not (items.get("lost", [1]) as Array).is_empty():
+		m.append("preview items %s" % JSON.stringify(items))
+	# Changing the returned block does not change the save.
+	if not items.is_empty():
+		(items["kept"] as Array).clear()
+	if JSON.stringify(ctx.save_data, "", true) != save_before:
+		m.append("the returned block shares data with the save")
+	# (d) The payout after the preview is the same as without a preview (the preview left no mark).
+	var twin := _ctx(_SEED_ALL, 8, 4)
+	_hold(twin, 1)
+	EarningsService.record_item(_stage(twin), "s0", "0", _entry("ph_relic_a"))
+	EarningsService.record_item(_stage(twin), "s0", "1", _entry("ph_consumable_a", 2))
+	_settle_path(twin, 5)
+	_settle_path(ctx, 5)
+	if JSON.stringify(ctx.save_data, "", true) != JSON.stringify(twin.save_data, "", true):
+		m.append("a settle after a preview differs from a settle without one")
 	return _result(m)
 
 

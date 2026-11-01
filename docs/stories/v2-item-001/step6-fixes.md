@@ -162,3 +162,60 @@ ASSUMED: 8. Any open item row in the save blocks a discard, also one in another 
 OPEN: `the_console_producer_is_gated_to_debug_builds` stays a source check (V5d).
 BLOCKED: None.
 QUESTION (Jeff, UI step): where must the path-end kept and lost row show when the party goes to the stage map and not to the Sanctum? It needs a decision before the UI reads `stage_clear_items`.
+
+
+## D-30 — Path-end item report on the stage-clear card
+
+Source: `decisions.md` D-30. Environment: `ECHOES_TEST_SAVE_DIR=/tmp/claude-0/echoes-saves-d30/`, deleted before each run. No recorded value moved. No fixture, hash or constant was re-recorded.
+
+### What changed
+
+| Part | Change |
+|---|---|
+| `StageSettlementService._bank_rows` (new, static) | The one path-end bank loop: `_settle_item_row` per open row, then `InventoryService.move_pack_to_sanctum`, then `_finish_report`. Takes save, config, rows and a logger (may be null). |
+| `StageSettlementService._bank_item_rows` | Calls `_bank_rows` on the live save and rows, then writes the `economy.stage.items` log (unchanged text and fields). |
+| `StageSettlementService.preview()` | Adds `items` ({ kept, lost }, from `card_items`) ONLY when the report is non-empty. It runs `_bank_rows` on a deep copy of `flow_ctx.save_data` and a deep copy of the open item rows, logger null. Real save, rows, stage and `next_seq` do not change. Returns {} for a settled stage, as before. |
+| `FlowEncounterState.build_final_snapshot` | After `add_stage_payout`, calls `ResolveSnapshotBuilder.add_items(_data, preview.items)`. It writes nothing for an empty report. |
+| `PendingResultService` | No code change. The stored result copies the whole card data (`resolve_data`), and producer G already replays `items` through `add_items`. The reload test proves it. |
+| Removed (D-29 plumbing) | `FlowContext.pending_stage_clear_items`; its set in `VentureController.handle_complete_stage` (the `settle` result is no longer kept); its clearing in `FlowRuntime.dispatch`; `data.stage_clear_items` in `SanctumSnapshotBuilder`. The removal was clean: no other reader in `core/` or `ui/`. |
+
+### Card key and shape for the UI step
+
+- Key: `data.items` on the stage-ending victory card (the card that carries `stage_payout_rows`). It is the same key and row shape as the scout-return card. Conflict check: this card type has no other `data.items` key. The defeat `packs_lost.items` sits inside a ledger row `params`, not in `data`.
+- Shape: `{ kept: [row], lost: [row] }`. Row keys: `type_id`, `kind`, `grade`, `quantity`, `reason_key`, `source` ("gathered"), `mark_index`; `lost_quantity` only for a stack surplus. No ids.
+- Present only when the report is non-empty. An item-free card has the exact old keys.
+- After a reload the numbers come back as floats. The UI reads `quantity`, `mark_index` and `lost_quantity` with `int()`.
+- The UI does not read `stage_clear_items` (it no longer exists).
+
+### Held pieces
+
+The report lists item rows only. A held piece that moves into the Sanctum at path end has NO row, in the payout and in the preview. A path with held pieces and no open row gives no `items` key. This is the smaller rule; it is pinned by `path_end_preview_is_pure_and_adds_items_only_when_non_empty`, case (b).
+
+### Tests
+
+| Test | What it pins |
+|---|---|
+| `item_packs/path_end_preview_equals_the_payout_report` | Full Sanctum, stack at its limit, unique pieces, one held piece: preview kept and lost lists equal the payout report row by row (JSON), `lost_quantity` present, settled stage gives {}. |
+| `item_packs/path_end_preview_is_pure_and_adds_items_only_when_non_empty` | Byte-equal save, stage and `next_seq` before and after; item-free and held-only keys are `rows, ase, ekwan`; the returned block is a copy; a settle after a preview equals a settle without one. |
+| `inventory_actions/stage_clear_card_carries_the_item_preview` | The real victory card has `data.items`; building it changes nothing; `flow.complete_stage` then banks the same row; the old field and Sanctum key are gone. |
+| `inventory_actions/item_free_stage_clear_card_keeps_the_old_keys` | Literal of the 29 old card keys, no `items`. |
+| `inventory_actions/stage_clear_card_items_survive_reload_and_replay` | Capture, replay, JSON round trip. |
+| Removed | `path_end_item_report_reaches_the_destination_snapshot`, `path_end_report_is_not_resent_by_a_later_dispatch`, `path_end_report_is_dropped_when_the_party_goes_to_the_stage_map`, and the helper `_path_end_env`. |
+
+Test helper change: `EconomyCharacterizationTests._final_card` has a new optional `pre_card: Callable` hook, run just before the card is built.
+
+| Run | `Tests:` line |
+|---|---|
+| `=item_packs,inventory_actions` | `Tests: 55 total, 55 passed, 0 failed` |
+| `=item_packs_char,inventory_service,inventory_save,flow_transaction,snapshot_purity,snapshot_contract,snapshot_fingerprint,save_integrity,pending_result` | `Tests: 112 total, 112 passed, 0 failed` |
+| `=payout_ui,stop_short,foundation_ui,sanctum.layout,sanctum.party,echo_party,realm_ui` | `Tests: 188 total, 188 passed, 0 failed` |
+| `=econ_char,economy` | `Tests: 112 total, 112 passed, 0 failed` |
+| `=traversal` / `=seam` / `=venture_char` | 61 of 61 / 44 of 44 / 16 of 16 |
+
+Compile check: zero errors. The step 6 OPEN question about the stage map destination is closed by D-30: the card shows the report whatever the destination.
+
+### Assumptions
+
+1. The preview copies the whole `save_data` (as the brief says). The copy cost is paid once per stage-ending card.
+2. The preview runs only when the card already builds a preview (`victory and objectives_remaining == 0`). A stage that ends without a fight has no card of this type, so it shows no item report. Not changed.
+3. Assumption 3 and the QUESTION in the second pass list above are superseded by D-30.

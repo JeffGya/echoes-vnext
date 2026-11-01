@@ -416,6 +416,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if not _stage_preview.is_empty():
 		ResolveSnapshotBuilder.add_stage_payout(
 			_data, _stage_preview["rows"], int(_stage_preview["ase"]), int(_stage_preview["ekwan"]))
+		# The path-end item report (D-30): `data.items`, the key the scout-return card uses. This card type has no
+		# other `items` key (the defeat `packs_lost.items` sits inside a ledger row). Written only when non-empty.
+		ResolveSnapshotBuilder.add_items(_data, _stage_preview.get("items", {}))
 	if victory and flow_ctx.encounter_start_revealed_count >= 0:
 		ResolveSnapshotBuilder.add_intel_gained(_data, maxi(0,
 			ActiveStageService.count_revealed_situations(flow_ctx) - flow_ctx.encounter_start_revealed_count))

@@ -46,11 +46,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_actions/leave_item_report_reaches_the_card_and_survives_a_reload", Callable(InventoryActionTests, "_t_leave_chain"))
 	runner.register_test("inventory_actions/item_free_leave_card_has_no_items_key", Callable(InventoryActionTests, "_t_leave_item_free"))
 	runner.register_test("inventory_actions/return_home_is_refused_off_the_path", Callable(InventoryActionTests, "_t_return_home_refused"))
-	runner.register_test("inventory_actions/path_end_item_report_reaches_the_destination_snapshot", Callable(InventoryActionTests, "_t_path_end_report"))
+	runner.register_test("inventory_actions/stage_clear_card_carries_the_item_preview", Callable(InventoryActionTests, "_t_stage_clear_card_items"))
+	runner.register_test("inventory_actions/item_free_stage_clear_card_keeps_the_old_keys", Callable(InventoryActionTests, "_t_stage_clear_card_item_free"))
+	runner.register_test("inventory_actions/stage_clear_card_items_survive_reload_and_replay", Callable(InventoryActionTests, "_t_stage_clear_card_items_reload"))
 	runner.register_test("inventory_actions/discard_blocked_key_and_the_live_path_rule", Callable(InventoryActionTests, "_t_discard_blocked"))
 	runner.register_test("inventory_actions/discard_guard_works_from_saved_state_after_a_reload", Callable(InventoryActionTests, "_t_discard_reload"))
-	runner.register_test("inventory_actions/path_end_report_is_not_resent_by_a_later_dispatch", Callable(InventoryActionTests, "_t_clear_items_spent"))
-	runner.register_test("inventory_actions/path_end_report_is_dropped_when_the_party_goes_to_the_stage_map", Callable(InventoryActionTests, "_t_clear_items_stage_map"))
 	runner.register_test("inventory_actions/party_prep_inventory_is_always_present_and_a_copy", Callable(InventoryActionTests, "_t_party_prep_item_free"))
 	runner.register_test("inventory_actions/sanctum_and_party_prep_count_open_rows_of_every_realm", Callable(InventoryActionTests, "_t_reserved_and_party_prep"))
 	runner.register_test("inventory_actions/the_console_producer_is_gated_to_debug_builds", Callable(InventoryActionTests, "_t_console_gate"))
@@ -835,42 +835,93 @@ static func _t_return_home_refused() -> Dictionary:
 	return _result(m)
 
 
-## L8: the path-end item report is carried to the snapshot of the complete_stage dispatch, only when an item was
-## banked or lost, and is spent after that dispatch. An item-free path end adds no key.
-static func _t_path_end_report() -> Dictionary:
-	var rows: Array = []
-	for with_item in [true, false]:
-		var env := _explore_env("path_end_%s" % str(with_item), 2, 2)
-		if not bool(env.get("ok", false)):
-			return env
-		var rt: FlowRuntime = env["runtime"]
-		var realm := VentureCharacterizationTests._realm(rt.get_save_data(), "realm.01")
-		if int(realm.get("stage_count", 0)) < 2:
-			realm["stage_count"] = 2
-		realm["current_stage_index"] = 0
-		if with_item:
-			EarningsService.record_item(_stage_of(env), "s0", "a", ItemPacksTests._entry("ph_armor_a"))
-		var out: Dictionary = rt.dispatch({ "type": "flow.complete_stage", "destination": FlowStateIds.SANCTUM })
-		rows.append({ "with_item": with_item, "out": out, "env": env })
+## D-30: the stage-ending victory card carries the path-end item preview as `data.items` ({ kept, lost }, the
+## scout-return card's key and row shape), the preview changes nothing, and `flow.complete_stage` then banks
+## exactly that. Cap 2, pack 2, one armor row: kept, `ok`, mark 1. The context field and the Sanctum key of
+## the old report no longer exist.
+static func _t_stage_clear_card_items() -> Dictionary:
+	var env := _stage_clear_card("card_items", true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
 	var m: Array = []
-	var with_row: Dictionary = rows[0]
-	var plain: Dictionary = rows[1]
-	var data: Dictionary = (with_row["out"] as Dictionary).get("data", {})
+	var rt: FlowRuntime = env["runtime"]
+	var data: Dictionary = (env["card"] as Dictionary)["data"]
 	var want := { "kept": [_row_of("ph_armor_a", 1, "gathered", 1, "ok")], "lost": [] }
-	if str((with_row["out"] as Dictionary).get("type", "")) != FlowStateIds.SANCTUM or str(data.get("stage_clear_items", {})) != str(want):
-		m.append("path end with an item: type %s, stage_clear_items %s, expected %s" % [
-			str((with_row["out"] as Dictionary).get("type")), str(data.get("stage_clear_items")), str(want)])
-	if not ((with_row["env"] as Dictionary)["runtime"] as FlowRuntime).flow_ctx.pending_stage_clear_items.is_empty():
-		m.append("the field was not spent")
-	var plain_data: Dictionary = (plain["out"] as Dictionary).get("data", {})
-	if str((plain["out"] as Dictionary).get("type", "")) != FlowStateIds.SANCTUM or plain_data.has("stage_clear_items"):
-		m.append("an item-free path end: type %s, has the key %s" % [str((plain["out"] as Dictionary).get("type")), str(plain_data.has("stage_clear_items"))])
-	# The next Sanctum build has no key (one-shot).
-	var rt2: FlowRuntime = (with_row["env"] as Dictionary)["runtime"]
-	rt2.flow_machine.reenter(rt2.flow_ctx, (with_row["env"] as Dictionary)["logger"], 40)
-	if (rt2.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
-		m.append("the key stayed after the dispatch that set it")
+	if str(data.get("items", {})) != str(want):
+		m.append("card items %s, expected %s" % [str(data.get("items")), str(want)])
+	if not data.has("stage_payout_rows") or data.has("stage_clear_items"):
+		m.append("card keys %s" % str(data.keys()))
+	var stage := FlowStageExploreState._get_current_stage(rt.flow_ctx)
+	if EarningsService.open_item_rows(stage).size() != 1 or not (rt.get_save_data()["inventory"]["items"] as Array).is_empty():
+		m.append("building the card changed the rows or the Sanctum")
+	if "pending_stage_clear_items" in rt.flow_ctx:
+		m.append("the old context field still exists")
+	var out: Dictionary = rt.dispatch({ "type": "flow.complete_stage", "destination": FlowStateIds.SANCTUM })
+	var row: Dictionary = EarningsService.rows_of(FlowStageExploreState._get_current_stage(rt.flow_ctx)).filter(
+		func(r): return EarningsService.is_item_row(r))[0]
+	var entry: Dictionary = (row["items"] as Array)[0]
+	if not bool(row.get("settled", false)) or str(entry.get("fate", "")) != "carried" or str(entry.get("reason_key", "")) != "ok" \
+			or str(((rt.get_save_data()["inventory"] as Dictionary)["pack"] as Array).size() + (rt.get_save_data()["inventory"]["items"] as Array).size()) != "1":
+		m.append("the payout did not bank what the card showed: row %s" % JSON.stringify(row))
+	if (out.get("data", {}) as Dictionary).has("stage_clear_items"):
+		m.append("the Sanctum snapshot has the old key")
 	return _result(m)
+
+
+## Item-free stage-clear card: the keys are exactly the old keys, with no `items`.
+static func _t_stage_clear_card_item_free() -> Dictionary:
+	var env := _stage_clear_card("card_free", false)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var keys: Array = ((env["card"] as Dictionary)["data"] as Dictionary).keys()
+	if str(keys) != _OLD_CARD_KEYS:
+		return _result(["card keys %s, expected %s" % [str(keys), _OLD_CARD_KEYS]])
+	return _result([])
+
+
+## The card with items goes through the pending-result store, a JSON round trip and the replay: the replayed
+## `data.items` equals the card's (quantity and mark_index come back as floats; compared after int()).
+static func _t_stage_clear_card_items_reload() -> Dictionary:
+	var env := _stage_clear_card("card_reload", true)
+	if env.is_empty():
+		return { "ok": false, "error": "harness did not build an encounter" }
+	var m: Array = []
+	var fc: FlowContext = env["flow_ctx"]
+	var card: Dictionary = env["card"]
+	var want := JSON.stringify((card["data"] as Dictionary).get("items", {}), "", true)
+	if want == "{}":
+		return _result(["the card has no items"])
+	if PendingResultService.capture_or_consume(fc, card, 7) != "captured":
+		return _result(["the card was not captured"])
+	if JSON.stringify(((PendingResultService.read(fc.save_data).get("resolve_data", {}) as Dictionary).get("items", {})), "", true) != want:
+		m.append("the stored result lost or changed the items")
+	var replay := PendingResultService.build_snapshot(fc, 8)
+	if JSON.stringify((replay["data"] as Dictionary).get("items", {}), "", true) != want:
+		m.append("the replay changed the items")
+	# Through JSON: numbers become floats; the row shape is kept.
+	fc.save_data = JSON.parse_string(JSON.stringify(fc.save_data))
+	var back: Dictionary = (PendingResultService.build_snapshot(fc, 9)["data"] as Dictionary).get("items", {})
+	var rows: Array = back.get("kept", [])
+	if rows.size() != 1 or int((rows[0] as Dictionary).get("quantity", -1)) != 1 or int((rows[0] as Dictionary).get("mark_index", -9)) != 1 \
+			or str((rows[0] as Dictionary).get("reason_key", "")) != "ok" or not (back.get("lost", [1]) as Array).is_empty():
+		m.append("after JSON: %s" % JSON.stringify(back))
+	return _result(m)
+
+
+## The keys of an item-free stage-ending victory card (before D-30, unchanged).
+const _OLD_CARD_KEYS := '["encounter_id", "reason", "round_ended", "enemies_defeated", "echoes_survived", "objective_state", "actors", "victory", "ase_awarded", "reward_breakdown", "ledger_seen", "stage_payout_rows", "stage_payout_ase", "stage_payout_ekwan", "thread_whole", "objective_overcome", "ekwan_awarded", "rank", "formula_inputs", "relics", "xp_events", "emotion_summary", "vow_outcome", "newly_unlocked_vows", "surface", "summary_line", "objectives_remaining", "guide_spirit_protected", "combat_intro_line"]'
+
+
+## A stage-ending victory card (Economy harness) with the inventory cfg cap 2, pack 2 and, when `with_item`, one
+## open armor row. Returns the harness env, or {}.
+static func _stage_clear_card(tag: String, with_item: bool) -> Dictionary:
+	var boss := ObjectiveModel.make(2, ObjectiveModel.TYPE_BOSS, 2, {}, false, false)
+	var objs: Array = [EconomyCharacterizationTests._req(0, "combat", false), EconomyCharacterizationTests._req(1, "shrine", true), boss]
+	return EconomyCharacterizationTests._final_card("inv_act_" + tag, objs, true, false, 0, func(env: Dictionary):
+		var rt: FlowRuntime = env["runtime"]
+		(rt.config_service._balance["data"] as Dictionary)["inventory"] = InventoryServiceTests._cfg(2, 2, 5)
+		if with_item:
+			EarningsService.record_item(FlowStageExploreState._get_current_stage(rt.flow_ctx), "s0", "a", ItemPacksTests._entry("ph_armor_a")))
 
 
 ## M3 + M4: `data.inventory.discard_blocked` is "path_open" only when the controller would refuse for the live path,
@@ -1013,72 +1064,6 @@ static func _t_discard_reload() -> Dictionary:
 	if ActiveStageService.discard_block_reason((live["rt"] as FlowRuntime).flow_ctx) != "":
 		m.append("live session: a stage that was selected and never entered blocks the discard")
 	_done(live)
-	return _result(m)
-
-
-## Runs complete_stage on a one-item path with `destination` ("" = the default) and returns { out, rt, logger }.
-static func _path_end_env(tag: String, destination: String) -> Dictionary:
-	var env := _explore_env(tag, 2, 2)
-	if not bool(env.get("ok", false)):
-		return env
-	var rt: FlowRuntime = env["runtime"]
-	var realm := VentureCharacterizationTests._realm(rt.get_save_data(), "realm.01")
-	if int(realm.get("stage_count", 0)) < 2:
-		realm["stage_count"] = 2
-	realm["current_stage_index"] = 0
-	EarningsService.record_item(_stage_of(env), "s0", "a", ItemPacksTests._entry("ph_armor_a"))
-	var action := { "type": "flow.complete_stage" }
-	if not destination.is_empty():
-		action["destination"] = destination
-	env["out"] = rt.dispatch(action)
-	env["ok"] = true
-	return env
-
-
-## `stage_clear_items` is spent by the dispatch that publishes it: a later dispatch that does not rebuild the
-## snapshot (a refused discard) returns a snapshot without the key, and so does `last_snapshot`.
-static func _t_clear_items_spent() -> Dictionary:
-	var env := _path_end_env("clear_spent", FlowStateIds.SANCTUM)
-	if not bool(env.get("ok", false)):
-		return env
-	var m: Array = []
-	var rt: FlowRuntime = env["runtime"]
-	var first: Dictionary = env["out"]
-	if not (first.get("data", {}) as Dictionary).has("stage_clear_items"):
-		m.append("the dispatch that ended the path did not return the report")
-	if (rt.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
-		m.append("last_snapshot kept the report after it was published")
-	var later: Dictionary = rt.dispatch(_discard("it.99"))
-	if str(later.get("type", "")) != FlowStateIds.SANCTUM or (later.get("data", {}) as Dictionary).has("stage_clear_items") \
-			or (rt.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
-		m.append("a later dispatch that does not rebuild the snapshot sent the report again")
-	return _result(m)
-
-
-## Pinned behaviour: when the path ends to `flow.stage_map` (the default destination), the report is not shown
-## and not kept. The dispatch clears `pending_stage_clear_items`, the stage map snapshot has no
-## `stage_clear_items` key, and a Sanctum shown later has none either. The settled rows stay in the save.
-## Where this report shows for the stage map is a decision for the UI step (decisions.md, D-29).
-static func _t_clear_items_stage_map() -> Dictionary:
-	var env := _path_end_env("clear_map", "")
-	if not bool(env.get("ok", false)):
-		return env
-	var m: Array = []
-	var rt: FlowRuntime = env["runtime"]
-	var out: Dictionary = env["out"]
-	if str(out.get("type", "")) != FlowStateIds.STAGE_MAP or (out.get("data", {}) as Dictionary).has("stage_clear_items"):
-		m.append("stage map: type %s, has the key %s" % [str(out.get("type")), str((out.get("data", {}) as Dictionary).has("stage_clear_items"))])
-	if not rt.flow_ctx.pending_stage_clear_items.is_empty():
-		m.append("the report stayed in the context after the dispatch")
-	rt.flow_machine.transition(FlowStateIds.SANCTUM, rt.flow_ctx, env["logger"], 50, "test")
-	if (rt.flow_ctx.last_snapshot.get("data", {}) as Dictionary).has("stage_clear_items"):
-		m.append("a later Sanctum showed the dropped report")
-	var settled := 0
-	for r_v in EarningsService.rows_of(_stage_of(env)):
-		if EarningsService.is_item_row(r_v) and bool((r_v as Dictionary).get("settled", false)):
-			settled += 1
-	if settled != 1:
-		m.append("expected the item row settled in the save, found %d" % settled)
 	return _result(m)
 
 

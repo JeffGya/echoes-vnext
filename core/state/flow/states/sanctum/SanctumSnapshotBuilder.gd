@@ -465,9 +465,6 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 	data["inventory"] = InventoryService.snapshot(inv_save,
 		ConfigService.get_inventory_cfg(flow_ctx.config_service) if flow_ctx.config_service != null else {},
 		EarningsService.open_item_rows_in_save(inv_save))
-	# One-shot, present only when the path end banked or lost an item: { kept, lost } report rows.
-	if not flow_ctx.pending_stage_clear_items.is_empty():
-		data["stage_clear_items"] = flow_ctx.pending_stage_clear_items.duplicate(true)
 	var blocked := ActiveStageService.discard_block_reason(flow_ctx)
 	if not blocked.is_empty():
 		(data["inventory"] as Dictionary)["discard_blocked"] = blocked
