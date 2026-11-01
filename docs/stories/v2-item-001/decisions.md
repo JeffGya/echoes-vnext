@@ -134,6 +134,11 @@ Source: `step6-qa-report.md`.
 - `stage_clear_items` is erased from `last_snapshot` after it is published, so a later dispatch cannot resend it.
 - OPEN for Jeff (UI step): where the path-end item report shows when the party goes to the stage map instead of the Sanctum.
 
+## D-30 — The path-end item report shows on the stage-clear card (Jeff, 2026-11-01)
+The item report of a finished path (what will be kept, what stays in the pack, what is lost) shows on the stage-clear card, beside the Ase and Ekwan lines. It shows once, whatever the destination (stage map or Sanctum).
+The card is built BEFORE the path-end payout runs (it shows a read-only preview). So core builds the item part as a read-only preview from the same intake code on a copy of the save, only when non-empty, and keeps it through a reload.
+`stage_clear_items` on the Sanctum snapshot (D-29) stays only if it is still needed after this change; the UI step does not read it.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
