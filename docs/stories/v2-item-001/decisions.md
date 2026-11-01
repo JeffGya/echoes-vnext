@@ -139,6 +139,20 @@ The item report of a finished path (what will be kept, what stays in the pack, w
 The card is built BEFORE the path-end payout runs (it shows a read-only preview). So core builds the item part as a read-only preview from the same intake code on a copy of the save, only when non-empty, and keeps it through a reload.
 `stage_clear_items` on the Sanctum snapshot (D-29) stays only if it is still needed after this change; the UI step does not read it.
 
+## D-31 — The inventory is a BottomRail destination with its own flow state (Jeff, 2026-11-01)
+Jeff chose option B of the merged mockup proposal: the Sanctum inventory view is a new rail destination with its own flow state (like Vows and Weaving Rite), not a hub panel.
+Consequences (core work BEFORE the UI build): a new flow state id and snapshot type (`flow.inventory`, SanctumShell family), a builder that carries the inventory projection, a nav action in the Sanctum rail (adds an `actions` key, so `snapshot_fingerprint/sanctum` is re-recorded ONCE with a named cause), a controller route, the keeper-intro gate, shell routing in `AppRoot`/`SanctumShell`, tests, and the doc tables (`AGENTS.md` Shell Routing).
+The discard's "in the Sanctum" check accepts `flow.inventory`. The party-prep chip navigates to the inventory screen; party choices are saved state and survive the trip. The hub `data.inventory` key stays for the count on the hub and for the chip.
+Supersedes the panel-based wording of the UI proposal (placement A). Decision 2 of the merged proposal (widen the discard to `flow.echo_party`) becomes moot.
+
+## D-32 — Mockup proposal decisions (Jeff, 2026-11-01)
+From `mockup-proposal-merged.md`:
+- Decision 3: result cards (leave result, defeat, stage-clear): the first tap finishes the motion, the second continues; `Continue` guards input for 0.25 s after the final state. Item sequence cap 2.4 s. Reduced motion = 0.15 s fade.
+- Decision 4: finds with no room: the mockups DRAW the encounter-card tile row and the mini pack-socket row as PARKED for ITEM-002. 001a builds only the core keys (left finds and pack free count on the encounter card snapshot, present only when non-empty). No encounter-card UI in 001a.
+- Decision 5: a blocked discard (`path_open`) shows `Let it go` disabled with a quiet reason line.
+- Decisions 6 and 7: all defaults accepted: grade pips 1 to 3 and no rarity colour for grade; six twin-notch shapes; two leaf glyphs (carried vs found this path); lost tiles at 35% fill and 60% marks; a 0.25 s open window on the modal `Let it go` and on the leave `Confirm`; one gauge-pip pulse on first becoming full; the carried-piece glide after a discard.
+- Decisions 1 and 2: see D-31.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
