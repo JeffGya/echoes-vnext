@@ -76,3 +76,15 @@
 | prototype-banner | Prototype. Not the game. |
 
 Rule: every line here is AGENT-WRITTEN PLACEHOLDER; Jeff edits it after the play test.
+
+## Table 4: singular and plural forms (added after the prototype build)
+
+The prototype writes these forms in code. Use the singular form when the count is 1.
+
+| Slot id | Singular (count 1) | Plural |
+|---|---|---|
+| inv-cap-gauge | Piece: 1 of %d | Pieces: %d of %d |
+| leave-risk-line | They may lose 1 piece. | They may lose %d pieces. |
+| leave-risk-carried | 1 was carried from before. | %d were carried from before. |
+
+AGENT-WRITTEN PLACEHOLDER. Jeff edits it after the play test.
