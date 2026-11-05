@@ -1,8 +1,10 @@
 # V2-ITEM-001a inventory screens, mockup set v1
 
-Written in STE by the ui-ux-designer. Static sheets for approval. No code, scene or data is changed. All player text is a grey bar or `[Jeff's wording]`. Existing game text (rail labels, `Return to the Sanctum`, `Stay`, `To the Sanctum`, `Continue`) is drawn as it is in the game.
+Written in STE by the ui-ux-designer. Static sheets for approval. No code, scene or data is changed. All player text is AGENT-WRITTEN PLACEHOLDER wording from `wording.md` (dotted underline in the sheets). A grey bar remains only where `wording.md` has no slot. Existing game text (rail labels, `Return to the Sanctum`, `Stay`, `To the Sanctum`, `Continue`) is drawn as it is in the game.
 Binding: D-30, D-31, D-32 in `../../decisions.md`. Plan: `../../mockup-proposal-merged.md`, `../../mockup-proposal-1-ui-ux.md`.
 The feel agent appends a storyboards section at the end of this file.
+
+**Wording status.** All wording in these sheets is AGENT-WRITTEN PLACEHOLDER from `wording.md`. Jeff edits it after the play test. The old `[Jeff's wording]` marks and the grey item-name bars are gone. Each placeholder is a `<span class="wording" data-slot="<slot id>">`. The command `grep -r 'data-slot' *.html` finds every slot. Item names use `<span class="name-ph wording" data-slot="item-...">`. The interactive prototype is `docs/visual-plans/inventory-ui-mockup.html`.
 
 ## 1. Files
 
@@ -10,6 +12,7 @@ True-size canvas. Detail sheets stack frames; the overviews scale the canvas (0.
 
 | File | Author | Shows |
 |---|---|---|
+| `wording.md` | agent | Placeholder wording: 42 game-text slots and 6 item names, keyed by `data-slot`. Jeff edits it. |
 | `shared/items.css` | artist | All item classes: tile, marks, five states, `CapGauge`, sockets, chip, strip, buttons, modal, `.result-shelf`. Not restyled here. |
 | `shared/screens.css` | UI/UX | Existing game chrome only (rail, cards, EchoBar pills, backdrop) and sheet helpers. |
 | `anatomy.html`, `anatomy.png` | artist (feel agent adds motion demos) | Swatches, contrast, tile construction, states, twin test, tap targets, 1280 tile. |
@@ -108,9 +111,9 @@ Key names only. The UI never prints an id. Read `quantity`, `mark_index`, `lost_
 | 6 | The gauge: `warn.room` is true from room 2 (6 of 8). The sheets draw `near` for 6 and 7 and `full` for 8. | Use `near` for `warn.room` and `full` for room 0. |
 | 7 | `BackButton` sits inside the panel header on S1. Echo Party puts it outside, at 16,16. | Keep it inside the header, 48 high, away from `Let it go`. |
 
-## 6. `[Jeff's wording]` slots (AGENT-WRITTEN, Jeff edits)
+## 6. Wording slots (AGENT-WRITTEN placeholder, Jeff edits)
 
-Every line below is a PROPOSAL from the design files. A dash means no proposal exists.
+Every line below is a PROPOSAL from the design files. A dash means no proposal exists. `wording.md` holds the placeholder text now drawn in the sheets, one `data-slot` id per line.
 
 | Slot | Where | PROPOSAL line | Source |
 |---|---|---|---|
@@ -168,7 +171,7 @@ Each card rates the screen on five points: clarity, motivation, response, satisf
 
 ## 10. Feel: storyboards, motion demos, beats
 
-Written in STE by the game-feel-developer. Source: `../../mockup-proposal-3-game-feel.md`, with D-31 and D-32 applied. Every player line is a PROPOSAL or `[Jeff's wording]`. Sound and haptic items are HINTS: the project has no audio layer. `[R<n> LABEL]` cites `../../research-ui-best-practices.md`. Most evidence is COMMUNITY or ARTICLE, so each use is a hypothesis for the play test.
+Written in STE by the game-feel-developer. Source: `../../mockup-proposal-3-game-feel.md`, with D-31 and D-32 applied. Every player line is a PROPOSAL or placeholder wording from `wording.md`. Sound and haptic items are HINTS: the project has no audio layer. `[R<n> LABEL]` cites `../../research-ui-best-practices.md`. Most evidence is COMMUNITY or ARTICLE, so each use is a hypothesis for the play test.
 
 ### 10.1 Files
 

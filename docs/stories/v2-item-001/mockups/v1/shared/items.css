@@ -242,6 +242,10 @@
 .on-dark .name-bar{background:var(--c-plate);opacity:.5}
 .wording{display:inline-block;font:calc(var(--t) + 2px)/1.2 var(--f-mono);color:inherit}
 .wording:empty::before{content:"[Jeff's wording]"}
+/* placeholder wording from wording.md: dotted underline only, no new colour; data-slot is the grep key */
+.wording[data-slot]{text-decoration:underline dotted;text-decoration-thickness:1px;text-underline-offset:3px}
+.name-ph{display:block;white-space:nowrap}
+.pack-chip .wording{white-space:nowrap}
 
 /* ---------- helpers ---------- */
 .on-dark .btn-let-go{color:var(--c-plate);border-color:var(--c-plate)}
