@@ -164,6 +164,22 @@ Jeff reviewed the first interactive prototype and rejected its layout. These ans
 - Jeff: UX and game feel lead. Core may change to fit. Built systems are not a constraint.
 Consequences for core (later, not now): `flow.inventory` as a separate flow state is probably not needed. A move action (`inventory.move.apply`) is needed. The one-per-path counter must be saved. The stack-merge rule in intake needs review.
 
+## D-34 — Answers to the prototype v2 open questions (Jeff, 2026-11-06)
+From `docs/visual-plans/inventory-ui-mockup-v2.html`, section F, plus Jeff's review notes.
+- Layout: the party pack opens to the RIGHT of party details. In the rail panel the Sanctum panel is on the left and the pack on the right. The Sanctum panel keeps a `Show pack` toggle.
+- Rail button: right of the Sanctum button, same selected look as the other buttons. Label is placeholder.
+- Sizes: Sanctum 20 slots, pack 4 slots in the prototype. Both numbers stay in config and must be able to grow. Start values may be smaller. Overrides D-25's 8/4 for the prototype only; final values come from play. Out of scope here (to note in Notion on the stories that own them): pack size per Echo (each Echo 1 slot, more with progression) and Sanctum progression setting the party's maximum pack size.
+- Stack discard: the player picks a count in the modal. A stack is otherwise an item like any other.
+- The one discard per path (pack pieces only): a saved value, kept through quit and Continue. Core owns it.
+- Drop rules inside a container: a piece may be dragged into an EMPTY slot (reorder). No swap onto an occupied slot. Dropping a stack on a same-type stack with room MERGES them up to the stack limit. Across containers the piece takes the first free slot.
+- Result cards: no pack panel after Continue. Items sit in lanes inside the card. The stage-clear preview uses the same three lanes with a read-only mark. Wording is not final.
+- Discard token uses a shape other than the grade diamond. Artist decides.
+- Dim layer: Ase and Ekwan cards stay dimmed.
+- Controller focus order: built in Godot with the same order as the keyboard. No prototype for it.
+- Moves while a path is open: core decides; the party cannot be in the Sanctum on a path.
+- Open for the prototype v3 pass: card "grow to 560" (Q3 of v1) was answered YES (D-33 context); rail result-tile size (v1 Q4) was not answered. Ask again only if the UI build needs it.
+Consequences for core (later): `inventory.move.apply` with reorder, merge and count-discard; saved per-path discard counter; stack merge rule on move (intake merge rule stays).
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
