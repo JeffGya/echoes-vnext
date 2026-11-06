@@ -211,6 +211,13 @@ After the designer and feel reviews (`pack-shrink-options-designer.md`, `pack-sh
 - A shrink never happens on a live path.
 - No Echo or progression story can shrink the pack yet. In 001a nothing triggers a shrink (sizes come from config only). Jeff (2026-11-06): DEFERRED. Build this rule in the story that contains shrinking packs. It is not part of 001a. Core builds nothing for it in 001a.
 
+## D-42 — Nothing moves automatically (Jeff, 2026-11-06)
+Jeff: movement between the party pack and the Sanctum inventory is up to the player. No automatic move at the end of a finished path, and none after an early leave. This reverses the move parts of D-20 ("finishing a path moves held pieces into the Sanctum when room exists") and D-24 (a survivor moves to the Sanctum when room exists).
+- Pieces in the pack stay in the pack until the player moves them, or until they are lost (early-leave draw D-19/D-22, defeat D-20).
+- Newly gathered items still go through intake: Sanctum first, then a free pack slot, then lost (D-16, `overflow`).
+- This removes QA findings F-01 (new stacks lost behind carried pieces) and F-02 (carried stacks not merging at path end).
+- UI: show, do not tell (Jeff). A result card shows what survived and what was lost. It does not name the pack as a place, and it adds no extra text or states. A survivor shown as kept implies it is still in the pack. The prototype result cards (lanes "Kept in the Sanctum" / "Left in the pack" / "Lost") need a simplification.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
