@@ -8,15 +8,18 @@
 # A piece may also be addressed by `item_id` in a discard.
 #
 # inventory.discard.apply  payload { item_id } or { from, slot }, plus optional { count }.
-#   - Sanctum or party prep, no live path: free, any entry, either container. A stack takes `count` (1 to its
-#     quantity; absent = the whole stack); a smaller count keeps the slot. A piece takes no count.
-#   - On a path (path view, or a Sanctum screen while the path is live): ONE discard per path, on a pack entry
-#     only. A stack discard counts as the one. The mark is saved on the stage record.
+#   - Sanctum or party prep screen (also while a saved path is live, D-40): free, any entry, either container.
+#     A stack takes `count` (1 to its quantity; absent = the whole stack); a smaller count keeps the slot. A
+#     piece takes no count. The one-discard mark is neither read nor written there.
+#   - Path view (`flow.stage_explore`): ONE discard per path, on a pack entry only. A stack discard counts as the
+#     one. The mark is saved on the stage record.
+#   - `item_id` wins over `from`/`slot` when both are sent.
 #   - Refusal keys: not_in_sanctum, not_in_pack, path_used, no_stage (rules); bad_payload (controller);
 #     not_found, not_unique, unknown_entry, count_range, equipped, bad_box, bad_state (service).
 # inventory.move.apply     payload { from, slot, to, to_slot? }.
 #   - Moves, reorders into an empty slot, or merges onto a same-type stack. `to_slot` absent = lowest free slot.
-#   - Sanctum or party prep, no live path. Refusal keys: not_in_sanctum, path_open (rules); bad_payload
+#   - Sanctum or party prep screen, whatever the saved path. Refused in the path view. Refusal keys:
+#     not_in_sanctum, path_open (rules); bad_payload
 #     (controller); unknown_entry, bad_slot, no_change, slot_taken, type_mismatch, stack_limit, container_full,
 #     bad_box, bad_state (service).
 # A refusal changes nothing: the outcome carries the reason key in `error_code`; no save, no snapshot.
@@ -90,7 +93,8 @@ func handle_move(action: Dictionary, t: int) -> FlowActionOutcome:
 	if not blocked.is_empty():
 		return _deny("inventory.move.denied", blocked, t)
 	var res := InventoryService.move_entry(flow_ctx.save_data, ConfigService.get_inventory_cfg(config_service),
-		from_v as String, int(slot_v), to_v as String, int(to_slot_v), logger, t)
+		from_v as String, int(slot_v), to_v as String, int(to_slot_v), logger, t,
+		EarningsService.open_item_rows_in_save(flow_ctx.save_data))
 	if str(res["result"]) == "refused":
 		return _deny("inventory.move.denied", str(res["reason_key"]), t,
 			{ "from": from_v, "slot": slot_v, "to": to_v, "to_slot": to_slot_v })

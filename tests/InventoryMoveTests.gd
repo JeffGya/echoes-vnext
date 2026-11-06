@@ -9,6 +9,7 @@ extends RefCounted
 
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_moves/intake_takes_the_lowest_free_slot", Callable(InventoryMoveTests, "_t_first_free"))
+	runner.register_test("inventory_moves/a_new_stack_takes_a_pack_slot_when_the_sanctum_is_full", Callable(InventoryMoveTests, "_t_stack_to_pack"))
 	runner.register_test("inventory_moves/validate_checks_slots", Callable(InventoryMoveTests, "_t_validate_slots"))
 	runner.register_test("inventory_moves/entries_without_a_slot_and_a_resized_container", Callable(InventoryMoveTests, "_t_resize"))
 	runner.register_test("inventory_moves/move_both_ways_with_and_without_a_slot", Callable(InventoryMoveTests, "_t_move"))
@@ -94,9 +95,50 @@ static func _t_first_free() -> Dictionary:
 	_put(full, cfg2, "ph_material_a", 1)
 	_put(full, cfg2, "ph_weapon_a")
 	_expect(m, _put(full, cfg2, "ph_material_a", 2), "stored", "ok", "merge into the full Sanctum")
-	_expect(m, _put(full, cfg2, "ph_consumable_a", 1), "lost", "overflow", "new stack, no free slot")
-	if InventoryService.sanctum_used(full) != 2 or int(full["inventory"]["stacks"][0]["quantity"]) != 3:
+	_expect(m, _put(full, cfg2, "ph_consumable_a", 1), "packed", "to_pack", "new stack, Sanctum full, free pack slot")
+	_expect(m, _put(full, cfg2, "ph_consumable_a", 1), "lost", "overflow", "new stack, Sanctum and pack full")
+	if InventoryService.sanctum_used(full) != 2 or int(full["inventory"]["stacks"][0]["quantity"]) != 3 \
+			or (full["inventory"]["pack_stacks"] as Array).size() != 1 or int(full["inventory"]["pack_stacks"][0]["slot"]) != 0:
 		m.append("full Sanctum: %s" % _json(full["inventory"]))
+	return _result(m)
+
+
+## D-16, D-42: a NEW stack goes to the Sanctum, then to a free pack slot, then it is lost. A merge into a Sanctum
+## stack of its type needs no slot and is preferred.
+static func _t_stack_to_pack() -> Dictionary:
+	var m: Array = []
+	var cfg := InventoryServiceTests._cfg(1, 2)  # stack limit 5; consumables stop at 3
+	var save := InventoryServiceTests._fresh()
+	_put(save, cfg, "ph_weapon_a")
+	# Full Sanctum, free pack slot: the stack is packed (direct and gathered).
+	var r := _put(save, cfg, "ph_material_a", 2)
+	_expect(m, r, "packed", "to_pack", "direct, free pack slot")
+	if int(r["quantity"]) != 2 or int(save["inventory"]["pack_stacks"][0]["slot"]) != 0 or (save["inventory"]["stacks"] as Array).size() != 0:
+		m.append("packed stack: %s / %s" % [_json(r), _json(save["inventory"])])
+	_expect(m, InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_consumable_a", 1), "gathered", 1), "packed", "to_pack", "gathered stack owns a pack slot")
+	# Both full: lost as overflow (direct). A gathered stack does not need a free slot (it owns one).
+	_expect(m, _put(save, cfg, "ph_charm_a"), "lost", "overflow", "piece, both full")
+	var before := _json(save)
+	_expect(m, InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_material_a", 1), "direct", 0), "lost", "overflow", "stack, both full")
+	if _json(save) != before:
+		m.append("a lost stack changed the save")
+	# Stack limit: a new stack above the limit is packed up to the limit, the surplus is lost.
+	var save2 := InventoryServiceTests._fresh()
+	_put(save2, cfg, "ph_weapon_a")
+	r = _put(save2, cfg, "ph_consumable_a", 5)
+	_expect(m, r, "partial", "stack_limit", "new stack above the limit, packed")
+	if int(r["quantity"]) != 3 or int(r["lost_quantity"]) != 2 or int(save2["inventory"]["pack_stacks"][0]["quantity"]) != 3:
+		m.append("limit in the pack: %s / %s" % [_json(r), _json(save2["inventory"])])
+	# A Sanctum stack of the type is preferred and needs no slot: nothing goes to the pack.
+	var save3 := InventoryServiceTests._fresh()
+	var cfg3 := InventoryServiceTests._cfg(2, 2)
+	_put(save3, cfg3, "ph_material_a", 1)
+	_put(save3, cfg3, "ph_weapon_a")
+	_expect(m, _put(save3, cfg3, "ph_material_a", 2), "stored", "ok", "merge into the Sanctum stack")
+	if not (save3["inventory"].get("pack_stacks", []) as Array).is_empty() or int(save3["inventory"]["stacks"][0]["quantity"]) != 3:
+		m.append("merge: %s" % _json(save3["inventory"]))
+	if not InventoryService.validate(save, cfg).is_empty() and not InventoryService.validate(save, cfg)[0].contains("above"):
+		m.append("validate: %s" % str(InventoryService.validate(save, cfg)))
 	return _result(m)
 
 
@@ -475,28 +517,24 @@ static func _t_held_stacks() -> Dictionary:
 	var removed := InventoryService.remove_held(save, ["stack:ph_material_a:1", "stack:nope:0", "it.99"])
 	if removed.size() != 1 or int(removed[0]["quantity"]) != 3 or InventoryService.pack_count(save) != 1:
 		m.append("remove_held: %s, pack %d" % [_json(removed), InventoryService.pack_count(save)])
-	# The settle move: pieces then stacks, whole, into the lowest free Sanctum slots.
+	# The draw name of a carried stack is its order among the stacks of its type, never its slot.
 	var save2 := InventoryServiceTests._fresh()
-	_put(save2, cfg, "ph_material_a", 2)
-	_put(save2, cfg, "ph_weapon_a")
-	_put(save2, cfg, "ph_charm_a")
-	_mv(save2, cfg, "sanctum", 0, "pack", 2)
-	_mv(save2, cfg, "sanctum", 1, "pack", 0)
-	var census := _census(save2)
-	var n := InventoryService.move_pack_to_sanctum(save2, cfg)
-	var snap := InventoryService.snapshot(save2, cfg)
-	if n != 2 or _slots(snap, "items") != [2, 0] or _slots(snap, "stacks") != [1] or InventoryService.pack_count(save2) != 0:
-		m.append("move_pack_to_sanctum: n %d, items %s, stacks %s" % [n, str(_slots(snap, "items")), str(_slots(snap, "stacks"))])
-	if _census(save2) != census:
-		m.append("the settle move changed the census")
-	# A full Sanctum keeps the stack in the pack.
+	var cfg2 := InventoryServiceTests._cfg(4, 6)
+	_put(save2, cfg2, "ph_material_a", 2)
+	_mv(save2, cfg2, "sanctum", 0, "pack", 3)
+	_put(save2, cfg2, "ph_material_a", 3)
+	_mv(save2, cfg2, "sanctum", 0, "pack", 1)
+	var names: Array = InventoryService.held_pieces(save2).map(func(h): return InventoryService.draw_id(h))
+	if names != ["stack:ph_material_a:1", "stack:ph_material_a:0"]:
+		m.append("draw names by slot order: %s" % str(names))
+	# One stack of a type keeps its draw name wherever it sits in the pack.
 	var save3 := InventoryServiceTests._fresh()
-	var cfg3 := InventoryServiceTests._cfg(1, 2)
-	_put(save3, cfg3, "ph_material_a", 2)
-	_mv(save3, cfg3, "sanctum", 0, "pack")
-	_put(save3, cfg3, "ph_weapon_a")
-	if InventoryService.move_pack_to_sanctum(save3, cfg3) != 0 or InventoryService.pack_count(save3) != 1:
-		m.append("a full Sanctum took the held stack")
+	_put(save3, cfg2, "ph_material_a", 2)
+	_mv(save3, cfg2, "sanctum", 0, "pack", 0)
+	for slot in [4, 1, 5, 2]:
+		_mv(save3, cfg2, "pack", int(InventoryService.held_pieces(save3)[0]["id"].split(":")[2]), "pack", slot)
+		if InventoryService.draw_id(InventoryService.held_pieces(save3)[0]) != "stack:ph_material_a:0":
+			m.append("the draw name changed with the slot %d" % slot)
 	return _result(m)
 
 

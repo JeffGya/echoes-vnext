@@ -431,12 +431,12 @@ static func _t_held_rolled() -> Dictionary:
 		m.append("held only: result %s, logs %s" % [str(r["outcome"]), str(logs)])
 	if str(_pack_ids(ctx)) != str(["it.2"]):
 		m.append("pack after: %s" % str(_pack_ids(ctx)))
-	var want := { "it.1": "0.0/lost/leave_some", "it.2": "0.0/carried/to_pack",
+	var want := { "it.1": "0.0/lost/leave_some", "it.2": "0.0/carried/ok",
 		"it.3": "0.0/lost/leave_some", "it.4": "0.0/lost/leave_some" }
 	if str(_held_fates(ctx)) != str(want):
 		m.append("held fates %s" % str(_held_fates(ctx)))
 	if int(r["items"]["kept_count"]) != 1 or int(r["items"]["lost_count"]) != 3 or _has_id_key(r["items"]) \
-			or str((r["items"]["kept"] as Array)[0]) != str({ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 2, "reason_key": "to_pack" }):
+			or str((r["items"]["kept"] as Array)[0]) != str({ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 2, "reason_key": "ok" }):
 		m.append("items report %s" % str(r["items"]))
 	var item_logs := _logs(got, "economy.settle.items")
 	if item_logs.size() != 1 or int(item_logs[0]["draws"]) != 4 or int(item_logs[0]["held"]) != 4:
@@ -451,14 +451,14 @@ static func _t_held_rolled() -> Dictionary:
 	if not _pack_ids(none).is_empty() or str(_held_fates(none)) != str({ "it.1": "0.0/lost/leave_none", "it.2": "0.0/lost/leave_none" }) \
 			or nl.size() != 1 or int(nl[0]["draws"]) != 0:
 		m.append("none: pack %s, fates %s, log %s" % [str(_pack_ids(none)), str(_held_fates(none)), str(nl)])
-	# Seed 2 "all", Sanctum with room: every held piece survives and moves into the Sanctum.
+	# Seed 2 "all", Sanctum with room: every held piece survives and stays in the pack (D-42).
 	var all := _ctx(_SEED_ALL, 8, 4)
 	_hold(all, 2)
 	var ga := _leave(all)
 	var al := _logs(ga, "economy.settle.items")
-	if not _pack_ids(all).is_empty() or str(_item_ids(all)) != str(["it.1", "it.2"]) \
+	if str(_pack_ids(all)) != str(["it.1", "it.2"]) or not _item_ids(all).is_empty() \
 			or str(_held_fates(all)) != str({ "it.1": "0.0/carried/ok", "it.2": "0.0/carried/ok" }) \
-			or al.size() != 1 or int(al[0]["draws"]) != 0 or int(al[0]["moved"]) != 2:
+			or al.size() != 1 or int(al[0]["draws"]) != 0:
 		m.append("all: pack %s, items %s, fates %s, log %s" % [str(_pack_ids(all)), str(_item_ids(all)), str(_held_fates(all)), str(al)])
 	return _result(m)
 
@@ -472,7 +472,7 @@ static func _t_repeat_leave() -> Dictionary:
 	_hold(ctx, 4)
 	var first := _leave(ctx, 1)
 	var l1 := _logs(first, "economy.settle.leave")
-	var all_held := { "it.1": "0.0/carried/to_pack", "it.2": "0.0/carried/to_pack", "it.3": "0.0/carried/to_pack", "it.4": "0.0/carried/to_pack" }
+	var all_held := { "it.1": "0.0/carried/ok", "it.2": "0.0/carried/ok", "it.3": "0.0/carried/ok", "it.4": "0.0/carried/ok" }
 	if str(first["result"]["outcome"]) != "all" or int(l1[0]["roll"]) != 99 or str(_pack_ids(ctx)) != str(["it.1", "it.2", "it.3", "it.4"]) \
 			or str(_held_fates(ctx)) != str(all_held):
 		m.append("first leave: %s, pack %s, fates %s" % [str(first["result"]["outcome"]), str(_pack_ids(ctx)), str(_held_fates(ctx))])
@@ -483,7 +483,7 @@ static func _t_repeat_leave() -> Dictionary:
 	var l2 := _logs(second, "economy.settle.leave")
 	if str(second["result"]["outcome"]) != "some" or l2.size() != 1 or int(l2[0]["roll"]) != 63 or int(l2[0]["settle_count"]) != 1:
 		m.append("second leave: %s %s" % [str(second["result"]["outcome"]), str(l2)])
-	var want := { "it.1": "0.1/lost/leave_some", "it.2": "0.1/carried/to_pack", "it.3": "0.1/lost/leave_some", "it.4": "0.1/lost/leave_some" }
+	var want := { "it.1": "0.1/lost/leave_some", "it.2": "0.1/carried/ok", "it.3": "0.1/lost/leave_some", "it.4": "0.1/lost/leave_some" }
 	if str(_pack_ids(ctx)) != str(["it.2"]) or str(_held_fates(ctx)) != str(want):
 		m.append("second leave: pack %s, fates %s" % [str(_pack_ids(ctx)), str(_held_fates(ctx))])
 	for c in [["it.1", 59], ["it.2", 42], ["it.3", 85], ["it.4", 54]]:
@@ -505,7 +505,7 @@ static func _t_survivor_full() -> Dictionary:
 	var got := _leave(ctx)
 	if str(got["result"]["outcome"]) != "all" or str(_item_ids(ctx)) != str(["it.1"]) or str(_pack_ids(ctx)) != str(["it.2", "it.3"]):
 		m.append("outcome %s, Sanctum %s, pack %s" % [str(got["result"]["outcome"]), str(_item_ids(ctx)), str(_pack_ids(ctx))])
-	if str(_row_fates(ctx)) != str({ "item:s0:0": "S-/carried/to_pack" }) or str(_held_fates(ctx)) != str({ "it.2": "0.0/carried/to_pack" }):
+	if str(_row_fates(ctx)) != str({ "item:s0:0": "S-/carried/to_pack" }) or str(_held_fates(ctx)) != str({ "it.2": "0.0/carried/ok" }):
 		m.append("row fates %s, held fates %s" % [str(_row_fates(ctx)), str(_held_fates(ctx))])
 	if not InventoryService.validate(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service)).is_empty():
 		m.append("validate: %s" % str(InventoryService.validate(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service))))
@@ -521,7 +521,7 @@ static func _t_retry_token() -> Dictionary:
 		"token": "0.0", "fate": "carried", "reason_key": "to_pack" })
 	var got := _leave(ctx)
 	var il := _logs(got, "economy.settle.items")
-	if str(_pack_ids(ctx)) != str(["it.1", "it.2"]) or str(_held_fates(ctx)) != str({ "it.1": "0.0/carried/to_pack", "it.2": "0.0/carried/to_pack" }) \
+	if str(_pack_ids(ctx)) != str(["it.1", "it.2"]) or str(_held_fates(ctx)) != str({ "it.1": "0.0/carried/to_pack", "it.2": "0.0/carried/ok" }) \
 			or il.size() != 1 or int(il[0]["draws"]) != 1 or int(il[0]["held"]) != 1:
 		m.append("pack %s, fates %s, log %s" % [str(_pack_ids(ctx)), str(_held_fates(ctx)), str(il)])
 	# A full cycle: leave, then put settle_count back (a state saved with the records but not the count).
@@ -603,8 +603,8 @@ static func _t_path_end() -> Dictionary:
 	var items: Dictionary = paid.get("items", {})
 	if int(items.get("kept_count", -1)) != 2 or int(items.get("lost_count", -1)) != 0 or _has_id_key(items):
 		m.append("payout items %s" % str(items))
-	if str(_item_ids(ctx)) != str(["it.1", "it.2"]) or not _pack_ids(ctx).is_empty():
-		m.append("Sanctum %s, pack %s: the held piece moves in first, then the relic" % [str(_item_ids(ctx)), str(_pack_ids(ctx))])
+	if str(_item_ids(ctx)) != str(["it.2"]) or str(_pack_ids(ctx)) != str(["it.1"]):
+		m.append("Sanctum %s, pack %s: the relic goes to the Sanctum, the held piece stays in the pack (D-42)" % [str(_item_ids(ctx)), str(_pack_ids(ctx))])
 	var stacks: Array = _inv(ctx)["stacks"]
 	if stacks.size() != 1 or str((stacks[0] as Dictionary)["type_id"]) != "ph_consumable_a" or int((stacks[0] as Dictionary)["quantity"]) != 2:
 		m.append("stacks %s" % JSON.stringify(stacks))
@@ -663,8 +663,8 @@ static func _preview(ctx: FlowContext) -> Dictionary:
 ## and a `lost_quantity` present so the equality is not empty.
 static func _t_preview_equals_payout() -> Dictionary:
 	var m: Array = []
-	var ctx := _ctx(_SEED_ALL, 2, 4)
-	var cfg := InventoryServiceTests._cfg(2, 4, 5)
+	var ctx := _ctx(_SEED_ALL, 3, 4)
+	var cfg := InventoryServiceTests._cfg(3, 4, 5)
 	for id in ["ph_armor_a", "ph_weapon_a"]:
 		InventoryServiceTests._direct(ctx.save_data, cfg, id)
 	InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_consumable_a", 4), InventoryService.MODE_DIRECT)
@@ -1057,7 +1057,7 @@ static func _t_report_rows() -> Dictionary:
 		var r: Dictionary = _leave(ctx)["result"]
 		var items: Dictionary = r["items"]
 		var modulo: int = mc if mc > 0 else 6
-		var want_kept: Array = [_xrow("ph_relic_a", 1, "held", 3 % modulo, "to_pack"),
+		var want_kept: Array = [_xrow("ph_relic_a", 1, "held", 3 % modulo, "ok"),
 			_xrow("ph_armor_a", 1, "gathered", 4 % modulo, "to_pack"), _xrow("ph_consumable_a", 2, "gathered", -1, "ok")]
 		if str(r["outcome"]) != "all" or str(items["kept"]) != str(want_kept) or not (items["lost"] as Array).is_empty() \
 				or _has_id_key(items):

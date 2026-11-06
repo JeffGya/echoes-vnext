@@ -131,7 +131,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 	)
 	flow_ctx.request_save("stage.reward")
 
-	# --- the item rows: banked in row order, then held pieces move in. Held pieces are not rolled here.
+	# --- the item rows: banked in row order. Carried entries stay where they are and are not rolled here.
 	var items := _bank_item_rows(stage_ref, t)
 
 	# --- the stage-cadence Storyweight -------------------------------------
@@ -165,7 +165,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 
 
 ## Path end: every open item row goes to intake (`gathered`) in row order and is marked settled with share 100.
-## Then held pieces move into the Sanctum while room exists. No draw. The receipt written by `settle` is the
+## Carried entries stay in the pack (D-42). No draw. The receipt written by `settle` is the
 ## exactly-once stamp; the row marks stop a second pass inside the same stage record. Returns the `_item_report`.
 func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
 	var rows: Array = EarningsService.open_item_rows(stage_ref)
@@ -178,16 +178,13 @@ func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
 
 
 ## The one path-end bank loop. `settle()` runs it on the live save and rows; `preview()` runs it on copies, so
-## the card shows what the payout does. A held piece that moves into the Sanctum here has no report row: the
+## the card shows what the payout does. Carried entries have no report row: the
 ## report lists only item rows (what the party gathered on the path). `logger` may be null.
 static func _bank_rows(save: Dictionary, inv_cfg: Dictionary, rows: Array,
 		log: StructuredLogger, t: int) -> Dictionary:
 	var report := _item_report()
-	# Carried entries take the Sanctum room before the new rows (intake does not move the pack).
-	InventoryService.move_pack_to_sanctum(save, inv_cfg)
 	for r_v in rows:
 		_settle_item_row(save, inv_cfg, r_v, true, "", rows.size(), report, log, t)
-	InventoryService.move_pack_to_sanctum(save, inv_cfg)
 	_finish_report(report)
 	return report
 
@@ -453,8 +450,8 @@ static func settle_leave(ctx: FlowContext, cfg_service: ConfigService, econ_serv
 
 
 ## Applies the leave outcome to the item entries: open item rows in row order, then held pieces in pack
-## order. Held pieces lost leave the pack and get a `held_fates` record; survivors stay held and then move into
-## the Sanctum while room exists. Surviving gathered entries go to intake. A held piece that already has a
+## order. Held pieces lost leave the pack and get a `held_fates` record; survivors stay in the pack (nothing moves
+## between the pack and the Sanctum on its own, D-42). Surviving gathered entries go to intake. A held piece that already has a
 ## record with this settle's token is skipped. Returns the `_item_report`.
 static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, stage_ref: Dictionary,
 		realm_model: Dictionary, picked: Dictionary, settle_count: int, logger: StructuredLogger, t: int) -> Dictionary:
@@ -479,7 +476,7 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 		var p: Dictionary = p_v
 		var keep := outcome == OUTCOME_ALL
 		if outcome == OUTCOME_SOME:
-			keep = _keeps(seed_v, ctx.stage_id, run_count, settle_count, "held", str(p["id"]), share_pct)
+			keep = _keeps(seed_v, ctx.stage_id, run_count, settle_count, "held", InventoryService.draw_id(p), share_pct)
 			draws += 1
 		(held_kept if keep else held_lost).append(p)
 	var removed := InventoryService.remove_held(ctx.save_data, held_lost.map(func(p): return p["id"]))
@@ -488,16 +485,11 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "lost", lost_reason))
 		(report["lost"] as Array).append(EarningsService.report_row(
 			p, lost_reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
-	var moved := InventoryService.move_pack_to_sanctum(ctx.save_data, inv_cfg)
-	var still_held := {}
-	for p_v in InventoryService.held_pieces(ctx.save_data):
-		still_held[str((p_v as Dictionary)["id"])] = true
 	for p_v in held_kept:
 		var p: Dictionary = p_v
-		var reason := "to_pack" if still_held.has(str(p["id"])) else "ok"
-		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "carried", reason))
+		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "carried", "ok"))
 		(report["kept"] as Array).append(EarningsService.report_row(
-			p, reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
+			p, "ok", "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
 
 	var reserved := rows.size()
 	for r_v in rows:
@@ -510,7 +502,7 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 	_finish_report(report)
 	logger.info(t, "economy.settle.items", "Leave settled the item entries", {
 		"stage_id": ctx.stage_id, "settle_count": settle_count, "outcome": outcome, "share_pct": share_pct,
-		"rows": rows.size(), "held": held.size(), "draws": draws, "moved": moved,
+		"rows": rows.size(), "held": held.size(), "draws": draws,
 		"kept": int(report["kept_count"]), "lost": int(report["lost_count"]) })
 	return report
 

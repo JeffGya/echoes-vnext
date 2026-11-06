@@ -712,7 +712,7 @@ static func _t_leave_chain() -> Dictionary:
 	# The leave.
 	var out: Dictionary = rt.dispatch({ "type": "stage.return_home" })
 	var data: Dictionary = out.get("data", {})
-	var want_kept: Array = [_row_of("ph_relic_a", 1, "held", 3, "to_pack"), _row_of("ph_armor_a", 1, "gathered", 4, "to_pack"),
+	var want_kept: Array = [_row_of("ph_relic_a", 1, "held", 3, "ok"), _row_of("ph_armor_a", 1, "gathered", 4, "to_pack"),
 		_row_of("ph_consumable_a", 2, "gathered", -1, "ok")]
 	var want_items := { "kept": want_kept, "lost": [] }
 	if str(out.get("type", "")) != FlowStateIds.RESOLVE or str(data.get("run_type", "")) != "scout_return" \
@@ -976,7 +976,7 @@ static func _t_discard_reload() -> Dictionary:
 	for c_v in cases:
 		var c: Dictionary = c_v
 		var name := str(c["name"])
-		var env := _env("reload_" + name, 2, 2)
+		var env := _env("reload_" + name, 2, 3)
 		_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
 		var realm: Dictionary = (c["realm"] as Dictionary).duplicate(true)
 		(_save(env)["realms"] as Dictionary)["realm.01"] = realm

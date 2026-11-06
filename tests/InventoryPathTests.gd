@@ -22,8 +22,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_paths/the_used_mark_is_saved_with_the_stage", Callable(InventoryPathTests, "_t_used_in_json"))
 	runner.register_test("inventory_paths/a_new_path_resets_the_used_mark", Callable(InventoryPathTests, "_t_reset"))
 	runner.register_test("inventory_paths/path_view_snapshot_carries_the_inventory", Callable(InventoryPathTests, "_t_path_snapshot"))
-	runner.register_test("inventory_paths/a_carried_stack_is_drawn_lost_and_banked_like_a_carried_piece", Callable(InventoryPathTests, "_t_held_stack_settle"))
+	runner.register_test("inventory_paths/a_carried_stack_is_drawn_and_lost_like_a_carried_piece", Callable(InventoryPathTests, "_t_held_stack_settle"))
 	runner.register_test("inventory_paths/a_carried_stack_is_drawn_on_a_some_leave", Callable(InventoryPathTests, "_t_held_stack_some"))
+	runner.register_test("inventory_paths/a_failed_return_home_keeps_the_used_mark", Callable(InventoryPathTests, "_t_failed_leave_keeps_mark"))
+	runner.register_test("inventory_paths/a_move_into_the_pack_leaves_the_slots_of_open_item_rows", Callable(InventoryPathTests, "_t_move_respects_reserved"))
+	runner.register_test("inventory_paths/a_new_stack_find_is_kept_in_the_pack_when_the_sanctum_is_full", Callable(InventoryPathTests, "_t_find_stack_to_pack"))
 	runner.register_test("inventory_paths/dispatches_are_deterministic", Callable(InventoryPathTests, "_t_determinism"))
 	runner.register_test("inventory_paths/new_save_and_config_hold_no_placeholder", Callable(InventoryPathTests, "_t_no_placeholder"))
 
@@ -465,7 +468,7 @@ static func _t_path_snapshot() -> Dictionary:
 
 
 ## A stack in the pack follows the carried-piece rules (D-19, D-20, D-22): drawn on an early leave, lost on
-## defeat, moved into the Sanctum at the path end or when the leave keeps it. Its report row has no mark.
+## defeat, and stays in the pack at the path end or when the leave keeps it. Its report row has no mark.
 static func _stack_row(reason: String) -> Dictionary:
 	return { "type_id": "ph_material_a", "kind": "material", "grade": "", "quantity": 2, "source": "held",
 		"mark_index": -1, "reason_key": reason }
@@ -498,20 +501,20 @@ static func _t_held_stack_settle() -> Dictionary:
 		m.append("none: %s, inventory %s" % [str(lost), JSON.stringify(save)])
 	if not str(ItemPacksTests._held_fates(ctx)).contains("stack:ph_material_a:0"):
 		m.append("none: no held fate for the stack: %s" % str(ItemPacksTests._held_fates(ctx)))
-	# Outcome all: the stack is kept and moves into the Sanctum.
+	# Outcome all: the stack is kept and stays in the pack (D-42).
 	var ctx2 := _stack_ctx(ItemPacksTests._SEED_ALL, 3)
 	var kept: Dictionary = ItemPacksTests._leave(ctx2)["result"]["items"]
 	var save2: Dictionary = ctx2.save_data["inventory"]
 	if str(kept["kept"]) != str([_stack_row("ok")]) or not (kept["lost"] as Array).is_empty() \
-			or not (save2["pack_stacks"] as Array).is_empty() or (save2["stacks"] as Array).size() != 1:
+			or (save2["pack_stacks"] as Array).size() != 1 or not (save2["stacks"] as Array).is_empty():
 		m.append("all: %s, inventory %s" % [str(kept), JSON.stringify(save2)])
-	# Outcome all with a full Sanctum: the stack stays held.
+	# Outcome all with a full Sanctum: the same, the stack stays held.
 	var ctx3 := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
 	var cfg3 := ConfigService.get_inventory_cfg(ctx3.config_service)
 	InventoryService.intake(ctx3.save_data, cfg3, InventoryServiceTests._e("ph_weapon_a"), "direct")
 	ctx3.save_data["inventory"]["pack_stacks"] = [{ "type_id": "ph_material_a", "kind": "material", "quantity": 2, "slot": 0 }]
 	var stay: Dictionary = ItemPacksTests._leave(ctx3)["result"]["items"]
-	if str(stay["kept"]) != str([_stack_row("to_pack")]) or (ctx3.save_data["inventory"]["pack_stacks"] as Array).size() != 1:
+	if str(stay["kept"]) != str([_stack_row("ok")]) or (ctx3.save_data["inventory"]["pack_stacks"] as Array).size() != 1:
 		m.append("all, full Sanctum: %s" % str(stay))
 	# Defeat: lost with the reason defeat; a second defeat changes nothing.
 	var ctx4 := _stack_ctx(ItemPacksTests._SEED_ALL, 3)
@@ -523,44 +526,129 @@ static func _t_held_stack_settle() -> Dictionary:
 	ActiveStageService.lose_unsettled_packs(ctx4, 4)
 	if JSON.stringify(ctx4.save_data) != after:
 		m.append("a repeat defeat changed the save")
-	# Path end: the stack moves into the Sanctum; nothing is drawn.
+	# Path end: nothing is drawn and nothing moves; the stack stays in the pack.
 	var ctx5 := _stack_ctx(ItemPacksTests._SEED_NONE, 3)
 	ItemPacksTests._settle_path(ctx5, 3)
-	if not (ctx5.save_data["inventory"]["pack_stacks"] as Array).is_empty() or (ctx5.save_data["inventory"]["stacks"] as Array).size() != 1:
+	if (ctx5.save_data["inventory"]["pack_stacks"] as Array).size() != 1 or not (ctx5.save_data["inventory"]["stacks"] as Array).is_empty():
 		m.append("path end: %s" % JSON.stringify(ctx5.save_data["inventory"]))
 	return _result(m)
 
 
-## Outcome "some": the carried stack draws once, on its own stream named by type and pack slot. The test predicts
-## the draw from the stream name, so a change of the key fails it. Six pack slots give both a keep and a loss.
+## Outcome "some": the carried stack draws once, on a stream named by its type and its order among the stacks of
+## that type (D-43), never by its pack slot. The test predicts the draw from the stream name and checks that the
+## same stack gives the same result in every pack slot. Two types and two seeds give both a keep and a loss.
 static func _t_held_stack_some() -> Dictionary:
 	var m: Array = []
 	var kept_n := 0
 	var lost_n := 0
-	for slot in 6:
-		var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_SOME, 3, 8)
-		var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
-		InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_material_a", 2), "direct")
-		InventoryService.move_entry(ctx.save_data, cfg, "sanctum", 0, "pack", slot)
-		var realm_seed := int(RealmService.get_active(ctx).get("seed", 0))
-		var name := "inventory.leave.%s.0.0.held.stack:ph_material_a:%d" % [ctx.stage_id, slot]
-		var keeps := CampaignSeed.get_rng_from(realm_seed, name).randi_range(0, 99) < 50
-		var r: Dictionary = ItemPacksTests._leave(ctx)
-		var items: Dictionary = r["result"]["items"]
-		var want_kept := [_stack_row("ok")] if keeps else []
-		var want_lost := [] if keeps else [_stack_row("leave_some")]
-		if str(r["result"]["outcome"]) != "some" or str(items["kept"]) != str(want_kept) or str(items["lost"]) != str(want_lost):
-			m.append("slot %d: outcome %s, predicted keep %s, items %s" % [slot, str(r["result"]["outcome"]), str(keeps), str(items)])
-		if keeps:
-			kept_n += 1
-			if (ctx.save_data["inventory"]["stacks"] as Array).size() != 1:
-				m.append("slot %d: the kept stack is not in the Sanctum" % slot)
-		else:
-			lost_n += 1
-			if not (ctx.save_data["inventory"]["pack_stacks"] as Array).is_empty() or not (ctx.save_data["inventory"]["stacks"] as Array).is_empty():
-				m.append("slot %d: the lost stack is still held" % slot)
+	for type_id in ["ph_material_a", "ph_consumable_a"]:
+		for seed_value in [ItemPacksTests._SEED_SOME, 13, 21, 34]:
+			var results: Array = []
+			for slot in [0, 3, 7]:
+				var ctx := ItemPacksTests._ctx(seed_value, 3, 8)
+				var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+				InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e(type_id, 2), "direct")
+				InventoryService.move_entry(ctx.save_data, cfg, "sanctum", 0, "pack", slot)
+				var r: Dictionary = ItemPacksTests._leave(ctx)
+				if str(r["result"]["outcome"]) != "some":
+					break
+				var kept := not (r["result"]["items"]["kept"] as Array).is_empty()
+				results.append(kept)
+				if slot == 0:
+					var realm_seed := int(RealmService.get_active(ctx).get("seed", 0))
+					var name := "inventory.leave.%s.0.0.held.stack:%s:0" % [ctx.stage_id, type_id]
+					var keeps := CampaignSeed.get_rng_from(realm_seed, name).randi_range(0, 99) < 50
+					if keeps != kept:
+						m.append("%s seed %d: predicted keep %s, got %s" % [type_id, seed_value, str(keeps), str(kept)])
+					if kept:
+						kept_n += 1
+					else:
+						lost_n += 1
+			if results.size() > 1 and (results.has(true) and results.has(false)):
+				m.append("%s seed %d: the result depends on the pack slot: %s" % [type_id, seed_value, str(results)])
 	if kept_n == 0 or lost_n == 0:
-		m.append("the six slots gave kept %d and lost %d; a draw that never varies proves nothing" % [kept_n, lost_n])
+		m.append("kept %d, lost %d; a draw that never varies proves nothing" % [kept_n, lost_n])
+	return _result(m)
+
+
+## F-04: a return home that fails (the escape roll fails, the path goes on) must keep the one-discard mark.
+static func _t_failed_leave_keeps_mark() -> Dictionary:
+	var env := _path_env("failed_leave")
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var rt: FlowRuntime = env["rt"]
+	var fc := rt.flow_ctx
+	var realm := VentureCharacterizationTests._realm(rt.get_save_data(), "realm.01")
+	var turn := int((InventoryActionTests._stage_of(env)["explore_map"] as Dictionary).get("turn_count", 0))
+	var found := false
+	for s in range(0, 20000):
+		if CampaignSeed.get_rng_from(s, "stage.escape.%s.%d" % [fc.stage_id, turn]).randi_range(0, 100) == 0:
+			realm["seed"] = s
+			found = true
+			break
+	if not found:
+		return { "ok": false, "error": "test setup failed: no seed gives a failing escape roll" }
+	rt.dispatch(_drop("pack", 0))
+	if not bool(InventoryActionTests._stage_of(env).get("discard_used", false)):
+		return { "ok": false, "error": "test setup: the discard did not set the mark" }
+	rt.dispatch({ "type": "stage.return_home" })
+	var map: Dictionary = InventoryActionTests._stage_of(env)["explore_map"]
+	if str(map.get("party_state", "")) == "escaped":
+		return { "ok": false, "error": "test setup: the escape succeeded" }
+	if not bool(InventoryActionTests._stage_of(env).get("discard_used", false)):
+		m.append("a failed return home cleared the mark")
+	if _drop_key(env, _drop("pack", 1)) != "path_used":
+		m.append("after a failed return home the second discard gave '%s'" % _drop_key(env, _drop("pack", 1)))
+	return _result(m)
+
+
+## F-05: open item rows own pack slots (D-17), so a move into the pack cannot take them.
+static func _t_move_respects_reserved() -> Dictionary:
+	var m: Array = []
+	var env := _stocked("rsv", 2)
+	InventoryActionTests._live_path(env)
+	var stage: Dictionary = (((InventoryActionTests._save(env)["realms"] as Dictionary)["realm.01"] as Dictionary)["stages"] as Array)[0]
+	EarningsService.record_item(stage, "s0", "a", ItemPacksTests._entry("ph_armor_a"))
+	var rt: FlowRuntime = env["rt"]
+	rt.flow_machine.reenter(rt.flow_ctx, env["logger"], 3)
+	InventoryActionTests._dispatch(env, { "type": "debug.seed.show" })
+	InventoryActionTests._dispatch(env, _mv("sanctum", 0, "pack"))
+	if InventoryService.pack_count(InventoryActionTests._save(env)) != 1:
+		m.append("the first move (one free slot) was refused")
+	var p := _refused(env, _mv("sanctum", 1, "pack"), "container_full", "pack slot owned by an open row", "inventory.move.denied")
+	if p != "":
+		m.append(p)
+	var load_info: Dictionary = InventoryActionTests._inv_snap(env)["pack_load"]
+	if int(load_info["carried"]) > int(load_info["capacity"]):
+		m.append("carried %s above capacity %s" % [str(load_info["carried"]), str(load_info["capacity"])])
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+## The leave and the path end use the same intake: a gathered stack with a full Sanctum is KEPT, reason `to_pack`.
+static func _t_find_stack_to_pack() -> Dictionary:
+	var m: Array = []
+	var want := { "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 2, "source": "gathered",
+		"mark_index": -1, "reason_key": "to_pack" }
+	var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
+	InventoryService.intake(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service), InventoryServiceTests._e("ph_weapon_a"), "direct")
+	ItemPacksTests._add_rows(ctx, "s0", [0], "ph_consumable_a")
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s1", "0", ItemPacksTests._entry("ph_consumable_a", 2))
+	var leave: Dictionary = ItemPacksTests._leave(ctx)["result"]["items"]
+	var kept: Array = leave["kept"]
+	if kept.size() != 2 or not (leave["lost"] as Array).is_empty() or str(kept[1]) != str(want):
+		m.append("leave: %s" % str(leave))
+	if (ctx.save_data["inventory"]["pack_stacks"] as Array).size() != 2 or not (ctx.save_data["inventory"]["stacks"] as Array).is_empty():
+		m.append("leave inventory: %s" % JSON.stringify(ctx.save_data["inventory"]))
+	# Path end.
+	var ctx2 := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
+	InventoryService.intake(ctx2.save_data, ConfigService.get_inventory_cfg(ctx2.config_service), InventoryServiceTests._e("ph_weapon_a"), "direct")
+	EarningsService.record_item(ItemPacksTests._stage(ctx2), "s1", "0", ItemPacksTests._entry("ph_consumable_a", 2))
+	var paid: Dictionary = ItemPacksTests._settle_path(ctx2, 4)
+	var pkept: Array = (paid["items"] as Dictionary)["kept"]
+	if pkept.size() != 1 or str(pkept[0]) != str(want) or (ctx2.save_data["inventory"]["pack_stacks"] as Array).size() != 1:
+		m.append("path end: %s, inventory %s" % [str(paid.get("items")), JSON.stringify(ctx2.save_data["inventory"])])
 	return _result(m)
 
 

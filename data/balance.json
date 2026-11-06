@@ -3736,7 +3736,7 @@
 		"inventory": {
 			"_comment": "V2-ITEM-001a: item containers (Sanctum inventory and party pack). Read by ConfigService.get_inventory_cfg. All values tunable without code changes (ANSWERS #83). The leave share is NOT here: it is data.rewards.carry_shares.some.",
 			"_numbers_comment": "PROVISIONAL (D-25, D-34): unique_cap, pack_capacity, stack_limit_default, warn_room_at and warn_pack_free_at are starting values chosen by Jeff to tune after his play test. Tests use their own config and never depend on them.",
-			"_unique_cap_comment": "Slots of the Sanctum inventory: pieces (gear and relics) and stacks share them, one slot each (D-05, D-33, D-37). May grow; a smaller value never moves or drops an entry.",
+			"_unique_cap_comment": "Slots of the Sanctum inventory: pieces (gear and relics) and stacks share them, one slot each (D-05, D-33, D-37). May grow. The Sanctum never shrinks.",
 			"unique_cap": 20,
 			"_pack_capacity_comment": "Slots of the party pack: pieces and stacks share them, one slot each. Carried entries from an earlier path use slots too (D-13, D-16). May grow.",
 			"pack_capacity": 4,

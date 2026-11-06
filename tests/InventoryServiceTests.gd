@@ -17,7 +17,6 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_service/intake_order_and_modes", Callable(InventoryServiceTests, "_t_order"))
 	runner.register_test("inventory_service/duplicate_piece_id", Callable(InventoryServiceTests, "_t_duplicate"))
 	runner.register_test("inventory_service/rejections", Callable(InventoryServiceTests, "_t_rejections"))
-	runner.register_test("inventory_service/move_pack_to_sanctum", Callable(InventoryServiceTests, "_t_move"))
 	runner.register_test("inventory_service/discard_outcomes", Callable(InventoryServiceTests, "_t_discard"))
 	runner.register_test("inventory_service/pack_load_levels", Callable(InventoryServiceTests, "_t_pack_load"))
 	runner.register_test("inventory_service/snapshot_is_deep_copy_without_banned_keys", Callable(InventoryServiceTests, "_t_snapshot"))
@@ -355,27 +354,6 @@ static func _t_rejections() -> Dictionary:
 	return _result(m)
 
 
-static func _t_move() -> Dictionary:
-	var m: Array = []
-	var save := _fresh()
-	var cfg := _cfg(1, 4)
-	for t in ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_armor_a"]:
-		_direct(save, cfg, t)
-	if _ids(save, "pack") != ["it.2", "it.3", "it.4"]:
-		m.append("setup pack %s" % str(_ids(save, "pack")))
-	if InventoryService.move_pack_to_sanctum(save, cfg) != 0:
-		m.append("moved with no room")
-	var cfg3 := _cfg(3, 4)
-	if InventoryService.move_pack_to_sanctum(save, cfg3) != 2:
-		m.append("expected 2 moved")
-	if _ids(save, "items") != ["it.1", "it.2", "it.3"] or _ids(save, "pack") != ["it.4"]:
-		m.append("oldest-first order broken: items %s pack %s" % [str(_ids(save, "items")), str(_ids(save, "pack"))])
-	if InventoryService.move_pack_to_sanctum(save, _cfg(9, 4)) != 1 or InventoryService.pack_count(save) != 0:
-		m.append("final move")
-	_check_invariants(save, _cfg(9, 4), "move", m)
-	return _result(m)
-
-
 static func _t_discard() -> Dictionary:
 	var m: Array = []
 	var save := _fresh()
@@ -507,12 +485,13 @@ static func _script(save: Dictionary, cfg: Dictionary) -> Array:
 	out.append(InventoryService.intake(save, cfg, _e("ph_weapon_a", 1, "it.20"), "direct"))
 	out.append(InventoryService.discard(save, cfg, "it.1", true))
 	out.append(InventoryService.discard(save, cfg, "it.4", true))
-	out.append({ "result": "moved", "reason_key": str(InventoryService.move_pack_to_sanctum(save, cfg)), "item_id": "" })
+	var mv := InventoryService.move_entry(save, cfg, "pack", 0, "sanctum")
+	out.append({ "result": mv["result"], "reason_key": mv["reason_key"], "item_id": "" })
 	out.append(InventoryService.intake(save, cfg, _e("ph_relic_a"), "gathered"))
 	return out
 
 
-const _PINNED_RESULTS := "stored/ok/it.1,stored/ok/it.2,stored/ok/,partial/stack_limit/,packed/to_pack/it.3,packed/to_pack/it.4,lost/overflow/,lost/overflow/,lost/overflow/,discarded/ok/it.1,discarded/ok/it.4,moved/1/,packed/to_pack/it.5"
+const _PINNED_RESULTS := "stored/ok/it.1,stored/ok/it.2,stored/ok/,partial/stack_limit/,packed/to_pack/it.3,packed/to_pack/it.4,lost/overflow/,lost/overflow/,lost/overflow/,discarded/ok/it.1,discarded/ok/it.4,moved/ok/,packed/to_pack/it.5"
 const _PINNED_SAVE := '{"inventory":{"items":[{"grade":"g1","held_by":"","id":"it.2","kind":"gear","slot":1,"type_id":"ph_weapon_a"},{"grade":"g1","held_by":"","id":"it.3","kind":"relic","slot":0,"type_id":"ph_relic_a"}],"next_seq":6,"pack":[{"grade":"g1","held_by":"","id":"it.5","kind":"relic","slot":0,"type_id":"ph_relic_a"}],"stacks":[{"kind":"material","quantity":4,"slot":2,"type_id":"ph_material_a"},{"kind":"consumable","quantity":3,"slot":3,"type_id":"ph_consumable_a"}],"version":1}}'
 
 
@@ -582,7 +561,6 @@ static func _t_malformed() -> Dictionary:
 	_expect(m, r, "refused", "not_found", "a piece with a non-String held_by is malformed and is never discarded")
 	r = InventoryService.discard(save, cfg, "5", true)
 	_expect(m, r, "refused", "not_found", "non-String id")
-	InventoryService.move_pack_to_sanctum(save, cfg)
 	if InventoryService.held_pieces(save).size() != 1 or InventoryService.remove_held(save, ["it.4", "it.1"]).size() != 0:
 		m.append("held_pieces or remove_held touched a malformed or non-pack piece")
 	# A save with a broken block is refused, never changed.
@@ -590,7 +568,7 @@ static func _t_malformed() -> Dictionary:
 		var copy: Dictionary = (bad as Dictionary).duplicate(true)
 		_expect(m, InventoryService.intake(copy, cfg, _e("ph_weapon_a"), "direct"), "rejected", "bad_state", "bad block")
 		_expect(m, InventoryService.discard(copy, cfg, "it.1", true), "refused", "bad_state", "bad block discard")
-		if InventoryService.move_pack_to_sanctum(copy, cfg) != 0 or not InventoryService.remove_held(copy, ["it.1"]).is_empty() \
+		if not InventoryService.remove_held(copy, ["it.1"]).is_empty() \
 				or not InventoryService.held_pieces(copy).is_empty() or _json(copy) != _json(bad):
 			m.append("a bad block was changed")
 		InventoryService.snapshot(copy, cfg)
@@ -607,7 +585,7 @@ static func _tail(save: Dictionary, cfg: Dictionary) -> Array:
 	out.append(InventoryService.intake(save, cfg, _e("ph_material_a", 4), "direct"))
 	out.append(InventoryService.intake(save, cfg, _e("ph_relic_a"), "gathered"))
 	out.append(InventoryService.discard(save, cfg, "it.1", true))
-	out.append({ "moved": InventoryService.move_pack_to_sanctum(save, cfg) })
+	out.append({ "moved": InventoryService.move_entry(save, cfg, "pack", 0, "sanctum")["result"] })
 	out.append(InventoryService.intake(save, cfg, _e("ph_charm_a"), "direct"))
 	return out
 
@@ -665,7 +643,7 @@ static func _t_invariants() -> Dictionary:
 			if not all.is_empty():
 				InventoryService.discard(save, cfg, all[(x >> 6) % all.size()], true)
 		else:
-			InventoryService.move_pack_to_sanctum(save, cfg)
+			InventoryService.move_entry(save, cfg, "pack", (x >> 6) % 3, "sanctum")
 		if InventoryService.sanctum_used(save) > count_before and InventoryService.sanctum_used(save) > int(cfg["unique_cap"]):
 			m.append("%s: a call put an entry in the Sanctum above the cap" % label)
 		_check_invariants(save, cfg, label, m, allowed)
@@ -728,7 +706,7 @@ static func _t_cfg_types() -> Dictionary:
 		InventoryService.validate(save3, cfg3)
 		InventoryService.pack_load(save3, cfg3, 1)
 		InventoryService.discard(save3, cfg3, "it.1", true)
-		InventoryService.move_pack_to_sanctum(save3, cfg3)
+		InventoryService.move_entry(save3, cfg3, "pack", 0, "sanctum")
 	for dv in ["x", [], 5, null, true]:
 		var cfg4 := _cfg(4, 2)
 		cfg4["definitions"] = dv
@@ -790,10 +768,6 @@ static func _t_move_first() -> Dictionary:
 	_expect(m, _direct(d, _cfg(1, 2), "ph_armor_a"), "lost", "overflow", "lost with both full")
 	if _ids(d, "items") != ["it.1"] or _ids(d, "pack") != ["it.2", "it.3"]:
 		m.append("lost case: items %s pack %s" % [str(_ids(d, "items")), str(_ids(d, "pack"))])
-	# The settlement call moves them: pieces in pack order while room exists.
-	var e := save.duplicate(true)
-	if InventoryService.move_pack_to_sanctum(e, raised) != 2 or _ids(e, "items") != ["it.1", "it.2", "it.3"]:
-		m.append("move_pack_to_sanctum: items %s" % str(_ids(e, "items")))
 	_check_invariants(a, raised, "no-pull a", m)
 	return _result(m)
 
@@ -833,11 +807,9 @@ static func _t_remove_held() -> Dictionary:
 		m.append("remove_held returned a live reference")
 	if not InventoryService.remove_held(save, []).is_empty() or not InventoryService.remove_held(save, ["it.1", "it.2"]).is_empty():
 		m.append("remove_held removed an unlisted, unknown or Sanctum piece")
-	# The caller decides about the move: with room, the piece stays in the pack until it asks.
+	# Nothing else moves: the remaining piece stays in the pack.
 	if InventoryService.pack_count(save) != 1:
 		m.append("remove_held moved a piece")
-	if InventoryService.move_pack_to_sanctum(save, _cfg(3, 4)) != 1:
-		m.append("move after remove_held")
 	return _result(m)
 
 

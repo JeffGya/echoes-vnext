@@ -189,3 +189,71 @@ ASSUMED: 1. `_bank_rows` calls `move_pack_to_sanctum` before the new rows as wel
 ASSUMED: 2. On a Sanctum or party-prep screen the one-discard mark is neither read nor written. A saved mark stays until a path end clears it, and applies again in the path view.
 ASSUMED: 3. The tolerant read of an out-of-range slot is unchanged and is not a shrink rule. A smaller pack or Sanctum size is not handled: D-41 defers it to the story that shrinks packs.
 BLOCKED: None.
+
+## Fixes after QA (D-42, D-43)
+
+Source: decisions D-42 and D-43, `step7-qa-report.md` (F-01 to F-08). Same private save dir. No commit.
+
+### Changes
+
+| Item | Change | File:line |
+|---|---|---|
+| D-42 (F-01, F-02) | Nothing moves on its own. `move_pack_to_sanctum` is deleted: it had no other user. The only move left is the player's `inventory.move.apply` (`move_entry`). | `core/inventory/InventoryService.gd` (function removed; `move_entry` :385) |
+| D-42 path end | `_bank_rows` only runs the new rows through intake. Carried entries stay in the pack. | `core/economy/StageSettlementService.gd:183` |
+| D-42 kept leave | Surviving carried pieces and stacks stay in the pack. The `moved` field of the log `economy.settle.items` is removed. | `core/economy/StageSettlementService.gd:456`, :503 |
+| D-43 (F-03) | New `draw_id`: a carried stack is named `stack:<type_id>:<n>`, n = its order among carried stacks of that type by slot. The leave draw key is `inventory.leave.<stage>.<run>.<settle>.held.stack:<type_id>:<n>`. Piece draws and the root are unchanged. `held_pieces` stack rows carry `order`. The held-fate record and `remove_held` still use `stack:<type_id>:<slot>`, which is only valid inside one settle. | `InventoryService.gd:115`, :141; `StageSettlementService.gd:479` |
+| F-05 | `move_entry` takes `reserved` (open item rows). A move into the pack counts them as taken slots (`container_full`). `InventoryController` passes `EarningsService.open_item_rows_in_save`. | `InventoryService.gd:385`, :632; `InventoryController.gd:97` |
+| F-04 | New test: a failed `stage.return_home` keeps the mark. Mutation M12 (clear before `if success:`) now fails it. | `tests/InventoryPathTests.gd` (`a_failed_return_home_keeps_the_used_mark`) |
+| F-07 | `InventoryController` header rewritten to the D-40 rule (screen decides; `item_id` wins over `from`/`slot`). | `core/runtime/controllers/InventoryController.gd:1-25` |
+| F-08 | The service header calls the slot code a tolerant read, not a shrink rule. The `unique_cap` comment says "The Sanctum never shrinks". Comment text only in `balance.json`. | `InventoryService.gd:14`; `data/balance.json:3739` |
+| F-06 | No code change. Exception to D-28 (recorded in D-43): `flow.stage_explore` always carries `data.inventory`, like `flow.echo_party` (D-29). | `StageExploreSnapshotBuilder.gd:481` |
+| Tests changed | `inventory_service/move_pack_to_sanctum` deleted (function gone). Tests that encoded the old moves rewritten: `item_packs/held_pieces_are_rolled`, `repeat_leave_draws_held_pieces_again`, `survivor_stays_held_when_the_sanctum_is_full`, `retry_after_a_partial_state_does_not_redraw`, `path_end_banks_item_rows_once`, `report_rows_carry_source_and_mark_index`; `inventory_actions/leave_item_report_reaches_the_card_and_survives_a_reload`; `inventory_paths/a_carried_stack_is_drawn_and_lost_like_a_carried_piece` (renamed); `inventory_service/intake_never_moves_the_pack`, `rejections`, `invariants`, `remove_held`. `inventory_paths/a_carried_stack_is_drawn_on_a_some_leave` now needs the same result in pack slots 0, 3 and 7. `inventory_moves/held_stacks_are_settled_like_held_pieces` checks `draw_id`. New: `a_failed_return_home_keeps_the_used_mark`, `a_move_into_the_pack_leaves_the_slots_of_open_item_rows`. | `tests/` |
+
+### Result rows now (leave, defeat, path-end card: `data.items`)
+
+Field names are unchanged: `{ type_id, kind, grade, quantity, source, mark_index, reason_key }`, plus `lost_quantity` only for a stack surplus.
+
+| Field | Content |
+|---|---|
+| `source` | `"held"` = a carried entry (it was in the pack before). `"gathered"` = a NEW find of this path. |
+| List | `kept` = survived. `lost` = lost. |
+| `reason_key` of a kept carried entry | Always `ok`. The value `to_pack` is no longer used for a carried entry. The entry is still in the pack. |
+| `reason_key` of a kept NEW find | `ok` (put in the Sanctum), `to_pack` (put in a free pack slot), `stack_limit` (stack surplus lost, `lost_quantity`). |
+| `reason_key` of a lost entry | `leave_none`, `leave_some`, `defeat`, `overflow`, or an intake refusal key. |
+| `mark_index` | Piece mark; `-1` for a stack and for any find not yet a piece. |
+| Path-end card | Lists NEW finds only (carried entries are not rolled and not listed), as before. |
+
+The UI can show survivors without naming a place: `kept` rows with `source` `held` stay where they were; `kept` rows with `source` `gathered` carry `ok` or `to_pack` if a place is ever needed.
+
+### Tests run
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_paths,inventory_moves,inventory_actions,inventory_service,inventory_save,item_packs,item_packs_char` | `Tests: 132 total, 132 passed, 0 failed` (paths 17, moves 12, actions 25, service 22, save 15, item_packs 30, item_packs_char 11) |
+| `=flow_transaction,snapshot_fingerprint,snapshot_purity,snapshot_contract,save_integrity,pending_result,econ_char,economy,payout_ui,sanctum.layout,sanctum.party,echo_party` | `Tests: 277 total, 277 passed, 0 failed` |
+| `=traversal,venture_char,seam,stop_short,realm_ui` | `Tests: 190 total, 190 passed, 0 failed` |
+
+Compile check: 0 `SCRIPT ERROR` lines. Mutations by hand (each restored, `cmp` equal): clear the mark before `if success:` fails `a_failed_return_home_keeps_the_used_mark`; drop `reserved` from the move check fails `a_move_into_the_pack_leaves_the_slots_of_open_item_rows`; key the stack draw by slot fails `held_stacks_are_settled_like_held_pieces` and `a_carried_stack_is_drawn_on_a_some_leave`. Suite count is 144 minus 0 (no suite added or removed), so the shard map is unchanged.
+
+### Recorded values
+
+None moved. No fingerprint, hash or balance number changed. One test-owned literal changed for a named cause: `inventory_service` `_PINNED_RESULTS` entry `moved/1/` is now `moved/ok/` (the script now calls the player move `move_entry`; the pinned save is unchanged). The early-leave draws of pieces and the `stage.settle` stream are unchanged. The draw key of a carried STACK changed from `...held.stack:<type>:<slot>` to `...held.stack:<type>:<n>`; that key existed only since step 7 and no recorded value used it.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"`, Bash `timeout` 3600000.
+2. Expected duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files the run edits: none in the checkout (it writes `/tmp/echoes-vnext-sharded/`). No `trap` needed.
+4. Verify: `git status --short` and `git diff --stat` are the same before and after.
+5. Read back: the `COMBINED:` line (expect 2,676 total or near: one test deleted, three added), any shard log without a `Tests:` line, the `movement_fallback` merge line.
+
+Late fix (QA option C, D-16, D-42): a NEW stack with no free Sanctum slot now takes a free pack slot (result `packed`, reason `to_pack`; `gathered` owns a slot, `direct` needs a free one) and is lost as `overflow` only when both are full. A merge into a Sanctum stack of its type is unchanged and needs no slot. Change: `core/inventory/InventoryService.gd:468` (`_intake_stack`, new `gathered` and `reserved` parameters, call at :464). The leave and the path end use the same intake, so the result row of a new stack find is a `kept` row with `reason_key` `to_pack`. New tests: `inventory_moves/a_new_stack_takes_a_pack_slot_when_the_sanctum_is_full` (full Sanctum plus free pack slot, both full, stack limit, merge preferred), `inventory_paths/a_new_stack_find_is_kept_in_the_pack_when_the_sanctum_is_full` (leave and path end). `item_packs/path_end_preview_equals_the_payout_report` uses Sanctum size 3 so its stack-surplus case still occurs.
+Late fix tests: `=inventory_paths,inventory_moves,inventory_actions,inventory_service,inventory_save,item_packs,item_packs_char`: `Tests: 134 total, 134 passed, 0 failed`; `=flow_transaction,snapshot_fingerprint,snapshot_purity,snapshot_contract,save_integrity,pending_result,econ_char,economy,payout_ui,sanctum.layout,sanctum.party,echo_party`: `Tests: 277 total, 277 passed, 0 failed`; `=traversal,venture_char,seam,stop_short,realm_ui`: `Tests: 190 total, 190 passed, 0 failed`. Recorded values moved: none. Expected sharded total: about 2,678.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. A kept carried entry always reports `reason_key` `ok` (it stays in the pack). If the UI wants a separate value, tell me.
+ASSUMED: 2. (Closed by the late fix above.) A NEW stack with no free Sanctum slot takes a free pack slot; only a full Sanctum and a full pack lose it.
+ASSUMED: 3. D-43 limit: the draw name of a carried stack is its order among stacks of the same type. If the player reorders two stacks of ONE type so that their relative order swaps, their two draw results swap between them (the set of results is the same). One stack of a type, or any move that keeps the relative order, never changes a result.
+ASSUMED: 4. The path-end card still lists NEW finds only. Carried entries stay silent there because they are neither rolled nor moved.
+BLOCKED: None.
