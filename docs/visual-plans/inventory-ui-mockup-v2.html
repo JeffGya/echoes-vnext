@@ -665,6 +665,9 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 .pstrap.near .strap{display:block;border-top:2px dashed rgba(245,230,211,.75)}
 .pstrap.full .strap{display:block;border-top:4px solid #F5E6D3}
 .pnl.pack.near{background:repeating-linear-gradient(45deg,rgba(245,230,211,.07) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(245,230,211,.05) 0 2px,transparent 2px 9px),#432F1F}
+
+/* D-42 result card row */
+.itemrow{display:flex;flex-wrap:wrap;gap:var(--gap);align-items:flex-start;padding:10px 0 12px;border-bottom:3px solid var(--c-bronze);min-height:calc(var(--bed-size) + 22px)}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -863,12 +866,11 @@ const W={
  pathUsedWhy:n=>`Used on ${n}. A new path gives one more.`, pathRule:'Only one piece may be let go on a path.',
  modalDiscardTitle:'Let this go?', modalDiscardLine:'It cannot be brought back.', modalPathLine:'This is the one discard of this path.',
  modalPackLine:'It is in the pack.', modalSanctLine:'It is in the Sanctum.',
- leaveTitle:'Leave the path?', leaveRisk:n=>`They may lose ${n} ${n===1?'piece':'pieces'} from the pack.`, leaveSafe:n=>`${n} pieces in the Sanctum are safe.`,
+ leaveTitle:'Leave the path?', leaveRisk:n=>`They may lose ${n} ${n===1?'piece':'pieces'}.`,
  btnStay:'Stay', btnToSanct:'To the Sanctum',
- grpKept:'Kept in the Sanctum', grpPack:'Left in the pack', grpLost:'Lost',
- tipKept:'It is safe in the Sanctum.', tipPack:'It stays in the pack. The Sanctum is full.', tipLostSome:'Lost. They left too soon.', tipLostNone:'Lost. They did not get it out.', tipLostDefeat:'Lost. The party fell.',
- cardLeave:'They left early', cardDefeat:'The party fell', cardClear:'The path is cleared', itemsHead:'Items from the pack', itemsHeadClear:'What the pack holds (preview)',
- safeNote:n=>`${n} pieces in the Sanctum are safe.`, btnContinue:'Continue',
+ aKept:'Survived', aLost:'Lost',
+ cardLeave:'They left early', cardDefeat:'The party fell', cardClear:'The path is cleared',
+ btnContinue:'Continue',
  partyDetails:'Party details', partyPackBtn:'Party pack', railStores:'Stores', railSanctum:'Sanctum',
  toastMoved:(n,to,c,cap)=>`${n} is now in the ${to==='pack'?'pack':'Sanctum'} (${c} of ${cap}).`,
  toastHidden:{pack:'The pack panel is not open. Open it with Show pack or the pack button in party details.',sanct:'The Sanctum panel is not open. Open it with the Stores button.'}
@@ -1101,38 +1103,30 @@ SCREENS.path=()=>`<div class="realm"><div class="bg"><div class="world-hint"></d
  ${echobar()}`;
 
 /* ---------- result cards: the items go inside the existing card ---------- */
-function planEntries(kind){
- const pk=items('pack');let room=SANCTUM_SLOTS-count('sanct');
- return pk.map((it,i)=>{
+function planEntries(kind){ // D-42: a piece survives or is lost. The card does not say where a survivor is.
+ let room=SANCTUM_SLOTS-count('sanct');
+ return items('pack').map((it,i)=>{
   const survive=kind==='defeat'?false:kind==='clear'?true:OUT==='everything'?true:OUT==='nothing'?false:i%2===0;
-  if(!survive)return{it,fate:'lost',reason:kind==='defeat'?'tipLostDefeat':OUT==='nothing'?'tipLostNone':'tipLostSome'};
-  if(room>0){room--;return{it,fate:'kept',reason:'tipKept'};}
-  return{it,fate:'pack',reason:'tipPack'};
+  if(!survive)return{it,fate:'lost'};
+  // intake: a newly gathered survivor goes to the Sanctum when there is room; a carried piece stays in the pack
+  if(it.src==='gathered'&&room>0){room--;return{it,fate:'kept',dest:'sanct'};}
+  return{it,fate:'kept',dest:'pack'};
  });
 }
 function openCard(kind){
  S.card={kind,entries:planEntries(kind),done:false,finalAt:0,timers:[]};
 }
-function lane(cls,labKey,list,loc,iconHTML){
- if(!list.length)return '';
- return `<div class="lane ${cls}" data-lane="${cls}"><div class="llab"><div class="row1">${iconHTML}<span>${ph(labKey)}</span></div><span class="mut" style="font-size:12px">${list.length} ${list.length===1?'piece':'pieces'}</span></div>
-  <div class="shelf card-tiles" role="group" aria-label="${phs(labKey)}">${list.map((e,i)=>tb(e.it,{act:'name',box:cls==='pack'?'pack':'sanct',state:cls==='kept'?'kept':cls==='lost'?'lost':'',loc,extra:phs(e.reason),kx:'-'+cls+i,tab:false})).join('')}</div></div>`;
-}
 SCREENS.card=()=>{
- const c=S.card,k=c.kind,g=f=>c.entries.filter(e=>e.fate===f);
+ const c=S.card,k=c.kind;
  const title=ph(k==='leave'?'cardLeave':k==='defeat'?'cardDefeat':'cardClear');
  const earn=k==='defeat'?'':`<div class="sumrow"><span class="nn">Ase</span><i class="gb" style="width:90px"></i><span class="nn" style="margin-left:18px">Ekwan</span><i class="gb" style="width:70px"></i></div>`;
- const lanes=lane('kept','grpKept',g('kept'),'now in the Sanctum',`<i class="roof" style="width:22px;height:21px" aria-hidden="true"></i>`)
-  +lane('pack','grpPack',g('pack'),'left in the pack',`<i class="load-mark l1" aria-hidden="true"></i>`)
-  +lane('lost','grpLost',g('lost'),'lost',`<i class="ghostico" aria-hidden="true"></i>`);
+ const row=c.entries.map((e,i)=>tb(e.it,{act:'name',box:'sanct',state:e.fate==='kept'?'kept':'lost',loc:phs(e.fate==='kept'?'aKept':'aLost'),kx:'-r'+i,tab:false})).join('');
  return `<div class="realm"><div class="bg"><div class="world-hint"></div></div></div><span class="nodename" style="left:24px;top:14px">ResolveScreen (existing card: ${k==='leave'?'leave result':k==='defeat'?'defeat':'stage-clear'})</span>
- <div class="wcard namehost" data-card="${k}" style="left:300px;top:28px;width:680px;height:572px">
+ <div class="wcard namehost" data-card="${k}" style="left:300px;top:28px;width:680px;height:420px">
   <div class="ctitle">${title}${k==='clear'?` <span class="tag" style="margin-left:10px">${ph('previewMark')}</span>`:''}</div>
   <div class="bars"><i class="gb" style="width:300px"></i><i class="gb" style="width:210px"></i></div>${earn}
-  <span class="callout">prototype tag: the item section sits inside the existing card</span>
-  <div class="items"><div class="ihead">${ph(k==='clear'?'itemsHeadClear':'itemsHead')}</div>${lanes}
-   <div class="safenote"><i class="roof" aria-hidden="true"></i>${ph('safeNote',count('sanct'))}</div></div>
-  <div class="nameline" id="nameline" aria-hidden="true">&nbsp;</div>
+  <span class="callout">prototype tag: the tile row sits inside the existing card</span>
+  <div class="items"><div class="itemrow card-tiles" role="group" aria-label="Pieces">${row}</div></div>
   <button type="button" class="btn-keep btn56 resbtn guarded" aria-disabled="true" data-act="continue" data-k="cont" id="cont">${ph('btnContinue')}</button></div>${echobar()}`;
 };
 
@@ -1155,8 +1149,7 @@ function modalHTML(){
    <span class="callout">prototype tag: the tile row sits inside the existing leave modal</span>
    <h3 id="mt">${ph('leaveTitle')}</h3>
    <p id="md">${ph('leaveRisk',pk.length)}</p>
-   <div class="tilerow" role="group" aria-label="Pieces at risk in the pack">${pk.map(it=>tb(it,{act:'name',box:'pack',state:'at-risk',kx:'-lv',tab:false,extra:'at risk'})).join('')}</div>
-   <div class="safeline"><i class="roof" aria-hidden="true"></i>${ph('leaveSafe',count('sanct'))}</div>
+   <div class="tilerow" role="group" aria-label="Pieces at risk">${pk.map(it=>tb(it,{act:'name',box:'pack',state:'at-risk',kx:'-lv',tab:false,extra:'at risk'})).join('')}</div>
    <div class="btnrow"><button type="button" class="btn-keep" data-act="stay" data-k="stay">${ph('btnStay')}</button>
    <button type="button" class="btn-let-go" data-act="goLeave" data-k="goleave" id="goleave" aria-disabled="true">${ph('btnToSanct')}</button></div></div></div>`;
  }
@@ -1360,7 +1353,7 @@ function runCard(){
  c.timers.push(setTimeout(markFinal,plan.total/cfg.speed));
 }
 function markFinal(){const c=S.card;if(!c||c.done)return;c.done=true;c.finalAt=now();const b=$('#cont');if(b)setTimeout(()=>{if(b.isConnected)b.classList.remove('guarded');b.removeAttribute('aria-disabled');},GUARD_CONTINUE_MS/cfg.speed);
- say(`Result: ${c.entries.filter(e=>e.fate==='kept').length} kept in the Sanctum, ${c.entries.filter(e=>e.fate==='pack').length} left in the pack, ${c.entries.filter(e=>e.fate==='lost').length} lost.`);}
+ say(`Result: ${c.entries.filter(e=>e.fate==='kept').length} survived, ${c.entries.filter(e=>e.fate==='lost').length} lost.`);}
 function finishCard(){
  const c=S.card;if(!c||c.done)return;
  c.timers.forEach(clearTimeout);c.timers=[];
@@ -1371,15 +1364,15 @@ function tryContinue(){
  const c=S.card;if(!c)return;
  if(!c.done){finishCard();return;}
  if(now()<c.finalAt+GUARD_CONTINUE_MS/cfg.speed)return;
- // apply the outcome
+ // apply the outcome (D-42): carried survivors stay in the pack; gathered survivors take intake; lost pieces go
  c.entries.forEach(e=>{
   const i=S.box.pack.indexOf(e.it);
-  if(e.fate==='kept'){S.box.pack[i]=null;const j=S.box.sanct.indexOf(null);S.box.sanct[j]=e.it;e.it.src=null;}
   if(e.fate==='lost'){S.box.pack[i]=null;}
-  if(e.fate==='pack'){e.it.src='held';}
+  else if(e.dest==='sanct'){S.box.pack[i]=null;const j=S.box.sanct.indexOf(null);S.box.sanct[j]=e.it;e.it.src=null;}
+  else{e.it.src='held';}
  });
  const kinds=S.card.kind;S.card=null;S.view='sanctum';S.open={sanct:false,pack:false};S.sel=null;
- render('r-stores');say(`Back in the Sanctum. Sanctum ${count('sanct')} of ${SANCTUM_SLOTS}, pack ${count('pack')} of ${PACK_SLOTS}.`);
+ render('r-stores');say('Back in the Sanctum.');
 }
 
 /* ================= drag and drop (pointer based, works with mouse and touch) ================= */
@@ -1510,8 +1503,6 @@ cv.addEventListener('click',e=>{
  move(it.id,s.dataset.box,+s.dataset.idx);
 });
 // result cards: the first tap finishes the motion; the Continue handler does the second
-cv.addEventListener('mouseover',e=>{const t=e.target.closest('.card-tiles .tb');const n=$('#nameline');if(!n)return;if(t){const it=getItem(+t.dataset.id);const en=S.card&&S.card.entries.find(x=>x.it===it);n.innerHTML=en?`${phn(it.name)} · ${ph(en.reason)}`:'';}else n.innerHTML='&nbsp;';});
-cv.addEventListener('focusin',e=>{const t=e.target.closest('.card-tiles .tb');const n=$('#nameline');if(t&&n){const it=getItem(+t.dataset.id);const en=S.card&&S.card.entries.find(x=>x.it===it);n.innerHTML=en?`${phn(it.name)} · ${ph(en.reason)}`:'';}});
 document.addEventListener('keydown',e=>{
  if(e.key==='Escape'){
   if(drag&&drag.started){const d=drag;drag=null;d.ghost.remove();$$('#work .pnl').forEach(p=>p.classList.remove('drop-ok','drop-no'));render(`t${d.id}`);return;}
@@ -1551,7 +1542,7 @@ const TRY={
  3:['The scenario starts with party details only. Press the pack button in party details: the pack opens to its right.','Press Stores on the rail: only the Sanctum panel opens, to the left of party details. Press the pack button to open all three.','Move a piece with the pack open and with it closed.','D-36 cues: party details shows one departure line while the pack holds a piece. Empty the pack: the line goes. The pack shows the nearly full level at 3 of 4 with a dashed strap line and a word, and no numbers; the count is on the Party pack button.'],
  4:['Select a pack tile. Move is disabled with a reason. Let it go is enabled.','Let it go once. The token turns to used and a reason line appears. A stack uses the picker; the whole action counts once.','Select another tile. Let it go is disabled with a reason.','Try to drag a tile. Every target refuses with a reason.','D-36 cues: the pack is full, so it looks heavy with the path wording. The path HUD shows one leaf per carried piece and the departure line.'],
  5:['The leave modal shows the pieces at risk as tiles. Stay is focused.','To the Sanctum has a 0.25 s open window.','Change the outcome in the aids, then press To the Sanctum.'],
- 6:['Use the card buttons in the aids. Tap the card once to finish the motion; press Continue to leave.','The stage-clear card uses the same three lanes and a read-only mark.','Reduced motion: every tile fades in 0.15 s.'],
+ 6:['Use the card buttons in the aids. Tap the card once to finish the motion; press Continue to leave.','The card shows one row of tiles: survivors have the heavier border, lost pieces are ghosts. No place words (D-42). The stage-clear card uses the same row and a read-only mark.','Reduced motion: every tile fades in 0.15 s.'],
  7:['The scenario starts with the Sanctum panel only. A Sanctum tile is selected and Move to pack is disabled: the pack is full. Press Show pack to see the full pack: heavy look, strap line and the consequence word (D-36).','Drag it to the pack: the pack shows a hatch and the reason.','Let it go on a pack piece, then Move to pack works for the next one.']
 };
 function updateAids(){
@@ -1639,7 +1630,7 @@ const FEEL=[
  ['Gauge full','Sanctum: the last mark pulses once at scale 1.15 on every transition into full. Pack: the strap line pulses once and the panel tone fades in (no beads, no numbers, D-39).',`${GAUGE_PULSE_MS} ms`],
  ['Discard','Ghost fade (fill 0.35, marks 0.6), then fade to 0. Slots stay fixed. A partial stack discard only lowers the count.',`${DISCARD_LOST_MS} + ${DISCARD_FADE_MS} ms`],
  ['Modal','Backdrop and card fade in. Let it go has a 0.25 s open window. Keep it holds focus.',`${MODAL_CARD_MS} ms + ${GUARD_OPEN_MS} ms`],
- ['Result card','Tiles reveal in order. 4 or fewer: 0.3 s apart. 5 to 8: 0.15 s apart. Total never over 2.4 s. First tap finishes, second continues, 0.25 s guard.',`cap ${SEQ_CAP_MS} ms`],
+ ['Result card','One row of tiles reveals in order. 4 or fewer: 0.3 s apart. 5 to 8: 0.15 s apart. Total never over 2.4 s. First tap finishes, second continues, 0.25 s guard.',`cap ${SEQ_CAP_MS} ms`],
  ['Reduced motion','Every move, reveal and loss is a 0.15 s fade.',`${RM_FADE_MS} ms`]
 ];
 const FRIC=[
@@ -1655,7 +1646,7 @@ const EPLAY=[
  ['Is Move to pack as easy as a drag?','Scenario 1, select, Move to pack.'],
  ['Is it clear that nothing moves on a path, and why?','Scenario 4.'],
  ['After the one discard, is the used state and the reason clear?','Scenario 4, Let it go.'],
- ['On the result card, can you see what is kept, left in the pack and lost before you tap?','Scenario 6.'],
+ ['On the result card, can you see which pieces survived and which were lost before you tap, with no words?','Scenario 6.'],
  ['With both containers full, do you know what to do next?','Scenario 7.']
 ];
 const APPLIED=[
@@ -1673,7 +1664,9 @@ const APPLIED=[
  'On a path nothing moves. One discard per path, on a pack piece. The whole action counts once. In the Sanctum, discard is unlimited. (D-33, D-34)',
  'The one-discard counter is a saved value that survives quit and Continue. Core owns it. (D-34)',
  'Slot counts are named constants (Sanctum 20, pack 4) that can grow. Final values come from play. (D-34)',
- 'Result cards keep the items in lanes inside the card. The stage-clear preview uses the same lanes and a read-only mark. No pack panel after Continue. (D-33, D-34)',
+ 'Result cards hold one row of tiles inside the existing card. A survivor has the heavier kept border. A lost piece is a ghost. The card names no place. The stage-clear preview uses the same row and a read-only mark. No pack panel after Continue. (D-33, D-34, D-42)',
+ 'Show, do not tell: no lane titles, no place words, no place icons, no "safe" line, no extra counts on result cards or in the leave modal. A kept survivor implies it is still carried. (Jeff, D-42)',
+ 'Nothing moves automatically between the pack and the Sanctum, at path end or after an early leave. Carried survivors stay in the pack. A newly gathered survivor goes to the Sanctum when there is room, else it stays in a pack slot. Lost pieces go. A gathered and a carried survivor look the same on the card. (D-42)',
  'The discard token uses a small leaf cut, not the grade diamond. The artist decides the final shape. (D-34)',
  'Ase and Ekwan cards stay dimmed behind the panels. (D-34)',
  'No mechanical pack penalty. The pack makes the existing loss risk visible instead. (D-36)',
@@ -1696,6 +1689,9 @@ const OPEN=[
  ['Discard token. The leave-cut shape is a placeholder. It is near the source leaf shape.','Artist decides a form that does not read as a source mark.','Scenario 4'],
  ['Reorder on a path. The prototype closes reorder on a path like every move. Is a reorder in the pack on a path harmless enough to allow?','Keep it closed. The rule stays simple.','Scenario 4'],
  ['A merge or discard in the pack on a path when the discard is used. The merge is a move, so it is closed.','Keep closed.','Scenario 4'],
+ ['The leave modal button still says where the party goes (placeholder `To the Sanctum`). D-42 says no text that names where the pieces go. The button names the trip, not the pieces.','Keep the trip label. Jeff decides if the button also needs a neutral label.','Scenario 5'],
+ ['After Continue, a carried survivor stays in the pack with no sign on the card. Is a player ever surprised to find it still carried?','Accept. The leaf and the departure line show it carries risk. Check in play.','Scenario 6, then Continue and Stores'],
+ ['A gathered survivor with no Sanctum room stays in a pack slot, as a carried piece. The card shows it as a survivor, same as the rest. Should it differ?','No. Do not add a state (D-42).','Scenario 6, Stage clear'],
  ['Rail label. The new rail button uses a placeholder label.','Jeff writes the label.','Any Sanctum screen'],
  ['Departure line position. It sits above the pack button in party details and on the path HUD. Should it sit next to Choose Realm on the rail instead?','Keep it in party details, next to the pack. The rail stays clean.','Scenario 3, scenario 4'],
  ['At-stake cue placement. The leaf on the tile is the cue (the source-leaf slot). A tile with a leaf, a notch and pips already has 3 marks, so a 4th mark does not fit. Pieces moved in from the Sanctum show the open leaf.','Keep the leaf as the only tile cue. Use the pack bed and the details line for the rest.','Scenario 2, any pack tile'],
