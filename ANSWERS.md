@@ -885,3 +885,12 @@
 **Date:** 2026-10-26
 
 ---
+
+## #88 — No save compatibility work while the game is not live (2026-11-06)
+
+**Q:** Must new work keep old saves loading (repairs, bridges, additive-only schema)?
+**A:** No. The game is not live. Jeff makes a new save when the save shape changes. Do not write save repairs, bridges or migrations for old saves, and do not keep old saves in mind. This holds for all work until Jeff says a full 1.0 version is live with players. It overrides the "additive-only" and repair parts of `AGENTS.md` for the time being. Determinism, the save choke point (`SaveService`) and the rule that UI never reads the save stay in force. A schema change may rename or remove fields without a bridge. Where a story already built a repair for its own new block, leave it as is unless Jeff asks to remove it.
+**Source:** Jeff, 2026-11-06 (V2-ITEM-001, decisions.md D-37)
+**Date:** 2026-11-06
+
+---

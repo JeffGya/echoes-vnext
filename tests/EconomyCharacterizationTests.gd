@@ -1599,7 +1599,7 @@ static func _t_stage_preview() -> Dictionary:
 ## set directly, which is all build_final_snapshot reads. Stage 0 holds `objectives`; objective 0
 ## is the fought one, linked to situation "sit.econ".
 static func _final_card(tag: String, objectives: Array, victory: bool, kill_first_echo: bool = false,
-		revealed_during_fight: int = 0) -> Dictionary:
+		revealed_during_fight: int = 0, pre_card: Callable = Callable()) -> Dictionary:
 	var env: Dictionary = FlowFingerprintTests._setup_encounter("combat", tag)
 	if env.is_empty():
 		return {}
@@ -1631,6 +1631,9 @@ static func _final_card(tag: String, objectives: Array, victory: bool, kill_firs
 	if victory:
 		env["runtime"]._stage_explore_session_service().resolve_combat_situation_and_objective(
 			5, true, true, "stage.combat_resolved", "econ_char pre-snapshot", true)
+	# A caller hook: runs with the env just before the card is built (item rows, inventory config).
+	if pre_card.is_valid():
+		pre_card.call(env)
 	env["card"] = FlowEncounterState.build_final_snapshot(flow_ctx, 6)
 	return env
 
@@ -2615,7 +2618,13 @@ static func _t_death_record_lifetime() -> Dictionary:
 	var first := str(env["dead_name"])
 	runtime._stage_explore_session_service().record_fight_deaths(7)
 	fc.encounter_ctx = null
-	runtime.dispatch({ "type": "stage.return_home" })
+	# The leave is allowed only from the path snapshot (M1); the fixture stands on the card.
+	fc.last_snapshot = { "type": FlowStateIds.STAGE_EXPLORE }
+	var left: Dictionary = runtime.dispatch({ "type": "stage.return_home" })
+	var left_data: Dictionary = left.get("data", {}) if left.get("data") is Dictionary else {}
+	var escaped := str(left.get("type", "")) == FlowStateIds.RESOLVE and str(left_data.get("run_type", "")) == "scout_return"
+	if not escaped and not left_data.has("return_home_result"):
+		m.append("the return home did not run: snapshot %s" % str(left.get("type", "")))
 	if str(ActiveStageService.stage_lost_echo_names(fc)) != str([first]):
 		m.append("after return home the record is %s, expected [%s]" % [str(ActiveStageService.stage_lost_echo_names(fc)), first])
 	var svc := StageSettlementService.new(fc, fc.config_service, null, null)

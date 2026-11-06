@@ -1,0 +1,102 @@
+/* ==========================================================================
+   screens.css - screen chrome for the V2-ITEM-001a screen sheets (ui-ux-designer).
+   Loads AFTER items.css. It adds only the existing game chrome (rail, cards, EchoBar pills,
+   modal backdrop) and sheet helpers. It does not restyle any item class from items.css.
+   Set --k on the canvas: 1 at 1280x720, 1.25 at 1920x1080 (the 1536 logical canvas).
+   Colours are the Living Grove chrome values read from LivingTreeSystem.tres.
+   ========================================================================== */
+.canvas{position:relative;overflow:hidden;background:#3D5A47;color:var(--c-ink);font-family:var(--f-mono);--k:1}
+.canvas *{box-sizing:border-box}
+.abs{position:absolute}
+.world-hint{position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(245,230,211,.035) 0 1px,transparent 1px 48px),repeating-linear-gradient(90deg,rgba(245,230,211,.035) 0 1px,transparent 1px 48px)}
+.realm-bg{position:absolute;inset:0;background:#1b1512}
+.realm-bg .world-hint{opacity:1}
+
+/* SanctumCard / RealmResolveCard: warm panel, bronze border, uneven corners */
+.card{position:absolute;background:rgba(243,231,211,.94);border:calc(2px*var(--k)) solid rgba(160,125,62,.75);border-top-width:calc(3px*var(--k));
+  border-radius:calc(18px*var(--k)) calc(5px*var(--k)) calc(14px*var(--k)) calc(8px*var(--k));color:var(--c-ink);--c-fg:var(--c-ink)}
+/* SanctumHeaderCard / SanctumRail: dark green, gold border */
+.dcard{position:absolute;background:rgba(26,39,30,.86);border:calc(2px*var(--k)) solid rgba(212,175,55,.7);border-top-width:calc(3px*var(--k));
+  border-radius:calc(28px*var(--k)) calc(6px*var(--k)) calc(22px*var(--k)) calc(10px*var(--k));color:#F5E6D3;--c-fg:#F5E6D3}
+.rail{position:absolute;display:flex;gap:calc(14px*var(--k));padding:calc(16px*var(--k)) calc(26px*var(--k));background:rgba(26,39,30,.88);
+  border:calc(2px*var(--k)) solid rgba(212,175,55,.68);border-top-width:calc(3px*var(--k));border-radius:calc(18px*var(--k))}
+.rb{position:relative;flex:1;height:calc(56px*var(--k));display:flex;align-items:center;justify-content:center;border-radius:calc(10px*var(--k));
+  font:calc(16px*var(--k))/1 var(--f-mono);color:#F5E6D3;border:calc(2px*var(--k)) solid rgba(212,175,55,.9);background:rgba(212,175,55,.04);white-space:nowrap}
+.rb.pri{background:#D4AF37;color:#3D2817;border-color:#D4AF37}
+.rb.dis{opacity:.45}
+.rb.sel{background:#F5E6D3;color:#3D2817;border-color:#F5E6D3;box-shadow:0 calc(5px*var(--k)) 0 -1px #D4AF37}
+.rb .wording{font-size:calc(14px*var(--k))}
+.rb.sel .wording,.rb.pri .wording{color:#3D2817}
+.rb.new{border-style:solid}
+
+/* text stand-ins and small labels */
+.gb{display:inline-block;height:calc(10px*var(--k));border-radius:3px;background:currentColor;opacity:.45;vertical-align:middle}
+.gb.t{height:calc(14px*var(--k))}
+.gb.l{height:calc(20px*var(--k))}
+.tx{font:calc(14px*var(--k))/1.2 var(--f-mono)}
+.tx12{font:calc(12px*var(--k))/1.2 var(--f-mono)}
+.nodename{position:absolute;font:calc(12px*var(--k))/1 var(--f-mono);color:rgba(245,230,211,.72);white-space:nowrap}
+.card .nodename,.modal-card .nodename{color:rgba(61,40,23,.7)}
+.hr{height:0;border-top:calc(2px*var(--k)) solid rgba(120,92,43,.55)}
+.hr.soft{border-top-width:1px}
+.circ{display:inline-block;border-radius:50%;background:#3D2817;opacity:.7}
+
+/* EchoBar pills (as in the v4 sheets) */
+.pill{display:flex;align-items:center;gap:calc(8px*var(--k));height:calc(58px*var(--k));padding:0 calc(14px*var(--k)) 0 calc(8px*var(--k));
+  background:#DCCEB5;border:calc(2px*var(--k)) solid #D4AF37;border-radius:calc(29px*var(--k));color:#3D2817}
+.pill .ic{width:calc(34px*var(--k));height:calc(34px*var(--k));border-radius:calc(8px*var(--k));background:#26232a}
+.pill .ln{display:flex;flex-direction:column;gap:calc(6px*var(--k))}
+.pill .ln i{display:block;height:calc(8px*var(--k));border-radius:3px;background:#8b7355;width:calc(88px*var(--k))}
+.pill .ln i+i{background:#6fa87e;width:calc(64px*var(--k));height:calc(5px*var(--k))}
+.pill.party{width:calc(168px*var(--k))}
+.pill.party .ic{border-radius:50%;background:#2f62d6}
+.echobar{position:absolute;display:flex;gap:calc(32px*var(--k));align-items:center;justify-content:center}
+.echobar .row{display:flex;gap:calc(12px*var(--k))}
+
+/* modal backdrop (ModalHost layer 40 covers all chrome) */
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.layer-tag{position:absolute;left:0;right:0;text-align:center;top:calc(8px*var(--k));font:calc(12px*var(--k))/1 var(--f-mono);color:rgba(245,230,211,.8)}
+
+.focus-ring{outline:calc(3px*var(--k)) solid var(--c-ink);outline-offset:calc(3px*var(--k))}
+.btn56{height:calc(56px*var(--k))!important}
+.btn-keep,.btn-let-go{position:relative}
+.btn-let-go[disabled]{cursor:default}
+
+/* result card groups */
+.grp{display:flex;align-items:flex-start;gap:calc(14px*var(--k))}
+.glabel{flex:none;width:calc(112px*var(--k));padding-top:calc(6px*var(--k));display:flex;flex-direction:column;gap:calc(6px*var(--k))}
+.grp .result-shelf{flex:1;min-height:calc(var(--bed-size) + 12px)}
+.atrisk{display:flex;flex-wrap:wrap;gap:var(--gap);padding-bottom:10px;border-bottom:1px solid var(--c-bronze)}
+
+/* piece grid cells */
+.cells{display:flex;flex-wrap:wrap;gap:var(--gap)}
+.sec-label{display:flex;align-items:center;gap:10px;margin-bottom:calc(6px*var(--k));font:calc(14px*var(--k))/1 var(--f-mono)}
+
+/* PARKED stamp */
+.parked-band{position:absolute;left:0;right:0;top:0;height:calc(40px*var(--k));display:flex;align-items:center;justify-content:center;
+  background:#D4AF37;color:#3D2817;border-bottom:calc(3px*var(--k)) solid #3D2817;font:700 calc(15px*var(--k))/1 var(--f-mono);letter-spacing:.02em}
+
+/* sheet helpers */
+.sheet .fwrap{position:relative;margin:0 0 6px}
+.sheet .fcap{font:13px/1.3 var(--f-mono);color:#c9c1af;margin:18px 0 4px}
+.sheet .fkeys{font:13px/1.35 var(--f-mono);color:#9d9585;margin:6px 0 0;max-width:1700px}
+.sheet .fkeys b{color:#d4af37;font-weight:400}
+.sheet .stamp{display:inline-block;margin:8px 0;padding:8px 14px;background:#D4AF37;color:#3D2817;font:700 15px var(--f-mono);border:2px solid #3D2817}
+.sheet .grid4{display:grid;gap:36px 56px}
+.sheet .cell{position:relative}
+.sheet .cell .sname{font:15px var(--f-head);color:#e8dcc4;margin:0 0 6px}
+.sheet .lab{margin-top:8px;border:1px solid #4a4339;background:#1f1c1b}
+.sheet .lab table{margin:0;width:100%;font:12.5px/1.3 var(--f-mono)}
+.sheet .lab td,.sheet .lab th{border:0;border-top:1px solid #38322b;padding:4px 7px}
+.sheet .lab th{width:26%;color:#d4af37;background:none;font-weight:400}
+.sheet .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 18px;font:13px var(--f-mono)}
+.sheet .flow .n{border:1px solid #d4af37;color:#e8dcc4;padding:6px 10px;border-radius:6px;background:#24211f}
+.sheet .flow .a{color:#d4af37}
+.sheet .flow .l{color:#9d9585}
+.sheet .arrowcol{position:absolute;top:50px;font:13px var(--f-mono);color:#d4af37;text-align:center;width:56px}
+.ov .tap-target{display:none}
+.ov .safe{display:none}
+
+.pack-chip,.cap-gauge{white-space:nowrap}
+.cap-gauge .wording{white-space:nowrap}
+.sec-label,.sec-label .wording{white-space:nowrap}

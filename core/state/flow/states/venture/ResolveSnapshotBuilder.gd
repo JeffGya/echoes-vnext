@@ -218,6 +218,14 @@ static func add_ase_gathered(data: Dictionary, gathered: int) -> void:
 		data["ase_gathered"] = gathered
 
 
+## 14g — What the item entries of a leave became: `{ kept: [row], lost: [row] }`, rows from
+## `EarningsService.report_row` (type_id, kind, grade, quantity, reason_key, source, mark_index; no id).
+## Written only when a row exists. Producers C and G (a return home). The caller passes a non-empty report.
+static func add_items(data: Dictionary, items: Dictionary) -> void:
+	if not items.is_empty():
+		data["items"] = items.duplicate(true)
+
+
 ## 14 — %ReasonLabel, "%d situation%s revealed". Producer C.
 static func add_scout_intel(data: Dictionary, intel_count: int) -> void:
 	data["intel_count"] = intel_count

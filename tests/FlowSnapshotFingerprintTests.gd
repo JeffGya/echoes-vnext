@@ -191,7 +191,8 @@ static func _shared_sanctum_env() -> Dictionary:
 	return _setup_sanctum_env("fp_sanctum_shared")
 
 
-## Canonical fingerprint projection: the full `data` payload plus sorted `actions` slot keys.
+## Canonical fingerprint projection: the `data` payload plus sorted `actions` slot keys. For the
+## flow.sanctum snapshot only, `data.inventory` is erased first (D-27).
 ## Deliberately excludes `meta` (carries only the sim tick `t`, which is not part of the
 ## documented contract for this task and is otherwise deterministic-but-irrelevant scaffolding).
 ## No field inside `data` is wall-clock-derived for either flow.sanctum or flow.stage_explore —
@@ -205,6 +206,11 @@ static func _fingerprint_projection(snap: Dictionary) -> Dictionary:
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	var action_keys: Array = actions.keys()
 	action_keys.sort()
+	# data.inventory carries tunable numbers from data/balance.json (sizes, warning thresholds), so the
+	# Sanctum and stage_explore hashes skip it: the inventory suites pin its shape with their own config.
+	if str(snap.get("type", "")) in [FlowStateIds.SANCTUM, FlowStateIds.STAGE_EXPLORE]:
+		data = data.duplicate()
+		data.erase("inventory")
 	return {
 		"data":        data,
 		"action_keys": action_keys,

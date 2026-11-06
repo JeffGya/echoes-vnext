@@ -160,6 +160,7 @@ static func build_scout_return_snapshot(flow_ctx_arg: FlowContext, t: int) -> Di
 	ResolveSnapshotBuilder.add_scout_intel(_data, _intel)
 	if not _settle.is_empty():
 		ResolveSnapshotBuilder.add_settle_outcome(_data, _settle)
+	ResolveSnapshotBuilder.add_items(_data, flow_ctx_arg.pending_scout_return_items)
 	ResolveSnapshotBuilder.add_actors(_data, actor_preview)
 	ResolveSnapshotBuilder.add_victory_flag(_data, false)
 	ResolveSnapshotBuilder.add_grade_rank(_data, "")

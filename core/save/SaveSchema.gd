@@ -144,6 +144,10 @@ static func make_new_save(root_seed: int, app_version: String = "vNext-dev") -> 
 			"intel": {},  # V2-MIG-002 / V2-INTEL-001+: stage-intel persistence stub
 		},
 		"ui_flags": { "result_ledger_seen": false },
+		# V2-ITEM-001a: item containers. Sanctum = items (unique pieces) + stacks; party pack = pack (pieces) +
+		# pack_stacks. Every entry carries an integer `slot` in its container. Piece ids "it.<seq>" come from
+		# next_seq (no RNG).
+		"inventory": { "version": 1, "next_seq": 1, "items": [], "stacks": [], "pack": [], "pack_stacks": [] },
 		# REALM-001: generated realm models keyed by realm_id (e.g. "realm.01": { ...RealmModel fields })
 		"realms": {}
 	}
