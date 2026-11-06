@@ -224,6 +224,9 @@ From `step7-qa-report.md`:
 - F-06: the path view always carries `data.inventory` (the pack HUD needs it), like party details (D-29). This is an exception to D-28 (keys only when non-empty). No code change.
 - F-01 and F-02 are closed by D-42. F-04, F-05, F-07 and F-08 go to the builder (test gap for the mark on a failed return home, item-row slot reservation, stale comments).
 
+## D-44 — Prototype v2 approved (Jeff, 2026-11-06)
+Jeff approved interactive prototype v2 (`docs/visual-plans/inventory-ui-mockup-v2.html`, published as a private artifact, Version 5) including the simplified result cards (D-42). It is the UI contract for step 7. The UI build starts after the backend (D-42 and D-43 fixes) is verified. Open questions still listed in its section F are decided at the build, or by Jeff when raised.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
