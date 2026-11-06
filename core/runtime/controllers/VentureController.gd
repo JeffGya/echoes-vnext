@@ -366,6 +366,7 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 	if success:
 		explore_map["party_state"] = StageExploreModel.STATE_ESCAPED
 		stage["explore_map"] = explore_map
+		InventoryRules.clear_discard_used(stage)
 		FlowStageExploreState._write_stage_back(flow_ctx, stage)
 		flow_ctx.request_save("stage.escaped")
 

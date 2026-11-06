@@ -393,7 +393,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# DECISION, NOT AN UNFINISHED STATE. There is no CombatController, and
 			# there is deliberately not going to be one in this story.
 			# ────────────────────────────────────────────────────────────────────
-			# 69 of the 75 actions dispatch() routes go to a controller in one line (81 match arms, minus the six
+			# 70 of the 76 actions dispatch() routes go to a controller in one line (82 match arms, minus the six
 			# inline `flow.*` arms: new_game, advance, go_state, continue, settings, quit).
 			# These six do not, and nothing else in this file would tell you whether
 			# that is a choice or debt. It is a choice. Full write-up and the cost of
@@ -566,9 +566,12 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"sanctum.institution.remove_echo":
 				_apply_action_outcome(_sanctum_controller().handle_institution_remove_echo(action, t), t)
 
-			# V2-ITEM-001a: Sanctum inventory discard, routed to InventoryController.
+			# V2-ITEM-001a: inventory discard and move, routed to InventoryController.
 			"inventory.discard.apply":
 				_apply_action_outcome(_inventory_controller().handle_discard(action, t), t)
+
+			"inventory.move.apply":
+				_apply_action_outcome(_inventory_controller().handle_move(action, t), t)
 	
 			# ---- Vows (VOW-001) ----
 			# V2-INFRA-003 Phase 4 Slice 2: VowController owns these 3 actions. Controllers
@@ -954,7 +957,7 @@ func _debug_controller() -> DebugController:
 	return DebugController.new(flow_ctx, config_service, logger)
 
 
-## V2-ITEM-001a: builds a fresh InventoryController (inventory.discard.apply). Same per-call rationale.
+## V2-ITEM-001a: builds a fresh InventoryController (inventory.discard.apply, inventory.move.apply). Same per-call rationale.
 func _inventory_controller() -> InventoryController:
 	return InventoryController.new(flow_ctx, config_service, logger)
 

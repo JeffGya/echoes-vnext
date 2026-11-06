@@ -386,7 +386,7 @@ static func _repair_inventory_block(save: Dictionary, repaired_notes: Array) -> 
 	var changed := false
 	var inv_v: Variant = save.get("inventory", null)
 	if not (inv_v is Dictionary):
-		save["inventory"] = { "version": 1, "next_seq": 1, "items": [], "stacks": [], "pack": [] }
+		save["inventory"] = { "version": 1, "next_seq": 1, "items": [], "stacks": [], "pack": [], "pack_stacks": [] }
 		repaired_notes.append("inventory block added (V2-ITEM-001a)")
 		return true
 	var inv: Dictionary = inv_v

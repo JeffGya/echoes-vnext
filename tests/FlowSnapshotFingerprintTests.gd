@@ -206,9 +206,9 @@ static func _fingerprint_projection(snap: Dictionary) -> Dictionary:
 	var actions: Dictionary = actions_v if actions_v is Dictionary else {}
 	var action_keys: Array = actions.keys()
 	action_keys.sort()
-	# data.inventory carries tunable numbers from data/balance.json (cap, warning thresholds), so the
-	# Sanctum hash skips it: the inventory_actions suite pins its shape with its own config.
-	if str(snap.get("type", "")) == FlowStateIds.SANCTUM:
+	# data.inventory carries tunable numbers from data/balance.json (sizes, warning thresholds), so the
+	# Sanctum and stage_explore hashes skip it: the inventory suites pin its shape with their own config.
+	if str(snap.get("type", "")) in [FlowStateIds.SANCTUM, FlowStateIds.STAGE_EXPLORE]:
 		data = data.duplicate()
 		data.erase("inventory")
 	return {

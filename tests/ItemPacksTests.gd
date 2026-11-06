@@ -1046,11 +1046,11 @@ static func _xrow(type_id: String, qty: int, source: String, mark: int, reason: 
 static func _t_report_rows() -> Dictionary:
 	var m: Array = []
 	for mc in [0, 4]:
-		var ctx := _ctx(_SEED_ALL, 2, 2)
+		var ctx := _ctx(_SEED_ALL, 3, 2)
 		var cfg: Dictionary = (ctx.config_service as _Cfg).inv
 		if mc > 0:
 			cfg["mark_count"] = mc
-		for ty in ["ph_weapon_a", "ph_charm_a", "ph_relic_a"]:
+		for ty in ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a"]:
 			InventoryServiceTests._direct(ctx.save_data, cfg, ty)
 		EarningsService.record_item(_stage(ctx), "s0", "a", _entry("ph_armor_a"))
 		EarningsService.record_item(_stage(ctx), "s0", "b", _entry("ph_consumable_a", 2))

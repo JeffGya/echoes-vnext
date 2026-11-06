@@ -49,8 +49,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_actions/stage_clear_card_carries_the_item_preview", Callable(InventoryActionTests, "_t_stage_clear_card_items"))
 	runner.register_test("inventory_actions/item_free_stage_clear_card_keeps_the_old_keys", Callable(InventoryActionTests, "_t_stage_clear_card_item_free"))
 	runner.register_test("inventory_actions/stage_clear_card_items_survive_reload_and_replay", Callable(InventoryActionTests, "_t_stage_clear_card_items_reload"))
-	runner.register_test("inventory_actions/discard_blocked_key_and_the_live_path_rule", Callable(InventoryActionTests, "_t_discard_blocked"))
-	runner.register_test("inventory_actions/discard_guard_works_from_saved_state_after_a_reload", Callable(InventoryActionTests, "_t_discard_reload"))
+	runner.register_test("inventory_actions/path_key_only_in_the_path_view_and_sanctum_rules_on_a_live_path", Callable(InventoryActionTests, "_t_discard_blocked"))
+	runner.register_test("inventory_actions/sanctum_rules_hold_after_a_reload_whatever_the_saved_path", Callable(InventoryActionTests, "_t_discard_reload"))
 	runner.register_test("inventory_actions/party_prep_inventory_is_always_present_and_a_copy", Callable(InventoryActionTests, "_t_party_prep_item_free"))
 	runner.register_test("inventory_actions/sanctum_and_party_prep_count_open_rows_of_every_realm", Callable(InventoryActionTests, "_t_reserved_and_party_prep"))
 	runner.register_test("inventory_actions/the_console_producer_is_gated_to_debug_builds", Callable(InventoryActionTests, "_t_console_gate"))
@@ -173,24 +173,24 @@ static func _walk(dir: String, out: Array) -> void:
 # Discard
 # ---------------------------------------------------------------------------
 
-## Cap 2, pack 2. Two Sanctum pieces, one held piece. Discarding a Sanctum piece frees a slot and the held
-## piece moves in. One save flush. The snapshot is rebuilt.
+## Cap 3, pack 2. Two Sanctum pieces, one stack, one held piece. Discarding a Sanctum piece frees its slot and
+## moves nothing else (the held piece stays in the pack). One save flush. The snapshot is rebuilt.
 static func _t_discard_sanctum() -> Dictionary:
 	var m: Array = []
-	var env := _env("sanctum", 2, 2)
-	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_consumable_a"])
+	var env := _env("sanctum", 3, 2)
+	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a"])
 	if str(_ids(env, "items")) != str(["it.1", "it.2"]) or str(_ids(env, "pack")) != str(["it.3"]):
 		m.append("seed: items %s pack %s" % [str(_ids(env, "items")), str(_ids(env, "pack"))])
 	var flushes := _dispatch(env, _discard("it.1"))
 	if flushes != 1:
 		m.append("expected 1 save flush, got %d" % flushes)
-	if str(_ids(env, "items")) != str(["it.2", "it.3"]) or not _ids(env, "pack").is_empty():
+	if str(_ids(env, "items")) != str(["it.2"]) or str(_ids(env, "pack")) != str(["it.3"]):
 		m.append("after: items %s pack %s" % [str(_ids(env, "items")), str(_ids(env, "pack"))])
 	if _save(env)["inventory"]["stacks"].size() != 1:
 		m.append("the stack changed")
 	var snap := _inv_snap(env)
-	if str(_snap(env).get("type", "")) != FlowStateIds.SANCTUM or int(snap.get("unique_count", -1)) != 2 \
-			or int(snap.get("pack_count", -1)) != 0:
+	if str(_snap(env).get("type", "")) != FlowStateIds.SANCTUM or int(snap.get("unique_count", -1)) != 1 \
+			or int(snap.get("pack_count", -1)) != 1:
 		m.append("snapshot not rebuilt: %s" % str(snap))
 	if _log_count(env["logger"], "inventory.discard") != 1:
 		m.append("expected one inventory.discard log")
@@ -232,8 +232,8 @@ static func _t_discard_pack() -> Dictionary:
 ## is byte-equal, no flush, no snapshot change, and the controller names the reason.
 static func _t_refusals() -> Dictionary:
 	var m: Array = []
-	var env := _env("refuse", 2, 2)
-	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_consumable_a"])
+	var env := _env("refuse", 3, 2)
+	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a"])
 	var before := JSON.stringify(_save(env), "", true)
 	var before_copy: Dictionary = JSON.parse_string(before)
 	var snap_before := JSON.stringify(_snap(env), "", true)
@@ -285,19 +285,13 @@ static func _t_refusals() -> Dictionary:
 # Debug producer
 # ---------------------------------------------------------------------------
 
-## Defaults: three unique pieces fill cap 3, the consumable stacks. One flush. The cfg stays without
-## definitions: the overlay lived in the call only.
-## D-27: a discard is refused with `path_open` while the live path has an unsettled, not-lost item row, even
-## when the last snapshot is flow.sanctum. A settled or lost row, or no live path, allows it.
+## D-40: a live saved path with the party back on a Sanctum screen follows the Sanctum rules. A Sanctum piece can be
+## discarded, the one-discard mark is not spent, and nothing in the snapshot says "path".
 static func _t_path_open() -> Dictionary:
 	var m: Array = []
 	var env := _env("pathopen", 3, 2)
 	_seed(env, ["ph_weapon_a", "ph_charm_a"])
 	var ids := _ids(env, "items")
-	# (d) no live path: allowed.
-	if _refusal_key(env, _discard("it.99")) != "not_found":
-		m.append("no live path: the path check came first")
-	# (a) one open item row: refused, nothing changes.
 	_live_path(env)
 	var stage: Dictionary = (((_save(env)["realms"] as Dictionary)["realm.01"] as Dictionary)["stages"] as Array)[0]
 	var row := { "id": "item:test:1", "items": [{ "type_id": "ph_relic_a", "kind": "relic", "grade": "", "quantity": 1 }],
@@ -305,26 +299,13 @@ static func _t_path_open() -> Dictionary:
 	(stage["earnings"] as Array).append(row)
 	if str(_snap(env).get("type", "")) != FlowStateIds.SANCTUM:
 		m.append("the snapshot is not flow.sanctum")
-	var before := JSON.stringify(_save(env), "", true)
-	var flushes := _dispatch(env, _discard(ids[0]))
-	if flushes != 0 or JSON.stringify(_save(env), "", true) != before:
-		m.append("open row: flushes %d or the save changed" % flushes)
-	if _refusal_key(env, _discard(ids[0])) != "path_open":
-		m.append("open row: reason is not path_open")
-	# (b) the same row settled, then lost: allowed.
-	row["settled"] = true
-	if _refusal_key(env, _discard("it.99")) != "not_found":
-		m.append("settled row: still refused path_open")
-	row["settled"] = false
-	row["lost"] = true
-	if _refusal_key(env, _discard("it.99")) != "not_found":
-		m.append("lost row: still refused path_open")
-	row["lost"] = false
-	row["settled"] = true
+	if InventoryRules.mode((env["rt"] as FlowRuntime).flow_ctx) != InventoryRules.MODE_SANCTUM:
+		m.append("a Sanctum screen with a live saved path is not in the Sanctum mode")
 	_dispatch(env, _discard(ids[0]))
 	if _ids(env, "items").has(ids[0]):
-		m.append("settled row: the discard did not remove the piece")
-	# (c) the same id again: not_found.
+		m.append("open row: the Sanctum piece was not discarded")
+	if stage.has("discard_used"):
+		m.append("a Sanctum discard spent the one discard of the path")
 	if _refusal_key(env, _discard(ids[0])) != "not_found":
 		m.append("second discard of the same id is not not_found")
 	_done(env)
@@ -333,7 +314,7 @@ static func _t_path_open() -> Dictionary:
 
 static func _t_produce_direct() -> Dictionary:
 	var m: Array = []
-	var env := _env("produce", 3, 1)
+	var env := _env("produce", 4, 1)
 	var flushes := _dispatch(env, { "type": _PRODUCER_ACTION })
 	if flushes != 1:
 		m.append("expected 1 save flush, got %d" % flushes)
@@ -536,29 +517,29 @@ static func _forbidden_keys(v: Variant, path: String, out: Array) -> void:
 
 static func _t_snapshot_shape() -> Dictionary:
 	var m: Array = []
-	var env := _env("shape", 2, 2)
+	var env := _env("shape", 3, 2)
 	var rt: FlowRuntime = env["rt"]
 	# A fresh game: the field exists and is empty.
 	var fresh := _inv_snap(env)
-	if fresh.is_empty() or int(fresh.get("unique_count", -1)) != 0 or int(fresh.get("unique_cap", -1)) != 2:
+	if fresh.is_empty() or int(fresh.get("unique_count", -1)) != 0 or int(fresh.get("unique_cap", -1)) != 3:
 		m.append("fresh field %s" % str(fresh))
-	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_consumable_a"])
+	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a"])
 	rt.flow_machine.reenter(rt.flow_ctx, env["logger"], 3)
 	var snap := _inv_snap(env)
-	var want_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "sanctum_room",
-		"stacks", "unique_cap", "unique_count", "warn"])
+	var want_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "pack_stacks",
+		"sanctum_room", "sanctum_used", "stacks", "unique_cap", "unique_count", "warn"])
 	if _sorted_keys(snap) != want_keys:
 		m.append("keys %s" % _sorted_keys(snap))
-	if int(snap["unique_count"]) != 2 or int(snap["unique_cap"]) != 2 or int(snap["sanctum_room"]) != 0 \
+	if int(snap["unique_count"]) != 2 or int(snap["sanctum_used"]) != 3 or int(snap["unique_cap"]) != 3 or int(snap["sanctum_room"]) != 0 \
 			or int(snap["pack_count"]) != 1 or int(snap["pack_capacity"]) != 2 or int(snap["pack_free"]) != 1:
 		m.append("counts %s" % str(snap))
-	var row_keys := str(["equipped", "grade", "id", "kind", "mark_index", "type_id"])
+	var row_keys := str(["equipped", "grade", "id", "kind", "mark_index", "name", "slot", "type_id"])
 	for r in (snap["items"] as Array) + (snap["pack"] as Array):
 		if _sorted_keys(r) != row_keys:
 			m.append("piece row keys %s" % _sorted_keys(r))
 	if (snap["items"] as Array).size() != 2 or (snap["pack"] as Array).size() != 1 or (snap["stacks"] as Array).size() != 1:
 		m.append("row counts %s" % str(snap))
-	if _sorted_keys(snap["stacks"][0]) != str(["at_limit", "kind", "limit", "quantity", "type_id"]):
+	if _sorted_keys(snap["stacks"][0]) != str(["at_limit", "count", "kind", "name", "slot", "stack_limit", "type_id"]):
 		m.append("stack row keys %s" % _sorted_keys(snap["stacks"][0]))
 	if _sorted_keys(snap["pack_load"]) != str(["capacity", "carried", "free", "level"]) \
 			or _sorted_keys(snap["warn"]) != str(["pack", "room"]):
@@ -577,9 +558,9 @@ static func _t_snapshot_shape() -> Dictionary:
 
 static func _t_snapshot_copy() -> Dictionary:
 	var m: Array = []
-	var env := _env("copy", 2, 2)
+	var env := _env("copy", 3, 2)
 	var rt: FlowRuntime = env["rt"]
-	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_consumable_a"])
+	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a"])
 	rt.flow_machine.reenter(rt.flow_ctx, env["logger"], 3)
 	var save_before := JSON.stringify(_save(env), "", true)
 	var snap := _inv_snap(env)
@@ -588,7 +569,7 @@ static func _t_snapshot_copy() -> Dictionary:
 	((snap["items"] as Array)[0] as Dictionary)["type_id"] = "x"
 	(snap["items"] as Array).clear()
 	(snap["pack"] as Array).append({ "id": "it.77" })
-	((snap["stacks"] as Array)[0] as Dictionary)["quantity"] = 99
+	((snap["stacks"] as Array)[0] as Dictionary)["count"] = 99
 	(snap["pack_load"] as Dictionary)["free"] = 99
 	(snap["warn"] as Dictionary)["room"] = true
 	snap["unique_cap"] = 99
@@ -609,8 +590,8 @@ static func _t_snapshot_copy() -> Dictionary:
 ## copy gives the same result and the same state, and `validate` is clean.
 static func _t_round_trip() -> Dictionary:
 	var m: Array = []
-	var env := _env("trip", 2, 3)
-	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_armor_a", "ph_consumable_a"])
+	var env := _env("trip", 3, 3)
+	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a", "ph_armor_a"])
 	_dispatch(env, _discard("it.2"))
 	var loaded: Dictionary = JSON.parse_string(JSON.stringify(_save(env)))
 	var cfg: Dictionary = env["inv_cfg"]
@@ -632,13 +613,13 @@ static func _t_round_trip() -> Dictionary:
 	return _result(m)
 
 
-## Items it.2 (charm) and it.4 (armor), stacks consumable 2 and material 1, next_seq 5. Numbers are floats
+## Items it.2 (charm, slot 1) and it.4 (armor, slot 0), stacks consumable 2 (slot 3) and material 1 (slot 2), next_seq 5. Numbers are floats
 ## because the value is read back from JSON.
-const _PINNED_FINAL := '{"items":[{"grade":"g1","held_by":"","id":"it.2","kind":"gear","type_id":"ph_charm_a"},{"grade":"g1","held_by":"","id":"it.4","kind":"gear","type_id":"ph_armor_a"}],"next_seq":5.0,"pack":[],"stacks":[{"kind":"consumable","quantity":2.0,"type_id":"ph_consumable_a"},{"kind":"material","quantity":1.0,"type_id":"ph_material_a"}],"version":1.0}'
+const _PINNED_FINAL := '{"items":[{"grade":"g1","held_by":"","id":"it.2","kind":"gear","slot":1.0,"type_id":"ph_charm_a"},{"grade":"g1","held_by":"","id":"it.4","kind":"gear","slot":0.0,"type_id":"ph_armor_a"}],"next_seq":5.0,"pack":[],"pack_stacks":[],"stacks":[{"kind":"consumable","quantity":2.0,"slot":3.0,"type_id":"ph_consumable_a"},{"kind":"material","quantity":1.0,"slot":2.0,"type_id":"ph_material_a"}],"version":1.0}'
 
 
 static func _run_sequence(tag: String) -> String:
-	var env := _env(tag, 3, 2)
+	var env := _env(tag, 4, 2)
 	_dispatch(env, { "type": _PRODUCER_ACTION })
 	_dispatch(env, _discard("it.1"))
 	_dispatch(env, _discard("it.3"))
@@ -705,18 +686,18 @@ static func _row_of(type_id: String, qty: int, source: String, mark: int, reason
 	return out
 
 
-## B1 + B3 + reload. Cap 2, pack 2. The Sanctum holds two pieces, one piece is held (it.3), the path holds an armor
-## row (becomes it.4, in the pack) and a stack row. The outcome is "all". The explore preview lists the three at
+## B1 + B3 + reload. Cap 3, pack 2. The Sanctum holds two pieces and a consumable stack, one piece is held (it.3),
+## the path holds an armor row (becomes it.4, in the pack) and a stack row (merges into the stack). The outcome is "all". The explore preview lists the three at
 ## risk; the scout-return card carries `items`; the context field is spent; a JSON reload replays the same block.
 static func _t_leave_chain() -> Dictionary:
-	var env := _explore_env("leave_chain", 2, 2)
+	var env := _explore_env("leave_chain", 3, 2)
 	if not bool(env.get("ok", false)):
 		return env
 	var m: Array = []
 	var rt: FlowRuntime = env["runtime"]
 	var fc := rt.flow_ctx
 	var save := rt.get_save_data()
-	for ty in ["ph_weapon_a", "ph_charm_a", "ph_relic_a"]:
+	for ty in ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a"]:
 		InventoryService.intake(save, env["inv_cfg"], InventoryServiceTests._e(ty), "direct")
 	EarningsService.record_item(_stage_of(env), "s0", "a", ItemPacksTests._entry("ph_armor_a"))
 	EarningsService.record_item(_stage_of(env), "s0", "b", ItemPacksTests._entry("ph_consumable_a", 2))
@@ -924,70 +905,37 @@ static func _stage_clear_card(tag: String, with_item: bool) -> Dictionary:
 			EarningsService.record_item(FlowStageExploreState._get_current_stage(rt.flow_ctx), "s0", "a", ItemPacksTests._entry("ph_armor_a")))
 
 
-## M3 + M4: `data.inventory.discard_blocked` is "path_open" only when the controller would refuse for the live path,
-## and the controller uses the same function. Cases: no live stage; open row; held piece on an unsettled path;
-## the same path after the party left it (escaped), after the path end (receipt), with nothing held.
+## `data.inventory.path` is present only in the path view (D-40). A Sanctum screen with a live saved path has no
+## `path` key, free moves and free discards on any entry, and does not spend the one-discard mark.
 static func _t_discard_blocked() -> Dictionary:
 	var m: Array = []
-	var base_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "sanctum_room",
-		"stacks", "unique_cap", "unique_count", "warn"])
-	var with_key := str(["discard_blocked", "items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load",
-		"sanctum_room", "stacks", "unique_cap", "unique_count", "warn"])
-	# (a) No live stage: no key, the discard of a held piece works.
-	var a := _env("blocked_a", 2, 2)
-	_seed(a, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
-	(a["rt"] as FlowRuntime).flow_machine.reenter((a["rt"] as FlowRuntime).flow_ctx, a["logger"], 3)
-	if _sorted_keys(_inv_snap(a)) != base_keys:
-		m.append("(a) keys %s" % _sorted_keys(_inv_snap(a)))
-	_dispatch(a, _discard("it.3"))
-	if not _ids(a, "pack").is_empty():
-		m.append("(a) no live stage: the held piece was not discarded")
-	_done(a)
-	# (b) Back-route: a live unsettled path, a held piece, no open row.
-	var b := _env("blocked_b", 2, 2)
-	_seed(b, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
+	var base_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "pack_stacks",
+		"sanctum_room", "sanctum_used", "stacks", "unique_cap", "unique_count", "warn"])
+	var b := _env("blocked_b", 2, 3)
+	_seed(b, ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_armor_a"])
 	_live_path(b)
 	var rt: FlowRuntime = b["rt"]
 	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 3)
-	var snap := _inv_snap(b)
-	if _sorted_keys(snap) != with_key or str(snap.get("discard_blocked", "")) != "path_open" \
-			or ActiveStageService.discard_block_reason(rt.flow_ctx) != "path_open":
-		m.append("(b) keys %s, discard_blocked '%s'" % [_sorted_keys(snap), str(snap.get("discard_blocked"))])
-	_dispatch(b, { "type": "debug.seed.show" })  # flushes the layout save the re-entry queued
-	var before := JSON.stringify(_save(b), "", true)
-	for id in ["it.3", "it.1"]:
-		var flushes := _dispatch(b, _discard(id))
-		var key := _refusal_key(b, _discard(id))
-		if flushes != 0 or JSON.stringify(_save(b), "", true) != before or key != "path_open":
-			m.append("(b) a discard of %s: flushes %d, save changed %s, reason '%s'" % [id, flushes,
-				str(JSON.stringify(_save(b), "", true) != before), key])
-	# (c) The party left the path (escaped): the draw already happened, so the discard is allowed.
+	if _sorted_keys(_inv_snap(b)) != base_keys:
+		m.append("keys on a Sanctum screen with a live path: %s" % _sorted_keys(_inv_snap(b)))
 	var stage: Dictionary = (((_save(b)["realms"] as Dictionary)["realm.01"] as Dictionary)["stages"] as Array)[0]
-	(stage["explore_map"] as Dictionary)["party_state"] = "escaped"
-	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 4)
-	if (_inv_snap(b)).has("discard_blocked") or ActiveStageService.discard_block_reason(rt.flow_ctx) != "":
-		m.append("(c) an escaped path still blocks")
-	(stage["explore_map"] as Dictionary)["party_state"] = ""
-	# (d) The path end stamped the receipt: allowed.
-	stage["settlement_receipt"] = { "settled": true }
-	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 5)
-	if (_inv_snap(b)).has("discard_blocked") or ActiveStageService.discard_block_reason(rt.flow_ctx) != "":
-		m.append("(d) a settled path still blocks")
-	stage["settlement_receipt"] = {}
-	# (e) An open row blocks with no held piece (D-27); the room counts the row.
-	_dispatch(b, _discard("it.99"))
-	EarningsService.record_item(stage, "s0", "a", ItemPacksTests._entry("ph_armor_a"))
-	rt.flow_machine.reenter(rt.flow_ctx, b["logger"], 6)
-	if str(_inv_snap(b).get("discard_blocked", "")) != "path_open" or int((_inv_snap(b)["pack_load"] as Dictionary)["carried"]) != 2:
-		m.append("(e) open row: %s" % str(_inv_snap(b)))
+	# Sanctum piece, pack piece, and a move: all free, the mark stays unspent.
+	_dispatch(b, _discard("it.1"))
+	_dispatch(b, _discard("it.3"))
+	if _ids(b, "items").has("it.1") or _ids(b, "pack").has("it.3") or stage.has("discard_used"):
+		m.append("Sanctum rules on a live path: items %s pack %s mark %s" % [str(_ids(b, "items")), str(_ids(b, "pack")), str(stage.get("discard_used"))])
+	var mv := InventoryController.new(rt.flow_ctx, rt.config_service, b["logger"]).handle_move(
+		{ "type": "inventory.move.apply", "payload": { "from": "pack", "slot": 1, "to": "sanctum" } }, 9)
+	if mv.error_code != "":
+		m.append("a move on a Sanctum screen with a live path: '%s'" % mv.error_code)
 	_done(b)
-	# (f) A live path with nothing held and no row: nothing to dodge, allowed.
+	# The path view (forced) carries the key.
 	var f := _env("blocked_f", 2, 2)
-	_seed(f, ["ph_weapon_a", "ph_charm_a"])
-	_live_path(f)
-	(f["rt"] as FlowRuntime).flow_machine.reenter((f["rt"] as FlowRuntime).flow_ctx, f["logger"], 3)
-	if (_inv_snap(f)).has("discard_blocked") or _refusal_key(f, _discard("it.99")) != "not_found":
-		m.append("(f) a live path with an empty pack blocks")
+	var inv := InventoryRules.projection((f["rt"] as FlowRuntime).flow_ctx, true)
+	var want_path := { "move_reason": "path_open", "discard_used": false, "discard_pack_reason": "",
+		"discard_sanctum_reason": "not_in_pack" }
+	if str(inv.get("path")) != str(want_path):
+		m.append("path view projection: %s" % str(inv.get("path")))
 	_done(f)
 	return _result(m)
 
@@ -1014,25 +962,22 @@ static func _reload(env: Dictionary) -> Dictionary:
 	return { "rt": rt2, "logger": logger, "cfg": env["cfg"], "inv_cfg": env["inv_cfg"], "path": env["path"] }
 
 
-## The discard guard reads saved state, so a quit and Continue does not open it (`flow_ctx.stage_id` is empty after
-## `boot()`). Each case: a save with one held piece (it.3), the runtime rebuilt from the file by `_reload`.
-## Blocked: an entered, unsettled path; an open item row with nothing held. Allowed: a stage never entered (the
-## player selected it and went back), an escaped party, a settled path. The last case is the same never-entered
-## stage in a live session, where `stage_id` is set.
+## After a quit and Continue (`flow_ctx.stage_id` empty), a Sanctum screen follows the Sanctum rules whether or not
+## the saved path is live (D-40): a move works, a Sanctum piece can be discarded, the snapshot has no `path` key.
 static func _t_discard_reload() -> Dictionary:
 	var m: Array = []
 	var cases := [
-		{ "name": "entered", "realm": _saved_realm(true, "exploring", false), "row": false, "held": true, "want": "path_open" },
-		{ "name": "open_row_only", "realm": _saved_realm(false, "exploring", false), "row": true, "held": false, "want": "path_open" },
-		{ "name": "never_entered", "realm": _saved_realm(false, "exploring", false), "row": false, "held": true, "want": "" },
-		{ "name": "escaped", "realm": _saved_realm(true, "escaped", false), "row": false, "held": true, "want": "" },
-		{ "name": "settled", "realm": _saved_realm(true, "exploring", true), "row": false, "held": true, "want": "" },
+		{ "name": "entered", "realm": _saved_realm(true, "exploring", false), "row": false },
+		{ "name": "open_row_only", "realm": _saved_realm(false, "exploring", false), "row": true },
+		{ "name": "never_entered", "realm": _saved_realm(false, "exploring", false), "row": false },
+		{ "name": "escaped", "realm": _saved_realm(true, "escaped", false), "row": false },
+		{ "name": "settled", "realm": _saved_realm(true, "exploring", true), "row": false },
 	]
 	for c_v in cases:
 		var c: Dictionary = c_v
 		var name := str(c["name"])
 		var env := _env("reload_" + name, 2, 2)
-		_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"] if bool(c["held"]) else ["ph_weapon_a", "ph_charm_a"])
+		_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
 		var realm: Dictionary = (c["realm"] as Dictionary).duplicate(true)
 		(_save(env)["realms"] as Dictionary)["realm.01"] = realm
 		if bool(c["row"]):
@@ -1041,29 +986,15 @@ static func _t_discard_reload() -> Dictionary:
 		var rt2: FlowRuntime = re["rt"]
 		if rt2.flow_ctx.realm_id != "realm.01" or not rt2.flow_ctx.stage_id.is_empty():
 			m.append("%s: setup: realm_id '%s', stage_id '%s' after boot" % [name, rt2.flow_ctx.realm_id, rt2.flow_ctx.stage_id])
-		var reason := ActiveStageService.discard_block_reason(rt2.flow_ctx)
-		var shown := str(_inv_snap(re).get("discard_blocked", ""))
-		if reason != str(c["want"]) or shown != str(c["want"]):
-			m.append("%s: reason '%s', snapshot '%s', expected '%s'" % [name, reason, shown, str(c["want"])])
-		var target := "it.3" if bool(c["held"]) else "it.1"
-		var before := JSON.stringify(_save(re), "", true)
-		var flushes := _dispatch(re, _discard(target))
-		var changed := JSON.stringify(_save(re), "", true) != before
-		if str(c["want"]) == "path_open" and (flushes != 0 or changed or _refusal_key(re, _discard(target)) != "path_open"):
-			m.append("%s: the discard was not refused (flushes %d, changed %s)" % [name, flushes, str(changed)])
-		if str(c["want"]) == "" and not changed:
-			m.append("%s: the discard was refused" % name)
+		if _inv_snap(re).has("path") or InventoryRules.mode(rt2.flow_ctx) != InventoryRules.MODE_SANCTUM:
+			m.append("%s: the Sanctum screen is not in the Sanctum mode" % name)
+		var mv := InventoryController.new(rt2.flow_ctx, rt2.config_service, re["logger"]).handle_move(
+			{ "type": "inventory.move.apply", "payload": { "from": "sanctum", "slot": 0, "to": "pack" } }, 9)
+		var dk := _refusal_key(re, _discard("it.2"))
+		if mv.error_code != "" or dk != "":
+			m.append("%s: move '%s', discard '%s'" % [name, mv.error_code, dk])
 		_done(re)
 		_done(env)
-	# The same never-entered stage in a live session: stage_id is set, the stage is not entered.
-	var live := _env("reload_live", 2, 2)
-	_seed(live, ["ph_weapon_a", "ph_charm_a", "ph_relic_a"])
-	_live_path(live)
-	var stage: Dictionary = (((_save(live)["realms"] as Dictionary)["realm.01"] as Dictionary)["stages"] as Array)[0]
-	(stage["explore_map"] as Dictionary)["locked"] = false
-	if ActiveStageService.discard_block_reason((live["rt"] as FlowRuntime).flow_ctx) != "":
-		m.append("live session: a stage that was selected and never entered blocks the discard")
-	_done(live)
 	return _result(m)
 
 
@@ -1080,8 +1011,8 @@ static func _t_party_prep_item_free() -> Dictionary:
 		_done(env)
 		return { "ok": false, "error": "flow.echo_party data has no inventory for an item-free save" }
 	var inv: Dictionary = inv_v
-	var want_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "sanctum_room",
-		"stacks", "unique_cap", "unique_count", "warn"])
+	var want_keys := str(["items", "pack", "pack_capacity", "pack_count", "pack_free", "pack_load", "pack_stacks",
+		"sanctum_room", "sanctum_used", "stacks", "unique_cap", "unique_count", "warn"])
 	if _sorted_keys(inv) != want_keys:
 		m.append("keys %s" % _sorted_keys(inv))
 	if int(inv["unique_cap"]) != 4 or int(inv["pack_capacity"]) != 3 or int(inv["pack_free"]) != 3 \
@@ -1118,8 +1049,8 @@ static func _t_reserved_and_party_prep() -> Dictionary:
 	if int((snap["pack_load"] as Dictionary)["carried"]) != 1 or int(snap["pack_free"]) != 2 or int(snap["pack_count"]) != 0 \
 			or plain_pack_load == str(snap["pack_load"]):
 		m.append("sanctum: pack_load %s, pack_free %s" % [str(snap["pack_load"]), str(snap["pack_free"])])
-	if str(snap.get("discard_blocked", "")) != "path_open":
-		m.append("an open row in another realm must block the discard, got '%s'" % str(snap.get("discard_blocked")))
+	if snap.has("path"):
+		m.append("a Sanctum screen carries a path key (D-40)")
 	# Party prep.
 	var party: Dictionary = FlowEchoPartyState.build_snapshot(rt.flow_ctx, 4)
 	var data: Dictionary = party["data"]

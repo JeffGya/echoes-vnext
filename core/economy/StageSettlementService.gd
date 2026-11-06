@@ -140,6 +140,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 		flow_ctx.request_save("progression.xp")
 
 	# --- stamp --------------------------------------------------------------
+	InventoryRules.clear_discard_used(stage_ref)
 	stage_ref["settlement_receipt"] = {
 		"version":   RECEIPT_VERSION,
 		"result_id": "%s.stage.%d" % [flow_ctx.realm_id, stage_index],
@@ -182,6 +183,8 @@ func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
 static func _bank_rows(save: Dictionary, inv_cfg: Dictionary, rows: Array,
 		log: StructuredLogger, t: int) -> Dictionary:
 	var report := _item_report()
+	# Carried entries take the Sanctum room before the new rows (intake does not move the pack).
+	InventoryService.move_pack_to_sanctum(save, inv_cfg)
 	for r_v in rows:
 		_settle_item_row(save, inv_cfg, r_v, true, "", rows.size(), report, log, t)
 	InventoryService.move_pack_to_sanctum(save, inv_cfg)

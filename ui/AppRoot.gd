@@ -645,6 +645,8 @@ func _run_tests(parts: Array) -> void:
 	InventoryServiceTests.register(runner)  # V2-ITEM-001a step 3: InventoryService (intake order, discard, snapshot, validate)
 	ItemPacksTests.register(runner)  # V2-ITEM-001a step 4: item rows in the packs (seam, leave draws, held pieces, defeat, path end)
 	InventoryActionTests.register(runner)  # V2-ITEM-001a step 5: inventory.discard.apply, debug.inventory.produce, data.inventory in the Sanctum snapshot
+	InventoryMoveTests.register(runner)  # V2-ITEM-001 step 7: slots, moves, merges and count discards (service level)
+	InventoryPathTests.register(runner)  # V2-ITEM-001 step 7: inventory.move.apply, the discard rules on a path, the saved one-discard mark
 	RiskProbeTests.register(runner)  # V2-ECONOMY-004 phase 5: do player choices change pace outcome and Echo loss (measures, asserts no design number)
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
 	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence

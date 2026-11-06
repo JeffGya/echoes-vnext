@@ -33,7 +33,7 @@ static func register(runner: CoreTestRunner) -> void:
 # ---------------------------------------------------------------------------
 
 static func _default_block() -> Dictionary:
-	return { "version": 1, "next_seq": 1, "items": [], "stacks": [], "pack": [] }
+	return { "version": 1, "next_seq": 1, "items": [], "stacks": [], "pack": [], "pack_stacks": [] }
 
 
 static func _piece(seq: int, type_id: String = "t_gear", kind: String = "gear") -> Dictionary:
@@ -73,13 +73,13 @@ static func _t_new_save_block() -> Dictionary:
 	if not (inv_v is Dictionary):
 		return { "ok": false, "error": "new save has no inventory Dictionary: %s" % str(inv_v) }
 	var inv: Dictionary = inv_v
-	if inv.keys().size() != 5:
-		m.append("block keys %s, expected 5" % str(inv.keys()))
+	if inv.keys().size() != 6:
+		m.append("block keys %s, expected 6" % str(inv.keys()))
 	if typeof(inv.get("version")) != TYPE_INT or int(inv["version"]) != 1:
 		m.append("version %s, expected int 1" % str(inv.get("version")))
 	if typeof(inv.get("next_seq")) != TYPE_INT or int(inv["next_seq"]) != 1:
 		m.append("next_seq %s, expected int 1" % str(inv.get("next_seq")))
-	for key in ["items", "stacks", "pack"]:
+	for key in ["items", "stacks", "pack", "pack_stacks"]:
 		if not (inv.get(key) is Array) or not (inv[key] as Array).is_empty():
 			m.append("%s %s, expected []" % [key, str(inv.get(key))])
 	# Two new saves never share the same arrays.
@@ -137,7 +137,10 @@ static func _t_wrong_types() -> Dictionary:
 	var notes2: Array = []
 	if not SaveService._repair_inventory_block(save2, notes2):
 		m.append("wrongly typed fields reported no change")
-	if str(save2["inventory"]) != str(_default_block()):
+	# The repair covers the arrays that existed when it was written; `pack_stacks` is created on first use.
+	var want_block := _default_block()
+	want_block.erase("pack_stacks")
+	if str(save2["inventory"]) != str(want_block):
 		m.append("wrongly typed fields became %s, expected the default block" % str(save2["inventory"]))
 	if notes2.is_empty():
 		m.append("wrongly typed fields left no repair note")

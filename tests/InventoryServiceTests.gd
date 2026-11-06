@@ -23,7 +23,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_service/snapshot_is_deep_copy_without_banned_keys", Callable(InventoryServiceTests, "_t_snapshot"))
 	runner.register_test("inventory_service/fixed_calls_give_the_pinned_save", Callable(InventoryServiceTests, "_t_pinned"))
 	runner.register_test("inventory_service/cfg_of_the_wrong_type_does_not_crash", Callable(InventoryServiceTests, "_t_cfg_types"))
-	runner.register_test("inventory_service/intake_moves_held_pieces_first", Callable(InventoryServiceTests, "_t_move_first"))
+	runner.register_test("inventory_service/intake_never_moves_the_pack", Callable(InventoryServiceTests, "_t_move_first"))
 	runner.register_test("inventory_service/remove_held_and_held_pieces", Callable(InventoryServiceTests, "_t_remove_held"))
 	runner.register_test("inventory_service/stack_above_a_lowered_limit", Callable(InventoryServiceTests, "_t_stack_below"))
 	runner.register_test("inventory_service/missing_cfg_keys_and_bad_next_seq", Callable(InventoryServiceTests, "_t_missing_keys"))
@@ -128,10 +128,8 @@ static func _check_invariants(save: Dictionary, cfg: Dictionary, label: String, 
 			if ids.has(id):
 				m.append("%s: duplicate id %s" % [label, id])
 			ids[id] = true
-	if InventoryService.unique_count(save) > int(cfg["unique_cap"]) and not allowed.has("above unique_cap"):
-		m.append("%s: items above the cap" % label)
-	if InventoryService.pack_count(save) > 0 and InventoryService.sanctum_room(save, cfg) > 0:
-		m.append("%s: pack holds pieces while the Sanctum has room" % label)
+	if InventoryService.sanctum_used(save) > int(cfg["unique_cap"]) and not allowed.has("above unique_cap"):
+		m.append("%s: Sanctum entries above the cap" % label)
 	for prob in InventoryService.validate(save, cfg):
 		var expected := false
 		for a in allowed:
@@ -347,8 +345,8 @@ static func _t_rejections() -> Dictionary:
 	_expect(m, InventoryService.intake(save, no_defs, e3, "direct"), "stored", "ok", "empty definitions accept any type")
 	if _json(save) == b:
 		m.append("test setup: the accepted piece left no trace")
-	# The accepted piece moved the held it.2 in first and took it.3 after it.
-	if _ids(save, "items") != ["it.1", "it.2", "it.3"] or int(_inv(save)["next_seq"]) != 4:
+	# The accepted piece took it.3 in the Sanctum; the held it.2 stayed in the pack (intake never moves the pack).
+	if _ids(save, "items") != ["it.1", "it.3"] or int(_inv(save)["next_seq"]) != 4:
 		m.append("accepted piece: items %s, next_seq %s" % [str(_ids(save, "items")), str(_inv(save)["next_seq"])])
 	var edge := _fresh()
 	_expect(m, InventoryService.intake(edge, cfg, _e("ph_weapon_a", 1, "it.999999999999999"), "direct"), "stored", "ok", "15-digit id")
@@ -381,12 +379,12 @@ static func _t_move() -> Dictionary:
 static func _t_discard() -> Dictionary:
 	var m: Array = []
 	var save := _fresh()
-	var cfg := _cfg(2, 3)
+	var cfg := _cfg(3, 3)
 	_direct(save, cfg, "ph_weapon_a")
 	_direct(save, cfg, "ph_charm_a")
+	InventoryService.intake(save, cfg, _e("ph_material_a", 2), "direct")
 	_direct(save, cfg, "ph_relic_a")
 	_direct(save, cfg, "ph_armor_a")
-	InventoryService.intake(save, cfg, _e("ph_material_a", 2), "direct")
 	var snapshot_before := _json(save)
 	var r := InventoryService.discard(save, cfg, "it.1", false)
 	_expect(m, r, "refused", "not_in_sanctum", "off path")
@@ -400,26 +398,20 @@ static func _t_discard() -> Dictionary:
 	(_inv(save)["items"][1] as Dictionary)["held_by"] = ""
 	if _json(save) != snapshot_before:
 		m.append("a refusal changed the save")
-	# Pack piece, Sanctum full: frees a pack slot, moves nothing.
+	# A pack piece leaves the pack; nothing else moves.
 	r = InventoryService.discard(save, cfg, "it.4", true)
 	_expect(m, r, "discarded", "ok", "pack piece")
-	if r["moved"] != 0 or _ids(save, "pack") != ["it.3"] or InventoryService.unique_count(save) != 2:
-		m.append("pack-piece discard: %s, pack %s" % [_json(r), str(_ids(save, "pack"))])
-	# Sanctum piece: the oldest held piece moves in.
+	if _ids(save, "pack") != ["it.3"] or InventoryService.unique_count(save) != 2:
+		m.append("pack-piece discard: pack %s" % str(_ids(save, "pack")))
+	# A Sanctum piece leaves its slot free; the held piece stays in the pack (the player decides).
 	r = InventoryService.discard(save, cfg, "it.1", true)
 	_expect(m, r, "discarded", "ok", "Sanctum piece")
-	if r["moved"] != 1 or _ids(save, "items") != ["it.2", "it.3"] or InventoryService.pack_count(save) != 0:
-		m.append("Sanctum-piece discard: %s, items %s" % [_json(r), str(_ids(save, "items"))])
+	if _ids(save, "items") != ["it.2"] or _ids(save, "pack") != ["it.3"] or InventoryService.sanctum_room(save, cfg) != 1:
+		m.append("Sanctum-piece discard: items %s, pack %s" % [str(_ids(save, "items")), str(_ids(save, "pack"))])
+	var rows: Array = InventoryService.snapshot(save, cfg)["items"]
+	if rows.size() != 1 or rows[0]["slot"] != 1:
+		m.append("the kept piece changed its slot: %s" % _json(rows))
 	_check_invariants(save, cfg, "discard", m)
-	# A pack-piece discard also moves held pieces in when a raised cap left room.
-	var save2 := _fresh()
-	var tight := _cfg(1, 3)
-	for t in ["ph_weapon_a", "ph_charm_a", "ph_relic_a"]:
-		_direct(save2, tight, t)
-	var r2 := InventoryService.discard(save2, _cfg(2, 3), "it.3", true)
-	_expect(m, r2, "discarded", "ok", "pack piece with room")
-	if r2["moved"] != 1 or _ids(save2, "items") != ["it.1", "it.2"] or InventoryService.pack_count(save2) != 0:
-		m.append("pack-piece discard with room: %s, items %s, pack %s" % [_json(r2), str(_ids(save2, "items")), str(_ids(save2, "pack"))])
 	return _result(m)
 
 
@@ -477,10 +469,11 @@ static func _t_pack_load() -> Dictionary:
 static func _t_snapshot() -> Dictionary:
 	var m: Array = []
 	var save := _fresh()
-	var cfg := _cfg(2, 2)
-	for t in ["ph_weapon_a", "ph_weapon_a", "ph_relic_a"]:
+	var cfg := _cfg(3, 2)
+	for t in ["ph_weapon_a", "ph_weapon_a"]:
 		_direct(save, cfg, t)
 	InventoryService.intake(save, cfg, _e("ph_material_a", 2), "direct")
+	_direct(save, cfg, "ph_relic_a")
 	var before := _json(save)
 	var snap := InventoryService.snapshot(save, cfg, 1)
 	var banned := _banned_key(snap)
@@ -493,7 +486,7 @@ static func _t_snapshot() -> Dictionary:
 	(snap["items"] as Array)[0]["type_id"] = "x"
 	(snap["items"] as Array).clear()
 	(snap["pack"] as Array).append({ "id": "junk" })
-	(snap["stacks"] as Array)[0]["quantity"] = 999
+	(snap["stacks"] as Array)[0]["count"] = 999
 	(snap["pack_load"] as Dictionary)["level"] = 9
 	if _json(save) != before:
 		m.append("mutating the projection changed the save")
@@ -505,10 +498,12 @@ static func _t_snapshot() -> Dictionary:
 
 static func _script(save: Dictionary, cfg: Dictionary) -> Array:
 	var out: Array = []
-	for t in ["ph_weapon_a", "ph_weapon_a", "ph_relic_a", "ph_charm_a", "ph_armor_a", "ph_armor_a"]:
+	for t in ["ph_weapon_a", "ph_weapon_a"]:
 		out.append(_direct(save, cfg, t))
 	out.append(InventoryService.intake(save, cfg, _e("ph_material_a", 4), "gathered"))
 	out.append(InventoryService.intake(save, cfg, _e("ph_consumable_a", 4), "direct"))
+	for t in ["ph_relic_a", "ph_charm_a", "ph_armor_a", "ph_armor_a"]:
+		out.append(_direct(save, cfg, t))
 	out.append(InventoryService.intake(save, cfg, _e("ph_weapon_a", 1, "it.20"), "direct"))
 	out.append(InventoryService.discard(save, cfg, "it.1", true))
 	out.append(InventoryService.discard(save, cfg, "it.4", true))
@@ -517,8 +512,8 @@ static func _script(save: Dictionary, cfg: Dictionary) -> Array:
 	return out
 
 
-const _PINNED_RESULTS := "stored/ok/it.1,stored/ok/it.2,stored/ok/it.3,packed/to_pack/it.4,packed/to_pack/it.5,lost/overflow/,stored/ok/,partial/stack_limit/,lost/overflow/,discarded/ok/it.1,discarded/ok/it.4,moved/0/,packed/to_pack/it.6"
-const _PINNED_SAVE := '{"inventory":{"items":[{"grade":"g1","held_by":"","id":"it.2","kind":"gear","type_id":"ph_weapon_a"},{"grade":"g1","held_by":"","id":"it.3","kind":"relic","type_id":"ph_relic_a"},{"grade":"g1","held_by":"","id":"it.5","kind":"gear","type_id":"ph_armor_a"}],"next_seq":7,"pack":[{"grade":"g1","held_by":"","id":"it.6","kind":"relic","type_id":"ph_relic_a"}],"stacks":[{"kind":"material","quantity":4,"type_id":"ph_material_a"},{"kind":"consumable","quantity":3,"type_id":"ph_consumable_a"}],"version":1}}'
+const _PINNED_RESULTS := "stored/ok/it.1,stored/ok/it.2,stored/ok/,partial/stack_limit/,packed/to_pack/it.3,packed/to_pack/it.4,lost/overflow/,lost/overflow/,lost/overflow/,discarded/ok/it.1,discarded/ok/it.4,moved/1/,packed/to_pack/it.5"
+const _PINNED_SAVE := '{"inventory":{"items":[{"grade":"g1","held_by":"","id":"it.2","kind":"gear","slot":1,"type_id":"ph_weapon_a"},{"grade":"g1","held_by":"","id":"it.3","kind":"relic","slot":0,"type_id":"ph_relic_a"}],"next_seq":6,"pack":[{"grade":"g1","held_by":"","id":"it.5","kind":"relic","slot":0,"type_id":"ph_relic_a"}],"stacks":[{"kind":"material","quantity":4,"slot":2,"type_id":"ph_material_a"},{"kind":"consumable","quantity":3,"slot":3,"type_id":"ph_consumable_a"}],"version":1}}'
 
 
 ## A fixed call sequence gives exactly this save and these results. A change to either is a decision.
@@ -526,7 +521,7 @@ static func _t_pinned() -> Dictionary:
 	var m: Array = []
 	var save := _fresh()
 	var results: Array = []
-	for r in _script(save, _cfg(3, 2)):
+	for r in _script(save, _cfg(4, 2)):
 		results.append("%s/%s/%s" % [r["result"], r["reason_key"], r["item_id"]])
 	var got_results := ",".join(results)
 	if got_results != _PINNED_RESULTS:
@@ -539,29 +534,29 @@ static func _t_pinned() -> Dictionary:
 static func _t_malformed() -> Dictionary:
 	var m: Array = []
 	var cfg := _cfg(5, 3)
-	var good := { "id": "it.1", "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "held_by": "" }
+	var good := { "id": "it.1", "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "held_by": "", "slot": 0 }
 	var save := _fresh()
 	save["inventory"]["items"] = [
 		good, 42, null, "str",
 		{ "id": 5, "type_id": "ph_weapon_a", "kind": "gear" },
 		{ "id": "it.2", "kind": "gear" },
 		{ "id": "it.3", "type_id": "ph_charm_a", "kind": "sword" },
-		{ "id": "it.1", "type_id": "ph_armor_a", "kind": "gear", "held_by": "" },
+		{ "id": "it.1", "type_id": "ph_armor_a", "kind": "gear", "held_by": "", "slot": 2 },
 		{ "id": "it.4", "type_id": "ph_relic_a", "kind": "relic", "held_by": 7 },
 		{ "id": "it.9", "type_id": "ph_armor_a", "kind": "gear", "grade": 5 },
 	]
-	save["inventory"]["pack"] = [{ "id": "it.5", "type_id": "ph_charm_a", "kind": "gear", "held_by": "" }, [], { "type_id": "x" }]
+	save["inventory"]["pack"] = [{ "id": "it.5", "type_id": "ph_charm_a", "kind": "gear", "held_by": "", "slot": 0 }, [], { "type_id": "x" }]
 	save["inventory"]["stacks"] = [
 		{ "type_id": "ph_material_a", "kind": "material", "quantity": "many" }, 7,
 		{ "kind": "material", "quantity": 2 }, { "type_id": "ph_material_a", "kind": "gear", "quantity": 2 },
-		{ "type_id": "ph_consumable_a", "kind": "consumable", "quantity": 2.0 },
+		{ "type_id": "ph_consumable_a", "kind": "consumable", "quantity": 2.0, "slot": 1 },
 	]
 	var want_probs := [
 		"items[1]: not a Dictionary", "items[2]: not a Dictionary", "items[3]: not a Dictionary",
 		"items[4]: bad id", "items[5]: bad type_id", "items[6]: bad kind",
 		"items[7]: duplicate id it.1", "items[8]: bad held_by", "items[9]: bad grade",
 		"pack[1]: not a Dictionary", "pack[2]: bad id",
-		"items: 10 pieces above unique_cap 5",
+		"items: 15 entries above unique_cap 5",
 		"stacks[0]: bad quantity", "stacks[1]: not a Dictionary", "stacks[2]: bad type_id", "stacks[3]: bad kind",
 		"next_seq: not above the highest piece id",
 	]
@@ -574,7 +569,7 @@ static func _t_malformed() -> Dictionary:
 		item_ids.append(row["id"])
 	if item_ids != ["it.1"]:
 		m.append("snapshot kept %s, expected only the first well-formed it.1" % str(item_ids))
-	if snap["stacks"].size() != 1 or snap["stacks"][0]["quantity"] != 2:
+	if snap["stacks"].size() != 1 or snap["stacks"][0]["count"] != 2:
 		m.append("snapshot stacks %s" % _json(snap["stacks"]))
 	InventoryService.intake(save, cfg, _e("ph_weapon_a"), "direct")
 	InventoryService.intake(save, cfg, _e("ph_material_a", 1), "direct")
@@ -584,7 +579,7 @@ static func _t_malformed() -> Dictionary:
 	var minted := InventoryService.intake(save, cfg, _e("ph_weapon_a", 1, "it.1"), "direct")
 	_expect(m, minted, "rejected", "duplicate", "duplicate of a good piece")
 	var r := InventoryService.discard(save, cfg, "it.4", true)
-	_expect(m, r, "refused", "equipped", "non-String held_by is never discarded")
+	_expect(m, r, "refused", "not_found", "a piece with a non-String held_by is malformed and is never discarded")
 	r = InventoryService.discard(save, cfg, "5", true)
 	_expect(m, r, "refused", "not_found", "non-String id")
 	InventoryService.move_pack_to_sanctum(save, cfg)
@@ -647,7 +642,7 @@ static func _t_invariants() -> Dictionary:
 	var cfg := _cfg(3, 2, 4)
 	var save := _fresh()
 	var types := ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_armor_a", "ph_material_a", "ph_consumable_a"]
-	var allowed: Array = ["above pack_capacity"]
+	var allowed: Array = ["above pack_capacity", "at or above the size"]
 	var x := 12345
 	for step in 160:
 		x = (x * 1103515245 + 12345) % 2147483648
@@ -655,7 +650,7 @@ static func _t_invariants() -> Dictionary:
 		var label := "step %d" % step
 		var type_id: String = types[(x >> 12) % types.size()]
 		var qty := 1 + (x >> 4) % 3 if type_id.contains("material") or type_id.contains("consumable") else 1
-		var count_before := InventoryService.unique_count(save)
+		var count_before := InventoryService.sanctum_used(save)
 		if step == 80:
 			cfg = _cfg(2, 2, 4)
 			allowed.append("above unique_cap")
@@ -671,8 +666,8 @@ static func _t_invariants() -> Dictionary:
 				InventoryService.discard(save, cfg, all[(x >> 6) % all.size()], true)
 		else:
 			InventoryService.move_pack_to_sanctum(save, cfg)
-		if InventoryService.unique_count(save) > count_before and InventoryService.unique_count(save) > int(cfg["unique_cap"]):
-			m.append("%s: a call put a piece in items above the cap" % label)
+		if InventoryService.sanctum_used(save) > count_before and InventoryService.sanctum_used(save) > int(cfg["unique_cap"]):
+			m.append("%s: a call put an entry in the Sanctum above the cap" % label)
 		_check_invariants(save, cfg, label, m, allowed)
 		if m.size() > 3:
 			break
@@ -780,29 +775,26 @@ static func _t_move_first() -> Dictionary:
 	InventoryService.intake(stacked, raised, _e("ph_material_a", 1), "direct")
 	if _ids(stacked, "pack") != ["it.2", "it.3"]:
 		m.append("a stack intake moved held pieces: %s" % str(_ids(stacked, "pack")))
-	# Cap 3: it.2 and it.3 move in first; the new piece then goes to the pack by the normal rule.
+	# Intake never moves the pack (D-40): the held pieces stay where they are in every case.
 	var a := save.duplicate(true)
 	var ra := _direct(a, raised, "ph_armor_a")
-	_expect(m, ra, "packed", "to_pack", "new piece after the move")
-	if _ids(a, "items") != ["it.1", "it.2", "it.3"] or _ids(a, "pack") != ["it.4"] or ra["item_id"] != "it.4":
+	_expect(m, ra, "stored", "ok", "new piece with Sanctum room")
+	if _ids(a, "items") != ["it.1", "it.4"] or _ids(a, "pack") != ["it.2", "it.3"] or ra["item_id"] != "it.4":
 		m.append("cap 3: items %s pack %s result %s" % [str(_ids(a, "items")), str(_ids(a, "pack")), _json(ra)])
-	# Cap 4: the new piece takes the last Sanctum slot and the pack ends empty.
-	var b := save.duplicate(true)
-	_expect(m, _direct(b, _cfg(4, 2), "ph_armor_a"), "stored", "ok", "new piece with room left")
-	if _ids(b, "items") != ["it.1", "it.2", "it.3", "it.4"] or InventoryService.pack_count(b) != 0:
-		m.append("cap 4: items %s pack %s" % [str(_ids(b, "items")), str(_ids(b, "pack"))])
-	# Cap 2: one held piece moves in; the new piece goes to the pack behind the other.
 	var c := save.duplicate(true)
-	_expect(m, InventoryService.intake(c, _cfg(2, 3), _e("ph_armor_a"), "gathered"), "packed", "to_pack", "gathered with one slot of room")
-	if _ids(c, "items") != ["it.1", "it.2"] or _ids(c, "pack") != ["it.3", "it.4"]:
+	_expect(m, InventoryService.intake(c, _cfg(2, 3), _e("ph_armor_a"), "gathered"), "stored", "ok", "gathered with Sanctum room")
+	if _ids(c, "items") != ["it.1", "it.4"] or _ids(c, "pack") != ["it.2", "it.3"]:
 		m.append("cap 2: items %s pack %s" % [str(_ids(c, "items")), str(_ids(c, "pack"))])
-	# A lost piece still lets the held pieces in.
+	# A full Sanctum and a full pack: the piece is lost and the pack stays.
 	var d := save.duplicate(true)
-	_expect(m, _direct(d, _cfg(2, 1), "ph_armor_a"), "lost", "overflow", "lost after the move")
-	if _ids(d, "items") != ["it.1", "it.2"] or _ids(d, "pack") != ["it.3"]:
+	_expect(m, _direct(d, _cfg(1, 2), "ph_armor_a"), "lost", "overflow", "lost with both full")
+	if _ids(d, "items") != ["it.1"] or _ids(d, "pack") != ["it.2", "it.3"]:
 		m.append("lost case: items %s pack %s" % [str(_ids(d, "items")), str(_ids(d, "pack"))])
-	_check_invariants(a, raised, "move-first a", m)
-	_check_invariants(b, _cfg(4, 2), "move-first b", m)
+	# The settlement call moves them: pieces in pack order while room exists.
+	var e := save.duplicate(true)
+	if InventoryService.move_pack_to_sanctum(e, raised) != 2 or _ids(e, "items") != ["it.1", "it.2", "it.3"]:
+		m.append("move_pack_to_sanctum: items %s" % str(_ids(e, "items")))
+	_check_invariants(a, raised, "no-pull a", m)
 	return _result(m)
 
 
@@ -852,14 +844,14 @@ static func _t_remove_held() -> Dictionary:
 static func _t_stack_below() -> Dictionary:
 	var m: Array = []
 	var save := _fresh()
-	_inv(save)["stacks"] = [{ "type_id": "ph_material_a", "kind": "material", "quantity": 5 }]
+	_inv(save)["stacks"] = [{ "type_id": "ph_material_a", "kind": "material", "quantity": 5, "slot": 0 }]
 	var cfg := _cfg(4, 2, 3)
 	var r := InventoryService.intake(save, cfg, _e("ph_material_a", 2), "direct")
 	_expect(m, r, "lost", "stack_limit", "stack above a lowered limit")
 	if r["quantity"] != 0 or r["lost_quantity"] != 2 or int(_inv(save)["stacks"][0]["quantity"]) != 5:
 		m.append("lowered limit: %s, stack %s" % [_json(r), _json(_inv(save)["stacks"])])
 	var row: Dictionary = InventoryService.snapshot(save, cfg)["stacks"][0]
-	if not row["at_limit"] or row["limit"] != 3 or row["quantity"] != 5:
+	if not row["at_limit"] or row["stack_limit"] != 3 or row["count"] != 5:
 		m.append("snapshot row %s" % _json(row))
 	if InventoryService.validate(save, cfg) != ["stacks[0]: quantity above the stack limit"]:
 		m.append("validate: %s" % str(InventoryService.validate(save, cfg)))
@@ -928,7 +920,7 @@ static func _t_gathered_over() -> Dictionary:
 	if InventoryService.pack_count(save) != 3 or InventoryService.pack_free(save, cfg) != 0:
 		m.append("pack %d, free %d" % [InventoryService.pack_count(save), InventoryService.pack_free(save, cfg)])
 	var probs := InventoryService.validate(save, cfg)
-	if probs != ["pack: 3 pieces above pack_capacity"]:
+	if probs != ["pack: 3 entries above pack_capacity", "pack[1]: slot 1 at or above the size 1", "pack[2]: slot 2 at or above the size 1"]:
 		m.append("validate: %s" % str(probs))
 	_expect(m, _direct(save, cfg, "ph_weapon_a"), "lost", "overflow", "direct above capacity")
 	var pl := InventoryService.pack_load(save, cfg, 0)

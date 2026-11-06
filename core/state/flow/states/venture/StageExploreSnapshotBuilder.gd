@@ -477,6 +477,8 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 			# What the party has gathered and has not yet settled: { ase, ekwan, overcome, total,
 			# nothing_new, gathered: { ase, ekwan, rows, has_fight_rows, has_found_rows } }. No odds. Read only.
 			"carry_home_preview":      _carry_preview(flow_ctx),
+			# The pack button and the one-discard state of the path view. Always on a path.
+			"inventory":               InventoryRules.projection(flow_ctx, true),
 		},
 		"actions": actions,
 		"meta": { "t": t },

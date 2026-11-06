@@ -147,10 +147,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"active_party_ids": party_ids,
 			"party_count": party_ids.size(),
 			"thread_count": thread_count,
-			# The pack for party prep and the departure chip. Same projection as the Sanctum's;
-			# `reserved` counts the open item rows of the whole save.
-			"inventory": InventoryService.snapshot(flow_ctx.save_data,
-				ConfigService.get_inventory_cfg(flow_ctx.config_service), EarningsService.open_item_rows_in_save(flow_ctx.save_data)),
+			# The pack for party prep and the departure chip. Same projection as the Sanctum's.
+			"inventory": InventoryRules.projection(flow_ctx),
 		},
 		"actions": {
 			"nav.back": {

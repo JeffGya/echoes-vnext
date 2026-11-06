@@ -496,32 +496,6 @@ static func record_found_items(flow_ctx_arg: FlowContext, situation_id: String, 
 	return out
 
 
-## The reason a Sanctum discard is refused because of an open path, or "". The one rule for the controller and
-## the Sanctum snapshot (`data.inventory.discard_blocked`). A discard would move held pieces to safety and dodge
-## the early-leave draw (D-22), so it is refused with `path_open` when
-##  1. any stage of the save has an open item row, or
-##  2. the pack holds a piece and the live stage is entered (`explore_map.locked`), has no `settlement_receipt.settled`
-##     and its party has not left (`party_state` is not "escaped").
-## It reads saved state only (the active realm's `current_stage_index`), because `flow_ctx.stage_id` is not
-## restored by `boot()`: the answer is the same after a quit and Continue. Pure and read-only.
-static func discard_block_reason(flow_ctx_arg: FlowContext) -> String:
-	var save := flow_ctx_arg.save_data
-	if EarningsService.open_item_rows_in_save(save) > 0:
-		return "path_open"
-	if InventoryService.pack_count(save) == 0:
-		return ""
-	var realm_model := RealmService.get_active(flow_ctx_arg)
-	var stage := FlowStageExploreState.stage_by_index(realm_model, int(realm_model.get("current_stage_index", 0)))
-	var receipt_v: Variant = stage.get("settlement_receipt", {})
-	if receipt_v is Dictionary and bool((receipt_v as Dictionary).get("settled", false)):
-		return ""
-	var map_v: Variant = stage.get("explore_map", {})
-	var map: Dictionary = map_v if map_v is Dictionary else {}
-	if not bool(map.get("locked", false)) or str(map.get("party_state", "")) == StageExploreModel.STATE_ESCAPED:
-		return ""
-	return "path_open"
-
-
 ## The fight row of the situation being fought, or {} when there is none. Read only: a rebuilt final card
 ## shows the same row as the first build, because it reads the row and not the act of writing it.
 static func fight_row(flow_ctx_arg: FlowContext, claimant: bool) -> Dictionary:
@@ -541,8 +515,8 @@ static func _last_situation_id(stage: Dictionary) -> String:
 ## D-115: a defeat loses every unsettled row of the active stage's packs (rows kept on defeat stay).
 ## A completed objective with no row gets its row first, so the safety net cannot add it back later.
 ## Item rows are lost with their entry marked `defeat`, and every held piece leaves `inventory.pack` with a
-## `held_fates` record (D-20). Runs on every defeat. It is idempotent: a lost row is not unsettled and the pack
-## is empty, so a repeat marks and removes nothing.
+## `held_fates` record (D-20), and the path's one-discard mark is cleared. Runs on every defeat. It is
+## idempotent: a lost row is not unsettled and the pack is empty, so a repeat marks and removes nothing.
 ## Returns how many rows were lost (item rows included). The caller requests the save.
 ## Item report: when any item row or held piece is lost, `encounter_ctx.packs_lost` also holds `items`, a list of
 ## `EarningsService.report_row` rows (reason `defeat`, no id; item rows first in row order, then held pieces in
@@ -572,6 +546,7 @@ static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 					item_report.append(EarningsService.report_row(e_v as Dictionary, "defeat", "gathered", -1))
 					lost_items += 1
 	var lost := EarningsService.mark_lost(stage)
+	InventoryRules.clear_discard_used(stage)
 	var held: Array = InventoryService.held_pieces(flow_ctx_arg.save_data)
 	var removed := InventoryService.remove_held(flow_ctx_arg.save_data, held.map(func(p): return p["id"]))
 	for p_v in removed:
