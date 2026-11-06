@@ -183,6 +183,15 @@ Consequences for core (later): `inventory.move.apply` with reorder, merge and co
 ## D-35 — Panels open alone (Jeff, 2026-11-06)
 Reviewing prototype v2, Jeff found that Stores and party details opened together. Rule: each panel opens alone. Stores opens only the Sanctum panel. Party opens only party details. The pack opens only from party details (or from the Sanctum panel's `Show pack` toggle). A panel opens beside another only if the player opens both. No screen or scenario starts with extra panels open.
 
+## D-36 — No mechanical pack penalty; show the risk (Jeff, 2026-11-06)
+Jeff accepted Option A from `pack-debuff-options-designer.md` and `pack-debuff-options-feel.md`. A full or carried pack has NO mechanical penalty. The cost stays what D-16 to D-20 already set: lost room, and held pieces rolled again on an early leave or lost on defeat. The pack must make that risk visible:
+- a heavy look for a full pack (beads lower, darker tone, thin strap line; no extra gold);
+- the loose-leaf "at stake" glyph on every carried piece, also on the path;
+- a consequence word at full, in place of `Full` (placeholder wording; Jeff writes final text);
+- the gauge pulse on every transition into full (0.4 s, no loop; reduced motion = 0.15 s fade);
+- one departure line that says carried pieces can be lost on a defeat or an early leave.
+Options B (presentational walk/idle change), C and D stay unbuilt. Revisit B only if play shows nobody feels the pack. This closes the "pack debuff story" idea: there is no rule to own.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
