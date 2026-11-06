@@ -180,6 +180,9 @@ From `docs/visual-plans/inventory-ui-mockup-v2.html`, section F, plus Jeff's rev
 - Open for the prototype v3 pass: card "grow to 560" (Q3 of v1) was answered YES (D-33 context); rail result-tile size (v1 Q4) was not answered. Ask again only if the UI build needs it.
 Consequences for core (later): `inventory.move.apply` with reorder, merge and count-discard; saved per-path discard counter; stack merge rule on move (intake merge rule stays).
 
+## D-35 — Panels open alone (Jeff, 2026-11-06)
+Reviewing prototype v2, Jeff found that Stores and party details opened together. Rule: each panel opens alone. Stores opens only the Sanctum panel. Party opens only party details. The pack opens only from party details (or from the Sanctum panel's `Show pack` toggle). A panel opens beside another only if the player opens both. No screen or scenario starts with extra panels open.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
