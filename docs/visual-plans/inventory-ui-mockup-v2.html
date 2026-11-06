@@ -635,6 +635,29 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 .cut{display:inline-block;width:14px;height:14px;background:currentColor;flex:none;clip-path:polygon(0 100%,0 45%,45% 0,100% 0,100% 55%,55% 100%,38% 100%,38% 62%,25% 62%)}
 .cut.used{opacity:.4}
 #size-ctl b{min-width:2ch;text-align:center}
+
+/* D-36 heavy pack */
+.beads b{transition:none}
+.beads .strap{position:absolute;left:4px;right:4px;top:calc(50% + 15px);display:none;height:0}
+.beads.near b{transform:translateY(1px)}
+.beads.near .strap{display:block;border-top:2px dashed rgba(245,230,211,.6)}
+.beads.full b,.beads.full b.on{transform:translateY(2px);background:#4B3826;border-color:#F5E6D3}
+.beads.full b.on{background:#A99A80;border-color:#F5E6D3}
+.beads.full{box-shadow:none}
+.beads.full .strap{display:block;border-top:3px solid #F5E6D3}
+.pnl.pack.heavy{background:repeating-linear-gradient(45deg,rgba(245,230,211,.06) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(245,230,211,.04) 0 2px,transparent 2px 9px),#3B2B1C}
+.cword{margin-top:4px;font:700 13px/1.25 var(--f-mono);display:flex;gap:6px;align-items:center}
+.cword::before{content:"";width:14px;height:11px;flex:none;border-top:3px solid #F5E6D3;border-bottom:1px solid #F5E6D3}
+.cword[data-level=near]::before{border-top-style:dashed}
+.depart{display:flex;gap:8px;align-items:flex-start;margin:0 0 8px;padding:5px 8px;border-left:3px solid var(--c-bronze);font:13px/1.3 var(--f-mono)}
+.depart .leaf{flex:none;margin-top:2px;background:var(--c-ink)}
+.hud{width:300px!important}
+.hud .depart{color:#F5E6D3;border-left-color:#F5E6D3;margin:8px 0 0}
+.hud .depart .leaf{background:#F5E6D3}
+.hudleaves{display:flex;align-items:center;gap:5px;margin-top:6px;color:#F5E6D3;font:13px/1 var(--f-mono)}
+.hudleaves .leaf{width:18px;height:18px;background:#F5E6D3}
+.hudleaves span{margin-left:6px}
+.dtl .kv .leaf{background:var(--c-ink);width:16px;height:16px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -672,8 +695,8 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 <span><svg viewBox="0 0 28 28" aria-hidden="true"><polygon points="14,3 24,9 24,19 14,25 4,19 4,9" fill="#785C2B"/></svg>Relic · hexagon</span>
 <span><svg viewBox="0 0 28 28" aria-hidden="true"><polygon points="14,4 25,24 3,24" fill="#785C2B"/></svg>Consumable · triangle</span>
 <span><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="7" width="18" height="5" fill="#785C2B"/><rect x="5" y="16" width="18" height="5" fill="#785C2B"/></svg>Material · two bars</span>
-<span><i class="sw"><i class="leaf held"></i></i>Open leaf · carried from an earlier path</span>
-<span><i class="sw"><i class="leaf gathered"></i></i>Whole leaf · found this path</span>
+<span><i class="sw"><i class="leaf held"></i></i>Open leaf · carried (at stake), from an earlier path</span>
+<span><i class="sw"><i class="leaf gathered"></i></i>Whole leaf · carried (at stake), found this path</span>
 <span><i class="sw"><i class="pips"><i></i><i></i></i></i>Pips · grade 1 to 3</span>
 <span><i class="sw"><i class="notch n2"></i></i>Notch · twin mark</span>
 <span><i class="sw gold">gold</i>Gold · full or actionable, with ink keyline</span>
@@ -789,7 +812,8 @@ const now=()=>performance.now();
 /* ================= MOTION CONSTANTS (milliseconds unless noted). Tune here. ================= */
 const MOVE_GLIDE_MS=260;                 // a moved tile glides from its old slot to the new slot
 const LAND_RING_MS=450;                  // one quiet ring on the landing slot
-const GAUGE_PULSE_MS=400, PULSE_SCALE=1.15;   // one pulse of the last gauge mark on first becoming full (once per session)
+const GAUGE_PULSE_MS=400, PULSE_SCALE=1.15;   // D-36: one pulse of the last gauge mark on EVERY transition into full (no loop)
+const HEAVY_TONE_MS=250;                       // D-36: the heavy tone and strap line fade in (reduced motion: RM_FADE_MS)
 const LOST_ALPHA=.35, LOST_MS=500;       // loss = ghost fade (fill 0.35, marks 0.6). No red. No shake.
 const DISCARD_LOST_MS=350, DISCARD_FADE_MS=150;
 const MODAL_BACKDROP_MS=150, MODAL_CARD_MS=150, GUARD_OPEN_MS=250;   // 0.25 s open window on Let it go and on leave confirm
@@ -824,6 +848,8 @@ const W={
  rDiscardUsed:'The one discard of this path is used.', rOccupied:'That slot is taken. Drop on an empty slot.',
  dropReorder:'Drop to place it in this slot', dropMerge:'Drop to merge the stacks', previewMark:'Preview. Read-only.',
  modalCountLab:'How many?', cntFewer:'Fewer', cntMore:'More',
+ packHeavy:'Heavy. They may lose what they carry.', packFullPath:'Full. Nothing more fits.', packNear:'Nearly full.',
+ atStake:'At stake: it can be lost.', atStakeLab:'At stake', departLine:'Carried pieces can be lost on a defeat or an early leave.',
  toastMerged:(t,l)=>`Merged. The stack is now x${t}.${l?` x${l} stay in the source slot.`:''}`,
  toastLetCount:(n,c)=>`Let go x${n}. x${c} remain.`,
  dropOkPack:'Drop to put it in the pack', dropOkSanct:'Drop to put it in the Sanctum', dropSame:'Drop to place it here',
@@ -839,7 +865,7 @@ const W={
  safeNote:n=>`${n} pieces in the Sanctum are safe.`, btnContinue:'Continue',
  partyDetails:'Party details', partyPackBtn:'Party pack', railStores:'Stores', railSanctum:'Sanctum',
  toastMoved:(n,to,c,cap)=>`${n} is now in the ${to==='pack'?'pack':'Sanctum'} (${c} of ${cap}).`,
- toastHidden:{pack:'The pack panel is closed. Open it from party details.',sanct:'The Sanctum panel is closed. Open it with the Stores button.'}
+ toastHidden:{pack:'The pack panel is not open. Open it with Show pack or the pack button in party details.',sanct:'The Sanctum panel is not open. Open it with the Stores button.'}
 };
 const phs=(k,...a)=>{const t=W[k];return typeof t==='function'?t(...a):t;};
 const ph=(k,...a)=>`<span class="ph" data-slot="${k}">${phs(k,...a)}</span>`;
@@ -884,13 +910,13 @@ function load(n,cardKind){
   fill('pack',[mk('gear',3,0,{src:'held'}),stk('consumable',5,{src:'held'})]);
  }
  if(n===2){
-  S.open={sanct:true,pack:true};
+  S.open={sanct:true,pack:false};
   spread([mk('gear',2,1),mk('relic',3,4),stk('consumable',12),mk('armor',1,2),stk('consumable',20),mk('charm',2,5),stk('material',14),mk('gear',1,3),mk('relic',2,0),mk('armor',3,1),stk('consumable',3),mk('charm',1,0),stk('consumable',6)]);
   fill('pack',[mk('gear',2,3,{src:'held'}),stk('consumable',18,{src:'held'}),mk('relic',1,2,{src:'held'})]);
   S.sel=null;
  }
  if(n===3){
-  S.view='prep';S.open={sanct:false,pack:true};
+  S.view='prep';S.open={sanct:false,pack:false};
   spread(filler(12,1));
   fill('pack',[mk('gear',2,3,{src:'held'}),stk('material',7,{src:'held'}),mk('relic',1,2,{src:'held'})]);
  }
@@ -908,15 +934,14 @@ function load(n,cardKind){
   openCard(S.cardKind);
  }
  if(n===7){
-  S.open={sanct:true,pack:true};
+  S.open={sanct:true,pack:false};
   spread(filler(14,4));fill('sanct',[...filler(6,0)].slice(0,0));
   // fill every free Sanctum slot
   S.box.sanct=S.box.sanct.map((x,i)=>x||(i%7===3?stk('consumable',9):mk(['gear','relic','armor','charm'][i%4],1+i%3,i%6)));
   fill('pack',[mk('gear',2,3,{src:'held'}),stk('consumable',5,{src:'held'}),mk('relic',1,2,{src:'held'}),mk('charm',3,5,{src:'held'})]);
   S.sel=S.box.sanct[0].id;
  }
- pulsedOnce=false;
-}
+ }
 
 /* ================= tiles ================= */
 function tile(r,o={}){
@@ -924,7 +949,7 @@ function tile(r,o={}){
  const cls=['item-tile','kind-'+r.kind,st?'stack':'unique'];
  if(box==='pack')cls.push('carried'); if(state)cls.push(state); if(o.selected)cls.push('selected');
  let m='';
- if(box==='pack'&&r.src)m+=`<span class="leaf ${r.src==='held'?'held':'gathered'}"></span>`;
+ if(box==='pack')m+=`<span class="leaf ${r.src==='gathered'?'gathered':'held'}"></span>`;   // D-36: the leaf is the at-stake mark on every carried piece
  if(!st&&r.mark>=0)m+=`<span class="notch n${r.mark}"></span>`;
  if(!st)m+=`<span class="pips">${'<i></i>'.repeat(r.grade)}</span>`;
  m+='<span class="equip-hold"></span>';
@@ -945,11 +970,13 @@ function gaugeSanct(){
  return `<div class="ledger ${cls}" role="img" aria-label="${n} of ${SANCTUM_SLOTS} slots used" data-gauge="sanct">${bars}</div>
   <div class="gline"><span>${ph('slotsWord',n,SANCTUM_SLOTS)}</span>${r===0?`<span class="full-word">${ph('fullWord')}</span>`:'<span></span>'}</div>`;
 }
+function packLevel(){const n=count('pack');return n>=PACK_SLOTS?'full':(n>0&&PACK_SLOTS-n===1)?'near':'';}
 function gaugePack(){
- const n=count('pack'),r=PACK_SLOTS-n,cls=r===0?'full':'';
+ const n=count('pack'),lv=packLevel();
  let b='';for(let i=0;i<PACK_SLOTS;i++)b+=`<b class="${i<n?'on':''}"></b>`;
- return `<div class="beads ${cls}" role="img" aria-label="${n} of ${PACK_SLOTS} sockets used" data-gauge="pack">${b}</div>
-  <div class="gline"><span>${ph('socketsWord',n,PACK_SLOTS)}</span><span>${r===0?`<span class="full-word">${ph('fullWord')}</span>`:ph('loadWord',n,PACK_SLOTS)}</span></div>`;
+ const word=lv==='full'?ph(onPath()?'packFullPath':'packHeavy'):lv==='near'?ph('packNear'):'';
+ return `<div class="beads ${lv}" role="img" aria-label="${n} of ${PACK_SLOTS} sockets used" data-gauge="pack"><i class="strap"></i>${b}</div>
+  <div class="gline"><span>${ph('socketsWord',n,PACK_SLOTS)}</span><span>${ph('loadWord',n,PACK_SLOTS)}</span></div>${word?`<div class="cword" data-level="${lv}">${word}</div>`:''}`;
 }
 const loadLvl=()=>[0,1,1,2,3][Math.min(4,count('pack'))];
 function slotHTML(box,i){
@@ -980,7 +1007,7 @@ function packPanel(){
  const pathbar=p?`<div class="pathbar"><div class="r1"><i class="lock" aria-hidden="true"></i><span>${ph('pathReadonly')}</span></div>
    <div class="r1"><span class="ltoken ${S.path.used?'used':'left'}" data-state="${S.path.used?'used':'left'}"><i class="cut ${S.path.used?'used':''}" aria-hidden="true"></i>${ph(S.path.used?'pathUsed':'pathLeft')}</span></div>
    ${S.path.used?`<div>${ph('pathUsedWhy',S.path.why)}</div>`:''}</div>`:'';
- return `<section class="pnl pack on-dark" data-box="pack" aria-label="Party pack"><div class="hdr"><i class="load-mark l${loadLvl()}" role="img" aria-label="Pack load ${loadLvl()}"></i>
+ return `<section class="pnl pack on-dark ${packLevel()==='full'?'heavy':packLevel()}" data-box="pack" aria-label="Party pack"><div class="hdr"><i class="load-mark l${loadLvl()}" role="img" aria-label="Pack load ${loadLvl()}"></i>
   <div class="grow"><h2>${ph('packTitle')}</h2><div class="sub">${ph('packSub')}</div></div>
   <button type="button" class="xbtn" data-act="closePack" data-k="xp" aria-label="Close party pack">&times;</button></div>
   ${pathbar}
@@ -1014,7 +1041,7 @@ function detailsPanel(){
  const pathNote=onPath()&&!ldDis?`<p>${ph('pathRule')}</p>`:'';
  return `<aside class="dtl" aria-label="Details" data-k="dtl"><h3>${ph('detailsTitle')}</h3>
   <div class="top"><div class="bigt" aria-hidden="true">${tile(it,{box})}</div>
-   <div class="lines"><div class="nm">${phn(it.name)}</div><div class="kv"><span>${phs('kindLab')}:</span><b>${ph('kind'+it.kind)||''}</b></div>${gr}${cnt}</div></div>
+   <div class="lines"><div class="nm">${phn(it.name)}</div><div class="kv"><span>${phs('kindLab')}:</span><b>${ph('kind'+it.kind)||''}</b></div>${gr}${cnt}${box==='pack'?`<div class="kv"><i class="leaf held" aria-hidden="true"></i><span>${ph('atStake')}</span></div>`:''}</div></div>
   ${whereBadge(box)}
   <div class="dbtns">
    <button type="button" class="btn-keep" data-act="moveSel" data-k="mv" ${mvDis?'aria-disabled="true" aria-describedby="rs-mv"':''}>${ph(mv.label)}</button>
@@ -1029,6 +1056,7 @@ function partyPanel(){
  return `<section class="pnl party" aria-label="Party details" data-k="party"><div class="hdr"><h2>${ph('partyDetails')}</h2></div>
   ${rows}<div class="hr" style="margin:8px 0 10px"></div><i class="gb" style="width:200px"></i><br><i class="gb" style="width:150px;margin-top:8px"></i>
   <div style="flex:1"></div>
+  ${n>0?`<div class="depart" role="note"><i class="leaf held" aria-hidden="true"></i><span>${ph('departLine')}</span></div>`:''}
   <button type="button" class="packbtn" data-act="togPack" data-k="packbtn" aria-expanded="${S.open.pack}" aria-controls="work"><i class="connect" aria-hidden="true"></i><i class="load-mark l${loadLvl()}" aria-hidden="true"></i>
    <span><b>${ph('partyPackBtn')}</b><span class="minis" aria-hidden="true">${dots}</span><span>${ph('socketsWord',n,PACK_SLOTS)}</span></span><span class="chev" aria-hidden="true">${S.open.pack?'&lsaquo;':'&rsaquo;'}</span></button></section>`;
 }
@@ -1065,7 +1093,7 @@ SCREENS.sanctum=()=>`<div class="bg"><div class="world-hint"></div></div><span c
 SCREENS.prep=()=>`<div class="bg"><div class="world-hint"></div></div><span class="nodename" style="right:24px;top:4px">EchoPartyScreen (existing, SanctumShell): party details is its panel</span>`;
 SCREENS.path=()=>`<div class="realm"><div class="bg"><div class="world-hint"></div></div></div><span class="nodename" style="left:24px;top:14px">StageExploreScreen (existing, RealmShell)</span>
  <div class="abs board" style="left:48px;top:48px;width:1184px;height:540px"><span class="nodename" style="position:static">CombatBoard and world layer (existing)</span></div>
- <div class="dcard hud"><button type="button" class="hudbtn" data-act="togPack" data-k="hudpack" aria-pressed="${S.open.pack}"><i class="load-mark l${loadLvl()}" aria-hidden="true"></i><span>${ph('partyPackBtn')} ${count('pack')}/${PACK_SLOTS}</span></button><span class="nodename" style="position:static;display:block;margin-top:6px">path HUD (stand-in)</span></div>
+ <div class="dcard hud"><button type="button" class="hudbtn" data-act="togPack" data-k="hudpack" aria-pressed="${S.open.pack}"><i class="load-mark l${loadLvl()}" aria-hidden="true"></i><span>${ph('partyPackBtn')} ${count('pack')}/${PACK_SLOTS}</span></button>${count('pack')?`<div class="hudleaves" role="img" aria-label="${phs('atStakeLab')}: ${count('pack')}">${items('pack').map(()=>'<i class="leaf held"></i>').join('')}<span>${ph('atStakeLab')}</span></div><div class="depart" role="note"><i class="leaf held" aria-hidden="true"></i><span>${ph('departLine')}</span></div>`:''}<span class="nodename" style="position:static;display:block;margin-top:6px">path HUD (stand-in)</span></div>
  ${echobar()}`;
 
 /* ---------- result cards: the items go inside the existing card ---------- */
@@ -1145,6 +1173,10 @@ function render(focusK){
  // roving tab stops
  $$('#work .tb').forEach(t=>{t.tabIndex=S.tabIds&&S.tabIds.includes(+t.dataset.id)?0:-1;});
  if(k){const el=$(`[data-k="${k}"]`,cv);if(el)el.focus({preventScroll:true});}
+
+ const fullNow={sanct:count('sanct')>=SANCTUM_SLOTS,pack:count('pack')>=PACK_SLOTS};
+ if(S.fp&&S.view!=='card')['sanct','pack'].forEach(bx=>{if(fullNow[bx]&&!S.fp[bx]&&S.open[bx]&&!(onPath()&&bx==='sanct'))pulseGauge(bx);});
+ S.fp=fullNow;
  updateAids();
 }
 
@@ -1191,7 +1223,8 @@ function say(t){$('#status').textContent=t;}
 function toast(t){const e=$('#toast');e.textContent=t;e.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>{e.style.opacity=0;},TOAST_MS/cfg.speed);}
 function refuse(key,boxHint){
  const msg=phs(REASON[key]);
- S.flash={box:boxHint||'pack',key:REASON[key],until:now()+REFUSE_MS};
+ const fb=(boxHint&&S.open[boxHint])?boxHint:(S.open.sanct?'sanct':S.open.pack?'pack':boxHint||'pack');
+ S.flash={box:fb,key:REASON[key],until:now()+REFUSE_MS};
  render();say('Move refused. '+msg);toast(msg);
  setTimeout(()=>{if(S.flash&&S.flash.until<=now()){S.flash=null;render();}},REFUSE_MS+50);
 }
@@ -1226,7 +1259,6 @@ function move(id,to,idx){
  render(`t${id}`);
  flip(before,moved);
  setTimeout(()=>{S.lastLanded=null;},LAND_RING_MS);
- pulseIfFull(to);
  const n=count(to);
  say(from===to?`${it.name} placed in another slot.`:`${it.name} moved to the ${to==='pack'?'pack':'Sanctum'}. ${to==='pack'?'Pack':'Sanctum'} ${n} of ${cap(to)}.`);
  if(from!==to){
@@ -1234,13 +1266,17 @@ function move(id,to,idx){
  }
  return true;
 }
-function pulseIfFull(box){
- if(count(box)<cap(box)||pulsedOnce)return;
- pulsedOnce=true;
+let pulses=0,lastPulse=null;
+function pulseGauge(box){
+ const g=$(`[data-gauge="${box}"]`);if(!g)return;
  const last=$(`[data-gauge="${box}"] ${box==='pack'?'b':'i'}:last-child`);
- if(last&&!cfg.rm)last.animate([{transform:'scale(1)'},{transform:`scale(${PULSE_SCALE})`},{transform:'scale(1)'}],{duration:dur(GAUGE_PULSE_MS)});
+ pulses++;lastPulse={box,ms:cfg.rm?RM_FADE_MS:GAUGE_PULSE_MS,scaled:!cfg.rm};
+ const tone=[$('.strap',g),$$('b',g),$('.cword',g&&g.parentNode)].flat().filter(Boolean);
+ if(cfg.rm){tone.forEach(e=>e.animate([{opacity:0},{opacity:1}],{duration:RM_FADE_MS}));return;}
+ if(last)last.animate([{transform:'translateY(2px) scale(1)'},{transform:`translateY(2px) scale(${PULSE_SCALE})`},{transform:'translateY(2px) scale(1)'}],{duration:dur(GAUGE_PULSE_MS)});
+ const st=$('.strap',g);if(st)st.animate([{opacity:0},{opacity:1}],{duration:dur(HEAVY_TONE_MS)});
+ const cw=$('.cword',g.parentNode);if(cw)cw.animate([{opacity:0},{opacity:1}],{duration:dur(HEAVY_TONE_MS)});
 }
-
 /* ================= discard ================= */
 function openDiscard(){
  const it=S.sel!=null?getItem(S.sel):null;if(!it)return;
@@ -1449,7 +1485,7 @@ cv.addEventListener('click',e=>{
   case 'togSanct':S.open.sanct=!S.open.sanct;render('r-stores');say(S.open.sanct?'Sanctum storage opened.':'Sanctum storage closed.');break;
   case 'togPack':S.open.pack=!S.open.pack;render();say(S.open.pack?'Party pack opened.':'Party pack closed.');break;
   case 'goSanctum':S.view='sanctum';S.open={sanct:false,pack:false};render('r-sanct');say('The Sanctum.');break;
-  case 'goPrep':S.view='prep';S.open={sanct:false,pack:false};render('r-party');say('Party prep. Open the party pack from party details.');break;
+  case 'goPrep':S.view='prep';S.open.pack=false;render('r-party');say(S.open.sanct?'Party details opened beside the Sanctum panel. Open the party pack with its button.':'Party details opened. Open the party pack with its button.');break;
   case 'goPath':S.view='path';S.open={sanct:false,pack:true};S.path={used:false,why:''};render();say('On a path. The pack is read-only except one discard.');break;
   case 'railToast':toast('Existing rail button. Not part of this prototype.');break;
   case 'continue':tryContinue();break;
@@ -1502,12 +1538,12 @@ window.addEventListener('resize',fit);
 /* ================= aids, readout, lists ================= */
 const TRY={
  1:['Select a tile. Read the details. Press Move to pack. The pack is closed, so a toast says where it went.','Press Show pack in the Sanctum header. The pack opens to the right of the Sanctum.','Drag a tile to an empty Sanctum slot: it reorders. Drag it onto a full slot: the move is refused with a reason.','Use the slot controls in the aids to grow or shrink both panels.'],
- 2:['Drag a tile from the Sanctum onto the pack, or onto one empty socket.','Drag the pack stack (x18) onto the Sanctum stack x12: they merge up to 20 and the rest stays in the source slot.','Drag a stack onto a same-type stack at the limit: refused with a reason.','Let it go on a stack: a count picker opens, default is the whole stack.'],
- 3:['The pack opens to the right of party details. Close it with the x.','Press Stores on the rail: the Sanctum opens to the left of party details.','Move a piece with the pack open and with it closed.'],
- 4:['Select a pack tile. Move is disabled with a reason. Let it go is enabled.','Let it go once. The token turns to used and a reason line appears. A stack uses the picker; the whole action counts once.','Select another tile. Let it go is disabled with a reason.','Try to drag a tile. Every target refuses with a reason.'],
+ 2:['The scenario starts with the Sanctum panel only. Press Show pack to see both panels side by side.','Drag a tile from the Sanctum onto the pack, or onto one empty socket.','Drag the pack stack (x18) onto the Sanctum stack x12: they merge up to 20 and the rest stays in the source slot.','Drag a stack onto a same-type stack at the limit: refused with a reason.','Let it go on a stack: a count picker opens, default is the whole stack.','D-36 cues: the pack shows 3 of 4 (nearly full). Move one more piece in: the gauge turns heavy, pulses once, and shows the consequence word. Move one out and in again: it pulses again.'],
+ 3:['The scenario starts with party details only. Press the pack button in party details: the pack opens to its right.','Press Stores on the rail: only the Sanctum panel opens, to the left of party details. Press the pack button to open all three.','Move a piece with the pack open and with it closed.','D-36 cues: party details shows one departure line while the pack holds a piece. Empty the pack: the line goes. The pack shows the nearly full level at 3 of 4.'],
+ 4:['Select a pack tile. Move is disabled with a reason. Let it go is enabled.','Let it go once. The token turns to used and a reason line appears. A stack uses the picker; the whole action counts once.','Select another tile. Let it go is disabled with a reason.','Try to drag a tile. Every target refuses with a reason.','D-36 cues: the pack is full, so it looks heavy with the path wording. The path HUD shows one leaf per carried piece and the departure line.'],
  5:['The leave modal shows the pieces at risk as tiles. Stay is focused.','To the Sanctum has a 0.25 s open window.','Change the outcome in the aids, then press To the Sanctum.'],
  6:['Use the card buttons in the aids. Tap the card once to finish the motion; press Continue to leave.','The stage-clear card uses the same three lanes and a read-only mark.','Reduced motion: every tile fades in 0.15 s.'],
- 7:['A Sanctum tile is selected. Move to pack is disabled: the pack is full.','Drag it to the pack: the pack shows a hatch and the reason.','Let it go on a pack piece, then Move to pack works for the next one.']
+ 7:['The scenario starts with the Sanctum panel only. A Sanctum tile is selected and Move to pack is disabled: the pack is full. Press Show pack to see the full pack: heavy look, strap line and the consequence word (D-36).','Drag it to the pack: the pack shows a hatch and the reason.','Let it go on a pack piece, then Move to pack works for the next one.']
 };
 function updateAids(){
  $('#aidhint').textContent=SCN[S.scn]+'. All text is placeholder.';
@@ -1540,7 +1576,7 @@ $('#aidbtns').addEventListener('click',e=>{
 function armLeave(){setTimeout(()=>{const g=$('#goleave');if(g)g.removeAttribute('aria-disabled');},GUARD_OPEN_MS/cfg.speed);}
 $$('[data-out]').forEach(b=>b.addEventListener('click',()=>{OUT=b.dataset.out;if(S.scn===6){const k=S.cardKind;load(6,k);render();runCard();}updateAids();}));
 function start(n){
- load(n);render(n===5?'stay':null);say(SCN[n]+'.');
+ load(n);clearTimeout(toast.t);$('#toast').style.opacity=0;render(n===5?'stay':null);say(SCN[n]+'.');
  if(n===6)runCard();
  if(n===5)armLeave();
 }
@@ -1616,7 +1652,9 @@ const EPLAY=[
 const APPLIED=[
  'The party pack opens to the right of party details. In the rail panel the Sanctum is on the left and the pack on the right. The Sanctum keeps a Show pack toggle. (D-33, D-34)',
  'The rail button sits right of the Sanctum button with the selected look of the other buttons. The label is a placeholder. (D-34)',
- 'Panels sit over the Sanctum, not on full screens. Both can be open. (D-33)',
+ 'Panels sit over the Sanctum, not on full screens. (D-33)',
+ 'Each panel opens alone. Stores opens only the Sanctum panel. The Party button opens only party details. The pack opens only from its button in party details or from Show pack. No scenario opens extra panels by itself. (D-35)',
+ 'Side by side only when the player opens both. Stores in party prep and Party with the Sanctum open each add a second panel; all three can be open. (D-35)',
  'Pieces move both ways by drag and drop, or by select, details and a Move button. (D-33)',
  'A drop on an empty slot reorders. A drop on a full slot is refused with a reason. There is no swap. (D-34)',
  'A stack dropped on a same-type stack with room merges up to the stack limit. The rest stays in the source slot. (D-34)',
@@ -1629,6 +1667,12 @@ const APPLIED=[
  'Result cards keep the items in lanes inside the card. The stage-clear preview uses the same lanes and a read-only mark. No pack panel after Continue. (D-33, D-34)',
  'The discard token uses a small leaf cut, not the grade diamond. The artist decides the final shape. (D-34)',
  'Ase and Ekwan cards stay dimmed behind the panels. (D-34)',
+ 'No mechanical pack penalty. The pack makes the existing loss risk visible instead. (D-36)',
+ 'Heavy full pack: beads sit 2 units lower, one tone darker, with a thin strap line. No extra gold, no red. Nearly full shows a lighter form: 1 unit lower and a dashed strap line. (D-36)',
+ 'The loose-leaf at-stake glyph is on every carried piece in the pack, and on the path HUD pack. It reuses the source-leaf slot, so no tile has more than 3 marks. (D-36)',
+ 'A consequence word replaces Full: one sentence at prep, one on a path. Wording is a placeholder. (D-36)',
+ 'The gauge pulses on every transition into full: 0.4 s, once, no loop. Reduced motion: no pulse, a 0.15 s fade of tone and glyph. (D-36)',
+ 'One departure line says carried pieces can be lost on a defeat or an early leave. It shows in party details (and on the path HUD) only while the pack holds a piece. No modal, no confirm. (D-36)',
  'No red and no shake for loss. Loss is a ghost fade. First tap finishes a result motion, second continues. Sequence cap 2.4 s. Reduced motion 0.15 s. (D-32)'
 ];
 const OPEN=[
@@ -1641,7 +1685,13 @@ const OPEN=[
  ['Discard token. The leave-cut shape is a placeholder. It is near the source leaf shape.','Artist decides a form that does not read as a source mark.','Scenario 4'],
  ['Reorder on a path. The prototype closes reorder on a path like every move. Is a reorder in the pack on a path harmless enough to allow?','Keep it closed. The rule stays simple.','Scenario 4'],
  ['A merge or discard in the pack on a path when the discard is used. The merge is a move, so it is closed.','Keep closed.','Scenario 4'],
- ['Rail label. The new rail button uses a placeholder label.','Jeff writes the label.','Any Sanctum screen']
+ ['Rail label. The new rail button uses a placeholder label.','Jeff writes the label.','Any Sanctum screen'],
+ ['Departure line position. It sits above the pack button in party details and on the path HUD. Should it sit next to Choose Realm on the rail instead?','Keep it in party details, next to the pack. The rail stays clean.','Scenario 3, scenario 4'],
+ ['At-stake cue placement. The leaf on the tile is the cue (the source-leaf slot). A tile with a leaf, a notch and pips already has 3 marks, so a 4th mark does not fit. Pieces moved in from the Sanctum show the open leaf.','Keep the leaf as the only tile cue. Use the pack bed and the details line for the rest.','Scenario 2, any pack tile'],
+ ['The leaf now has two meanings: where a piece came from, and that it is at stake. Is the source distinction (open leaf and whole leaf) still needed?','Keep both leaf forms. Both mean carried; the form says where it came from.','Legend, scenario 4'],
+ ['Consequence word. Is a second line under the gauge right, or should it replace the load word on the same line?','Second line, only at nearly full and full.','Scenario 3, scenario 7'],
+ ['Nearly full level. The prototype shows it at one free slot. With pack 2 the nearly full level shows at 1 of 2.','Keep one free slot as the near level for any pack size.','Aids: pack size'],
+ ['Does the heavy look need a handheld or sound cue? D-36 gives a hint only (soft thud, short vibration).','Hint only; no audio layer exists.','Scenario 7']
 ];
 function buildLists(){
  $('#d-table').insertAdjacentHTML('beforeend',FEEL.map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td><td>${f[2]}</td></tr>`).join(''));
@@ -1662,6 +1712,7 @@ window.inventoryProto2=Object.freeze({
   sizes:{sanct:SANCTUM_SLOTS,pack:PACK_SLOTS}};},
  get plan(){return S.card?S.card.plan:null;},
  seqPlan,
+ get pulses(){return pulses;},get lastPulse(){return lastPulse;},
  get constants(){return{SEQ_CAP_MS,GUARD_OPEN_MS,GUARD_CONTINUE_MS,RM_FADE_MS,SANCTUM_SLOTS,PACK_SLOTS};}
 });
 load(1);buildB();buildLists();fit();render();
