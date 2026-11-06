@@ -195,6 +195,15 @@ Options B (presentational walk/idle change), C and D stay unbuilt. Revisit B onl
 ## D-37 — Pieces keep a saved slot position (Jeff, 2026-11-06)
 Each piece and stack keeps a saved slot position inside its container (Sanctum or pack). The player arranges the chest and the pack. Reorder by drag into an empty slot (D-34) changes the saved position. Core needs a new saved field per entry (the slot index) through SaveService, a rule for where an intake or a move places a piece (first free slot), and a validation (no two entries in one slot, slot inside the container size). When a container shrinks below an occupied slot, the piece must keep a valid place. Mechanics developer proposes the rule for Jeff.
 
+## D-40 — Backend rules decided after the step-7 report (Jeff, 2026-11-06)
+Answers to the mechanics developer's assumptions (`step7-backend-moves-slots.md`):
+- Sanctum size never goes down. It only grows. So the shrink rule applies to the pack only.
+- Pack size changes (a smaller pack): the pieces in slots that no longer exist move to the Sanctum inventory. If the Sanctum is full, the piece may be lost or destroyed. Jeff wants the designer and feel agents to review this last case before it is built. Until they report, core builds no rule for it.
+- Stacks fill one slot and count against the Sanctum slots and the pack slots (changes D-05). A new stack into a full Sanctum is lost as overflow. A merge into an existing stack needs no slot.
+- A live path with the party back on a Sanctum or party-prep screen (encounter Back route, Continue into a live path): treat it as the Sanctum. Moves and unlimited discard are allowed. The player may empty the pack mid path. Penalties for not completing the path (lower scores and others) are outside this story. This reverses assumption 6 of the report. The path VIEW keeps the path rules (no moves, one discard per path on a pack piece).
+- The unique-piece intake no longer pulls the pack into the Sanctum. Settlement flows still move kept pieces at path end.
+- Accepted without comment: moves and discards also work in party prep; moves of a stack move the whole entry; an occupied target slot is refused with `slot_taken` (also across containers).
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
