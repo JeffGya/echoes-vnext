@@ -209,7 +209,7 @@ After the designer and feel reviews (`pack-shrink-options-designer.md`, `pack-sh
 - A pack shrink moves the pieces in the closing slots to the Sanctum inventory, with one quiet report line.
 - Only when the Sanctum has no room, the surplus is lost. The player chooses at party prep which pieces to keep. Core therefore needs a saved pending-shrink state and a party-prep step. Lost pieces use the existing lost-tile motion and a loss line the player dismisses. A preview shows before the shrink applies when a player action causes it.
 - A shrink never happens on a live path.
-- No Echo or progression story can shrink the pack yet. In 001a nothing triggers a shrink (sizes come from config only). OPEN for Jeff: build this rule in 001a, or record it here and build it in the story that adds the first shrink trigger. Until Jeff answers, core builds nothing for it.
+- No Echo or progression story can shrink the pack yet. In 001a nothing triggers a shrink (sizes come from config only). Jeff (2026-11-06): DEFERRED. Build this rule in the story that contains shrinking packs. It is not part of 001a. Core builds nothing for it in 001a.
 
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
