@@ -153,6 +153,17 @@ From `mockup-proposal-merged.md`:
 - Decisions 6 and 7: all defaults accepted: grade pips 1 to 3 and no rarity colour for grade; six twin-notch shapes; two leaf glyphs (carried vs found this path); lost tiles at 35% fill and 60% marks; a 0.25 s open window on the modal `Let it go` and on the leave `Confirm`; one gauge-pip pulse on first becoming full; the carried-piece glide after a discard.
 - Decisions 1 and 2: see D-31.
 
+## D-33 — Inventory as two panels, moves both ways, realm discard (Jeff, 2026-11-06)
+Jeff reviewed the first interactive prototype and rejected its layout. These answers supersede D-31 (full-screen destination) and the "discard only in the Sanctum" part of D-21.
+- Panels, not screens. The rail button opens the Sanctum inventory as a panel over the Sanctum, placed next to the Sanctum button. Party prep opens party details, and the party pack opens from there. Both panels can be open side by side.
+- Move rule: pieces move both ways between the Sanctum inventory and the party pack, anywhere in the Sanctum or party prep. Move by drag and drop, or by select, see details, then `Move to pack` / `Move to Sanctum`. Design reference: a normal RPG chest and held inventory. Keep it simple.
+- On a path nothing moves, except one discard per path, on a pack piece only (Jeff: "1 per path, pack pieces only"). In the Sanctum, discard stays unlimited.
+- Stacks are not special. A stack is an item that fills one slot, sits among the other items, and moves like them. The same item type may exist as several stacks on either side. The player decides. No separate stack area, no forced merge.
+- Result screens (leave result, defeat, stage-clear) show items inside the existing cards, not as a new pack panel.
+- Pack and Sanctum must look clearly different. The first prototype put them too close together.
+- Jeff: UX and game feel lead. Core may change to fit. Built systems are not a constraint.
+Consequences for core (later, not now): `flow.inventory` as a separate flow state is probably not needed. A move action (`inventory.move.apply`) is needed. The one-per-path counter must be saved. The stack-merge rule in intake needs review.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
