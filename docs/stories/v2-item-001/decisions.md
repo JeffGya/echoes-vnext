@@ -193,9 +193,12 @@ Jeff accepted Option A from `pack-debuff-options-designer.md` and `pack-debuff-o
 Options B (presentational walk/idle change), C and D stay unbuilt. Revisit B only if play shows nobody feels the pack. This closes the "pack debuff story" idea: there is no rule to own.
 
 ## D-37 — Pieces keep a saved slot position (Jeff, 2026-11-06)
-Each piece and stack keeps a saved slot position inside its container (Sanctum or pack). The player arranges the chest and the pack. Reorder by drag into an empty slot (D-34) changes the saved position. Core needs a new saved field per entry (the slot index) with a repair for old saves (additive, SaveService only), a rule for where an intake or a move places a piece (first free slot), and a validation (no two entries in one slot, slot inside the container size). When a container shrinks below an occupied slot, the piece must keep a valid place. Mechanics developer proposes the rule for Jeff.
+Each piece and stack keeps a saved slot position inside its container (Sanctum or pack). The player arranges the chest and the pack. Reorder by drag into an empty slot (D-34) changes the saved position. Core needs a new saved field per entry (the slot index) through SaveService, a rule for where an intake or a move places a piece (first free slot), and a validation (no two entries in one slot, slot inside the container size). When a container shrinks below an occupied slot, the piece must keep a valid place. Mechanics developer proposes the rule for Jeff.
 
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
 - Notion has no row for ECONOMY-004 Part B.
+
+## D-38 — No save repairs for old saves (Jeff, 2026-11-06)
+Jeff: the game is not live; he makes a new save. D-37's slot field needs no repair or bridge for old saves. This is project-wide until Jeff says a 1.0 version is live (ANSWERS #88). Existing repairs from this story (`_repair_inventory_block`) stay unless Jeff asks to remove them.
