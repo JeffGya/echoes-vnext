@@ -202,3 +202,6 @@ Each piece and stack keeps a saved slot position inside its container (Sanctum o
 
 ## D-38 — No save repairs for old saves (Jeff, 2026-11-06)
 Jeff: the game is not live; he makes a new save. D-37's slot field needs no repair or bridge for old saves. This is project-wide until Jeff says a 1.0 version is live (ANSWERS #88). Existing repairs from this story (`_repair_inventory_block`) stay unless Jeff asks to remove them.
+
+## D-39 — The party pack panel shows no counts (Jeff, 2026-11-06)
+The pack panel showed the fill three ways (bead gauge, `n / n sockets`, `Load n of n`). Jeff: one is enough, and the party details pack button already carries it. Remove all three from the pack panel. Keep the slots, the leaf mark on carried pieces, the consequence line, and the heavy tone with its strap line (D-36). The pulse on a transition into full moves to the strap line and panel tone (0.4 s; reduced motion 0.15 s fade). The Sanctum panel gauge stays.

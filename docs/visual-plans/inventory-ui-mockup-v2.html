@@ -658,6 +658,13 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 .hudleaves .leaf{width:18px;height:18px;background:#F5E6D3}
 .hudleaves span{margin-left:6px}
 .dtl .kv .leaf{background:var(--c-ink);width:16px;height:16px}
+
+/* D-39 pack panel: strap line and tone only */
+.pstrap{position:relative;height:16px;margin-top:8px}
+.pstrap .strap{position:absolute;left:6px;right:6px;top:50%;display:none;height:0}
+.pstrap.near .strap{display:block;border-top:2px dashed rgba(245,230,211,.75)}
+.pstrap.full .strap{display:block;border-top:4px solid #F5E6D3}
+.pnl.pack.near{background:repeating-linear-gradient(45deg,rgba(245,230,211,.07) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(245,230,211,.05) 0 2px,transparent 2px 9px),#432F1F}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -759,7 +766,7 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 <tr><td>Bed</td><td>Light tan, horizontal plank lines</td><td>Dark leather, woven cross lines</td></tr>
 <tr><td>Frame</td><td>Square corners, double line</td><td>Round top, stitched dashed line, buckle tab</td></tr>
 <tr><td>Slot shape</td><td>Square cubbies in a grid (5 or 6 columns)</td><td>Round recessed sockets in rows of 4</td></tr>
-<tr><td>Capacity gauge</td><td>Ledger: 20 thin bars, count of slots, word when full</td><td>Bead string: 4 large beads, count of sockets, load mark, word when full</td></tr>
+<tr><td>Capacity gauge</td><td>Ledger: 20 thin bars, count of slots, word when full</td><td>No numbers. A strap line (dashed near full, solid at full), a darker tone and a consequence word. The count is on the Party pack button.</td></tr>
 <tr><td>Tile bed</td><td>Plain bed</td><td>Darker bed, 2 px lower, source leaf</td></tr>
 <tr><td>Where badge in details</td><td>Square double frame + roof</td><td>Dashed pill + satchel</td></tr>
 <tr><td>Position</td><td>Left of the pair</td><td>Right of the pair. In party prep it opens to the right of party details.</td></tr>
@@ -837,8 +844,7 @@ const LET='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const W={
  sanctTitle:'Sanctum storage', sanctSub:'House storage. Always safe.',
  packTitle:'Party pack', packSub:'Goes with the party.',
- slotsWord:(n,c)=>`${n} / ${c} slots`, socketsWord:(n,c)=>`${n} / ${c} sockets`,
- loadWord:(n,c)=>`Load ${n} of ${c}`, fullWord:'Full',
+ slotsWord:(n,c)=>`${n} / ${c} slots`, socketsWord:(n,c)=>`${n} / ${c} sockets`, fullWord:'Full',
  detailsTitle:'Details', detailsEmpty:'Select a piece to see its details.', detailsHint:'Drag a piece to the other panel, or select it and press a Move button.',
  whereSanct:'In the Sanctum', wherePack:'In the pack',
  kindLab:'Kind', gradeLab:'Grade', countLab:'Count', onePiece:'1 piece', stackCount:(q,l)=>`x${q} of ${l}`, atLimit:'At the limit',
@@ -971,12 +977,10 @@ function gaugeSanct(){
   <div class="gline"><span>${ph('slotsWord',n,SANCTUM_SLOTS)}</span>${r===0?`<span class="full-word">${ph('fullWord')}</span>`:'<span></span>'}</div>`;
 }
 function packLevel(){const n=count('pack');return n>=PACK_SLOTS?'full':(n>0&&PACK_SLOTS-n===1)?'near':'';}
-function gaugePack(){
- const n=count('pack'),lv=packLevel();
- let b='';for(let i=0;i<PACK_SLOTS;i++)b+=`<b class="${i<n?'on':''}"></b>`;
+function gaugePack(){ // D-39: no numbers in the pack panel. The strap line, the tone and the word show the level.
+ const lv=packLevel();
  const word=lv==='full'?ph(onPath()?'packFullPath':'packHeavy'):lv==='near'?ph('packNear'):'';
- return `<div class="beads ${lv}" role="img" aria-label="${n} of ${PACK_SLOTS} sockets used" data-gauge="pack"><i class="strap"></i>${b}</div>
-  <div class="gline"><span>${ph('socketsWord',n,PACK_SLOTS)}</span><span>${ph('loadWord',n,PACK_SLOTS)}</span></div>${word?`<div class="cword" data-level="${lv}">${word}</div>`:''}`;
+ return `<div class="pstrap ${lv}" ${lv?`role="img" aria-label="${phs(lv==='full'?(onPath()?'packFullPath':'packHeavy'):'packNear')}"`:'aria-hidden="true"'} data-gauge="pack"><i class="strap"></i></div>${word?`<div class="cword" data-level="${lv}">${word}</div>`:''}`;
 }
 const loadLvl=()=>[0,1,1,2,3][Math.min(4,count('pack'))];
 function slotHTML(box,i){
@@ -1269,13 +1273,18 @@ function move(id,to,idx){
 let pulses=0,lastPulse=null;
 function pulseGauge(box){
  const g=$(`[data-gauge="${box}"]`);if(!g)return;
- const last=$(`[data-gauge="${box}"] ${box==='pack'?'b':'i'}:last-child`);
  pulses++;lastPulse={box,ms:cfg.rm?RM_FADE_MS:GAUGE_PULSE_MS,scaled:!cfg.rm};
- const tone=[$('.strap',g),$$('b',g),$('.cword',g&&g.parentNode)].flat().filter(Boolean);
- if(cfg.rm){tone.forEach(e=>e.animate([{opacity:0},{opacity:1}],{duration:RM_FADE_MS}));return;}
- if(last)last.animate([{transform:'translateY(2px) scale(1)'},{transform:`translateY(2px) scale(${PULSE_SCALE})`},{transform:'translateY(2px) scale(1)'}],{duration:dur(GAUGE_PULSE_MS)});
- const st=$('.strap',g);if(st)st.animate([{opacity:0},{opacity:1}],{duration:dur(HEAVY_TONE_MS)});
- const cw=$('.cword',g.parentNode);if(cw)cw.animate([{opacity:0},{opacity:1}],{duration:dur(HEAVY_TONE_MS)});
+ if(box==='pack'){ // D-39: the strap line and the panel tone carry the pulse
+  const st=$('.strap',g),cw=$('.cword',g.parentNode),pn=g.closest('.pnl');
+  if(cfg.rm){[st,cw].filter(Boolean).forEach(e=>e.animate([{opacity:0},{opacity:1}],{duration:RM_FADE_MS}));return;}
+  if(st)st.animate([{transform:'scaleY(1)'},{transform:'scaleY(2.4)'},{transform:'scaleY(1)'}],{duration:dur(GAUGE_PULSE_MS)});
+  if(pn)pn.animate([{filter:'brightness(1.3)'},{filter:'none'}],{duration:dur(HEAVY_TONE_MS)});
+  if(cw)cw.animate([{opacity:0},{opacity:1}],{duration:dur(HEAVY_TONE_MS)});
+  return;
+ }
+ const last=$(`[data-gauge="${box}"] i:last-child`);
+ if(cfg.rm){if(last)last.animate([{opacity:0},{opacity:1}],{duration:RM_FADE_MS});return;}
+ if(last)last.animate([{transform:'scale(1)'},{transform:`scale(${PULSE_SCALE})`},{transform:'scale(1)'}],{duration:dur(GAUGE_PULSE_MS)});
 }
 /* ================= discard ================= */
 function openDiscard(){
@@ -1538,8 +1547,8 @@ window.addEventListener('resize',fit);
 /* ================= aids, readout, lists ================= */
 const TRY={
  1:['Select a tile. Read the details. Press Move to pack. The pack is closed, so a toast says where it went.','Press Show pack in the Sanctum header. The pack opens to the right of the Sanctum.','Drag a tile to an empty Sanctum slot: it reorders. Drag it onto a full slot: the move is refused with a reason.','Use the slot controls in the aids to grow or shrink both panels.'],
- 2:['The scenario starts with the Sanctum panel only. Press Show pack to see both panels side by side.','Drag a tile from the Sanctum onto the pack, or onto one empty socket.','Drag the pack stack (x18) onto the Sanctum stack x12: they merge up to 20 and the rest stays in the source slot.','Drag a stack onto a same-type stack at the limit: refused with a reason.','Let it go on a stack: a count picker opens, default is the whole stack.','D-36 cues: the pack shows 3 of 4 (nearly full). Move one more piece in: the gauge turns heavy, pulses once, and shows the consequence word. Move one out and in again: it pulses again.'],
- 3:['The scenario starts with party details only. Press the pack button in party details: the pack opens to its right.','Press Stores on the rail: only the Sanctum panel opens, to the left of party details. Press the pack button to open all three.','Move a piece with the pack open and with it closed.','D-36 cues: party details shows one departure line while the pack holds a piece. Empty the pack: the line goes. The pack shows the nearly full level at 3 of 4.'],
+ 2:['The scenario starts with the Sanctum panel only. Press Show pack to see both panels side by side.','Drag a tile from the Sanctum onto the pack, or onto one empty socket.','Drag the pack stack (x18) onto the Sanctum stack x12: they merge up to 20 and the rest stays in the source slot.','Drag a stack onto a same-type stack at the limit: refused with a reason.','Let it go on a stack: a count picker opens, default is the whole stack.','D-36 cues: the pack shows 3 of 4 (nearly full). Move one more piece in: the strap line and panel turn heavy, pulse once, and show the consequence word. Move one out and in again: it pulses again.'],
+ 3:['The scenario starts with party details only. Press the pack button in party details: the pack opens to its right.','Press Stores on the rail: only the Sanctum panel opens, to the left of party details. Press the pack button to open all three.','Move a piece with the pack open and with it closed.','D-36 cues: party details shows one departure line while the pack holds a piece. Empty the pack: the line goes. The pack shows the nearly full level at 3 of 4 with a dashed strap line and a word, and no numbers; the count is on the Party pack button.'],
  4:['Select a pack tile. Move is disabled with a reason. Let it go is enabled.','Let it go once. The token turns to used and a reason line appears. A stack uses the picker; the whole action counts once.','Select another tile. Let it go is disabled with a reason.','Try to drag a tile. Every target refuses with a reason.','D-36 cues: the pack is full, so it looks heavy with the path wording. The path HUD shows one leaf per carried piece and the departure line.'],
  5:['The leave modal shows the pieces at risk as tiles. Stay is focused.','To the Sanctum has a 0.25 s open window.','Change the outcome in the aids, then press To the Sanctum.'],
  6:['Use the card buttons in the aids. Tap the card once to finish the motion; press Continue to leave.','The stage-clear card uses the same three lanes and a read-only mark.','Reduced motion: every tile fades in 0.15 s.'],
@@ -1627,7 +1636,7 @@ const FEEL=[
  ['Reorder','A drop on an empty slot in the same container glides the tile there. A drop on a full slot is refused: the tile glides back.','same glide'],
  ['Merge','A drop on a same-type stack adds the count up to the limit. The target shows its new count. The rest stays in the source slot.','same ring'],
  ['Refused move','The tile glides back. A gold-framed reason line shows in the panel. No red, no shake.','220 ms glide back'],
- ['Gauge full','The last mark pulses once at scale 1.15, once per session.',`${GAUGE_PULSE_MS} ms`],
+ ['Gauge full','Sanctum: the last mark pulses once at scale 1.15 on every transition into full. Pack: the strap line pulses once and the panel tone fades in (no beads, no numbers, D-39).',`${GAUGE_PULSE_MS} ms`],
  ['Discard','Ghost fade (fill 0.35, marks 0.6), then fade to 0. Slots stay fixed. A partial stack discard only lowers the count.',`${DISCARD_LOST_MS} + ${DISCARD_FADE_MS} ms`],
  ['Modal','Backdrop and card fade in. Let it go has a 0.25 s open window. Keep it holds focus.',`${MODAL_CARD_MS} ms + ${GUARD_OPEN_MS} ms`],
  ['Result card','Tiles reveal in order. 4 or fewer: 0.3 s apart. 5 to 8: 0.15 s apart. Total never over 2.4 s. First tap finishes, second continues, 0.25 s guard.',`cap ${SEQ_CAP_MS} ms`],
@@ -1668,10 +1677,12 @@ const APPLIED=[
  'The discard token uses a small leaf cut, not the grade diamond. The artist decides the final shape. (D-34)',
  'Ase and Ekwan cards stay dimmed behind the panels. (D-34)',
  'No mechanical pack penalty. The pack makes the existing loss risk visible instead. (D-36)',
- 'Heavy full pack: beads sit 2 units lower, one tone darker, with a thin strap line. No extra gold, no red. Nearly full shows a lighter form: 1 unit lower and a dashed strap line. (D-36)',
+ 'Heavy full pack: a darker panel tone and a solid strap line, with the consequence word. No extra gold, no red. Nearly full shows a lighter form: a dashed strap line, a lighter tone and its own word. (D-36)',
+ 'The pack panel shows no numbers: no bead gauge, no socket count and no load text. The count shows once, on the Party pack button in party details, and once on the path HUD. The Sanctum gauge stays. (Jeff, 2026-11-06, to be recorded as D-39)',
+ 'The full pulse runs on the strap line and the panel tone: 0.4 s, once. Reduced motion: a 0.15 s fade. (D-36, D-39)',
  'The loose-leaf at-stake glyph is on every carried piece in the pack, and on the path HUD pack. It reuses the source-leaf slot, so no tile has more than 3 marks. (D-36)',
  'A consequence word replaces Full: one sentence at prep, one on a path. Wording is a placeholder. (D-36)',
- 'The gauge pulses on every transition into full: 0.4 s, once, no loop. Reduced motion: no pulse, a 0.15 s fade of tone and glyph. (D-36)',
+ 'The pack pulses on every transition into full: 0.4 s, once, no loop. Reduced motion: no pulse, a 0.15 s fade of tone and glyph. (D-36)',
  'One departure line says carried pieces can be lost on a defeat or an early leave. It shows in party details (and on the path HUD) only while the pack holds a piece. No modal, no confirm. (D-36)',
  'No red and no shake for loss. Loss is a ghost fade. First tap finishes a result motion, second continues. Sequence cap 2.4 s. Reduced motion 0.15 s. (D-32)'
 ];
@@ -1691,6 +1702,8 @@ const OPEN=[
  ['The leaf now has two meanings: where a piece came from, and that it is at stake. Is the source distinction (open leaf and whole leaf) still needed?','Keep both leaf forms. Both mean carried; the form says where it came from.','Legend, scenario 4'],
  ['Consequence word. Is a second line under the gauge right, or should it replace the load word on the same line?','Second line, only at nearly full and full.','Scenario 3, scenario 7'],
  ['Nearly full level. The prototype shows it at one free slot. With pack 2 the nearly full level shows at 1 of 2.','Keep one free slot as the near level for any pack size.','Aids: pack size'],
+ ['Count in the pack panel. D-39 removes it. With the pack opened from Show pack in the Sanctum, no pack count shows (the Party pack button is not on that screen).','Accept. The slots show the count by themselves. Add a count only if play tests show confusion.','Scenario 2, Show pack'],
+ ['Pulse target. With no beads, the pulse runs on the strap line and the panel tone. Is that enough to notice a fill?','Keep. Check in play with Slow speed.','Scenario 3, fill the pack'],
  ['Does the heavy look need a handheld or sound cue? D-36 gives a hint only (soft thud, short vibration).','Hint only; no audio layer exists.','Scenario 7']
 ];
 function buildLists(){
