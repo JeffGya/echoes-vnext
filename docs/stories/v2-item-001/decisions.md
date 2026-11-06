@@ -218,6 +218,12 @@ Jeff: movement between the party pack and the Sanctum inventory is up to the pla
 - This removes QA findings F-01 (new stacks lost behind carried pieces) and F-02 (carried stacks not merging at path end).
 - UI: show, do not tell (Jeff). A result card shows what survived and what was lost. It does not name the pack as a place, and it adds no extra text or states. A survivor shown as kept implies it is still in the pack. The prototype result cards (lanes "Kept in the Sanctum" / "Left in the pack" / "Lost") need a simplification.
 
+## D-43 — QA step 7 decisions (Jeff, 2026-11-06)
+From `step7-qa-report.md`:
+- F-03: the early-leave draw of a carried stack does not depend on its pack slot. Reordering the pack never changes a result. Key the draw on the stack's type and its order among stacks of that type.
+- F-06: the path view always carries `data.inventory` (the pack HUD needs it), like party details (D-29). This is an exception to D-28 (keys only when non-empty). No code change.
+- F-01 and F-02 are closed by D-42. F-04, F-05, F-07 and F-08 go to the builder (test gap for the mark on a failed return home, item-row slot reservation, stale comments).
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
