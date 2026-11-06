@@ -204,6 +204,13 @@ Answers to the mechanics developer's assumptions (`step7-backend-moves-slots.md`
 - The unique-piece intake no longer pulls the pack into the Sanctum. Settlement flows still move kept pieces at path end.
 - Accepted without comment: moves and discards also work in party prep; moves of a stack move the whole entry; an occupied target slot is refused with `slot_taken` (also across containers).
 
+## D-41 — Pack shrink rule (Jeff, 2026-11-06)
+After the designer and feel reviews (`pack-shrink-options-designer.md`, `pack-shrink-options-feel.md`), Jeff chose feel option B with a player choice:
+- A pack shrink moves the pieces in the closing slots to the Sanctum inventory, with one quiet report line.
+- Only when the Sanctum has no room, the surplus is lost. The player chooses at party prep which pieces to keep. Core therefore needs a saved pending-shrink state and a party-prep step. Lost pieces use the existing lost-tile motion and a loss line the player dismisses. A preview shows before the shrink applies when a player action causes it.
+- A shrink never happens on a live path.
+- No Echo or progression story can shrink the pack yet. In 001a nothing triggers a shrink (sizes come from config only). OPEN for Jeff: build this rule in 001a, or record it here and build it in the story that adds the first shrink trigger. Until Jeff answers, core builds nothing for it.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
