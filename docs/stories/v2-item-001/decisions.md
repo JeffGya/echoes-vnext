@@ -192,6 +192,9 @@ Jeff accepted Option A from `pack-debuff-options-designer.md` and `pack-debuff-o
 - one departure line that says carried pieces can be lost on a defeat or an early leave.
 Options B (presentational walk/idle change), C and D stay unbuilt. Revisit B only if play shows nobody feels the pack. This closes the "pack debuff story" idea: there is no rule to own.
 
+## D-37 — Pieces keep a saved slot position (Jeff, 2026-11-06)
+Each piece and stack keeps a saved slot position inside its container (Sanctum or pack). The player arranges the chest and the pack. Reorder by drag into an empty slot (D-34) changes the saved position. Core needs a new saved field per entry (the slot index) with a repair for old saves (additive, SaveService only), a rule for where an intake or a move places a piece (first free slot), and a validation (no two entries in one slot, slot inside the container size). When a container shrinks below an occupied slot, the piece must keep a valid place. Mechanics developer proposes the rule for Jeff.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
