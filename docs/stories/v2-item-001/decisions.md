@@ -227,6 +227,13 @@ From `step7-qa-report.md`:
 ## D-44 — Prototype v2 approved (Jeff, 2026-11-06)
 Jeff approved interactive prototype v2 (`docs/visual-plans/inventory-ui-mockup-v2.html`, published as a private artifact, Version 5) including the simplified result cards (D-42). It is the UI contract for step 7. The UI build starts after the backend (D-42 and D-43 fixes) is verified. Open questions still listed in its section F are decided at the build, or by Jeff when raised.
 
+## D-45 — Stack intake order and QA round 2 decisions (Jeff, 2026-11-06)
+From `step7-qa-report-2.md`:
+- F2-01: a new find of a stack type starts a new stack in a free slot even when the same-type Sanctum stack is at its limit. A find is lost only when both containers are full.
+- F2-02: intake MAY merge a new find into a same-type pack stack with room. Intake order for a stack find: 1) merge into a same-type Sanctum stack with room, 2) new stack in a free Sanctum slot, 3) merge into a same-type pack stack with room, 4) new stack in a free pack slot, 5) lost (`overflow`; or `stack_limit` for a surplus above the limit when no slot can hold it). Sanctum first stays (D-16).
+- F2-03: accepted as built. The early-leave draw of a carried stack is keyed on type and order among same-type carried stacks (D-43). Swapping two same-type stacks may swap their results.
+- Builder tasks (no decision needed): F2-04 to F2-06 test gaps; F2-07 stale text.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
