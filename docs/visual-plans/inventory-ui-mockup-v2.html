@@ -621,6 +621,20 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 .pnl.drop-ok .refuse,.pnl.drop-no .refuse{visibility:hidden}
 .hudbtn[aria-pressed=true]{outline:none;font-weight:700}
 .dropnote{min-height:40px}
+
+/* v2.1 */
+#work{height:566px}
+.psocks{flex-wrap:wrap}
+.connect{left:auto;right:-18px;border-right:2px solid #241910;border-left:0;clip-path:polygon(0 0,100% 50%,0 100%)}
+.dtl{overflow:auto}
+#toast{left:50%;bottom:auto;top:586px;transform:translateX(-50%);max-width:1180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:3px 14px;font-size:13px;line-height:1.3;border-width:2px;z-index:70}
+.picker{display:flex;align-items:center;gap:10px;margin-top:6px}
+.picker output{min-width:96px;text-align:center;font:700 15px/1 var(--f-mono)}
+.picker .pk{min-width:48px;width:48px;padding:0;font-size:22px}
+.picker button[aria-disabled=true]{opacity:.45}
+.cut{display:inline-block;width:14px;height:14px;background:currentColor;flex:none;clip-path:polygon(0 100%,0 45%,45% 0,100% 0,100% 55%,55% 100%,38% 100%,38% 62%,25% 62%)}
+.cut.used{opacity:.4}
+#size-ctl b{min-width:2ch;text-align:center}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -629,7 +643,7 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 <header>
 <div class="eyebrow">Echoes vNext · visual proposal · V2-ITEM-001a inventory UI · prototype v2</div>
 <h1>Inventory UI click-through prototype, v2</h1>
-<p class="mut">v2 follows Jeff's review of v1 and decision D-33. The Sanctum inventory and the party pack are two separate panels. Pieces move both ways by drag and drop, or by select and a Move button. A stack is an item like any other. On a path, the pack is read-only except one discard. Result cards hold the items inside the existing card. All wording is placeholder. Placeholder text has a dotted underline, and the button <b>Highlight placeholder wording</b> marks it.</p>
+<p class="mut">v2 follows Jeff's review of v1 and decision D-33. The Sanctum inventory and the party pack are two separate panels. Pieces move both ways by drag and drop, or by select and a Move button. A drop on an empty slot reorders. A drop on a same-type stack merges. A stack is an item like any other. On a path, the pack is read-only except one discard. Result cards hold the items inside the existing card. All wording is placeholder. Placeholder text has a dotted underline, and the button <b>Highlight placeholder wording</b> marks it.</p>
 <span class="banner">Prototype. Not the game. HTML only; the Godot build comes later.</span>
 <div class="toolbar" role="toolbar" aria-label="Scenario switcher">
 <div class="grp" role="group" aria-label="Scenario"><span class="gl">Scenario</span>
@@ -691,6 +705,10 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 <button class="pb" type="button" data-out="nothing" aria-pressed="false">Nothing</button>
 <button class="pb" type="button" data-out="some" aria-pressed="true">Some</button>
 <button class="pb" type="button" data-out="everything" aria-pressed="false">Everything</button></div>
+<div class="grp" role="group" aria-label="Prototype slot counts" id="size-ctl"><span class="gl mut">Prototype slots (not game UI)</span>
+<span class="mut">Pack</span><button class="pb" type="button" data-size="pack:-1" aria-label="Fewer pack slots">&minus;</button><b id="sz-pack">4</b><button class="pb" type="button" data-size="pack:1" aria-label="More pack slots">+</button>
+<span class="mut">Sanctum</span><button class="pb" type="button" data-size="sanct:-1" aria-label="Fewer Sanctum slots">&minus;</button><b id="sz-sanct">20</b><button class="pb" type="button" data-size="sanct:1" aria-label="More Sanctum slots">+</button></div>
+<p class="mut">Slot counts come from the constants <code>SANCTUM_SLOTS</code> and <code>PACK_SLOTS</code> (start 20 and 4). The range is pack 2 to 8, Sanctum 8 to 30. A scenario change resets them.</p>
 <p class="mut">Some = every second pack piece gets out, the first one first. A piece that gets out goes to the Sanctum when there is room, and stays in the pack when there is none.</p>
 </div>
 <div class="panel" aria-label="State readout">
@@ -717,11 +735,11 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 <tr><td>Header glyph and label</td><td>Roof glyph + <span class="ph">Sanctum storage</span></td><td>Satchel glyph + <span class="ph">Party pack</span></td></tr>
 <tr><td>Bed</td><td>Light tan, horizontal plank lines</td><td>Dark leather, woven cross lines</td></tr>
 <tr><td>Frame</td><td>Square corners, double line</td><td>Round top, stitched dashed line, buckle tab</td></tr>
-<tr><td>Slot shape</td><td>Square cubbies in a 5 x 4 grid</td><td>Round recessed sockets in one row of 4</td></tr>
+<tr><td>Slot shape</td><td>Square cubbies in a grid (5 or 6 columns)</td><td>Round recessed sockets in rows of 4</td></tr>
 <tr><td>Capacity gauge</td><td>Ledger: 20 thin bars, count of slots, word when full</td><td>Bead string: 4 large beads, count of sockets, load mark, word when full</td></tr>
 <tr><td>Tile bed</td><td>Plain bed</td><td>Darker bed, 2 px lower, source leaf</td></tr>
 <tr><td>Where badge in details</td><td>Square double frame + roof</td><td>Dashed pill + satchel</td></tr>
-<tr><td>Position</td><td>Left of the pair</td><td>Right of the pair, next to party information</td></tr>
+<tr><td>Position</td><td>Left of the pair</td><td>Right of the pair. In party prep it opens to the right of party details.</td></tr>
 </table></div>
 </section>
 
@@ -738,25 +756,19 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 </section>
 
 <section aria-labelledby="set-h">
-<h2 id="set-h">F. Settled and open</h2>
-<h3>Settled (Jeff, D-33 and earlier)</h3>
-<table class="tt"><tr><th>Ref</th><th>Settled</th><th>Where to see it</th></tr>
-<tr><td>D-33</td><td>Two panels over the Sanctum. Rail button next to the Sanctum button opens the Sanctum inventory. Party prep opens party details, and the pack opens from there. Both can be open.</td><td>Scenarios 1, 2, 3</td></tr>
-<tr><td>D-33</td><td>Pieces move both ways, anywhere in the Sanctum or party prep, by drag and drop or select, details, Move button.</td><td>Scenarios 2, 3, 7</td></tr>
-<tr><td>D-33</td><td>On a path nothing moves except one discard per path, on a pack piece. Sanctum discard is unlimited.</td><td>Scenario 4, scenario 2 (Sanctum)</td></tr>
-<tr><td>D-33</td><td>A stack is an item in one slot. The same type can be several stacks on either side. No stack area.</td><td>Scenario 2: three consumable stacks</td></tr>
-<tr><td>D-33</td><td>Result cards hold the items inside the card. No pack panel on a result screen.</td><td>Scenario 6</td></tr>
-<tr><td>D-32</td><td>First tap finishes the motion, second continues, 0.25 s guard. Item sequence cap 2.4 s. Reduced motion 0.15 s fade. Tile marks, ghost fade for loss, no red, no shake.</td><td>Scenario 6, Reduced motion</td></tr>
-<tr><td>D-30</td><td>The item report shows on the stage-clear card as a read-only preview.</td><td>Scenario 6, Stage clear</td></tr>
-<tr><td>D-23</td><td>The leave confirmation shows the items at risk as tiles.</td><td>Scenario 5</td></tr>
-</table>
-<h3>Open for Jeff</h3>
-<p class="mut">Each row has a recommendation. Jeff decides.</p>
+<h2 id="set-h">F. Open for Jeff</h2>
+<p class="mut">These questions stay open after D-34. Each row has a recommendation. Jeff decides. All wording in the frame is placeholder.</p>
 <table class="tt" id="f-open"><tr><th>#</th><th>Question</th><th>Recommendation</th><th>Try it here</th></tr></table>
 </section>
 
+<section aria-labelledby="app-h">
+<h2 id="app-h">G. Decisions now applied</h2>
+<p class="mut">Each line is a rule that this prototype follows. The reference is the decision record.</p>
+<ul class="pass" id="g-applied"></ul>
+</section>
+
 <section aria-labelledby="reg-h">
-<h2 id="reg-h">G. Placeholder wording register</h2>
+<h2 id="reg-h">H. Placeholder wording register</h2>
 <p class="mut">Every player-facing string in the frame is a placeholder. Jeff writes the final copy. Item names such as "Test gear A" are placeholders too. Items are never shown as ids.</p>
 <details><summary>All placeholder strings used in the frame</summary><ul id="g-list"></ul></details>
 </section>
@@ -764,7 +776,7 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--acc)}details p,detail
 <footer class="foot">Review proposal, not game implementation or approved final art. All wording is placeholder.<br>Review focus: can a player always tell which pieces are in the pack and which are in the Sanctum, and does a move feel like lifting a piece from a chest into a bag?
 <details><summary>Grounding and limits</summary>
 <p>Tile, marks, tokens and motion constants are reused from the v1 prototype (<code>inventory-ui-mockup.html</code>). The 1920 profile is dropped in v2. The page draws one 1280 x 720 frame and scales it to the page width.</p>
-<p>The Sanctum and the path view are stand-ins. Slot counts (Sanctum 20, pack 4) are prototype numbers, not the provisional values in <code>data/balance.json</code>. Item data, the leave draw and the path-end rule are small prototype rules. They do not read the game's core code.</p></details></footer>
+<p>The Sanctum and the path view are stand-ins. Slot counts come from the named constants <code>SANCTUM_SLOTS</code> and <code>PACK_SLOTS</code>. They are prototype numbers (D-34), not the provisional values in <code>data/balance.json</code>. Item data, the leave draw and the path-end rule are small prototype rules. They do not read the game's core code.</p></details></footer>
 <noscript><p>JavaScript is required to run this prototype.</p></noscript>
 </main>
 <script>
@@ -787,7 +799,11 @@ const RM_FADE_MS=150, RM_STAGGER_MS=100;  // reduced motion
 const TOAST_MS=2600, REFUSE_MS=3200;
 
 /* ================= rules and data (prototype numbers) ================= */
-const SCAP=20, PCAP=4, COLS=5, LIM={consumable:20,material:40};
+const SANCTUM_SLOTS_DEFAULT=20, PACK_SLOTS_DEFAULT=4;   // named prototype constants; the aids panel can change them
+let SANCTUM_SLOTS=SANCTUM_SLOTS_DEFAULT, PACK_SLOTS=PACK_SLOTS_DEFAULT;
+const SIZE_RANGE={pack:[2,8],sanct:[8,30]};
+const LIM={consumable:20,material:40};
+const cols=()=>SANCTUM_SLOTS<=20?5:6;
 const KIND={gear:'gear',charm:'relic',armor:'gear',relic:'relic',consumable:'consumable',material:'material'};
 const KINDW={gear:'Gear',relic:'Relic',consumable:'Consumable',material:'Material'};
 const isStack=r=>r.kind==='consumable'||r.kind==='material';
@@ -805,7 +821,11 @@ const W={
  btnMovePack:'Move to pack', btnMoveSanct:'Move to Sanctum', btnLetGo:'Let it go', btnKeep:'Keep it', btnClose:'Close',
  showPack:'Show pack', hidePack:'Hide pack',
  rPath:'Moves are closed on a path.', rPackFull:'The pack is full. Free a socket first.', rSanctFull:'The Sanctum is full. Free a slot first.',
- rDiscardUsed:'The one discard of this path is used.',
+ rDiscardUsed:'The one discard of this path is used.', rOccupied:'That slot is taken. Drop on an empty slot.',
+ dropReorder:'Drop to place it in this slot', dropMerge:'Drop to merge the stacks', previewMark:'Preview. Read-only.',
+ modalCountLab:'How many?', cntFewer:'Fewer', cntMore:'More',
+ toastMerged:(t,l)=>`Merged. The stack is now x${t}.${l?` x${l} stay in the source slot.`:''}`,
+ toastLetCount:(n,c)=>`Let go x${n}. x${c} remain.`,
  dropOkPack:'Drop to put it in the pack', dropOkSanct:'Drop to put it in the Sanctum', dropSame:'Drop to place it here',
  pathReadonly:'On a path: read-only', pathLeft:'Let it go: 1 left this path', pathUsed:'Let it go: used',
  pathUsedWhy:n=>`Used on ${n}. A new path gives one more.`, pathRule:'Only one piece may be let go on a path.',
@@ -824,7 +844,7 @@ const W={
 const phs=(k,...a)=>{const t=W[k];return typeof t==='function'?t(...a):t;};
 const ph=(k,...a)=>`<span class="ph" data-slot="${k}">${phs(k,...a)}</span>`;
 const phn=n=>`<span class="ph" data-slot="itemname">${n}</span>`;
-const REASON={path:'rPath',packFull:'rPackFull',sanctFull:'rSanctFull',discardUsed:'rDiscardUsed'};
+const REASON={occupied:'rOccupied',path:'rPath',packFull:'rPackFull',sanctFull:'rSanctFull',discardUsed:'rDiscardUsed'};
 
 /* ================= state ================= */
 let ID=1;
@@ -839,7 +859,7 @@ const items=box=>S.box[box].filter(Boolean);
 const count=box=>items(box).length;
 const getItem=id=>[...S.box.sanct,...S.box.pack].find(x=>x&&x.id===id)||null;
 const where=id=>S.box.sanct.some(x=>x&&x.id===id)?'sanct':S.box.pack.some(x=>x&&x.id===id)?'pack':null;
-const cap=box=>box==='pack'?PCAP:SCAP;
+const cap=box=>box==='pack'?PACK_SLOTS:SANCTUM_SLOTS;
 const other=b=>b==='pack'?'sanct':'pack';
 const onPath=()=>S.view==='path';
 function fill(box,list){list.forEach(it=>{const i=S.box[box].indexOf(null);if(i>=0)S.box[box][i]=it;});}
@@ -854,10 +874,9 @@ const stk=(t,q,o)=>mk(t,0,-1,Object.assign({qty:q},o||{}));
 
 const SCN={1:'Scenario 1: Sanctum panel alone',2:'Scenario 2: both panels, moves',3:'Scenario 3: party prep with pack panel',4:'Scenario 4: on a path, one discard',5:'Scenario 5: early-leave confirm in the leave modal',6:'Scenario 6: result cards with items inside',7:'Scenario 7: both containers full'};
 function load(n,cardKind){
- ID=1;
- const keep={scn:n};
+ ID=1;SANCTUM_SLOTS=SANCTUM_SLOTS_DEFAULT;PACK_SLOTS=PACK_SLOTS_DEFAULT;
  Object.keys(S).forEach(k=>delete S[k]);
- Object.assign(S,{scn:n,view:'sanctum',open:{sanct:false,pack:false},box:{sanct:Array(SCAP).fill(null),pack:Array(PCAP).fill(null)},sel:null,
+ Object.assign(S,{scn:n,view:'sanctum',open:{sanct:false,pack:false},box:{sanct:Array(SANCTUM_SLOTS).fill(null),pack:Array(PACK_SLOTS).fill(null)},sel:null,
   path:{used:false,why:''},modal:null,card:null,flash:null,justDragged:0,lastLanded:null});
  if(n===1){
   S.open={sanct:true,pack:false};
@@ -866,8 +885,8 @@ function load(n,cardKind){
  }
  if(n===2){
   S.open={sanct:true,pack:true};
-  spread([mk('gear',2,1),mk('relic',3,4),stk('consumable',12),mk('armor',1,2),stk('consumable',20),mk('charm',2,5),stk('material',14),mk('gear',1,3),mk('relic',2,0),mk('armor',3,1),stk('consumable',3),mk('charm',1,0)]);
-  fill('pack',[mk('gear',2,3,{src:'held'}),stk('consumable',5,{src:'held'}),mk('relic',1,2,{src:'held'})]);
+  spread([mk('gear',2,1),mk('relic',3,4),stk('consumable',12),mk('armor',1,2),stk('consumable',20),mk('charm',2,5),stk('material',14),mk('gear',1,3),mk('relic',2,0),mk('armor',3,1),stk('consumable',3),mk('charm',1,0),stk('consumable',6)]);
+  fill('pack',[mk('gear',2,3,{src:'held'}),stk('consumable',18,{src:'held'}),mk('relic',1,2,{src:'held'})]);
   S.sel=null;
  }
  if(n===3){
@@ -921,16 +940,16 @@ function tb(r,o={}){
 
 /* ================= panels ================= */
 function gaugeSanct(){
- const n=count('sanct'),r=SCAP-n,cls=r===0?'full':r<=3?'near':'';
- let bars='';for(let i=0;i<SCAP;i++)bars+=`<i class="${i<n?'on':''}"></i>`;
- return `<div class="ledger ${cls}" role="img" aria-label="${n} of ${SCAP} slots used" data-gauge="sanct">${bars}</div>
-  <div class="gline"><span>${ph('slotsWord',n,SCAP)}</span>${r===0?`<span class="full-word">${ph('fullWord')}</span>`:'<span></span>'}</div>`;
+ const n=count('sanct'),r=SANCTUM_SLOTS-n,cls=r===0?'full':r<=3?'near':'';
+ let bars='';for(let i=0;i<SANCTUM_SLOTS;i++)bars+=`<i class="${i<n?'on':''}"></i>`;
+ return `<div class="ledger ${cls}" role="img" aria-label="${n} of ${SANCTUM_SLOTS} slots used" data-gauge="sanct">${bars}</div>
+  <div class="gline"><span>${ph('slotsWord',n,SANCTUM_SLOTS)}</span>${r===0?`<span class="full-word">${ph('fullWord')}</span>`:'<span></span>'}</div>`;
 }
 function gaugePack(){
- const n=count('pack'),r=PCAP-n,cls=r===0?'full':'';
- let b='';for(let i=0;i<PCAP;i++)b+=`<b class="${i<n?'on':''}"></b>`;
- return `<div class="beads ${cls}" role="img" aria-label="${n} of ${PCAP} sockets used" data-gauge="pack">${b}</div>
-  <div class="gline"><span>${ph('socketsWord',n,PCAP)}</span><span>${r===0?`<span class="full-word">${ph('fullWord')}</span>`:ph('loadWord',n,PCAP)}</span></div>`;
+ const n=count('pack'),r=PACK_SLOTS-n,cls=r===0?'full':'';
+ let b='';for(let i=0;i<PACK_SLOTS;i++)b+=`<b class="${i<n?'on':''}"></b>`;
+ return `<div class="beads ${cls}" role="img" aria-label="${n} of ${PACK_SLOTS} sockets used" data-gauge="pack">${b}</div>
+  <div class="gline"><span>${ph('socketsWord',n,PACK_SLOTS)}</span><span>${r===0?`<span class="full-word">${ph('fullWord')}</span>`:ph('loadWord',n,PACK_SLOTS)}</span></div>`;
 }
 const loadLvl=()=>[0,1,1,2,3][Math.min(4,count('pack'))];
 function slotHTML(box,i){
@@ -944,21 +963,22 @@ function tabPrep(){ // roving tab stop: the selected tile, else the first tile o
 }
 function flashHTML(box){return S.flash&&S.flash.box===box&&S.flash.until>now()?`<div class="refuse" role="note">${ph(S.flash.key)}</div>`:'';}
 function sanctPanel(){
- let cells='';for(let i=0;i<SCAP;i++)cells+=slotHTML('sanct',i);
+ let cells='';for(let i=0;i<SANCTUM_SLOTS;i++)cells+=slotHTML('sanct',i);
  const showTgl=S.view==='sanctum';
- return `<section class="pnl sanct" data-box="sanct" aria-label="Sanctum storage"><div class="hdr"><i class="roof" aria-hidden="true"></i>
+ const cw=cols()*(72+8)+58;
+ return `<section class="pnl sanct" data-box="sanct" style="width:${Math.max(456,cw)}px" aria-label="Sanctum storage"><div class="hdr"><i class="roof" aria-hidden="true"></i>
   <div class="grow"><h2>${ph('sanctTitle')}</h2><div class="sub">${ph('sanctSub')}</div></div>
   ${showTgl?`<button type="button" class="tgl" data-act="togPack" data-k="tglpack" aria-pressed="${S.open.pack}"><span>${ph(S.open.pack?'hidePack':'showPack')}</span></button>`:''}
   <button type="button" class="xbtn" data-act="closeSanct" data-k="xs" aria-label="Close Sanctum storage">&times;</button></div>
-  <div class="sgrid" role="group" aria-label="Sanctum slots">${cells}</div>
+  <div class="sgrid" style="grid-template-columns:repeat(${cols()},var(--bed-size))" role="group" aria-label="Sanctum slots">${cells}</div>
   <div class="pfoot">${gaugeSanct()}${flashHTML('sanct')}</div>
   <div class="dropnote" aria-hidden="true"></div><div class="veil"></div></section>`;
 }
 function packPanel(){
- let cells='';for(let i=0;i<PCAP;i++)cells+=slotHTML('pack',i);
+ let cells='';for(let i=0;i<PACK_SLOTS;i++)cells+=slotHTML('pack',i);
  const p=onPath();
  const pathbar=p?`<div class="pathbar"><div class="r1"><i class="lock" aria-hidden="true"></i><span>${ph('pathReadonly')}</span></div>
-   <div class="r1"><span class="ltoken ${S.path.used?'used':'left'}" data-state="${S.path.used?'used':'left'}"><span aria-hidden="true">${S.path.used?'&#9671;':'&#9670;'}</span>${ph(S.path.used?'pathUsed':'pathLeft')}</span></div>
+   <div class="r1"><span class="ltoken ${S.path.used?'used':'left'}" data-state="${S.path.used?'used':'left'}"><i class="cut ${S.path.used?'used':''}" aria-hidden="true"></i>${ph(S.path.used?'pathUsed':'pathLeft')}</span></div>
    ${S.path.used?`<div>${ph('pathUsedWhy',S.path.why)}</div>`:''}</div>`:'';
  return `<section class="pnl pack on-dark" data-box="pack" aria-label="Party pack"><div class="hdr"><i class="load-mark l${loadLvl()}" role="img" aria-label="Pack load ${loadLvl()}"></i>
   <div class="grow"><h2>${ph('packTitle')}</h2><div class="sub">${ph('packSub')}</div></div>
@@ -1005,20 +1025,20 @@ W.kindgear='Gear';W.kindrelic='Relic';W.kindconsumable='Consumable';W.kindmateri
 const ECHOS=[1,1,1,0];
 function partyPanel(){
  const rows=ECHOS.map((on,i)=>`<div class="echoline"><span class="circ" style="width:24px;height:24px"></span><i class="gb" style="width:90px"></i><i class="gb" style="width:50px"></i><span style="margin-left:auto" aria-hidden="true">${on?'&#9679;':'&#9675;'}</span></div>`).join('');
- const n=count('pack');let dots='';for(let i=0;i<PCAP;i++)dots+=`<i class="${i<n?'on':''}"></i>`;
+ const n=count('pack');let dots='';for(let i=0;i<PACK_SLOTS;i++)dots+=`<i class="${i<n?'on':''}"></i>`;
  return `<section class="pnl party" aria-label="Party details" data-k="party"><div class="hdr"><h2>${ph('partyDetails')}</h2></div>
   ${rows}<div class="hr" style="margin:8px 0 10px"></div><i class="gb" style="width:200px"></i><br><i class="gb" style="width:150px;margin-top:8px"></i>
   <div style="flex:1"></div>
   <button type="button" class="packbtn" data-act="togPack" data-k="packbtn" aria-expanded="${S.open.pack}" aria-controls="work"><i class="connect" aria-hidden="true"></i><i class="load-mark l${loadLvl()}" aria-hidden="true"></i>
-   <span><b>${ph('partyPackBtn')}</b><span class="minis" aria-hidden="true">${dots}</span><span>${ph('socketsWord',n,PCAP)}</span></span><span class="chev" aria-hidden="true">${S.open.pack?'&lsaquo;':'&rsaquo;'}</span></button></section>`;
+   <span><b>${ph('partyPackBtn')}</b><span class="minis" aria-hidden="true">${dots}</span><span>${ph('socketsWord',n,PACK_SLOTS)}</span></span><span class="chev" aria-hidden="true">${S.open.pack?'&lsaquo;':'&rsaquo;'}</span></button></section>`;
 }
 function workHTML(){
  if(S.view==='card')return '';
  const parts=[];
  const anyOpen=S.open.sanct||S.open.pack;
  if(S.open.sanct&&!onPath())parts.push(sanctPanel());
- if(anyOpen&&!(onPath()&&!S.open.pack))parts.push(`<div class="col">${S.open.pack?packPanel():''}${detailsPanel()}</div>`);
  if(S.view==='prep')parts.push(partyPanel());
+ if(anyOpen&&!(onPath()&&!S.open.pack))parts.push(`<div class="col">${S.open.pack?packPanel():''}${detailsPanel()}</div>`);
  return parts.join('');
 }
 
@@ -1045,12 +1065,12 @@ SCREENS.sanctum=()=>`<div class="bg"><div class="world-hint"></div></div><span c
 SCREENS.prep=()=>`<div class="bg"><div class="world-hint"></div></div><span class="nodename" style="right:24px;top:4px">EchoPartyScreen (existing, SanctumShell): party details is its panel</span>`;
 SCREENS.path=()=>`<div class="realm"><div class="bg"><div class="world-hint"></div></div></div><span class="nodename" style="left:24px;top:14px">StageExploreScreen (existing, RealmShell)</span>
  <div class="abs board" style="left:48px;top:48px;width:1184px;height:540px"><span class="nodename" style="position:static">CombatBoard and world layer (existing)</span></div>
- <div class="dcard hud"><button type="button" class="hudbtn" data-act="togPack" data-k="hudpack" aria-pressed="${S.open.pack}"><i class="load-mark l${loadLvl()}" aria-hidden="true"></i><span>${ph('partyPackBtn')} ${count('pack')}/${PCAP}</span></button><span class="nodename" style="position:static;display:block;margin-top:6px">path HUD (stand-in)</span></div>
+ <div class="dcard hud"><button type="button" class="hudbtn" data-act="togPack" data-k="hudpack" aria-pressed="${S.open.pack}"><i class="load-mark l${loadLvl()}" aria-hidden="true"></i><span>${ph('partyPackBtn')} ${count('pack')}/${PACK_SLOTS}</span></button><span class="nodename" style="position:static;display:block;margin-top:6px">path HUD (stand-in)</span></div>
  ${echobar()}`;
 
 /* ---------- result cards: the items go inside the existing card ---------- */
 function planEntries(kind){
- const pk=items('pack');let room=SCAP-count('sanct');
+ const pk=items('pack');let room=SANCTUM_SLOTS-count('sanct');
  return pk.map((it,i)=>{
   const survive=kind==='defeat'?false:kind==='clear'?true:OUT==='everything'?true:OUT==='nothing'?false:i%2===0;
   if(!survive)return{it,fate:'lost',reason:kind==='defeat'?'tipLostDefeat':OUT==='nothing'?'tipLostNone':'tipLostSome'};
@@ -1075,7 +1095,7 @@ SCREENS.card=()=>{
   +lane('lost','grpLost',g('lost'),'lost',`<i class="ghostico" aria-hidden="true"></i>`);
  return `<div class="realm"><div class="bg"><div class="world-hint"></div></div></div><span class="nodename" style="left:24px;top:14px">ResolveScreen (existing card: ${k==='leave'?'leave result':k==='defeat'?'defeat':'stage-clear'})</span>
  <div class="wcard namehost" data-card="${k}" style="left:300px;top:28px;width:680px;height:572px">
-  <div class="ctitle">${title}</div>
+  <div class="ctitle">${title}${k==='clear'?` <span class="tag" style="margin-left:10px">${ph('previewMark')}</span>`:''}</div>
   <div class="bars"><i class="gb" style="width:300px"></i><i class="gb" style="width:210px"></i></div>${earn}
   <span class="callout">prototype tag: the item section sits inside the existing card</span>
   <div class="items"><div class="ihead">${ph(k==='clear'?'itemsHeadClear':'itemsHead')}</div>${lanes}
@@ -1092,7 +1112,8 @@ function modalHTML(){
   return `<div class="dim" data-act="modalDim"></div><div class="mwrap"><div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="mt" aria-describedby="md" data-k="dlg">
    <h3 id="mt">${ph('modalDiscardTitle')}</h3>
    <div class="row2"><div style="width:${72}px;height:${72}px">${tile(it,{box})}</div><div id="md"><div class="nm">${phn(it.name)}</div><div>${ph(box==='pack'?'modalPackLine':'modalSanctLine')}</div>
-    <div>${ph('modalDiscardLine')}</div>${onPath()?`<div><b>${ph('modalPathLine')}</b></div>`:''}</div></div>
+    <div>${ph('modalDiscardLine')}</div>${isStack(it)?`<div class="picker" role="group" aria-label="${phs('modalCountLab')}"><span>${ph('modalCountLab')}</span>
+     <button type="button" class="btn-let-go pk" data-act="cntMinus" data-k="cminus" aria-label="${phs('cntFewer')}">&minus;</button><output id="cnt" aria-live="polite">x${S.discardCount} of ${it.qty}</output><button type="button" class="btn-let-go pk" data-act="cntPlus" data-k="cplus" aria-label="${phs('cntMore')}">+</button></div>`:''}${onPath()?`<div><b>${ph('modalPathLine')}</b></div>`:''}</div></div>
    <div class="btnrow"><button type="button" class="btn-keep" data-act="keepIt" data-k="keep">${ph('btnKeep')}</button>
    <button type="button" class="btn-let-go" data-act="letGo" data-k="letgo" id="letgo" aria-disabled="true">${ph('btnLetGo')}</button></div></div></div>`;
  }
@@ -1128,12 +1149,28 @@ function render(focusK){
 }
 
 /* ================= moves ================= */
-function canMove(it,to){
+function canMove(it,to){ // panel-level: can this piece go to that container at all?
  if(onPath())return{ok:false,key:'path'};
  const from=where(it.id);
  if(from===to)return{ok:true};
- if(S.box[to].every(Boolean))return{ok:false,key:to==='pack'?'packFull':'sanctFull'};
+ if(S.box[to].every(Boolean)&&!S.box[to].some(t=>t&&mergeable(it,t)))return{ok:false,key:to==='pack'?'packFull':'sanctFull'};
  return{ok:true};
+}
+const mergeable=(it,t)=>t&&t!==it&&isStack(it)&&isStack(t)&&it.type===t.type&&t.qty<LIM[t.type];
+// what a drop on a container (and optionally a slot) does
+function plan(it,to,idx){
+ if(onPath())return{kind:'refuse',key:'path'};
+ const from=where(it.id);
+ const tgt=idx!=null?S.box[to][idx]:null;
+ if(tgt===it)return{kind:'none'};
+ if(mergeable(it,tgt))return{kind:'merge',tgt,from};
+ if(from===to){
+  if(idx==null)return{kind:'none'};
+  if(tgt)return{kind:'refuse',key:'occupied'};
+  return{kind:'reorder'};
+ }
+ if(S.box[to].every(Boolean))return{kind:'refuse',key:to==='pack'?'packFull':'sanctFull'};
+ return{kind:'place'};
 }
 function rects(){const m={};$$('#work .tb[data-id]').forEach(t=>{const r=t.getBoundingClientRect();m[t.dataset.id]={x:r.left,y:r.top};});return m;}
 function dur(ms){return cfg.rm?RM_FADE_MS:ms/cfg.speed;}
@@ -1160,22 +1197,32 @@ function refuse(key,boxHint){
 }
 function move(id,to,idx){
  const it=getItem(id);if(!it)return false;
- const from=where(id);const c=canMove(it,to);
- if(!c.ok){refuse(c.key,to);return false;}
+ const from=where(id);const pl=plan(it,to,idx);
+ if(pl.kind==='refuse'){refuse(pl.key,to);return false;}
+ if(pl.kind==='none')return false;
  const before=rects();const moved=[id];
  const fi=S.box[from].indexOf(it);
  let ti;
- if(from===to){
-  if(idx==null||idx===fi)return false;
-  const o=S.box[to][idx];S.box[to][idx]=it;S.box[from][fi]=o;ti=idx;if(o)moved.push(o.id);
- }else{
+ if(pl.kind==='merge'){
+  const t=pl.tgt;const room=LIM[t.type]-t.qty,amt=Math.min(room,it.qty);
+  t.qty+=amt;it.qty-=amt;
+  ti=S.box[to].indexOf(t);
+  if(it.qty<=0){S.box[from][fi]=null;S.sel=t.id;}else S.sel=it.id;
+  S.flash=null;S.lastLanded={box:to,idx:ti};
+  render(`t${S.sel}`);flip(before,[]);
+  setTimeout(()=>{S.lastLanded=null;},LAND_RING_MS);
+  const msg=phs('toastMerged',t.qty,it.qty>0?it.qty:0);
+  say(`${t.name}: merged. Stack is now x${t.qty}.${it.qty>0?` x${it.qty} stay in the source slot.`:''}`);toast(msg);
+  return true;
+ }
+ if(pl.kind==='reorder'){S.box[to][fi]=null;S.box[to][idx]=it;ti=idx;}
+ else{
   S.box[from][fi]=null;
   ti=(idx!=null&&!S.box[to][idx])?idx:S.box[to].indexOf(null);
   S.box[to][ti]=it;
   if(to==='sanct')it.src=null;
  }
  S.sel=id;S.flash=null;S.lastLanded={box:to,idx:ti};
- const wasFull=false;
  render(`t${id}`);
  flip(before,moved);
  setTimeout(()=>{S.lastLanded=null;},LAND_RING_MS);
@@ -1199,18 +1246,31 @@ function openDiscard(){
  const it=S.sel!=null?getItem(S.sel):null;if(!it)return;
  const di=discardInfo(it);
  if(!di.ok){refuse(di.key,'pack');return;}
- S.modal='discard';S.modalItem=it.id;S.modalAt=now();render('keep');
+ S.modal='discard';S.modalItem=it.id;S.modalAt=now();S.discardCount=it.qty;render('keep');syncPicker();
  const back=$('#modal .dim'),card=$('#modal .modal-card');
  if(back)back.animate([{opacity:0},{opacity:1}],{duration:dur(MODAL_BACKDROP_MS)});
  if(card)card.animate(cfg.rm?[{opacity:0},{opacity:1}]:[{opacity:0,transform:'translateY(4px)'},{opacity:1,transform:'none'}],{duration:dur(MODAL_CARD_MS)});
  setTimeout(()=>{const b=$('#letgo');if(b)b.removeAttribute('aria-disabled');},GUARD_OPEN_MS/cfg.speed);
  say('Let this go? Keep it is focused.');
 }
+function syncPicker(){
+ const it=getItem(S.modalItem);const o=$('#cnt');if(!it||!o)return;
+ o.textContent=`x${S.discardCount} of ${it.qty}`;
+ const m=$('[data-act="cntMinus"]'),p=$('[data-act="cntPlus"]');
+ if(m)m.setAttribute('aria-disabled',S.discardCount<=1?'true':'false');
+ if(p)p.setAttribute('aria-disabled',S.discardCount>=it.qty?'true':'false');
+}
 function closeModal(focusK){S.modal=null;S.modalItem=null;render(focusK);}
 function doDiscard(){
  const b=$('#letgo');if(!b||b.getAttribute('aria-disabled')==='true')return;
  const it=getItem(S.modalItem);if(!it)return closeModal();
  const box=where(it.id);const path=onPath();
+ const n=isStack(it)?S.discardCount:1;
+ if(isStack(it)&&n<it.qty){
+  it.qty-=n;if(path){S.path.used=true;S.path.why=it.name;}
+  closeModal();render(path?'ld':`t${it.id}`);
+  say(`${it.name}: let go x${n}. x${it.qty} remain.${path?' The one discard of this path is used.':''}`);toast(phs('toastLetCount',n,it.qty));return;
+ }
  closeModal();
  const t=$(`#work .tb[data-id="${it.id}"]`);
  const finish=()=>{
@@ -1274,7 +1334,7 @@ function tryContinue(){
   if(e.fate==='pack'){e.it.src='held';}
  });
  const kinds=S.card.kind;S.card=null;S.view='sanctum';S.open={sanct:false,pack:false};S.sel=null;
- render('r-stores');say(`Back in the Sanctum. Sanctum ${count('sanct')} of ${SCAP}, pack ${count('pack')} of ${PCAP}.`);
+ render('r-stores');say(`Back in the Sanctum. Sanctum ${count('sanct')} of ${SANCTUM_SLOTS}, pack ${count('pack')} of ${PACK_SLOTS}.`);
 }
 
 /* ================= drag and drop (pointer based, works with mouse and touch) ================= */
@@ -1290,7 +1350,7 @@ function startDrag(e){
  const r=drag.tb.getBoundingClientRect();drag.ox=e.clientX-r.left;drag.oy=e.clientY-r.top;
  // mark both panels
  $$('#work .pnl[data-box]').forEach(p=>{const to=p.dataset.box;const c=canMove(it,to);const from=where(it.id);
-  p.classList.add(c.ok?'drop-ok':'drop-no');
+  p.classList.add(c.ok?'drop-ok':'drop-no');p.dataset.def=c.ok?phs(from===to?'dropReorder':(to==='pack'?'dropOkPack':'dropOkSanct')):phs(REASON[c.key]);
   p.querySelector('.dropnote').textContent=c.ok?phs(from===to?'dropSame':(to==='pack'?'dropOkPack':'dropOkSanct')):phs(REASON[c.key]);});
  document.body.style.userSelect='none';
 }
@@ -1301,15 +1361,26 @@ function targetAt(x,y){
  if(pnl)return{box:pnl.dataset.box,idx:null,slot:null};
  return null;
 }
+function dropLabel(pl){
+ if(pl.kind==='refuse')return phs(REASON[pl.key]);
+ if(pl.kind==='merge')return phs('dropMerge');
+ if(pl.kind==='reorder')return phs('dropReorder');
+ if(pl.kind==='none')return phs('dropSame');
+ return null;
+}
 function moveDrag(e){
  const g=drag.ghost;
  g.style.transform=`translate(${e.clientX-drag.ox*scale}px,${e.clientY-drag.oy*scale}px) scale(${scale*1.06})`;
  $$('.slot.hov-ok,.slot.hov-no').forEach(s=>s.classList.remove('hov-ok','hov-no'));
- const it=getItem(drag.id),t=targetAt(e.clientX,e.clientY),tip=tipEl();
- if(t&&it){const c=canMove(it,t.box);
-  if(t.slot&&!(t.slot.contains(drag.tb)))t.slot.classList.add(c.ok?'hov-ok':'hov-no');
-  tip.style.display='none';
- }else tip.style.display='none';
+ $$('#work .pnl[data-box]').forEach(p=>{const n=p.querySelector('.dropnote');if(n&&p.dataset.def)n.textContent=p.dataset.def;});
+ const it=getItem(drag.id),t=targetAt(e.clientX,e.clientY);
+ const tip=$('#dragtip');if(tip)tip.style.display='none';
+ if(t&&it&&t.slot){
+  const pl=plan(it,t.box,t.idx);
+  if(pl.kind!=='none')t.slot.classList.add(pl.kind==='refuse'?'hov-no':'hov-ok');
+  const lab=dropLabel(pl);const n=t.slot.closest('.pnl').querySelector('.dropnote');
+  if(lab&&n)n.textContent=lab;
+ }
 }
 function endDrag(e){
  const d=drag;drag=null;
@@ -1322,10 +1393,10 @@ function endDrag(e){
  const t=targetAt(e.clientX,e.clientY);const it=getItem(d.id);
  const cleanup=()=>{if(d.ghost)d.ghost.remove();};
  if(!it||!t){snapBack(d,cleanup);return;}
- const c=canMove(it,t.box);
- if(!c.ok){snapBack(d,cleanup,true);refuse(c.key,t.box);return;}
+ const pl=plan(it,t.box,t.idx);
+ if(pl.kind==='refuse'){snapBack(d,cleanup,true);refuse(pl.key,t.box);return;}
  cleanup();
- if(where(it.id)===t.box&&(t.idx==null)){render(`t${it.id}`);return;}
+ if(pl.kind==='none'){render(`t${it.id}`);return;}
  move(it.id,t.box,t.idx);
 }
 function snapBack(d,cleanup,refused){
@@ -1365,6 +1436,8 @@ cv.addEventListener('click',e=>{
   case 'select':select(+a.dataset.id);break;
   case 'moveSel':selectedMove();break;
   case 'discard':openDiscard();break;
+  case 'cntMinus':S.discardCount=Math.max(1,S.discardCount-1);syncPicker();break;
+  case 'cntPlus':{const it=getItem(S.modalItem);S.discardCount=Math.min(it.qty,S.discardCount+1);syncPicker();break;}
   case 'keepIt':closeModal('ld');say('Kept.');break;
   case 'letGo':doDiscard();break;
   case 'stay':closeModal();say('Staying on the path.');break;
@@ -1428,12 +1501,12 @@ window.addEventListener('resize',fit);
 
 /* ================= aids, readout, lists ================= */
 const TRY={
- 1:['Select a tile. Read the details. Press Move to pack. The pack is closed, so a toast says where it went.','Press Show pack in the Sanctum header to open both panels.','Select a stack. It moves like any other tile.'],
- 2:['Drag a tile from the Sanctum onto the pack. Drop it on a socket or anywhere on the pack.','Select a pack tile, press Move to Sanctum.','Three consumable stacks exist on both sides. Move one across; nothing merges.','Let it go on any piece: the modal opens with Keep it focused.'],
- 3:['The pack opens from Party pack in party details. Close it with the x.','Press Stores on the rail to open the Sanctum next to the pack.','Move a piece with the pack open and with it closed.'],
- 4:['Select a pack tile. Move is disabled with a reason. Let it go is enabled.','Let it go once. The token turns to used and a reason line appears.','Select another tile. Let it go is disabled with a reason.','Try to drag a tile. Every target refuses with a reason.'],
- 5:['The leave modal shows the pieces at risk as tiles. Stay is focused.','To the Sanctum has a 0.25 s open window. Press it twice if the first press is ignored.','Change the outcome in the aids, then press To the Sanctum.'],
- 6:['Use the card buttons in the aids. Tap the card once to finish the motion; press Continue to leave.','Reduced motion: every tile fades in 0.15 s.','Hover a tile: the name and the reason show under the lanes.'],
+ 1:['Select a tile. Read the details. Press Move to pack. The pack is closed, so a toast says where it went.','Press Show pack in the Sanctum header. The pack opens to the right of the Sanctum.','Drag a tile to an empty Sanctum slot: it reorders. Drag it onto a full slot: the move is refused with a reason.','Use the slot controls in the aids to grow or shrink both panels.'],
+ 2:['Drag a tile from the Sanctum onto the pack, or onto one empty socket.','Drag the pack stack (x18) onto the Sanctum stack x12: they merge up to 20 and the rest stays in the source slot.','Drag a stack onto a same-type stack at the limit: refused with a reason.','Let it go on a stack: a count picker opens, default is the whole stack.'],
+ 3:['The pack opens to the right of party details. Close it with the x.','Press Stores on the rail: the Sanctum opens to the left of party details.','Move a piece with the pack open and with it closed.'],
+ 4:['Select a pack tile. Move is disabled with a reason. Let it go is enabled.','Let it go once. The token turns to used and a reason line appears. A stack uses the picker; the whole action counts once.','Select another tile. Let it go is disabled with a reason.','Try to drag a tile. Every target refuses with a reason.'],
+ 5:['The leave modal shows the pieces at risk as tiles. Stay is focused.','To the Sanctum has a 0.25 s open window.','Change the outcome in the aids, then press To the Sanctum.'],
+ 6:['Use the card buttons in the aids. Tap the card once to finish the motion; press Continue to leave.','The stage-clear card uses the same three lanes and a read-only mark.','Reduced motion: every tile fades in 0.15 s.'],
  7:['A Sanctum tile is selected. Move to pack is disabled: the pack is full.','Drag it to the pack: the pack shows a hatch and the reason.','Let it go on a pack piece, then Move to pack works for the next one.']
 };
 function updateAids(){
@@ -1448,10 +1521,11 @@ function updateAids(){
  $$('[data-out]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.out===OUT)));
  const sel=S.sel!=null?getItem(S.sel):null;
  const rd=[['View',S.view+(S.modal?' + '+S.modal+' modal':'')],['Panels open',['sanct','pack'].filter(k=>S.open[k]).join(' + ')||'none'],
-  ['Sanctum',`${count('sanct')} / ${SCAP}`],['Pack',`${count('pack')} / ${PCAP}`],['Discards this path',onPath()?(S.path.used?'0 left (used)':'1 left'):'not on a path'],['Selected',sel?`${sel.name} (${where(sel.id)})`:'none']];
+  ['Sanctum',`${count('sanct')} / ${SANCTUM_SLOTS}`],['Pack',`${count('pack')} / ${PACK_SLOTS}`],['Discards this path',onPath()?(S.path.used?'0 left (used)':'1 left'):'not on a path'],['Selected',sel?`${sel.name} (${where(sel.id)})`:'none']];
  $('#reads').innerHTML=rd.map(r=>`<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
  $('#tryl').innerHTML=TRY[S.scn].map(t=>`<li>${t}</li>`).join('');
  $$('[data-scn]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.scn===S.scn)));
+ $('#sz-pack').textContent=PACK_SLOTS;$('#sz-sanct').textContent=SANCTUM_SLOTS;
 }
 $('#aidbtns').addEventListener('click',e=>{
  const b=e.target.closest('[data-aid]');if(!b)return;const a=b.dataset.aid;
@@ -1471,6 +1545,21 @@ function start(n){
  if(n===5)armLeave();
 }
 $$('[data-scn]').forEach(b=>b.addEventListener('click',()=>start(+b.dataset.scn)));
+function setSizes(sz,pk){
+ const ns=Math.max(SIZE_RANGE.sanct[0],Math.min(SIZE_RANGE.sanct[1],sz)),np=Math.max(SIZE_RANGE.pack[0],Math.min(SIZE_RANGE.pack[1],pk));
+ const fitBox=(box,n)=>{
+  if(n<count(box))return false;
+  const arr=S.box[box].slice(0,n);const over=S.box[box].slice(n).filter(Boolean);
+  while(arr.length<n)arr.push(null);
+  over.forEach(it=>{arr[arr.indexOf(null)]=it;});
+  S.box[box]=arr;return true;
+ };
+ if(!fitBox('sanct',ns)||!fitBox('pack',np)){toast('Smaller than the pieces it holds. Free slots first.');return;}
+ SANCTUM_SLOTS=ns;PACK_SLOTS=np;render();say(`Prototype slots: Sanctum ${ns}, pack ${np}.`);
+}
+$('#size-ctl').addEventListener('click',e=>{const b=e.target.closest('[data-size]');if(!b)return;const [w,d]=b.dataset.size.split(':');
+ if(S.view==='card')return;
+ setSizes(SANCTUM_SLOTS+(w==='sanct'?+d:0),PACK_SLOTS+(w==='pack'?+d:0));});
 $('#reset').addEventListener('click',()=>start(S.scn));
 
 /* toolbar toggles */
@@ -1499,45 +1588,64 @@ function buildB(){
 const FEEL=[
  ['Drag lift','The tile follows the pointer at 1.06 scale with a soft shadow. The source slot dims to 35%.','at once'],
  ['Move glide','The tile glides from the old slot to the new slot. The landing slot shows one quiet ring.',`${MOVE_GLIDE_MS} ms + ${LAND_RING_MS} ms ring`],
- ['Refused move','The tile glides back. A gold-framed reason line shows in the full panel. No red, no shake.','220 ms glide back'],
+ ['Reorder','A drop on an empty slot in the same container glides the tile there. A drop on a full slot is refused: the tile glides back.','same glide'],
+ ['Merge','A drop on a same-type stack adds the count up to the limit. The target shows its new count. The rest stays in the source slot.','same ring'],
+ ['Refused move','The tile glides back. A gold-framed reason line shows in the panel. No red, no shake.','220 ms glide back'],
  ['Gauge full','The last mark pulses once at scale 1.15, once per session.',`${GAUGE_PULSE_MS} ms`],
- ['Discard','Ghost fade (fill 0.35, marks 0.6), then fade to 0. Slots stay fixed; neighbours do not shift.',`${DISCARD_LOST_MS} + ${DISCARD_FADE_MS} ms`],
+ ['Discard','Ghost fade (fill 0.35, marks 0.6), then fade to 0. Slots stay fixed. A partial stack discard only lowers the count.',`${DISCARD_LOST_MS} + ${DISCARD_FADE_MS} ms`],
  ['Modal','Backdrop and card fade in. Let it go has a 0.25 s open window. Keep it holds focus.',`${MODAL_CARD_MS} ms + ${GUARD_OPEN_MS} ms`],
  ['Result card','Tiles reveal in order. 4 or fewer: 0.3 s apart. 5 to 8: 0.15 s apart. Total never over 2.4 s. First tap finishes, second continues, 0.25 s guard.',`cap ${SEQ_CAP_MS} ms`],
  ['Reduced motion','Every move, reveal and loss is a 0.15 s fade.',`${RM_FADE_MS} ms`]
 ];
 const FRIC=[
- 'Moving to a closed panel gives no visual proof. A toast and the status line name the destination. Question 3 asks whether this is enough.',
+ 'Moving to a closed panel gives no visual proof. A toast and the status line name the destination. The toast sits in a band between the panels and the rail, so it covers no gauge.',
  'A drag over a refusing panel shows a hatch and the reason at once, so the player learns the rule before the drop.',
- 'The details panel sits under the pack in the middle column. Selecting in the Sanctum or the pack shows details in the same place.',
+ 'The details panel sits under the pack. Selecting in the Sanctum or the pack shows details in the same place.',
  'On a path the Move button is disabled with a reason, not hidden. The player sees why nothing moves.'
 ];
 const EPLAY=[
  ['Can you say, without reading, which tiles are in the pack and which are in the Sanctum?','Scenario 2, then Grayscale frame.'],
  ['Does a drag from the chest to the bag feel like lifting a piece?','Scenario 2, drag. Try Slow speed.'],
+ ['Is the merge result clear when the target reaches the limit?','Scenario 2, drag the x18 stack onto x12.'],
  ['Is Move to pack as easy as a drag?','Scenario 1, select, Move to pack.'],
  ['Is it clear that nothing moves on a path, and why?','Scenario 4.'],
  ['After the one discard, is the used state and the reason clear?','Scenario 4, Let it go.'],
  ['On the result card, can you see what is kept, left in the pack and lost before you tap?','Scenario 6.'],
  ['With both containers full, do you know what to do next?','Scenario 7.']
 ];
+const APPLIED=[
+ 'The party pack opens to the right of party details. In the rail panel the Sanctum is on the left and the pack on the right. The Sanctum keeps a Show pack toggle. (D-33, D-34)',
+ 'The rail button sits right of the Sanctum button with the selected look of the other buttons. The label is a placeholder. (D-34)',
+ 'Panels sit over the Sanctum, not on full screens. Both can be open. (D-33)',
+ 'Pieces move both ways by drag and drop, or by select, details and a Move button. (D-33)',
+ 'A drop on an empty slot reorders. A drop on a full slot is refused with a reason. There is no swap. (D-34)',
+ 'A stack dropped on a same-type stack with room merges up to the stack limit. The rest stays in the source slot. (D-34)',
+ 'Across containers a piece takes the first free slot, or the empty slot it is dropped on. (D-34)',
+ 'A stack is an item that fills one slot. The same type can be several stacks on either side. (D-33)',
+ 'Stack discard: the modal has a count picker. The default is the whole stack and the minimum is 1. (D-34; the default is the coordinator\'s assumption)',
+ 'On a path nothing moves. One discard per path, on a pack piece. The whole action counts once. In the Sanctum, discard is unlimited. (D-33, D-34)',
+ 'The one-discard counter is a saved value that survives quit and Continue. Core owns it. (D-34)',
+ 'Slot counts are named constants (Sanctum 20, pack 4) that can grow. Final values come from play. (D-34)',
+ 'Result cards keep the items in lanes inside the card. The stage-clear preview uses the same lanes and a read-only mark. No pack panel after Continue. (D-33, D-34)',
+ 'The discard token uses a small leaf cut, not the grade diamond. The artist decides the final shape. (D-34)',
+ 'Ase and Ekwan cards stay dimmed behind the panels. (D-34)',
+ 'No red and no shake for loss. Loss is a ghost fade. First tap finishes a result motion, second continues. Sequence cap 2.4 s. Reduced motion 0.15 s. (D-32)'
+];
 const OPEN=[
- ['Should the Sanctum panel have a Show pack toggle? D-33 says the pack opens from party details. The toggle lets a player in the Sanctum see the pack beside the chest.','Keep the toggle. Without it, Move to pack gives no sight of the pack.','Scenario 1, Show pack'],
- ['Where should the new rail button sit and what should it be called? The prototype puts it right of the Sanctum button, labelled with a placeholder.','Right of the Sanctum button. Jeff writes the label.','Any Sanctum screen'],
- ['Slot counts. The prototype uses Sanctum 20 and pack 4. D-25 sets 8 and 4 as provisional values. Jeff said the Sanctum grid is large.','Sanctum 20 (5 x 4). Keep the pack at 4 until play tests.','Scenario 7'],
- ['Can a whole stack be discarded? D-21 said stacks are not discarded. D-33 says a stack is an item like any other.','Yes. One Let it go removes the whole slot. Use the same modal.','Scenario 2, select a stack, Let it go'],
- ['Is the one discard per path a saved counter that a quit and Continue keeps? The prototype resets it on a new path.','Save it. Core owns this.','Scenario 4'],
- ['May a player drop a piece onto an occupied slot to swap, inside one container? The prototype allows this inside one container, and places a piece in the first free slot across containers.','Keep it.','Scenario 2'],
- ['If a stack has room and another stack of the same type is dropped on it, should they merge? D-33 says no forced merge.','No merge in this story. Revisit with a play test.','Scenario 2'],
- ['Should the result card keep the pieces that stay in the pack visible after Continue (an automatic panel)? Jeff said no new pack panel on result screens.','No panel. The Sanctum screen shows them only when the player opens the pack.','Scenario 6'],
- ['On the stage-clear card (D-30) the lanes show a preview. Should the preview use the same three lane names as the leave result?','Yes. Same lanes. The preview adds a read-only mark in the title.','Scenario 6, Stage clear'],
- ['A move on a path is closed. Should party prep or the Sanctum also close moves while a path is open (the party is out)?','Not needed: the party cannot be in the Sanctum on a path. Core decides.','Scenario 4'],
- ['The one-discard token uses a diamond. The same shape is the grade pip. Use a different shape?','Use a small leaf cut. Artist decides.','Scenario 4'],
- ['The dim backdrop covers the Sanctum behind the panels. May the Ase and Ekwan cards stay visible above it?','Keep them dimmed. Less noise.','Scenario 1'],
- ['Touch and controller: the prototype supports mouse, touch (pointer drag) and keyboard. Controller focus order is not drawn.','Add in the Godot build with the same focus order as the keyboard.','Keyboard only']
+ ['Count picker default. The prototype uses the whole stack, minimum 1. A default of 1 is safer against a mistake; the whole stack is faster to clear.','Whole stack, with the confirm modal as the safety. Test in play.','Scenario 2, select a stack, Let it go'],
+ ['Merge overflow. When the drop is over the limit, the target fills to the limit and the rest stays in the source slot. Should the player see this before the drop?','Show it after the drop in the toast and the counts. Add a preview line if play tests show confusion.','Scenario 2, drag x18 onto x12'],
+ ['Merge by button. Move to pack and Move to Sanctum take the first free slot and never merge. Should the button merge into a same-type stack with room?','No. Only a drop merges. The button is for simple moves.','Scenario 2, Move button on a stack'],
+ ['Refusal wording. The prototype uses one reason line per case (path, full, taken slot). Jeff writes the final text and decides whether the reason shows as a line, a toast or both.','Both: a panel line and the status toast, as now.','Scenario 7, scenario 2 (drop on a full slot)'],
+ ['Pack size growth. The prototype shows 2 to 8 pack slots in two rows of 4, and Sanctum 8 to 30 in 5 or 6 columns. At 8 pack slots the details panel gets short.','Accept for the prototype. The Godot layout may scroll the details area.','Scenario 2 with the slot controls'],
+ ['Sanctum column count. The panel grows from 5 to 6 columns above 20 slots. In party prep with three panels open it fills the 1280 frame.','Keep 5 to 6 columns. Check 1920 in the build.','Scenario 3, Stores, with 30 slots'],
+ ['Discard token. The leave-cut shape is a placeholder. It is near the source leaf shape.','Artist decides a form that does not read as a source mark.','Scenario 4'],
+ ['Reorder on a path. The prototype closes reorder on a path like every move. Is a reorder in the pack on a path harmless enough to allow?','Keep it closed. The rule stays simple.','Scenario 4'],
+ ['A merge or discard in the pack on a path when the discard is used. The merge is a move, so it is closed.','Keep closed.','Scenario 4'],
+ ['Rail label. The new rail button uses a placeholder label.','Jeff writes the label.','Any Sanctum screen']
 ];
 function buildLists(){
  $('#d-table').insertAdjacentHTML('beforeend',FEEL.map(f=>`<tr><td>${f[0]}</td><td>${f[1]}</td><td>${f[2]}</td></tr>`).join(''));
+ $('#g-applied').innerHTML=APPLIED.map(t=>`<li>${t}</li>`).join('');
  $('#d-list').innerHTML=FRIC.map(t=>`<li>${t}</li>`).join('');
  $('#e-list').innerHTML=EPLAY.map(a=>`<li>${a[0]} <span class="mut">Try: ${a[1]}</span></li>`).join('');
  $('#f-open').insertAdjacentHTML('beforeend',OPEN.map((o,i)=>`<tr><td>${i+1}</td><td>${o[0]}</td><td>${o[1]}</td><td>${o[2]}</td></tr>`).join(''));
@@ -1548,10 +1656,13 @@ function buildLists(){
 window.inventoryProto2=Object.freeze({
  get state(){return{scn:S.scn,view:S.view,modal:S.modal,open:Object.assign({},S.open),sanct:count('sanct'),pack:count('pack'),sel:S.sel,used:S.path.used,cardDone:S.card?S.card.done:null,
   packIds:items('pack').map(x=>x.id),sanctIds:items('sanct').map(x=>x.id),
-  stacks:{sanct:items('sanct').filter(isStack).length,pack:items('pack').filter(isStack).length}};},
+  stacks:{sanct:items('sanct').filter(isStack).length,pack:items('pack').filter(isStack).length},
+  slots:{sanct:S.box.sanct.map(x=>x?x.id:null),pack:S.box.pack.map(x=>x?x.id:null)},
+  stackInfo:[...S.box.sanct.map((x,i)=>x&&isStack(x)?{id:x.id,type:x.type,qty:x.qty,box:'sanct',idx:i}:null),...S.box.pack.map((x,i)=>x&&isStack(x)?{id:x.id,type:x.type,qty:x.qty,box:'pack',idx:i}:null)].filter(Boolean),
+  sizes:{sanct:SANCTUM_SLOTS,pack:PACK_SLOTS}};},
  get plan(){return S.card?S.card.plan:null;},
  seqPlan,
- constants:{SEQ_CAP_MS,GUARD_OPEN_MS,GUARD_CONTINUE_MS,RM_FADE_MS,SCAP,PCAP}
+ get constants(){return{SEQ_CAP_MS,GUARD_OPEN_MS,GUARD_CONTINUE_MS,RM_FADE_MS,SANCTUM_SLOTS,PACK_SLOTS};}
 });
 load(1);buildB();buildLists();fit();render();
 if(cfg.rm){document.body.classList.add('rm');setP($('#rm'),true);}
