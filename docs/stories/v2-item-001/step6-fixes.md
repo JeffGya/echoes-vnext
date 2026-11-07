@@ -34,7 +34,7 @@ At-risk row: the same without `reason_key`.
 
 | Where | Key | Shape | Present when |
 |---|---|---|---|
-| `flow.resolve`, `run_type` "scout_return" (also the replayed card) | `data.items` | `{ kept: [report row], lost: [report row] }` | at least one row. Absent for an item-free leave. Reasons: kept `ok`, `to_pack`, `stack_limit`; lost `leave_none`, `leave_some`, `overflow`, and the intake reasons. |
+| `flow.resolve`, `run_type` "scout_return" (also the replayed card) | `data.items` | `{ kept: [report row], lost: [report row] }` | at least one row. Absent for an item-free leave. Reasons (current, D-42/D-45/D-46; see `step7-backend-moves-slots.md`): kept `ok`, `to_pack`, `overflow` (a stack find whose rest found no slot: the kept part with `lost_quantity`); lost `leave_none`, `leave_some`, `overflow`, and the intake refusal reasons. `stack_limit` is no longer an item-report reason. |
 | `flow.stage_explore` | `data.carry_home_preview.items_at_risk` | `[at-risk row]`, open item rows first (row order), then held pieces (pack order) | an open item row or a held piece exists. `nothing_new` is then false. |
 | `flow.resolve` (defeat) | `data.reward_breakdown[cause == "packs_lost"].params.items` | `[report row]`, reason `defeat`; rows first, then held pieces | an item row or a held piece was lost. The `packs_lost` row now also appears for an item-only or held-only defeat, with `params.lost_ase` 0 and `params.lost_ekwan` 0. An Ase-only defeat keeps `{ lost_ase, lost_ekwan }` exactly. |
 | `flow.echo_party` | `data.inventory` | the same projection as `flow.sanctum` `data.inventory` | always (ASSUMED 2) |

@@ -29,6 +29,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_paths/a_new_stack_find_is_kept_in_the_pack_when_the_sanctum_is_full", Callable(InventoryPathTests, "_t_find_stack_to_pack"))
 	runner.register_test("inventory_paths/a_big_stack_find_stays_within_the_pack_through_the_real_seam", Callable(InventoryPathTests, "_t_big_find_seam"))
 	runner.register_test("inventory_paths/a_big_stack_find_leaves_the_slots_of_later_rows", Callable(InventoryPathTests, "_t_big_find_later_rows"))
+	runner.register_test("inventory_paths/a_big_stack_find_leaves_the_slots_of_rows_in_other_realms", Callable(InventoryPathTests, "_t_big_find_other_realm"))
 	runner.register_test("inventory_paths/dispatches_are_deterministic", Callable(InventoryPathTests, "_t_determinism"))
 	runner.register_test("inventory_paths/new_save_and_config_hold_no_placeholder", Callable(InventoryPathTests, "_t_no_placeholder"))
 
@@ -729,6 +730,51 @@ static func _t_big_find_later_rows() -> Dictionary:
 	if q2 != [3, 3, 2] or (ctx2.save_data["inventory"]["pack"] as Array).size() != 1 or _pack_entries(ctx2) != 4 \
 			or kept2.size() != 2 or int(paid2["lost_count"]) != 0:
 		m.append("rows [consumable 8, relic]: pack stacks %s, entries %d, report %s" % [str(q2), _pack_entries(ctx2), str(paid2)])
+	# F4-03: the early leave (outcome all) counts the later rows the same way: [relic, consumable 8], pack of 4.
+	var ctx3 := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 4)
+	InventoryService.intake(ctx3.save_data, cfg, InventoryServiceTests._e("ph_weapon_a"), "direct")
+	EarningsService.record_item(ItemPacksTests._stage(ctx3), "s0", "0", ItemPacksTests._entry("ph_relic_a"))
+	EarningsService.record_item(ItemPacksTests._stage(ctx3), "s0", "1", ItemPacksTests._entry("ph_consumable_a", 8))
+	var leave3: Dictionary = ItemPacksTests._leave(ctx3)["result"]
+	var q3: Array = (ctx3.save_data["inventory"]["pack_stacks"] as Array).map(func(st): return int(st["quantity"]))
+	if str(leave3["outcome"]) != "all" or q3 != [3, 3, 2] or _pack_entries(ctx3) != 4 or int(leave3["items"]["lost_count"]) != 0 \
+			or not InventoryService.validate(ctx3.save_data, cfg).is_empty():
+		m.append("leave, rows [relic, consumable 8]: outcome %s, pack stacks %s, entries %d, items %s" % [
+			str(leave3["outcome"]), str(q3), _pack_entries(ctx3), str(leave3["items"])])
+	return _result(m)
+
+
+## F4-01. An open item row in ANOTHER Realm owns a pack slot too. Sanctum full (1 slot), pack of 3. Realm B holds an
+## open relic row. Realm A finds consumable 8 through the real seam (free room 2 because Realm B's row counts). The
+## path end and an early leave must keep the Realm B slot free: 3 + 3 kept, 2 lost, pack 2 of 3. When Realm B's row is
+## settled later, the pack holds 3 entries and `validate` is empty.
+static func _t_big_find_other_realm() -> Dictionary:
+	var m: Array = []
+	for how in ["path_end", "leave"]:
+		var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
+		var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+		InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_weapon_a"), "direct")
+		var other := { "run_count": 0, "seed": 1, "stages": [{ "index": 0, "earnings": [] }] }
+		(ctx.save_data["realms"] as Dictionary)["realm.02"] = other
+		EarningsService.record_item((other["stages"] as Array)[0], "r2", "open", ItemPacksTests._entry("ph_relic_a"))
+		var got := ActiveStageService.record_found_items(ctx, "s0", [ItemPacksTests._find("f0", "ph_consumable_a", 8)], 2)
+		if (got["taken"] as Array).size() != 1:
+			m.append("%s: the seam took %s" % [how, str(got)])
+		var items: Dictionary
+		if how == "path_end":
+			items = ItemPacksTests._settle_path(ctx, 5)["items"]
+		else:
+			items = ItemPacksTests._leave(ctx)["result"]["items"]
+		var kept: Dictionary = (items["kept"] as Array)[0]
+		if _quantity_in_stacks(ctx) != 6 or int(kept["quantity"]) != 6 or int(kept.get("lost_quantity", 0)) != 2 or _pack_entries(ctx) != 2:
+			m.append("%s: stacks hold %d, kept %s, pack entries %d" % [how, _quantity_in_stacks(ctx), str(kept), _pack_entries(ctx)])
+		# Realm B's path ends: its relic row is banked into the slot that was kept for it.
+		var res := InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_relic_a"), "gathered", 0)
+		var row: Dictionary = ((other["stages"] as Array)[0]["earnings"] as Array)[0]
+		row["settled"] = true
+		if str(res["result"]) != "packed" or _pack_entries(ctx) > 3 or not InventoryService.validate(ctx.save_data, cfg).is_empty():
+			m.append("%s after Realm B: %s, entries %d, validate %s" % [how, str(res["result"]), _pack_entries(ctx),
+				str(InventoryService.validate(ctx.save_data, cfg))])
 	return _result(m)
 
 

@@ -183,9 +183,11 @@ func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
 static func _bank_rows(save: Dictionary, inv_cfg: Dictionary, rows: Array,
 		log: StructuredLogger, t: int) -> Dictionary:
 	var report := _item_report()
+	var other := _other_open_rows(save, rows)
 	for i in rows.size():
-		# `later_rows` = open rows still to settle after this one: each owns one pack slot a stack find must not use.
-		_settle_item_row(save, inv_cfg, rows[i], true, "", rows.size() - i - 1, report, log, t)
+		# `later_rows` = open rows still to settle after this one, here and in every other stage and Realm: each
+		# owns one pack slot a stack find must not use.
+		_settle_item_row(save, inv_cfg, rows[i], true, "", other + rows.size() - i - 1, report, log, t)
 	_finish_report(report)
 	return report
 
@@ -492,13 +494,14 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 		(report["kept"] as Array).append(EarningsService.report_row(
 			p, "ok", "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
 
+	var other := _other_open_rows(ctx.save_data, rows)
 	for i in rows.size():
 		var row: Dictionary = rows[i]
 		var keep := outcome == OUTCOME_ALL
 		if outcome == OUTCOME_SOME:
 			keep = _keeps(seed_v, ctx.stage_id, run_count, settle_count, "row", str(row["id"]), share_pct)
 			draws += 1
-		_settle_item_row(ctx.save_data, inv_cfg, row, keep, lost_reason, rows.size() - i - 1, report, logger, t)
+		_settle_item_row(ctx.save_data, inv_cfg, row, keep, lost_reason, other + rows.size() - i - 1, report, logger, t)
 	_finish_report(report)
 	logger.info(t, "economy.settle.items", "Leave settled the item entries", {
 		"stage_id": ctx.stage_id, "settle_count": settle_count, "outcome": outcome, "share_pct": share_pct,
@@ -514,6 +517,12 @@ static func _keeps(realm_seed: int, stage_id: String, run_count: int, settle_cou
 	var rng := CampaignSeed.get_rng_from(realm_seed,
 		"inventory.leave.%s.%d.%d.%s.%s" % [stage_id, run_count, settle_count, kind, id])
 	return rng.randi_range(0, 99) < share_pct
+
+
+## Open item rows of the whole save that are not in `rows` (other stages and Realms). Each owns a pack slot
+## (`record_found_items` counts them), so the settlement of `rows` keeps those slots free. Never negative.
+static func _other_open_rows(save: Dictionary, rows: Array) -> int:
+	return maxi(0, EarningsService.open_item_rows_in_save(save) - rows.size())
 
 
 ## Settles one open item row. `keep` true: each entry goes to intake (`gathered`) and the row is marked settled
