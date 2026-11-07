@@ -3740,7 +3740,7 @@
 			"unique_cap": 20,
 			"_pack_capacity_comment": "Slots of the party pack: pieces and stacks share them, one slot each. Carried entries from an earlier path use slots too (D-13, D-16). May grow.",
 			"pack_capacity": 4,
-			"_stack_limit_comment": "Per-stack limit for consumables and materials. A definition may override it. Surplus above the limit is lost.",
+			"_stack_limit_comment": "Per-stack limit for consumables and materials. A definition may override it. What no free slot can hold is lost; a surplus above one stack starts new stacks (D-45).",
 			"stack_limit_default": 20,
 			"_warn_comment": "Cap pressure thresholds for the path view warnings (D-04, D-08). warn_room_at: warn when Sanctum room is this many pieces or fewer. warn_pack_free_at: warn when free pack slots are this many or fewer.",
 			"warn_room_at": 2,

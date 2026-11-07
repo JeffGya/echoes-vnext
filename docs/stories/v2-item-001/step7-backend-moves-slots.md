@@ -257,3 +257,120 @@ ASSUMED: 2. (Closed by the late fix above.) A NEW stack with no free Sanctum slo
 ASSUMED: 3. D-43 limit: the draw name of a carried stack is its order among stacks of the same type. If the player reorders two stacks of ONE type so that their relative order swaps, their two draw results swap between them (the set of results is the same). One stack of a type, or any move that keeps the relative order, never changes a result.
 ASSUMED: 4. The path-end card still lists NEW finds only. Carried entries stay silent there because they are neither rolled nor moved.
 BLOCKED: None.
+
+## Fixes after QA round 2 (D-45)
+
+Source: decision D-45, `step7-qa-report-2.md` (F2-01 to F2-07). Same private save dir. No commit.
+
+### Changes
+
+| Item | Change | File:line |
+|---|---|---|
+| F2-01, F2-02 (D-45) | `_intake_stack` rewritten. A stack find fills in order: 1) merge into same-type Sanctum stacks with room; 2) new Sanctum stacks in free Sanctum slots (each up to the limit); 3) merge into same-type pack stacks with room; 4) new pack stacks in free pack slots (`gathered`: if none is free below the size, ONE slot above it; `direct`: only while `pack_free(reserved)` is above 0); 5) the rest is lost. Reason of the lost rest: `stack_limit` when the find is larger than one stack can be (`quantity` above the limit), else `overflow`. Result: `stored`/`ok` all in the Sanctum; `packed`/`to_pack` when any went to the pack; `partial` when some was lost; `lost` when none was kept. Conservation holds (every unit is added to one stack or counted as lost). | `core/inventory/InventoryService.gd:474` |
+| New helper | `_stack_fill` adds to same-type stacks of one array, in array order. | `core/inventory/InventoryService.gd:524` |
+| F2-03 | No code change. Documented behaviour kept (swapping two same-type carried stacks may swap their results). | `InventoryService.gd:141` |
+| F2-07 text | `intake` doc describes the new stack order. The broken last sentence of the `remove_held` doc is fixed. The tolerant-read comments no longer say "size cut" or "no size ever shrinks": they say D-41 defers the pack shrink rule and the Sanctum never shrinks. The controller header says a move into the pack counts slots reserved by open item rows. The test comment "ASSUMED shrink rule" is reworded. | `InventoryService.gd:14`, :155, :272; `InventoryController.gd:19-21`; `tests/InventoryMoveTests.gd:182` |
+
+### Tests
+
+| Test | What it pins |
+|---|---|
+| `inventory_moves/a_new_stack_takes_a_pack_slot_when_the_sanctum_is_full` (rewritten) | QA example (Sanctum stack 3/3, free slots, find 2: new Sanctum stack, nothing lost); multi-step spill (merge, new Sanctum stack, new pack stack, 7 units, none lost); pack merge before a new pack slot; a full pack stack gives a new pack stack; both full (`lost/overflow`, save unchanged); 8 against limit 3 with two pack slots (`partial/stack_limit`, 6 kept, 2 lost); mode difference (direct lost, gathered one slot above the size at function level: no play path reaches it because every gathered row reserves a pack slot, F2-06); reserved slot (direct lost, gathered packed, F2-05). |
+| `inventory_moves/held_stacks_are_settled_like_held_pieces` (extended) | F2-04: the draw order is counted per type; moving a stack of another type does not change a draw name. |
+| `inventory_moves/intake_takes_the_lowest_free_slot` | Merge into the pack stack, partial/overflow, both full. |
+| `inventory_paths/a_new_stack_find_is_kept_in_the_pack_when_the_sanctum_is_full` | The leave merges the second find into the first pack stack (one pack stack of 3). The two-pack-stacks assertion is removed. |
+| Rewritten for the new rule | `inventory_service/stack_merge_and_limit`, `stack_above_a_lowered_limit`, `cfg_of_the_wrong_type_does_not_crash`, `fixed_calls_give_the_pinned_save` (re-pinned results and save); `item_packs/partial_stack_keeps_the_stored_quantity` (Sanctum 1, pack 1: 3 kept in the pack, 5 lost), `path_end_preview_equals_the_payout_report` (find of 12 keeps the lost-quantity case). |
+
+Mutations by hand (each restored, `cmp` equal): order counted over all types fails `held_stacks_are_settled_like_held_pieces` (F2-04); direct fallback ignores `reserved` fails `a_new_stack_takes_a_pack_slot_when_the_sanctum_is_full` (F2-05); no `_lowest_free` fallback for a gathered stack fails the same test (F2-06).
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_paths,inventory_moves,inventory_actions,inventory_service,inventory_save,item_packs,item_packs_char` | `Tests: 134 total, 134 passed, 0 failed` |
+| `=flow_transaction,snapshot_fingerprint,snapshot_purity,snapshot_contract,save_integrity,pending_result,econ_char,economy,payout_ui,sanctum.layout,sanctum.party,echo_party` | `Tests: 277 total, 277 passed, 0 failed` |
+| `=traversal,venture_char,seam,stop_short,realm_ui` | `Tests: 190 total, 190 passed, 0 failed` |
+
+Compile check (`--check-only --quit`): 0 `SCRIPT ERROR` lines. No suite added or removed (shard map unchanged). The expected sharded total is 2680 (no test added or removed).
+
+### Recorded values
+
+None moved. No fingerprint, hash or balance number changed. Test-owned literals re-pinned for one named cause (D-45: a stack find no longer stops at a full Sanctum stack and starts new stacks): `inventory_service` `_PINNED_RESULTS` and `_PINNED_SAVE`. I traced the new results by hand (the consumable find of 4 splits into 3 in the Sanctum and 1 in the pack; the player move then takes the pack stack to slot 0).
+
+### Result rows
+
+Field names are unchanged. A new stack find that put any part in the pack reports `kept`, `source` `gathered`, `reason_key` `to_pack`. A find with a lost rest reports `reason_key` `stack_limit` (find larger than one stack) or `overflow`, and `lost_quantity`.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"`, Bash `timeout` 3600000.
+2. Expected duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files the run edits: none in the checkout (it writes `/tmp/echoes-vnext-sharded/`). No `trap` needed.
+4. Verify: `git status --short` and `git diff --stat` are the same before and after.
+5. Read back: the `COMBINED:` line (expect 2680 total), any shard log without a `Tests:` line, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. The reason of a lost rest is `stack_limit` when the find is larger than one stack can be, else `overflow`. A find of 3 where 1 fits and no slot is left reports `partial`/`overflow`. D-45 names both keys but not this split; tell me if the UI needs another rule.
+ASSUMED: 2. A `gathered` stack may start only ONE new pack stack above the pack size (as a gathered piece takes one slot above it); further chunks need a free slot below the size. This path is not reached in play (every gathered row reserves a pack slot) and is tested at function level.
+ASSUMED: 3. Intake of a stack can now start several stacks in one call (a find larger than one stack). This follows D-45 and replaces the earlier rule "intake never starts a second stack".
+BLOCKED: None.
+
+## Fixes after QA round 3
+
+Source: `step7-qa-report-3.md` (F3-01 to F3-05), decision D-46. Same private save dir. No commit.
+
+### Changes
+
+| Item | Change | File:line |
+|---|---|---|
+| F3-01 (High) | A `gathered` stack find keeps the slot its row owns for the FIRST new pack stack. Every further pack chunk, and every `direct` chunk, needs `pack_free(reserved) > 0`. For `gathered`, `reserved` is now `later_rows`: the open rows still to settle AFTER this one (`rows.size() - index - 1`). Rows already settled are not counted: they are already in the pack, so `pack_count` counts them. The pack can no longer hold more entries than its size through the play path. | `core/inventory/InventoryService.gd:474` (`_intake_stack`, step 4) |
+| F3-01 callers | `_bank_rows` (path end and preview) and `_settle_leave_items` (early leave) pass `rows.size() - i - 1`. `_settle_item_row` names the parameter `later_rows`. The preview runs the same `_bank_rows`, so it still equals the payout. | `core/economy/StageSettlementService.gd:183`, :494, :524 |
+| D-46 (F3-02) | The lost rest of a stack find ALWAYS reports `overflow`. The `stack_limit` split is removed. A find is never refused for its size. Stored plus lost equals the find quantity. The result stays `partial` when some part was kept, `lost` when none. The move refusal `stack_limit` (target stack at its limit) is a different use and stays. | `InventoryService.gd:521` |
+| F3-03 | `_stack_limit_comment` text (comment only) and the docstring of `_t_preview_equals_payout` rewritten. | `data/balance.json:3743`; `tests/ItemPacksTests.gd:659` |
+| F3-05 | History, left as is (earlier sections are superseded by D-45 and D-46). | none |
+
+How `later_rows` was derived (the QA candidate M9 used `rows.size()`): at find time each open row owns one pack slot, so `pack_count + open rows <= size`. When row i of N is settled, `pack_count` already holds the pieces and stacks of rows 0..i-1. Slots still to keep free are those of rows i+1..N-1, which is `N - i - 1`. Row i itself uses its own slot for the first chunk. Proof by probe (tests below):
+
+| Rows (Sanctum full, size 1) | Pack size | M9 (`rows.size()`) | This fix |
+|---|---|---|---|
+| [relic, consumable 8] | 4 | relic 1, stack 3 kept, 5 lost (over-reserves) | relic 1, stacks 3+3+2, nothing lost, 4 entries |
+| [consumable 8, relic] | 4 | stacks 3+3, relic lost or above size | stacks 3+3+2, relic in the 4th slot, 4 entries |
+| [consumable 8, relic, armor] (real seam `record_found_items`) | 3 | n/a | stack 3 kept, 5 lost (`overflow`), relic, armor: 3 entries, `validate` empty |
+
+### Tests
+
+| Test | What it pins |
+|---|---|
+| `inventory_paths/a_big_stack_find_stays_within_the_pack_through_the_real_seam` (new) | QA play scenario through `record_found_items`, then path end AND an early leave with outcome all: pack entries <= 3, `validate` empty, 3 consumables kept and 5 reported lost, relic and armor in the pack. Fails without the fix (pack of 5 entries, 3 `validate` errors). |
+| `inventory_paths/a_big_stack_find_leaves_the_slots_of_later_rows` (new) | Rows [relic, consumable 8] and [consumable 8, relic] with a pack of 4: 3+3+2 and 4 entries, nothing lost, preview equals payout. Fails under M9. |
+| D-46 updates | `inventory_service/stack_merge_and_limit` (limit 0 case), `cfg_of_the_wrong_type_does_not_crash`, `inventory_moves/a_new_stack_takes_a_pack_slot_when_the_sanctum_is_full` (adds stored + lost = 8), `item_packs/partial_stack_keeps_the_stored_quantity`: the lost-remainder reason is `overflow`. |
+
+Mutations by hand (each restored, `cmp` equal): the old step 4 condition (no fix) fails the real-seam test (`pack entries 5`); M9 (`rows.size()`) fails `a_big_stack_find_leaves_the_slots_of_later_rows`.
+
+Remaining uses of the word `stack_limit` as a reason: only the move refusal (`InventoryService.gd:659`, controller header, `inventory_moves` merge tests). Other hits are the config key `stack_limit` and the snapshot field `stack_limit`. No intake test fixture pins it.
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_paths,inventory_moves,inventory_actions,inventory_service,inventory_save,item_packs,item_packs_char` | `Tests: 136 total, 136 passed, 0 failed` |
+| `=flow_transaction,snapshot_fingerprint,snapshot_purity,snapshot_contract,save_integrity,pending_result,econ_char,economy,payout_ui,sanctum.layout,sanctum.party,echo_party` | `Tests: 277 total, 277 passed, 0 failed` |
+| `=traversal,venture_char,seam,stop_short,realm_ui` | `Tests: 190 total, 190 passed, 0 failed` |
+
+Compile check (`--check-only --quit`): 0 `SCRIPT ERROR` lines. No suite added or removed (shard map unchanged); two tests added, so the expected sharded total is 2682.
+
+### Recorded values
+
+None moved. No fingerprint, hash or balance number changed (only comment text in `balance.json`). No pinned literal changed in this round.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"`, Bash `timeout` 3600000.
+2. Expected duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files the run edits: none in the checkout (it writes `/tmp/echoes-vnext-sharded/`). No `trap` needed.
+4. Verify: `git status --short` and `git diff --stat` are the same before and after.
+5. Read back: the `COMBINED:` line (expect 2682 total), any shard log without a `Tests:` line, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. `later_rows` counts only the open rows of the stage being settled. Open rows of other stages or Realms (counted by `record_found_items` through `open_item_rows_in_save`) are not passed. They cannot exist together with an entered path in normal play; if they do, a big find could still take a slot they own. Say if you want that count added.
+ASSUMED: 2. The first new pack stack of a `gathered` find may still go one slot above the pack size when no slot is free below it (function-level case, not reachable through `record_found_items`).
+ASSUMED: 3. F3-04 (the pinned script no longer covers a successful pack-piece discard) is left as is; `inventory_service/discard_outcomes` covers it.
+BLOCKED: None.

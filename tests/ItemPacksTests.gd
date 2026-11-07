@@ -657,10 +657,10 @@ static func _preview(ctx: FlowContext) -> Dictionary:
 	return StageSettlementService.new(ctx, ctx.config_service, null, null).preview()
 
 
-## The preview of the item report equals the report the payout then makes. The state has a full Sanctum
-## (two pieces, cap 2), a stack at its limit (4 of 5, a find of 3 loses 2), a unique relic, a unique armor
-## and one held piece. The kept and lost lists are equal field by field (JSON of every row), with both lists
-## and a `lost_quantity` present so the equality is not empty.
+## The preview of the item report equals the report the payout then makes. The state has a full Sanctum (cap 3:
+## two pieces and a consumable stack at its limit of 3), one held piece, and the rows relic, armor and consumable 12.
+## The 12 start pack stacks until the pack is full, and the rest is lost (a `lost_quantity` row). The kept and lost
+## lists are equal field by field (JSON of every row), so the equality is not empty.
 static func _t_preview_equals_payout() -> Dictionary:
 	var m: Array = []
 	var ctx := _ctx(_SEED_ALL, 3, 4)
@@ -672,7 +672,7 @@ static func _t_preview_equals_payout() -> Dictionary:
 	var stage := _stage(ctx)
 	EarningsService.record_item(stage, "s0", "0", _entry("ph_relic_a"))
 	EarningsService.record_item(stage, "s0", "1", _entry("ph_armor_a"))
-	EarningsService.record_item(stage, "s0", "2", _entry("ph_consumable_a", 3))
+	EarningsService.record_item(stage, "s0", "2", _entry("ph_consumable_a", 12))
 	var preview_items: Dictionary = _preview(ctx).get("items", {})
 	var paid_items := StageSettlementService.card_items(_settle_path(ctx, 5).get("items", {}))
 	if preview_items.is_empty() or str(preview_items.keys()) != str(["kept", "lost"]):
@@ -928,9 +928,11 @@ static func _t_find_order() -> Dictionary:
 static func _t_partial_stack() -> Dictionary:
 	var m: Array = []
 	var want_row := { "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 3,
-		"source": "gathered", "mark_index": -1, "reason_key": "stack_limit", "lost_quantity": 5 }
+		"source": "gathered", "mark_index": -1, "reason_key": "overflow", "lost_quantity": 5 }
 	for c in ["leave", "path"]:
-		var ctx := _ctx(_SEED_ALL, 8, 4)
+		# Sanctum of 1 slot, taken; pack of 1 slot: one stack of 3 fits in the pack, 5 are lost.
+		var ctx := _ctx(_SEED_ALL, 1, 1)
+		InventoryServiceTests._direct(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service), "ph_weapon_a")
 		EarningsService.record_item(_stage(ctx), "s0", "a", _entry("ph_consumable_a", 8))
 		var report: Dictionary
 		if c == "leave":
@@ -939,13 +941,13 @@ static func _t_partial_stack() -> Dictionary:
 			report = _settle_path(ctx, 5)["items"]
 		var row := EarningsService.row_of(_stage(ctx), "item:s0:a")
 		var e: Dictionary = (row["items"] as Array)[0]
-		if int(e["quantity"]) != 3 or int(e["lost_quantity"]) != 5 or str(e["reason_key"]) != "stack_limit" or str(e["fate"]) != "carried":
+		if int(e["quantity"]) != 3 or int(e["lost_quantity"]) != 5 or str(e["reason_key"]) != "overflow" or str(e["fate"]) != "carried":
 			m.append("%s: entry %s" % [c, JSON.stringify(e)])
 		if int(report["kept_count"]) != 1 or int(report["lost_count"]) != 0 or str((report["kept"] as Array)[0]) != str(want_row):
 			m.append("%s: report %s" % [c, str(report)])
-		var stacks: Array = _inv(ctx)["stacks"]
-		if stacks.size() != 1 or int((stacks[0] as Dictionary)["quantity"]) != 3:
-			m.append("%s: stacks %s" % [c, JSON.stringify(stacks)])
+		var stacks: Array = _inv(ctx)["pack_stacks"]
+		if stacks.size() != 1 or int((stacks[0] as Dictionary)["quantity"]) != 3 or not (_inv(ctx)["stacks"] as Array).is_empty():
+			m.append("%s: pack stacks %s" % [c, JSON.stringify(stacks)])
 	return _result(m)
 
 

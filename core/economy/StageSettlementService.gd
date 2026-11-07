@@ -183,8 +183,9 @@ func _bank_item_rows(stage_ref: Dictionary, t: int) -> Dictionary:
 static func _bank_rows(save: Dictionary, inv_cfg: Dictionary, rows: Array,
 		log: StructuredLogger, t: int) -> Dictionary:
 	var report := _item_report()
-	for r_v in rows:
-		_settle_item_row(save, inv_cfg, r_v, true, "", rows.size(), report, log, t)
+	for i in rows.size():
+		# `later_rows` = open rows still to settle after this one: each owns one pack slot a stack find must not use.
+		_settle_item_row(save, inv_cfg, rows[i], true, "", rows.size() - i - 1, report, log, t)
 	_finish_report(report)
 	return report
 
@@ -491,14 +492,13 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 		(report["kept"] as Array).append(EarningsService.report_row(
 			p, "ok", "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
 
-	var reserved := rows.size()
-	for r_v in rows:
-		var row: Dictionary = r_v
+	for i in rows.size():
+		var row: Dictionary = rows[i]
 		var keep := outcome == OUTCOME_ALL
 		if outcome == OUTCOME_SOME:
 			keep = _keeps(seed_v, ctx.stage_id, run_count, settle_count, "row", str(row["id"]), share_pct)
 			draws += 1
-		_settle_item_row(ctx.save_data, inv_cfg, row, keep, lost_reason, reserved, report, logger, t)
+		_settle_item_row(ctx.save_data, inv_cfg, row, keep, lost_reason, rows.size() - i - 1, report, logger, t)
 	_finish_report(report)
 	logger.info(t, "economy.settle.items", "Leave settled the item entries", {
 		"stage_id": ctx.stage_id, "settle_count": settle_count, "outcome": outcome, "share_pct": share_pct,
@@ -519,9 +519,10 @@ static func _keeps(realm_seed: int, stage_id: String, run_count: int, settle_cou
 ## Settles one open item row. `keep` true: each entry goes to intake (`gathered`) and the row is marked settled
 ## with share 100. `keep` false: each entry is lost for `lost_reason` and the row is marked settled with share 0.
 ## The entry records `fate` and `reason_key`; a stack surplus lost by intake sets `lost_quantity` and leaves the
-## stored quantity in `quantity`. A row whose entry intake lost gets share 0.
+## stored quantity in `quantity`. A row whose entry intake lost gets share 0. `later_rows` = the open rows still
+## to settle after this one (each owns a pack slot that this row's stack chunks must leave free).
 static func _settle_item_row(save: Dictionary, inv_cfg: Dictionary, row: Dictionary, keep: bool,
-		lost_reason: String, reserved: int, report: Dictionary, logger: StructuredLogger, t: int) -> void:
+		lost_reason: String, later_rows: int, report: Dictionary, logger: StructuredLogger, t: int) -> void:
 	var row_kept := keep
 	for e_v in (row["items"] as Array):
 		if not (e_v is Dictionary):
@@ -533,7 +534,7 @@ static func _settle_item_row(save: Dictionary, inv_cfg: Dictionary, row: Diction
 		if keep:
 			var res := InventoryService.intake(save, inv_cfg, { "type_id": e.get("type_id", ""), "kind": e.get("kind", ""),
 				"grade": e.get("grade", ""), "quantity": e.get("quantity", 1), "piece_id": "" },
-				InventoryService.MODE_GATHERED, reserved, logger, t)
+				InventoryService.MODE_GATHERED, later_rows, logger, t)
 			reason = str(res["reason_key"])
 			fate = "lost" if str(res["result"]) in ["lost", "rejected"] else "carried"
 			if fate == "carried" and not str(res["item_id"]).is_empty():

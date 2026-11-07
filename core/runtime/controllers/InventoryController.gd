@@ -18,6 +18,7 @@
 #     not_found, not_unique, unknown_entry, count_range, equipped, bad_box, bad_state (service).
 # inventory.move.apply     payload { from, slot, to, to_slot? }.
 #   - Moves, reorders into an empty slot, or merges onto a same-type stack. `to_slot` absent = lowest free slot.
+#     A move into the pack counts the slots reserved by open item rows as taken (`container_full`).
 #   - Sanctum or party prep screen, whatever the saved path. Refused in the path view. Refusal keys:
 #     not_in_sanctum, path_open (rules); bad_payload
 #     (controller); unknown_entry, bad_slot, no_change, slot_taken, type_mismatch, stack_limit, container_full,

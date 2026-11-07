@@ -27,6 +27,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_paths/a_failed_return_home_keeps_the_used_mark", Callable(InventoryPathTests, "_t_failed_leave_keeps_mark"))
 	runner.register_test("inventory_paths/a_move_into_the_pack_leaves_the_slots_of_open_item_rows", Callable(InventoryPathTests, "_t_move_respects_reserved"))
 	runner.register_test("inventory_paths/a_new_stack_find_is_kept_in_the_pack_when_the_sanctum_is_full", Callable(InventoryPathTests, "_t_find_stack_to_pack"))
+	runner.register_test("inventory_paths/a_big_stack_find_stays_within_the_pack_through_the_real_seam", Callable(InventoryPathTests, "_t_big_find_seam"))
+	runner.register_test("inventory_paths/a_big_stack_find_leaves_the_slots_of_later_rows", Callable(InventoryPathTests, "_t_big_find_later_rows"))
 	runner.register_test("inventory_paths/dispatches_are_deterministic", Callable(InventoryPathTests, "_t_determinism"))
 	runner.register_test("inventory_paths/new_save_and_config_hold_no_placeholder", Callable(InventoryPathTests, "_t_no_placeholder"))
 
@@ -639,7 +641,9 @@ static func _t_find_stack_to_pack() -> Dictionary:
 	var kept: Array = leave["kept"]
 	if kept.size() != 2 or not (leave["lost"] as Array).is_empty() or str(kept[1]) != str(want):
 		m.append("leave: %s" % str(leave))
-	if (ctx.save_data["inventory"]["pack_stacks"] as Array).size() != 2 or not (ctx.save_data["inventory"]["stacks"] as Array).is_empty():
+	# The second find merges into the pack stack of the first (1 + 2 = 3, the limit): one pack stack (D-45).
+	var pstacks: Array = ctx.save_data["inventory"]["pack_stacks"]
+	if pstacks.size() != 1 or int(pstacks[0]["quantity"]) != 3 or not (ctx.save_data["inventory"]["stacks"] as Array).is_empty():
 		m.append("leave inventory: %s" % JSON.stringify(ctx.save_data["inventory"]))
 	# Path end.
 	var ctx2 := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
@@ -649,6 +653,82 @@ static func _t_find_stack_to_pack() -> Dictionary:
 	var pkept: Array = (paid["items"] as Dictionary)["kept"]
 	if pkept.size() != 1 or str(pkept[0]) != str(want) or (ctx2.save_data["inventory"]["pack_stacks"] as Array).size() != 1:
 		m.append("path end: %s, inventory %s" % [str(paid.get("items")), JSON.stringify(ctx2.save_data["inventory"])])
+	return _result(m)
+
+
+static func _pack_entries(ctx: FlowContext) -> int:
+	return InventoryService.pack_count(ctx.save_data)
+
+
+static func _quantity_in_stacks(ctx: FlowContext) -> int:
+	var n := 0
+	for key in ["stacks", "pack_stacks"]:
+		for st in (ctx.save_data["inventory"] as Dictionary).get(key, []):
+			n += int(st["quantity"])
+	return n
+
+
+## F3-01. Sanctum of 1 slot, full. Pack of 3, empty. The real seam takes three finds (one pack slot each):
+## consumable 8 (limit 3), relic, armor. The path end and an early leave with outcome "all" must keep the pack
+## within its size: the stack find may start further pack stacks only in slots that no later row owns.
+static func _t_big_find_seam() -> Dictionary:
+	var m: Array = []
+	for how in ["path_end", "leave"]:
+		var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
+		var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+		InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_weapon_a"), "direct")
+		var finds := [ItemPacksTests._find("f0", "ph_consumable_a", 8), ItemPacksTests._find("f1", "ph_relic_a"),
+			ItemPacksTests._find("f2", "ph_armor_a")]
+		var got := ActiveStageService.record_found_items(ctx, "s0", finds, 2)
+		if (got["taken"] as Array).size() != 3:
+			m.append("%s: the seam took %s" % [how, str(got)])
+		var items: Dictionary
+		if how == "path_end":
+			items = ItemPacksTests._settle_path(ctx, 5)["items"]
+		else:
+			var r: Dictionary = ItemPacksTests._leave(ctx)["result"]
+			if str(r["outcome"]) != "all":
+				m.append("leave outcome %s, expected all" % str(r["outcome"]))
+			items = r["items"]
+		if _pack_entries(ctx) > 3 or not InventoryService.validate(ctx.save_data, cfg).is_empty():
+			m.append("%s: pack entries %d, validate %s" % [how, _pack_entries(ctx), str(InventoryService.validate(ctx.save_data, cfg))])
+		# Conservation: 3 consumables kept, 5 reported lost; relic and armor are in the pack.
+		var cons: Dictionary = (items["kept"] as Array)[0]
+		if int(cons["quantity"]) != 3 or int(cons.get("lost_quantity", 0)) != 5 or _quantity_in_stacks(ctx) != 3 \
+				or (items["kept"] as Array).size() != 3 or (ctx.save_data["inventory"]["pack"] as Array).size() != 2:
+			m.append("%s: kept %s, inventory %s" % [how, str(items), JSON.stringify(ctx.save_data["inventory"])])
+	return _result(m)
+
+
+## F3-01. Rows [relic, consumable 8], Sanctum full, empty pack of 4: the relic takes 1 slot and the stack takes the
+## other 3 (3 + 3 + 2, nothing lost). A row's chunks must leave free exactly one slot for each row AFTER it, never
+## for rows already settled. The preview equals the payout. Also: a row after the stack keeps its slot.
+static func _t_big_find_later_rows() -> Dictionary:
+	var m: Array = []
+	var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 4)
+	var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+	InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_weapon_a"), "direct")
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "0", ItemPacksTests._entry("ph_relic_a"))
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "1", ItemPacksTests._entry("ph_consumable_a", 8))
+	var preview: Dictionary = ItemPacksTests._preview(ctx).get("items", {})
+	var paid := StageSettlementService.card_items(ItemPacksTests._settle_path(ctx, 5)["items"])
+	var q: Array = (ctx.save_data["inventory"]["pack_stacks"] as Array).map(func(st): return int(st["quantity"]))
+	if q != [3, 3, 2] or _pack_entries(ctx) != 4 or not InventoryService.validate(ctx.save_data, cfg).is_empty():
+		m.append("rows [relic, consumable 8]: pack stacks %s, entries %d, validate %s" % [str(q), _pack_entries(ctx),
+			str(InventoryService.validate(ctx.save_data, cfg))])
+	if (paid["lost"] as Array).size() != 0 or JSON.stringify(preview, "", true) != JSON.stringify(paid, "", true):
+		m.append("preview %s, payout %s" % [JSON.stringify(preview), JSON.stringify(paid)])
+	# The stack row first, the relic after it: the stack leaves the relic's slot free (3 + 3 + 1 slot).
+	var ctx2 := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 4)
+	InventoryService.intake(ctx2.save_data, cfg, InventoryServiceTests._e("ph_weapon_a"), "direct")
+	EarningsService.record_item(ItemPacksTests._stage(ctx2), "s0", "0", ItemPacksTests._entry("ph_consumable_a", 8))
+	EarningsService.record_item(ItemPacksTests._stage(ctx2), "s0", "1", ItemPacksTests._entry("ph_relic_a"))
+	var paid2: Dictionary = ItemPacksTests._settle_path(ctx2, 5)["items"]
+	var q2: Array = (ctx2.save_data["inventory"]["pack_stacks"] as Array).map(func(st): return int(st["quantity"]))
+	var kept2: Array = paid2["kept"]
+	if q2 != [3, 3, 2] or (ctx2.save_data["inventory"]["pack"] as Array).size() != 1 or _pack_entries(ctx2) != 4 \
+			or kept2.size() != 2 or int(paid2["lost_count"]) != 0:
+		m.append("rows [consumable 8, relic]: pack stacks %s, entries %d, report %s" % [str(q2), _pack_entries(ctx2), str(paid2)])
 	return _result(m)
 
 

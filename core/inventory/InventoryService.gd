@@ -11,7 +11,7 @@ extends RefCounted
 ## `inventory.pack_stacks` (stacks), together at most `pack_capacity` entries. A stack is one entry in one
 ## slot; a type may have several stacks, each up to `stack_limit`. Every entry has a saved integer `slot`
 ## inside its container. Intake and moves use the lowest free slot unless a slot is given.
-## Tolerant read (not a shrink rule; no size ever shrinks): a stored slot at or above the size is kept as it is,
+## Tolerant read (not a shrink rule; D-41 defers the pack shrink rule and the Sanctum never shrinks): a stored slot at or above the size is kept as it is,
 ## and a new entry takes only a slot below the size. An entry with a missing, invalid or repeated slot reads as
 ## the lowest free slot, in array order, and gets that slot at the next mutation.
 ## Piece ids are minted at intake as `it.<n>`; a caller may supply one. A stack has no id: callers address
@@ -152,7 +152,7 @@ static func draw_id(row: Dictionary) -> String:
 ## Piece row: id, type_id, kind, grade, mark_index, equipped, name, slot.
 ## Stack row: type_id, kind, name, slot, count, stack_limit, at_limit.
 ## `items`/`stacks` are the Sanctum entries, `pack`/`pack_stacks` the pack entries. `unique_cap` and
-## `pack_capacity` are the container sizes; a row `slot` may be at or above its size after a size cut.
+## `pack_capacity` are the container sizes; a row `slot` may be at or above its size only for an entry written past the size (a gathered find) or read from outside data.
 ## It holds no Thread, partial-recovery, Ase or Ekwan key. A malformed entry is left out.
 static func snapshot(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> Dictionary:
 	var items_out: Array = []
@@ -269,10 +269,17 @@ static func piece_problem(p: Variant) -> String:
 
 ## `entry` = { type_id, kind, grade, quantity, piece_id }. `quantity` is read for stacks; a unique piece
 ## has quantity 1 or none. `piece_id` is optional for a unique piece (empty mints `it.<next_seq>`; a given
-## id must be `it.<n>`, n from 1 to 15 digits, no leading zero). A stack goes to its Sanctum stack and the
-## surplus above the limit is lost. A unique piece goes to
-## `items` when room exists, else to `pack` (`gathered`: always; `direct`: needs `pack_free`), else it is
-## lost. A lost piece burns no id. Intake never moves the pack, and nothing else moves it on its own (D-42): only `move_entry` does.
+## id must be `it.<n>`, n from 1 to 15 digits, no leading zero).
+## A unique piece goes to `items` when room exists, else to `pack` (`gathered`: always; `direct`: needs
+## `pack_free`), else it is lost. A lost piece burns no id.
+## A stack find (D-45) fills these steps in order, as far as the quantity goes: 1) merge into same-type Sanctum
+## stacks with room; 2) new Sanctum stacks in free Sanctum slots, each up to the limit; 3) merge into same-type
+## pack stacks with room; 4) new pack stacks in free pack slots (`gathered`: one slot above the pack size if none
+## is free; every further chunk and every `direct` chunk: only while `pack_free(reserved)` is above 0, with
+## `reserved` = for `gathered` the open item rows still to settle after this one); 5) the rest, for which no slot is left, is lost
+## and always reports `overflow` (D-46); a find is never refused for its size. Result `stored`/`ok` when all stayed in the Sanctum,
+## `packed`/`to_pack` when any went to the pack, `partial` when some was lost.
+## Intake never moves the pack, and nothing else moves it on its own (D-42): only `move_entry` does.
 ## Returns { result, reason_key, item_id, quantity, lost_quantity }.
 static func intake(save: Dictionary, cfg: Dictionary, entry: Dictionary, mode: String, reserved: int = 0,
 		logger: StructuredLogger = null, t: int = 0) -> Dictionary:
@@ -286,7 +293,7 @@ static func intake(save: Dictionary, cfg: Dictionary, entry: Dictionary, mode: S
 ## Removes held entries by id, one entry per listed id, pieces in pack order and then stacks. A piece id is its
 ## `id`; a held stack is named `stack:<type_id>:<slot>` as `held_pieces` lists it. An unknown id is ignored.
 ## Returns copies in the shape `held_pieces` lists: `{ id, type_id, kind, grade }` for a piece and the same plus
-## `quantity` for a stack. It draws nothing and does not move other entries: the caller decides whether to call
+## `quantity` for a stack. It draws nothing and does not move other entries.
 static func remove_held(save: Dictionary, ids: Array) -> Array:
 	var removed: Array = []
 	if not _block_ok(save):
@@ -469,46 +476,67 @@ static func _intake_stack(save: Dictionary, cfg: Dictionary, entry: Dictionary, 
 		gathered: bool, reserved: int) -> Dictionary:
 	var qty := _to_int(entry.get("quantity", 0))
 	var limit := _stack_limit(cfg, _def_of(cfg, type_id))
-	var matching: Array = []
-	for s_v in _arr(save, "stacks"):
-		if _stack_problem(s_v) == "" and s_v["type_id"] == type_id and s_v["kind"] == kind:
-			matching.append(s_v)
 	var left := qty
+	var in_pack := 0
 	var added := 0
-	for s_v in matching:
-		var take := clampi(limit - _to_int((s_v as Dictionary)["quantity"]), 0, left)
+	# 1. merge into same-type Sanctum stacks with room (array order)
+	var take := _stack_fill(save, "stacks", kind, type_id, limit, left)
+	left -= take
+	added += take
+	# 2. new Sanctum stacks in free Sanctum slots
+	while left > 0 and limit > 0 and sanctum_room(save, cfg) > 0:
+		var slot := _first_free(_layout(save, BOX_SANCTUM), box_size(cfg, BOX_SANCTUM))
+		if slot < 0:
+			break
+		_commit_layouts(save)
+		var chunk := mini(limit, left)
+		_live_arr(save, "stacks").append({ "type_id": type_id, "kind": kind, "quantity": chunk, "slot": slot })
+		left -= chunk
+		added += chunk
+	# 3. merge into same-type pack stacks with room (needs no slot)
+	take = _stack_fill(save, "pack_stacks", kind, type_id, limit, left)
+	left -= take
+	added += take
+	in_pack += take
+	# 4. new pack stacks in free pack slots. The FIRST new pack stack of a `gathered` find uses the slot its row
+	# owns (if none is free below the size, one slot above). Every further chunk, and every `direct` chunk, needs
+	# `pack_free(reserved) > 0`; for `gathered`, `reserved` = the open item rows still to settle after this one.
+	var made := 0
+	while left > 0 and limit > 0 and ((gathered and made == 0) or pack_free(save, cfg, reserved) > 0):
+		var lay := _layout(save, BOX_PACK)
+		var slot2 := _first_free(lay, box_size(cfg, BOX_PACK))
+		if slot2 < 0:
+			if not gathered or made > 0:
+				break
+			slot2 = _lowest_free(lay)
+		_commit_layouts(save)
+		var chunk2 := mini(limit, left)
+		_live_arr(save, "pack_stacks").append({ "type_id": type_id, "kind": kind, "quantity": chunk2, "slot": slot2 })
+		left -= chunk2
+		added += chunk2
+		in_pack += chunk2
+		made += 1
+	if left == 0:
+		return _res("packed", "to_pack", "", added) if in_pack > 0 else _res("stored", "ok", "", added)
+	# 5. what no slot holds is lost, always as `overflow` (D-46). Stored + lost = the find quantity.
+	return _res("partial" if added > 0 else "lost", "overflow", "", added, left)
+
+
+## Adds up to `want` to the same-type stacks of `key` that have room, in array order. Returns how much it added.
+static func _stack_fill(save: Dictionary, key: String, kind: String, type_id: String, limit: int, want: int) -> int:
+	var added := 0
+	for s_v in _arr(save, key):
+		if want - added <= 0:
+			break
+		if _stack_problem(s_v) != "" or s_v["type_id"] != type_id or s_v["kind"] != kind:
+			continue
+		var take := clampi(limit - _to_int((s_v as Dictionary)["quantity"]), 0, want - added)
 		if take > 0:
 			if added == 0:
 				_commit_layouts(save)
 			(s_v as Dictionary)["quantity"] = _to_int((s_v as Dictionary)["quantity"]) + take
-			left -= take
 			added += take
-	if matching.is_empty():
-		var first := mini(limit, left)
-		if first > 0:
-			# A new stack takes a Sanctum slot, else a pack slot (`gathered` always owns one; `direct` needs a
-			# free one), else it is lost.
-			var box := BOX_SANCTUM
-			var slot := -1
-			if sanctum_room(save, cfg) > 0:
-				slot = _first_free(_layout(save, BOX_SANCTUM), box_size(cfg, BOX_SANCTUM))
-			if slot < 0 and (gathered or pack_free(save, cfg, reserved) > 0):
-				box = BOX_PACK
-				var lay := _layout(save, BOX_PACK)
-				slot = _first_free(lay, box_size(cfg, BOX_PACK))
-				if slot < 0:
-					slot = _lowest_free(lay)
-			if slot < 0:
-				return _res("lost", "overflow", "", 0, qty)
-			_commit_layouts(save)
-			_live_arr(save, _stack_key(box)).append({ "type_id": type_id, "kind": kind, "quantity": first, "slot": slot })
-			left -= first
-			added += first
-			if left == 0 and box == BOX_PACK:
-				return _res("packed", "to_pack", "", added)
-	if left == 0:
-		return _res("stored", "ok", "", added)
-	return _res("partial" if added > 0 else "lost", "stack_limit", "", added, left)
+	return added
 
 
 static func _intake_unique(save: Dictionary, cfg: Dictionary, entry: Dictionary, kind: String, type_id: String,

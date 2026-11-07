@@ -197,27 +197,27 @@ static func _t_stacks() -> Dictionary:
 	var r1 := InventoryService.intake(save, cfg, _e("ph_material_a", 3), "direct")
 	_expect(m, r1, "stored", "ok", "first add")
 	var r2 := InventoryService.intake(save, cfg, _e("ph_material_a", 4), "direct")
-	_expect(m, r2, "partial", "stack_limit", "second add")
-	if r2["quantity"] != 2 or r2["lost_quantity"] != 2:
-		m.append("partial quantities %s" % _json(r2))
+	_expect(m, r2, "stored", "ok", "second add: fills the first stack, the rest starts a second stack")
+	if r2["quantity"] != 4 or r2["lost_quantity"] != 0:
+		m.append("split quantities %s" % _json(r2))
 	var r3 := InventoryService.intake(save, cfg, _e("ph_material_a", 1), "direct")
-	_expect(m, r3, "lost", "stack_limit", "full stack")
+	_expect(m, r3, "stored", "ok", "third add: fills the second stack")
 	var stacks: Array = _inv(save)["stacks"]
-	if stacks.size() != 1 or int(stacks[0]["quantity"]) != 5:
+	if stacks.size() != 2 or int(stacks[0]["quantity"]) != 5 or int(stacks[1]["quantity"]) != 3:
 		m.append("stacks %s" % _json(stacks))
 	# The definition override (ph_consumable_a limit 3) beats the default 5.
 	var r4 := InventoryService.intake(save, cfg, _e("ph_consumable_a", 9), "gathered")
-	_expect(m, r4, "partial", "stack_limit", "override limit")
-	if r4["quantity"] != 3 or r4["lost_quantity"] != 6:
-		m.append("override quantities %s" % _json(r4))
-	# A stack never takes a pack slot and has no total cap.
+	_expect(m, r4, "stored", "ok", "override limit 3: three stacks")
+	if r4["quantity"] != 9 or r4["lost_quantity"] != 0 or (_inv(save)["stacks"] as Array).size() != 5:
+		m.append("override quantities %s, stacks %s" % [_json(r4), _json(_inv(save)["stacks"])])
+	# While the Sanctum has room, no stack takes a pack slot.
 	if InventoryService.pack_count(save) != 0 or InventoryService.unique_count(save) != 0:
 		m.append("a stack touched items or pack")
 	# A whole-stack loss on a new type creates no empty stack.
 	var zero := _cfg(8, 4, 0)
 	var save2 := _fresh()
 	var r5 := InventoryService.intake(save2, zero, _e("ph_material_a", 2), "direct")
-	_expect(m, r5, "lost", "stack_limit", "limit 0")
+	_expect(m, r5, "lost", "overflow", "limit 0")
 	if not (_inv(save2)["stacks"] as Array).is_empty():
 		m.append("limit 0 created an empty stack")
 	var snap := InventoryService.snapshot(save, cfg)
@@ -225,8 +225,8 @@ static func _t_stacks() -> Dictionary:
 	for s in snap["stacks"]:
 		if s["at_limit"]:
 			at_limit += 1
-	if at_limit != 2:
-		m.append("at_limit count %d, expected 2" % at_limit)
+	if at_limit != 4:
+		m.append("at_limit count %d, expected 4" % at_limit)
 	return _result(m)
 
 
@@ -491,8 +491,8 @@ static func _script(save: Dictionary, cfg: Dictionary) -> Array:
 	return out
 
 
-const _PINNED_RESULTS := "stored/ok/it.1,stored/ok/it.2,stored/ok/,partial/stack_limit/,packed/to_pack/it.3,packed/to_pack/it.4,lost/overflow/,lost/overflow/,lost/overflow/,discarded/ok/it.1,discarded/ok/it.4,moved/ok/,packed/to_pack/it.5"
-const _PINNED_SAVE := '{"inventory":{"items":[{"grade":"g1","held_by":"","id":"it.2","kind":"gear","slot":1,"type_id":"ph_weapon_a"},{"grade":"g1","held_by":"","id":"it.3","kind":"relic","slot":0,"type_id":"ph_relic_a"}],"next_seq":6,"pack":[{"grade":"g1","held_by":"","id":"it.5","kind":"relic","slot":0,"type_id":"ph_relic_a"}],"stacks":[{"kind":"material","quantity":4,"slot":2,"type_id":"ph_material_a"},{"kind":"consumable","quantity":3,"slot":3,"type_id":"ph_consumable_a"}],"version":1}}'
+const _PINNED_RESULTS := "stored/ok/it.1,stored/ok/it.2,stored/ok/,packed/to_pack/,packed/to_pack/it.3,lost/overflow/,lost/overflow/,lost/overflow/,lost/overflow/,discarded/ok/it.1,refused/not_found/it.4,moved/ok/,packed/to_pack/it.4"
+const _PINNED_SAVE := '{"inventory":{"items":[{"grade":"g1","held_by":"","id":"it.2","kind":"gear","slot":1,"type_id":"ph_weapon_a"}],"next_seq":5,"pack":[{"grade":"g1","held_by":"","id":"it.3","kind":"relic","slot":1,"type_id":"ph_relic_a"},{"grade":"g1","held_by":"","id":"it.4","kind":"relic","slot":0,"type_id":"ph_relic_a"}],"pack_stacks":[],"stacks":[{"kind":"material","quantity":4,"slot":2,"type_id":"ph_material_a"},{"kind":"consumable","quantity":3,"slot":3,"type_id":"ph_consumable_a"},{"kind":"consumable","quantity":1,"slot":0,"type_id":"ph_consumable_a"}],"version":1}}'
 
 
 ## A fixed call sequence gives exactly this save and these results. A change to either is a decision.
@@ -701,7 +701,7 @@ static func _t_cfg_types() -> Dictionary:
 		var lbl := "numbers = %s" % _json(bad)
 		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_weapon_a"), "direct"), "lost", "overflow", lbl)
 		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_weapon_a"), "gathered"), "packed", "to_pack", lbl + " gathered")
-		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_material_a", 2), "direct"), "lost", "stack_limit", lbl + " stack")
+		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_material_a", 2), "direct"), "lost", "overflow", lbl + " stack")
 		InventoryService.snapshot(save3, cfg3, 1)
 		InventoryService.validate(save3, cfg3)
 		InventoryService.pack_load(save3, cfg3, 1)
@@ -712,7 +712,7 @@ static func _t_cfg_types() -> Dictionary:
 		cfg4["definitions"] = dv
 		var s4 := _fresh()
 		_expect(m, InventoryService.intake(s4, cfg4, _e("ph_weapon_a"), "direct"), "stored", "ok", "definitions = %s" % _json(dv))
-		_expect(m, InventoryService.intake(s4, cfg4, _e("ph_material_a", 9), "direct"), "partial", "stack_limit", "definitions = %s stack" % _json(dv))
+		_expect(m, InventoryService.intake(s4, cfg4, _e("ph_material_a", 9), "direct"), "stored", "ok", "definitions = %s stack" % _json(dv))
 		InventoryService.snapshot(s4, cfg4)
 		InventoryService.validate(s4, cfg4)
 	# A definition of the wrong shape.
@@ -725,7 +725,7 @@ static func _t_cfg_types() -> Dictionary:
 	var cfg7 := _cfg(4, 2, 5)
 	(cfg7["definitions"] as Dictionary)["ph_material_a"] = { "kind": "material", "stack_limit": "many" }
 	var s7 := _fresh()
-	_expect(m, InventoryService.intake(s7, cfg7, _e("ph_material_a", 9), "direct"), "partial", "stack_limit", "stack_limit is a String")
+	_expect(m, InventoryService.intake(s7, cfg7, _e("ph_material_a", 9), "direct"), "stored", "ok", "stack_limit is a String")
 	if int(_inv(s7)["stacks"][0]["quantity"]) != 5:
 		m.append("a wrong-typed stack_limit did not fall back to the default")
 	var cfg8 := _cfg(4, 2)
@@ -819,8 +819,9 @@ static func _t_stack_below() -> Dictionary:
 	_inv(save)["stacks"] = [{ "type_id": "ph_material_a", "kind": "material", "quantity": 5, "slot": 0 }]
 	var cfg := _cfg(4, 2, 3)
 	var r := InventoryService.intake(save, cfg, _e("ph_material_a", 2), "direct")
-	_expect(m, r, "lost", "stack_limit", "stack above a lowered limit")
-	if r["quantity"] != 0 or r["lost_quantity"] != 2 or int(_inv(save)["stacks"][0]["quantity"]) != 5:
+	_expect(m, r, "stored", "ok", "stack above a lowered limit: the find starts a new stack")
+	if r["quantity"] != 2 or r["lost_quantity"] != 0 or int(_inv(save)["stacks"][0]["quantity"]) != 5 \
+			or int(_inv(save)["stacks"][1]["quantity"]) != 2:
 		m.append("lowered limit: %s, stack %s" % [_json(r), _json(_inv(save)["stacks"])])
 	var row: Dictionary = InventoryService.snapshot(save, cfg)["stacks"][0]
 	if not row["at_limit"] or row["stack_limit"] != 3 or row["count"] != 5:

@@ -96,49 +96,94 @@ static func _t_first_free() -> Dictionary:
 	_put(full, cfg2, "ph_weapon_a")
 	_expect(m, _put(full, cfg2, "ph_material_a", 2), "stored", "ok", "merge into the full Sanctum")
 	_expect(m, _put(full, cfg2, "ph_consumable_a", 1), "packed", "to_pack", "new stack, Sanctum full, free pack slot")
-	_expect(m, _put(full, cfg2, "ph_consumable_a", 1), "lost", "overflow", "new stack, Sanctum and pack full")
+	_expect(m, _put(full, cfg2, "ph_consumable_a", 1), "packed", "to_pack", "merge into the pack stack")
+	_expect(m, _put(full, cfg2, "ph_consumable_a", 3), "partial", "overflow", "pack stack takes 1, the rest finds no slot")
+	_expect(m, _put(full, cfg2, "ph_consumable_a", 1), "lost", "overflow", "Sanctum and pack full")
 	if InventoryService.sanctum_used(full) != 2 or int(full["inventory"]["stacks"][0]["quantity"]) != 3 \
-			or (full["inventory"]["pack_stacks"] as Array).size() != 1 or int(full["inventory"]["pack_stacks"][0]["slot"]) != 0:
+			or (full["inventory"]["pack_stacks"] as Array).size() != 1 or int(full["inventory"]["pack_stacks"][0]["slot"]) != 0 \
+			or int(full["inventory"]["pack_stacks"][0]["quantity"]) != 3:
 		m.append("full Sanctum: %s" % _json(full["inventory"]))
 	return _result(m)
 
 
-## D-16, D-42: a NEW stack goes to the Sanctum, then to a free pack slot, then it is lost. A merge into a Sanctum
-## stack of its type needs no slot and is preferred.
+## D-45: a stack find fills, in order: 1) a same-type Sanctum stack with room, 2) new Sanctum stacks, 3) a same-type
+## pack stack with room, 4) new pack stacks, 5) the rest is lost, always as `overflow` (D-46). Stored plus lost
+## is the find quantity. Consumables stop at 3 (the fixture), materials at 5 (the cfg).
 static func _t_stack_to_pack() -> Dictionary:
 	var m: Array = []
-	var cfg := InventoryServiceTests._cfg(1, 2)  # stack limit 5; consumables stop at 3
-	var save := InventoryServiceTests._fresh()
-	_put(save, cfg, "ph_weapon_a")
-	# Full Sanctum, free pack slot: the stack is packed (direct and gathered).
-	var r := _put(save, cfg, "ph_material_a", 2)
-	_expect(m, r, "packed", "to_pack", "direct, free pack slot")
-	if int(r["quantity"]) != 2 or int(save["inventory"]["pack_stacks"][0]["slot"]) != 0 or (save["inventory"]["stacks"] as Array).size() != 0:
-		m.append("packed stack: %s / %s" % [_json(r), _json(save["inventory"])])
-	_expect(m, InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_consumable_a", 1), "gathered", 1), "packed", "to_pack", "gathered stack owns a pack slot")
-	# Both full: lost as overflow (direct). A gathered stack does not need a free slot (it owns one).
-	_expect(m, _put(save, cfg, "ph_charm_a"), "lost", "overflow", "piece, both full")
-	var before := _json(save)
-	_expect(m, InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_material_a", 1), "direct", 0), "lost", "overflow", "stack, both full")
-	if _json(save) != before:
+	var cons := "ph_consumable_a"
+	# F2-01: the Sanctum stack is at its limit and slots are free: the find starts a new Sanctum stack, nothing is lost.
+	var a := InventoryServiceTests._fresh()
+	var cfg_a := InventoryServiceTests._cfg(4, 4)
+	_put(a, cfg_a, cons, 3)
+	var r := _put(a, cfg_a, cons, 2)
+	_expect(m, r, "stored", "ok", "Sanctum stack at its limit, free slots")
+	if (a["inventory"]["stacks"] as Array).size() != 2 or int(a["inventory"]["stacks"][1]["quantity"]) != 2 \
+			or not (a["inventory"].get("pack_stacks", []) as Array).is_empty() or int(r["lost_quantity"]) != 0:
+		m.append("new Sanctum stack: %s / %s" % [_json(r), _json(a["inventory"])])
+	# Multi-step: 1 merges, then a new Sanctum stack, then the rest spills into a new pack stack.
+	var b := InventoryServiceTests._fresh()
+	var cfg_b := InventoryServiceTests._cfg(2, 2)
+	_put(b, cfg_b, cons, 2)
+	var census := _census(b)
+	r = _put(b, cfg_b, cons, 7)
+	_expect(m, r, "packed", "to_pack", "merge, new Sanctum stack, pack stack")
+	var sq: Array = (b["inventory"]["stacks"] as Array).map(func(s): return int(s["quantity"]))
+	var pq: Array = (b["inventory"]["pack_stacks"] as Array).map(func(s): return int(s["quantity"]))
+	if sq != [3, 3] or pq != [3] or int(r["quantity"]) != 7 or int(r["lost_quantity"]) != 0:
+		m.append("multi-step: Sanctum %s pack %s result %s" % [str(sq), str(pq), _json(r)])
+	if _census(b) == census:
+		m.append("the multi-step find changed nothing")
+	if not InventoryService.validate(b, cfg_b).is_empty():
+		m.append("multi-step validate: %s" % str(InventoryService.validate(b, cfg_b)))
+	# F2-02: a find merges into a same-type PACK stack with room before it takes a new pack slot.
+	var c := InventoryServiceTests._fresh()
+	var cfg_c := InventoryServiceTests._cfg(1, 2)
+	_put(c, cfg_c, "ph_weapon_a")
+	_expect(m, _put(c, cfg_c, cons, 2), "packed", "to_pack", "first pack stack")
+	_expect(m, _put(c, cfg_c, cons, 1), "packed", "to_pack", "merge into the pack stack")
+	if (c["inventory"]["pack_stacks"] as Array).size() != 1 or int(c["inventory"]["pack_stacks"][0]["quantity"]) != 3:
+		m.append("pack merge: %s" % _json(c["inventory"]))
+	_expect(m, _put(c, cfg_c, cons, 2), "packed", "to_pack", "full pack stack: a new pack stack")
+	if (c["inventory"]["pack_stacks"] as Array).size() != 2:
+		m.append("the second pack stack is missing: %s" % _json(c["inventory"]))
+	# Both full: lost as overflow, nothing changes.
+	var d := InventoryServiceTests._fresh()
+	var cfg_d := InventoryServiceTests._cfg(1, 1)
+	_put(d, cfg_d, "ph_weapon_a")
+	_put(d, cfg_d, cons, 3)
+	var before := _json(d)
+	_expect(m, _put(d, cfg_d, cons, 1), "lost", "overflow", "both full")
+	if _json(d) != before:
 		m.append("a lost stack changed the save")
-	# Stack limit: a new stack above the limit is packed up to the limit, the surplus is lost.
-	var save2 := InventoryServiceTests._fresh()
-	_put(save2, cfg, "ph_weapon_a")
-	r = _put(save2, cfg, "ph_consumable_a", 5)
-	_expect(m, r, "partial", "stack_limit", "new stack above the limit, packed")
-	if int(r["quantity"]) != 3 or int(r["lost_quantity"]) != 2 or int(save2["inventory"]["pack_stacks"][0]["quantity"]) != 3:
-		m.append("limit in the pack: %s / %s" % [_json(r), _json(save2["inventory"])])
-	# A Sanctum stack of the type is preferred and needs no slot: nothing goes to the pack.
-	var save3 := InventoryServiceTests._fresh()
-	var cfg3 := InventoryServiceTests._cfg(2, 2)
-	_put(save3, cfg3, "ph_material_a", 1)
-	_put(save3, cfg3, "ph_weapon_a")
-	_expect(m, _put(save3, cfg3, "ph_material_a", 2), "stored", "ok", "merge into the Sanctum stack")
-	if not (save3["inventory"].get("pack_stacks", []) as Array).is_empty() or int(save3["inventory"]["stacks"][0]["quantity"]) != 3:
-		m.append("merge: %s" % _json(save3["inventory"]))
-	if not InventoryService.validate(save, cfg).is_empty() and not InventoryService.validate(save, cfg)[0].contains("above"):
-		m.append("validate: %s" % str(InventoryService.validate(save, cfg)))
+	# Above the limit with no slot left for the rest: overflow (D-46), the part that fits is kept.
+	var e := InventoryServiceTests._fresh()
+	var cfg_e := InventoryServiceTests._cfg(1, 2)
+	_put(e, cfg_e, "ph_weapon_a")
+	r = _put(e, cfg_e, cons, 8)
+	_expect(m, r, "partial", "overflow", "8 against a limit of 3 and two pack slots")
+	if int(r["quantity"]) + int(r["lost_quantity"]) != 8 or int(r["quantity"]) != 6 or (e["inventory"]["pack_stacks"] as Array).size() != 2:
+		m.append("limit spill: %s / %s" % [_json(r), _json(e["inventory"])])
+	# Mode difference. Pack of 1 slot, full: direct is lost; gathered owns a slot and goes ONE slot above the size.
+	var f := InventoryServiceTests._fresh()
+	var cfg_f := InventoryServiceTests._cfg(1, 1)
+	_put(f, cfg_f, "ph_weapon_a")
+	_put(f, cfg_f, "ph_relic_a")
+	_expect(m, _put(f, cfg_f, cons, 1), "lost", "overflow", "direct, pack full")
+	var g := f.duplicate(true)
+	r = InventoryService.intake(g, cfg_f, InventoryServiceTests._e(cons, 8), "gathered")
+	_expect(m, r, "partial", "overflow", "gathered, pack full: one stack above the size")
+	var gp: Array = g["inventory"].get("pack_stacks", [])
+	if gp.size() != 1 or int(gp[0]["slot"]) < 1 or int(r["quantity"]) != 3:
+		m.append("gathered fallback: %s / %s" % [_json(r), _json(g["inventory"])])
+	# Pack slots reserved by open item rows: direct cannot use them, gathered owns one.
+	var h := InventoryServiceTests._fresh()
+	_put(h, cfg_f, "ph_weapon_a")
+	before = _json(h)
+	_expect(m, InventoryService.intake(h, cfg_f, InventoryServiceTests._e(cons, 1), "direct", 1), "lost", "overflow", "direct, the last slot is reserved")
+	if _json(h) != before:
+		m.append("a direct stack took a reserved slot")
+	_expect(m, InventoryService.intake(h, cfg_f, InventoryServiceTests._e(cons, 1), "gathered", 1), "packed", "to_pack", "gathered, reserved slot")
 	return _result(m)
 
 
@@ -179,8 +224,9 @@ static func _t_validate_slots() -> Dictionary:
 	return _result(m)
 
 
-## ASSUMED shrink rule. An entry without a valid slot reads as the lowest free slot and gets it at the next
-## mutation. A stored slot at or above a lowered size stays; new entries use slots below the size only.
+## Tolerant read (not a shrink rule; D-41 defers it). An entry without a valid slot reads as the lowest free
+## slot and gets it at the next mutation. A stored slot at or above the size is kept; new entries use slots
+## below the size only.
 static func _t_resize() -> Dictionary:
 	var m: Array = []
 	var cfg := InventoryServiceTests._cfg(5, 2)
@@ -527,6 +573,27 @@ static func _t_held_stacks() -> Dictionary:
 	var names: Array = InventoryService.held_pieces(save2).map(func(h): return InventoryService.draw_id(h))
 	if names != ["stack:ph_material_a:1", "stack:ph_material_a:0"]:
 		m.append("draw names by slot order: %s" % str(names))
+	# The order is counted per type: a stack of another type never changes it (D-43).
+	var mixed := InventoryServiceTests._fresh()
+	_put(mixed, cfg2, "ph_material_a", 2)
+	_mv(mixed, cfg2, "sanctum", 0, "pack", 3)
+	_put(mixed, cfg2, "ph_consumable_a", 2)
+	_mv(mixed, cfg2, "sanctum", 0, "pack", 0)
+	_put(mixed, cfg2, "ph_material_a", 3)
+	_mv(mixed, cfg2, "sanctum", 0, "pack", 1)
+	var by_qty := func(save_v: Dictionary) -> Dictionary:
+		var out := {}
+		for h in InventoryService.held_pieces(save_v):
+			out["%s/%d" % [h["type_id"], int(h["quantity"])]] = InventoryService.draw_id(h)
+		return out
+	var before_names: Dictionary = by_qty.call(mixed)
+	if before_names != { "ph_material_a/2": "stack:ph_material_a:1", "ph_consumable_a/2": "stack:ph_consumable_a:0",
+			"ph_material_a/3": "stack:ph_material_a:0" }:
+		m.append("per-type draw names: %s" % _json(before_names))
+	_mv(mixed, cfg2, "pack", 0, "pack", 5)  # the consumable stack goes to the end of the pack
+	var after_names: Dictionary = by_qty.call(mixed)
+	if after_names != before_names:
+		m.append("moving a stack of another type changed the draw names: %s" % _json(after_names))
 	# One stack of a type keeps its draw name wherever it sits in the pack.
 	var save3 := InventoryServiceTests._fresh()
 	_put(save3, cfg2, "ph_material_a", 2)
