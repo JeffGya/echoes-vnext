@@ -234,6 +234,11 @@ From `step7-qa-report-2.md`:
 - F2-03: accepted as built. The early-leave draw of a carried stack is keyed on type and order among same-type carried stacks (D-43). Swapping two same-type stacks may swap their results.
 - Builder tasks (no decision needed): F2-04 to F2-06 test gaps; F2-07 stale text.
 
+## D-46 — Lost remainder reason, pack never above its size (Jeff, 2026-11-06/07)
+From `step7-qa-report-3.md`:
+- F3-02: when no slot is left for the rest of a stack find, the lost remainder always reports `overflow` (D-16, D-45). A find is not refused for its size. This supersedes the `stack_limit` split the builder assumed in D-45's fix round.
+- F3-01 (High): the pack must never hold more entries than its size. A gathered stack find larger than one stack must respect the slots that open item rows reserve. Each open item row owns one pack slot. Builder fixes this and adds tests.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
