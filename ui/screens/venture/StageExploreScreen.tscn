@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" uid="uid://voice001_bark_popup_layer" path="res://ui/screens/combat/BarkPopupLayer.tscn" id="7_barklayer"]
 [ext_resource type="Script" uid="uid://culh5bvr1nyo7" path="res://ui/screens/venture/GhostFootprintLayer.gd" id="8_ghostlayer"]
 [ext_resource type="Script" uid="uid://cmas1ml5am5ou" path="res://ui/shared/BoardCamera.gd" id="9_board_camera"]
+[ext_resource type="PackedScene" path="res://ui/components/PartyPackButton.tscn" id="99_packhud"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_explore"]
 texture = ExtResource("2_tile")
@@ -250,6 +251,16 @@ wheel_surface = NodePath("../..")
 zoom_to_pointer = true
 space_drag_pan = false
 zoom_levels = PackedFloat32Array(0.5, 1, 1.5, 2, 2.5)
+
+[node name="PackHudButton" parent="." instance=ExtResource("99_packhud")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 0
+offset_left = 16.0
+offset_top = 80.0
+offset_right = 316.0
+offset_bottom = 186.0
 
 [node name="HudStrip" type="PanelContainer" parent="." unique_id=1175640428]
 visible = false

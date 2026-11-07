@@ -21,6 +21,7 @@ var _contact_modal_scene := preload("res://ui/overlays/realm/ContactModal.tscn")
 var _engagement_modal_scene := preload("res://ui/overlays/realm/EngagementModal.tscn")
 var _situation_modal_scene := preload("res://ui/overlays/realm/SituationModal.tscn")
 var _return_home_modal_scene := preload("res://ui/overlays/realm/ReturnHomeModal.tscn")
+var _discard_modal_scene := preload("res://ui/overlays/ItemDiscardModal.tscn")
 
 const EchoCardScene := preload("res://ui/components/EchoCardItem.tscn")
 const _ECHO_BAR_HEIGHT := 88.0
@@ -37,6 +38,7 @@ var _scene_by_flow_type: Dictionary = {}
 @onready var _echo_bar_scroll: ScrollContainer = %EchoBarScroll
 @onready var _echo_bar:     HBoxContainer = %EchoBar
 @onready var _why_card: StageWhyCard = %StageWhyCard
+@onready var _inventory_panels: Control = %InventoryPanels
 
 # The last stop mark: the snapshot's travel_why for the why card, and the control that holds the glyph.
 var _stop_why: Dictionary = {}
@@ -66,6 +68,9 @@ func _ready() -> void:
 	_party_card.setup_party(StageWhyText.text("ui", "party_card_label"))
 	_party_card.card_pressed.connect(_on_party_card_pressed)
 	_why_card.closed.connect(_on_why_closed)
+	_inventory_panels.action_requested.connect(_on_overlay_action_requested)
+	_inventory_panels.modal_requested.connect(_on_overlay_modal_requested)
+	_inventory_panels.open_state_changed.connect(_on_inventory_state_changed)
 	_apply_shell_layout()
 
 func _sync_chrome_layer_visibility() -> void:
@@ -79,6 +84,8 @@ func set_snapshot(snap: Dictionary) -> void:
 	# The screen first: on a travel snapshot it announces the walk, and the mark waits for its beat.
 	_show_overlay_for_type(str(snap.get("type", "")), snap)
 	_update_stop_mark(snap)
+	_inventory_panels.set_snapshot(snap)
+	_on_inventory_state_changed()
 
 func set_layout(layout: Dictionary) -> void:
 	_layout = layout.duplicate(true)
@@ -107,6 +114,8 @@ func modal_scene_for(_modal_id: StringName) -> PackedScene:
 		return _situation_modal_scene
 	if _modal_id == &"realm.return_home":
 		return _return_home_modal_scene
+	if _modal_id == &"inventory.discard":
+		return _discard_modal_scene
 	return null
 
 func _can_refresh_active_modal_on_layout() -> bool:
@@ -450,6 +459,9 @@ func _apply_shell_layout() -> void:
 		# horizontal scrollbar appears only when the party exceeds the frame.
 		_echo_bar_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 		_echo_bar_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	if _inventory_panels != null:
+		_inventory_panels.set_layout(_layout)
+		_inventory_panels.set_bottom_content_exclusion(int(_ECHO_BAR_HEIGHT + safe_bottom))
 	if _why_card != null and _why_card.is_open():
 		_place_why_card()
 
@@ -556,7 +568,16 @@ func _show_resolve_overlay(snap: Dictionary) -> void:
 		_resolve_overlay.call("set_layout", _layout)
 
 func _on_overlay_action_requested(action: Dictionary) -> void:
+	# The pack panel is UI-local state: the HUD pack button toggles it and nothing is dispatched.
+	if str(action.get("type", "")) == "ui.toggle_pack_panel":
+		_inventory_panels.toggle_pack()
+		return
 	action_requested.emit(action)
+
+
+func _on_inventory_state_changed() -> void:
+	if _active_overlay != null and _active_overlay.has_method("set_pack_open"):
+		_active_overlay.call("set_pack_open", _inventory_panels.is_pack_open())
 
 func _on_overlay_modal_requested(modal_id: StringName, payload: Dictionary) -> void:
 	_emit_realm_modal(modal_id, payload)
@@ -575,5 +596,7 @@ func _clear_tracked_modal() -> void:
 	_active_modal_payload = {}
 
 func on_modal_dismissed(modal_id: StringName) -> void:
+	if modal_id == &"inventory.discard":
+		_inventory_panels.note_discard_modal_closed()
 	if modal_id == _active_modal_id:
 		_clear_tracked_modal()

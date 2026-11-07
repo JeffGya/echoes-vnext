@@ -176,6 +176,7 @@ var _last_paint_key: String = ""
 # Board-local ghost trail, a child of Board so ghosts stay glued to the terrain.
 @onready var _ghost_layer:        Node2D         = %GhostFootprintLayer
 @onready var _hud_strip:          PanelContainer = $HudStrip
+@onready var _pack_hud:           Control        = %PackHudButton
 @onready var _turn_label:         Label          = %TurnLabel
 @onready var _objectives_label:   Label          = %ObjectivesLabel
 @onready var _party_state_label:  Label          = %PartyStateLabel
@@ -284,6 +285,8 @@ func _ready() -> void:
 	_stage_complete_btn.pressed.connect(_on_stage_complete_pressed)
 	_advance_btn.pressed.connect(_on_advance_pressed)
 	_return_btn.pressed.connect(_on_return_pressed)
+	_pack_hud.set_on_dark(true)
+	_pack_hud.toggle_requested.connect(func() -> void: action_requested.emit({ "type": "ui.toggle_pack_panel" }))
 	_begin_btn.pressed.connect(_on_begin_pressed)
 	_back_btn.pressed.connect(_on_back_pressed)
 	_dismiss_btn.pressed.connect(_on_dismiss_pressed)
@@ -412,6 +415,7 @@ func _enter_preview_mode(data: Dictionary, actions: Dictionary) -> void:
 	_cached_back_action  = back_v if back_v is Dictionary else {}
 
 	_hud_strip.hide()
+	_pack_hud.hide()
 	_hud_strip.modulate = Color.WHITE
 	_hud_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stage_complete_btn.hide()
@@ -628,6 +632,10 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_hud_strip.modulate = Color.WHITE
 	_hud_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_strip.show()
+	var inventory_v: Variant = data.get("inventory", {})
+	if inventory_v is Dictionary and not (inventory_v as Dictionary).is_empty():
+		_pack_hud.set_inventory(inventory_v as Dictionary)
+		_pack_hud.show()
 	_stage_complete_btn.show() if not _cached_stage_complete_action.is_empty() else _stage_complete_btn.hide()
 	_advance_btn.show()
 	_return_btn.show()
@@ -1084,6 +1092,10 @@ func _sync_return_confirm(data: Dictionary) -> void:
 
 
 ## The Return button only opens the confirmation. The modal's Confirm button sends the action.
+func set_pack_open(open: bool) -> void:
+	_pack_hud.set_open(open)
+
+
 func _on_return_pressed() -> void:
 	if _cached_return_action.is_empty():
 		return
@@ -1636,6 +1648,10 @@ func _apply_responsive_layout() -> void:
 	_hud_strip.offset_top = top
 	_hud_strip.offset_right = left + hud_width
 	_hud_strip.offset_bottom = top + _TOP_HUD_HEIGHT
+	_pack_hud.offset_left = left
+	_pack_hud.offset_top = top + _TOP_HUD_HEIGHT + 8.0
+	_pack_hud.offset_right = left + 300.0
+	_pack_hud.offset_bottom = _pack_hud.offset_top + 106.0
 	var stage_info_height := (
 		_STAGE_INFO_COMPACT_HEIGHT
 		if profile == "compact"

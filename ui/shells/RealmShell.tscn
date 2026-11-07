@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://c7smmm40nja3b" path="res://ui/shells/RealmShell.gd" id="1_realmshell"]
 [ext_resource type="PackedScene" uid="uid://cfpuypq3we4w1" path="res://ui/components/EchoCardItem.tscn" id="2_card"]
 [ext_resource type="PackedScene" path="res://ui/components/StageWhyCard.tscn" id="3_why"]
+[ext_resource type="PackedScene" path="res://ui/components/InventoryPanels.tscn" id="4_invpanels"]
 
 [node name="RealmShell" type="Control" unique_id=257620160]
 layout_mode = 3
@@ -77,3 +78,7 @@ offset_left = 16.0
 offset_top = 96.0
 offset_right = 376.0
 offset_bottom = 96.0
+
+[node name="InventoryPanels" parent="ChromeLayer/ChromeRoot" instance=ExtResource("4_invpanels")]
+unique_name_in_owner = true
+layout_mode = 1

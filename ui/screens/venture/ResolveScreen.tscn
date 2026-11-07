@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://ui/components/EffectChip.tscn" id="3_effectchip"]
 [ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="4_safe"]
 [ext_resource type="PackedScene" path="res://ui/components/CauseTooltip.tscn" id="5_tooltip"]
+[ext_resource type="PackedScene" path="res://ui/components/ItemResultRow.tscn" id="98_itemrow"]
 
 [node name="ResolveScreen" type="Control"]
 layout_mode = 3
@@ -321,6 +322,10 @@ mouse_filter = 2
 theme_type_variation = &"PayoutChipValue"
 text = "▾"
 horizontal_alignment = 1
+[node name="ItemRow" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent" instance=ExtResource("98_itemrow")]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="Ledger" type="VBoxContainer" parent="SafeFrame/CenterContainer/ResultCard/CardMargin/CardLayout/BodyViewport/ScrollContainer/CardContent"]
 unique_name_in_owner = true
 visible = false

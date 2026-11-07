@@ -555,6 +555,7 @@ func _run_tests(parts: Array) -> void:
 	CombatObjectiveLabelTestsScript.register(runner)
 	PaceUITestsScript.register(runner)
 	ResolvePayoutUITestsScript.register(runner)
+	InventoryUITests.register(runner)  # V2-ITEM-001a step 8: inventory UI
 	StageStopUITestsScript.register(runner)
 	RetreatTests.register(runner)        # UI-004
 	ArchetypeTests.register(runner)      # 9-archetype personality system
