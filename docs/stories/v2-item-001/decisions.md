@@ -239,6 +239,11 @@ From `step7-qa-report-3.md`:
 - F3-02: when no slot is left for the rest of a stack find, the lost remainder always reports `overflow` (D-16, D-45). A find is not refused for its size. This supersedes the `stack_limit` split the builder assumed in D-45's fix round.
 - F3-01 (High): the pack must never hold more entries than its size. A gathered stack find larger than one stack must respect the slots that open item rows reserve. Each open item row owns one pack slot. Builder fixes this and adds tests.
 
+## D-47 — QA round 4 decisions (Jeff, 2026-11-07)
+From `step7-qa-report-4.md`:
+- F4-02: accepted for now. A big stack find can lose a few units because a later row keeps a pack slot it may not use. Rare. The pack never goes above its size and nothing is minted. Revisit if play shows it.
+- F4-01: the slot hold counts open item rows of OTHER stages and Realms too, so the pack never goes above its size later. F4-03 (test for the early-leave caller) and F4-04 (stale `stack_limit` text in the step reports) go to the builder.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
