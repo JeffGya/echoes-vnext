@@ -1,27 +1,31 @@
 # V2-ITEM-001a play-test plan (for Jeff)
 
-Branch `claude/vibrant-tesla-x3ejvi`, last commit `30942c6`. Written in STE. This plan tests the inventory: two panels over the Sanctum, the party pack, moves, discard, and the result cards. All wording in the game is placeholder.
+Branch `claude/vibrant-tesla-x3ejvi`. Code is at `30942c6`; the latest commit `b516f1b` adds this plan. Written in STE. This plan tests the inventory: two panels over the Sanctum, the party pack, moves, discard, and the result cards. All wording in the game is placeholder.
 
 How to use it: do Part 0 once. Then do Parts A to K in order. Mark each item Pass, Fail or Skip. The same list is on a private page with tick boxes (the link is in the chat).
 
 ## Part 0. Set up on your machine
 
-### Get the branch
+### Get the branch as a separate copy (your own folder stays untouched)
 
-1. Open a terminal in your copy of the repository.
-2. Check that you have no uncommitted work: `git status`. If it lists changes, stop and tell me.
-3. `git fetch origin claude/vibrant-tesla-x3ejvi`
-4. `git checkout claude/vibrant-tesla-x3ejvi`
-5. `git pull origin claude/vibrant-tesla-x3ejvi`
-6. Check the last commit: `git log --oneline -1`. It must start with `30942c6`. If it does not, tell me what it shows.
+1. In your repository folder run: `git fetch origin claude/vibrant-tesla-x3ejvi`
+2. Run: `git worktree add --detach ../echoes-vnext-playtest origin/claude/vibrant-tesla-x3ejvi`
+3. Check: `git -C ../echoes-vnext-playtest log --oneline -3`. The top line starts with `b516f1b`. The list includes `30942c6`.
+4. When you finish the play test, remove the copy with: `git worktree remove ../echoes-vnext-playtest`
+
+### Protect your save before you start
+
+1. Both folders use the project name `echoes-vnext`, so they share one save location (`user://saves/`, file `slot_01.json`).
+2. In the Godot editor use Project, then Open User Data Folder. On a Mac I believe it is `~/Library/Application Support/Godot/app_userdata/echoes-vnext/`. I have not verified that on your machine.
+3. Copy the `saves` folder somewhere safe if you want to keep an existing save. A New Game can overwrite the slot.
 
 ### Open and run the game
 
-1. Start Godot 4.6 (the project declares 4.6, GL Compatibility). Import the folder that holds `project.godot`.
-2. The first open re-imports the project and can take a minute. Errors about missing imports in the first seconds are normal.
+1. Start Godot 4.6 and import the folder `../echoes-vnext-playtest` (the one that has `project.godot`). Do not open your own repository folder for this test.
+2. The first open re-imports the project and can take a minute. Missing-import errors in the first seconds are normal.
 3. Press F5 (Run Project). The game starts at the splash screen.
-4. Use a NEW game. Old saves are not supported (ANSWERS #88). Use the New Game entry on the first screen.
-5. Run in a window that you can resize. You will check 1280x720 and 1920x1080.
+4. Use a NEW game. Old saves are not supported (ANSWERS #88).
+5. Use a window you can resize. You check 1280x720 and 1920x1080.
 
 ### The debug console (F1)
 
