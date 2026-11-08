@@ -1,16 +1,11 @@
 extends Control
 
 ## Fill meters of the two panels, drawn. "ledger" (Sanctum): one thin bar per slot, ink fill for used slots, an
-## ink frame near full, gold fill with an ink keyline at full. "strap" (pack, D-39): no numbers; a cream line
-## that is dashed near full and solid at full. `pulse()` plays the one transition-into-full beat (0.4 s,
-## reduced motion 0.15 s fade). Presentation only.
+## ink frame near full, gold fill with an ink keyline at full. `pulse()` plays the one transition-into-full beat
+## (0.4 s, reduced motion 0.15 s fade). Presentation only.
 
 const _PULSE_SCALE := 1.15
 
-var mode := "ledger":
-	set(v):
-		mode = v
-		queue_redraw()
 var total := 0:
 	set(v):
 		total = v
@@ -52,10 +47,7 @@ func _set_pulse(t: float) -> void:
 
 
 func _draw() -> void:
-	if mode == "strap":
-		_draw_strap()
-	else:
-		_draw_ledger()
+	_draw_ledger()
 
 
 func _draw_ledger() -> void:
@@ -81,19 +73,3 @@ func _draw_ledger() -> void:
 			draw_rect(r, ink)
 		else:
 			draw_rect(r, ink, false, 1.5)
-
-
-func _draw_strap() -> void:
-	if level.is_empty():
-		return
-	var c := _color("cream")
-	var y := size.y * 0.5
-	if level == "full":
-		var h := 3.0 * (1.0 + 1.4 * _pulse_t)
-		draw_line(Vector2(4.0, y), Vector2(size.x - 4.0, y), c, h)
-		return
-	c.a = 0.55
-	var x := 4.0
-	while x < size.x - 4.0:
-		draw_line(Vector2(x, y), Vector2(minf(x + 8.0, size.x - 4.0), y), c, 2.0)
-		x += 13.0

@@ -36,6 +36,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_paths/item_names_are_on_at_risk_and_result_rows", Callable(InventoryPathTests, "_t_row_names"))
 	runner.register_test("inventory_paths/item_names_survive_a_reload_of_the_result", Callable(InventoryPathTests, "_t_row_names_reload"))
 	runner.register_test("inventory_paths/a_type_without_a_definition_has_no_name_key", Callable(InventoryPathTests, "_t_row_no_definition"))
+	runner.register_test("inventory_paths/new_finds_land_in_the_pack_and_stay_there", Callable(InventoryPathTests, "_t_finds_in_pack"))
+	runner.register_test("inventory_paths/a_find_in_the_pack_is_moved_by_the_player_only", Callable(InventoryPathTests, "_t_find_player_move"))
 	runner.register_test("inventory_paths/dispatches_are_deterministic", Callable(InventoryPathTests, "_t_determinism"))
 	runner.register_test("inventory_paths/new_save_and_config_hold_no_placeholder", Callable(InventoryPathTests, "_t_no_placeholder"))
 
@@ -643,7 +645,7 @@ static func _t_move_respects_reserved() -> Dictionary:
 static func _t_find_stack_to_pack() -> Dictionary:
 	var m: Array = []
 	var want := { "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 2, "source": "gathered",
-		"mark_index": -1, "name": "Placeholder consumable A", "reason_key": "to_pack" }
+		"mark_index": -1, "name": "Placeholder consumable A", "reason_key": "ok" }
 	var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
 	InventoryService.intake(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service), InventoryServiceTests._e("ph_weapon_a"), "direct")
 	ItemPacksTests._add_rows(ctx, "s0", [0], "ph_consumable_a")
@@ -1012,6 +1014,94 @@ static func _t_row_no_definition() -> Dictionary:
 	for r in rows:
 		if (r as Dictionary).has("name"):
 			m.append("a row without a definition has a name: %s" % str(r))
+	return _result(m)
+
+
+## D-49. A surviving gathered find (piece and stack) is in the PACK after the path end and after an early leave
+## (all, some, none), with the Sanctum empty and with the Sanctum full. The Sanctum is byte-equal, nothing moved,
+## stored + lost equals the find, and the pack holds no more entries than its size.
+static func _t_finds_in_pack() -> Dictionary:
+	var m: Array = []
+	for sanctum_state in ["empty", "full"]:
+		for how in ["path_end", "leave_all", "leave_some", "leave_none"]:
+			var seed_value := ItemPacksTests._SEED_ALL
+			if how == "leave_some":
+				seed_value = ItemPacksTests._SEED_SOME
+			elif how == "leave_none":
+				seed_value = ItemPacksTests._SEED_NONE
+			var ctx := ItemPacksTests._ctx(seed_value, 2, 4)
+			var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+			if sanctum_state == "full":
+				InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_weapon_a"), "direct")
+				InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_charm_a"), "direct")
+			ItemPacksTests._hold(ctx, 1, 9, "ph_armor_a")  # a carried piece already in the pack
+			var sanctum_before := JSON.stringify([ctx.save_data["inventory"]["items"], ctx.save_data["inventory"]["stacks"]])
+			EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "0", ItemPacksTests._entry("ph_relic_a"))
+			EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "1", ItemPacksTests._entry("ph_consumable_a", 2))
+			var items: Dictionary
+			if how == "path_end":
+				items = ItemPacksTests._settle_path(ctx, 5)["items"]
+			else:
+				items = ItemPacksTests._leave(ctx)["result"]["items"]
+			var tag := "%s/%s" % [sanctum_state, how]
+			var sanctum_after := JSON.stringify([ctx.save_data["inventory"]["items"], ctx.save_data["inventory"]["stacks"]])
+			if sanctum_after != sanctum_before:
+				m.append("%s: the Sanctum changed" % tag)
+			var kept: Array = items["kept"]
+			var gathered_kept := kept.filter(func(r): return str(r["source"]) == "gathered")
+			for r in gathered_kept:
+				if str(r["reason_key"]) != "ok":
+					m.append("%s: kept gathered row reason %s" % [tag, str(r["reason_key"])])
+			var in_pack_stack := _quantity_in_stacks(ctx)
+			var kept_pieces := (ctx.save_data["inventory"]["pack"] as Array).size()
+			if how == "leave_none":
+				if not gathered_kept.is_empty() or in_pack_stack != 0 or kept_pieces != 0:
+					m.append("%s: nothing should survive, pack stacks %d pieces %d" % [tag, in_pack_stack, kept_pieces])
+			else:
+				# the carried piece (a held it.9) may be lost by the "some" draw; the finds follow their own draws
+				var rows_kept := gathered_kept.size()
+				var expect_stack := 2 if gathered_kept.any(func(r): return str(r["type_id"]) == "ph_consumable_a") else 0
+				if in_pack_stack != expect_stack or rows_kept == 0 and how != "leave_some":
+					m.append("%s: pack stacks hold %d, kept rows %d" % [tag, in_pack_stack, rows_kept])
+			if _pack_entries(ctx) > 4 or not InventoryService.validate(ctx.save_data, cfg).is_empty():
+				m.append("%s: pack %d, validate %s" % [tag, _pack_entries(ctx), str(InventoryService.validate(ctx.save_data, cfg))])
+	# The pack invariant with a carried piece, Realm B's open row and a big find (F3-01, F4-01).
+	var c2 := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 2, 4)
+	var cfg2 := ConfigService.get_inventory_cfg(c2.config_service)
+	ItemPacksTests._hold(c2, 1, 9, "ph_armor_a")
+	var other := { "run_count": 0, "seed": 1, "stages": [{ "index": 0, "earnings": [] }] }
+	(c2.save_data["realms"] as Dictionary)["realm.02"] = other
+	EarningsService.record_item((other["stages"] as Array)[0], "r2", "open", ItemPacksTests._entry("ph_relic_a"))
+	ActiveStageService.record_found_items(c2, "s0", [ItemPacksTests._find("f0", "ph_consumable_a", 9)], 2)
+	var paid: Dictionary = ItemPacksTests._settle_path(c2, 5)["items"]
+	var kept0: Dictionary = (paid["kept"] as Array)[0]
+	if int(kept0["quantity"]) + int(kept0.get("lost_quantity", 0)) != 9 or _pack_entries(c2) > 4 \
+			or not InventoryService.validate(c2.save_data, cfg2).is_empty() or not (c2.save_data["inventory"]["stacks"] as Array).is_empty():
+		m.append("invariant: kept %s, pack %d, validate %s" % [str(kept0), _pack_entries(c2), str(InventoryService.validate(c2.save_data, cfg2))])
+	return _result(m)
+
+
+## After the path end the find sits in the pack; only the player's `inventory.move.apply` takes it to the Sanctum.
+static func _t_find_player_move() -> Dictionary:
+	var m: Array = []
+	var env := InventoryActionTests._env("find_move", 4, 3)
+	var rt: FlowRuntime = env["rt"]
+	var save := InventoryActionTests._save(env)
+	var cfg: Dictionary = env["inv_cfg"]
+	InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_relic_a"), "pack_only", 0)
+	InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_consumable_a", 2), "pack_only", 0)
+	rt.flow_machine.reenter(rt.flow_ctx, env["logger"], 3)
+	InventoryActionTests._dispatch(env, { "type": "debug.seed.show" })
+	var inv := InventoryActionTests._inv_snap(env)
+	if int(inv["sanctum_used"]) != 0 or int(inv["pack_count"]) != 2:
+		m.append("before the move: %s" % JSON.stringify(inv))
+	var census := InventoryMoveTests._census(save)
+	InventoryActionTests._dispatch(env, _mv("pack", 0, "sanctum"))
+	InventoryActionTests._dispatch(env, _mv("pack", 1, "sanctum"))
+	inv = InventoryActionTests._inv_snap(env)
+	if int(inv["sanctum_used"]) != 2 or int(inv["pack_count"]) != 0 or InventoryMoveTests._census(save) != census:
+		m.append("after the player moves: %s" % JSON.stringify(inv))
+	InventoryActionTests._done(env)
 	return _result(m)
 
 

@@ -10,6 +10,7 @@ extends RefCounted
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_moves/intake_takes_the_lowest_free_slot", Callable(InventoryMoveTests, "_t_first_free"))
 	runner.register_test("inventory_moves/a_new_stack_takes_a_pack_slot_when_the_sanctum_is_full", Callable(InventoryMoveTests, "_t_stack_to_pack"))
+	runner.register_test("inventory_moves/pack_only_intake_never_touches_the_sanctum", Callable(InventoryMoveTests, "_t_pack_only"))
 	runner.register_test("inventory_moves/validate_checks_slots", Callable(InventoryMoveTests, "_t_validate_slots"))
 	runner.register_test("inventory_moves/entries_without_a_slot_and_a_resized_container", Callable(InventoryMoveTests, "_t_resize"))
 	runner.register_test("inventory_moves/move_both_ways_with_and_without_a_slot", Callable(InventoryMoveTests, "_t_move"))
@@ -184,6 +185,54 @@ static func _t_stack_to_pack() -> Dictionary:
 	if _json(h) != before:
 		m.append("a direct stack took a reserved slot")
 	_expect(m, InventoryService.intake(h, cfg_f, InventoryServiceTests._e(cons, 1), "gathered", 1), "packed", "to_pack", "gathered, reserved slot")
+	return _result(m)
+
+
+## D-49: mode `pack_only` (a find at a path end or a kept leave) puts a piece or a stack in the pack, never in the
+## Sanctum, also when the Sanctum is empty. `direct` and `gathered` keep their Sanctum-first order.
+static func _t_pack_only() -> Dictionary:
+	var m: Array = []
+	var cons := "ph_consumable_a"
+	for sanctum_state in ["empty", "full"]:
+		var save := InventoryServiceTests._fresh()
+		var cfg := InventoryServiceTests._cfg(2, 4)
+		if sanctum_state == "full":
+			_put(save, cfg, "ph_weapon_a")
+			_put(save, cfg, "ph_charm_a")
+		var before_sanctum := _json([save["inventory"]["items"], save["inventory"]["stacks"]])
+		var r := InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_relic_a"), "pack_only", 0)
+		_expect(m, r, "stored", "ok", "piece, %s Sanctum" % sanctum_state)
+		if InventoryService.locate_piece(save, str(r["item_id"])).get("box", "") != "pack":
+			m.append("%s: the piece is not in the pack" % sanctum_state)
+		var rs := InventoryService.intake(save, cfg, InventoryServiceTests._e(cons, 5), "pack_only", 0)
+		_expect(m, rs, "stored", "ok", "stack, %s Sanctum" % sanctum_state)
+		var pq: Array = (save["inventory"]["pack_stacks"] as Array).map(func(st): return int(st["quantity"]))
+		if pq != [3, 2] or int(rs["quantity"]) + int(rs["lost_quantity"]) != 5:
+			m.append("%s: pack stacks %s, result %s" % [sanctum_state, str(pq), _json(rs)])
+		# A second find merges into the pack stack with room.
+		InventoryService.intake(save, cfg, InventoryServiceTests._e(cons, 1), "pack_only", 0)
+		pq = (save["inventory"]["pack_stacks"] as Array).map(func(st): return int(st["quantity"]))
+		if pq != [3, 3]:
+			m.append("%s: no pack merge: %s" % [sanctum_state, str(pq)])
+		if _json([save["inventory"]["items"], save["inventory"]["stacks"]]) != before_sanctum and sanctum_state == "empty":
+			m.append("empty: the Sanctum was touched")
+		if sanctum_state == "full" and _json([save["inventory"]["items"], save["inventory"]["stacks"]]) != before_sanctum:
+			m.append("full: the Sanctum was touched")
+		if not InventoryService.validate(save, cfg).is_empty():
+			m.append("%s: validate %s" % [sanctum_state, str(InventoryService.validate(save, cfg))])
+	# What no free pack slot can hold is lost as overflow; the later-rows rule (reserved) holds slots back.
+	var tight := InventoryServiceTests._fresh()
+	var cfg_t := InventoryServiceTests._cfg(4, 2)
+	var r2 := InventoryService.intake(tight, cfg_t, InventoryServiceTests._e(cons, 9), "pack_only", 1)
+	_expect(m, r2, "partial", "overflow", "9 against a limit of 3 and one free slot after the held one")
+	if int(r2["quantity"]) != 3 or int(r2["lost_quantity"]) != 6 or not (tight["inventory"]["stacks"] as Array).is_empty():
+		m.append("tight pack: %s / %s" % [_json(r2), _json(tight["inventory"])])
+	# The other modes keep the Sanctum first.
+	for mode in ["direct", "gathered"]:
+		var sv := InventoryServiceTests._fresh()
+		var rr := InventoryService.intake(sv, InventoryServiceTests._cfg(2, 2), InventoryServiceTests._e("ph_relic_a"), mode, 0)
+		if InventoryService.locate_piece(sv, str(rr["item_id"])).get("box", "") != "sanctum":
+			m.append("%s: no longer Sanctum first" % mode)
 	return _result(m)
 
 

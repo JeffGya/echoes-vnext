@@ -344,11 +344,16 @@ static func _t_item_only_roll() -> Dictionary:
 		if int(r["items"]["kept_count"]) != (1 if kept else 0) or int(r["items"]["lost_count"]) != (0 if kept else 1) \
 				or _has_id_key(r["items"]):
 			m.append("%s: items report %s" % [tag, str(r["items"])])
-		if (_item_ids(ctx).size() == 1) != kept:
-			m.append("%s: Sanctum pieces %s" % [tag, str(_item_ids(ctx))])
+		# D-49: a kept find lands in the PACK; the Sanctum is never touched.
+		if not _item_ids(ctx).is_empty() or (_pack_ids(ctx).size() == 1) != kept:
+			m.append("%s: Sanctum pieces %s, pack %s" % [tag, str(_item_ids(ctx)), str(_pack_ids(ctx))])
 		var before := JSON.stringify(ctx.save_data)
 		var repeat := _leave(ctx, 2)
-		if str(repeat["result"]["outcome"]) != "nothing_new" or not _logs(repeat, "economy.settle.leave").is_empty() \
+		if kept:
+			# The kept find is a carried piece now (D-22): a repeat leave rolls again for it.
+			if str(repeat["result"]["outcome"]) == "nothing_new" or _logs(repeat, "economy.settle.leave").size() != 1:
+				m.append("%s: a repeat leave did not draw the carried find" % tag)
+		elif str(repeat["result"]["outcome"]) != "nothing_new" or not _logs(repeat, "economy.settle.leave").is_empty() \
 				or JSON.stringify(ctx.save_data) != before:
 			m.append("%s: a repeat leave drew or changed the save" % tag)
 	return _result(m)
@@ -505,7 +510,7 @@ static func _t_survivor_full() -> Dictionary:
 	var got := _leave(ctx)
 	if str(got["result"]["outcome"]) != "all" or str(_item_ids(ctx)) != str(["it.1"]) or str(_pack_ids(ctx)) != str(["it.2", "it.3"]):
 		m.append("outcome %s, Sanctum %s, pack %s" % [str(got["result"]["outcome"]), str(_item_ids(ctx)), str(_pack_ids(ctx))])
-	if str(_row_fates(ctx)) != str({ "item:s0:0": "S-/carried/to_pack" }) or str(_held_fates(ctx)) != str({ "it.2": "0.0/carried/ok" }):
+	if str(_row_fates(ctx)) != str({ "item:s0:0": "S-/carried/ok" }) or str(_held_fates(ctx)) != str({ "it.2": "0.0/carried/ok" }):
 		m.append("row fates %s, held fates %s" % [str(_row_fates(ctx)), str(_held_fates(ctx))])
 	if not InventoryService.validate(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service)).is_empty():
 		m.append("validate: %s" % str(InventoryService.validate(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service))))
@@ -603,10 +608,10 @@ static func _t_path_end() -> Dictionary:
 	var items: Dictionary = paid.get("items", {})
 	if int(items.get("kept_count", -1)) != 2 or int(items.get("lost_count", -1)) != 0 or _has_id_key(items):
 		m.append("payout items %s" % str(items))
-	if str(_item_ids(ctx)) != str(["it.2"]) or str(_pack_ids(ctx)) != str(["it.1"]):
-		m.append("Sanctum %s, pack %s: the relic goes to the Sanctum, the held piece stays in the pack (D-42)" % [str(_item_ids(ctx)), str(_pack_ids(ctx))])
-	var stacks: Array = _inv(ctx)["stacks"]
-	if stacks.size() != 1 or str((stacks[0] as Dictionary)["type_id"]) != "ph_consumable_a" or int((stacks[0] as Dictionary)["quantity"]) != 2:
+	if not _item_ids(ctx).is_empty() or str(_pack_ids(ctx)) != str(["it.1", "it.2"]):
+		m.append("Sanctum %s, pack %s: the relic lands in the pack behind the held piece (D-49)" % [str(_item_ids(ctx)), str(_pack_ids(ctx))])
+	var stacks: Array = _inv(ctx)["pack_stacks"]
+	if not (_inv(ctx)["stacks"] as Array).is_empty() or stacks.size() != 1 or str((stacks[0] as Dictionary)["type_id"]) != "ph_consumable_a" or int((stacks[0] as Dictionary)["quantity"]) != 2:
 		m.append("stacks %s" % JSON.stringify(stacks))
 	if str(_row_fates(ctx)) != str({ "item:s0:0": "S-/carried/ok", "item:s0:1": "S-/carried/ok" }):
 		m.append("row fates %s" % str(_row_fates(ctx)))
@@ -625,9 +630,9 @@ static func _t_path_end() -> Dictionary:
 	var ctx2 := _ctx(_SEED_ALL, 8, 4)
 	EarningsService.record_item(_stage(ctx2), "s0", "0", _entry("ph_relic_a"))
 	_leave(ctx2)
-	var count := _item_ids(ctx2).size()
+	var count := _pack_ids(ctx2).size()
 	var paid2 := _settle_path(ctx2, 5)
-	if count != 1 or _item_ids(ctx2).size() != 1 or int((paid2.get("items", {}) as Dictionary).get("kept_count", -1)) != 0:
+	if count != 1 or _pack_ids(ctx2).size() != 1 or int((paid2.get("items", {}) as Dictionary).get("kept_count", -1)) != 0:
 		m.append("path end banked a row the leave had settled: %s" % str(paid2.get("items")))
 	return _result(m)
 
@@ -640,7 +645,7 @@ static func _t_path_end_full() -> Dictionary:
 	EarningsService.record_item(_stage(ctx), "s0", "0", _entry("ph_relic_a"))
 	var paid := _settle_path(ctx, 5)
 	var kept: Array = (paid.get("items", {}) as Dictionary).get("kept", [])
-	if kept.size() != 1 or str((kept[0] as Dictionary).get("reason_key")) != "to_pack":
+	if kept.size() != 1 or str((kept[0] as Dictionary).get("reason_key")) != "ok":
 		m.append("payout items %s" % str(paid.get("items")))
 	if str(_item_ids(ctx)) != str(["it.1"]) or str(_pack_ids(ctx)) != str(["it.2", "it.3"]):
 		m.append("Sanctum %s, pack %s: both pieces stay held" % [str(_item_ids(ctx)), str(_pack_ids(ctx))])
@@ -1067,7 +1072,7 @@ static func _t_report_rows() -> Dictionary:
 		var items: Dictionary = r["items"]
 		var modulo: int = mc if mc > 0 else 6
 		var want_kept: Array = [_xrow("ph_relic_a", 1, "held", 3 % modulo, "ok"),
-			_xrow("ph_armor_a", 1, "gathered", 4 % modulo, "to_pack"), _xrow("ph_consumable_a", 2, "gathered", -1, "ok")]
+			_xrow("ph_armor_a", 1, "gathered", 4 % modulo, "ok"), _xrow("ph_consumable_a", 2, "gathered", -1, "ok")]
 		if str(r["outcome"]) != "all" or str(items["kept"]) != str(want_kept) or not (items["lost"] as Array).is_empty() \
 				or _has_id_key(items):
 			m.append("mark_count %d: outcome %s, items %s, expected kept %s" % [mc, str(r["outcome"]), str(items), str(want_kept)])

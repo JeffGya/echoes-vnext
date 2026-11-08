@@ -253,14 +253,6 @@ theme_override_constants/h_separation = 8
 theme_override_constants/v_separation = 8
 columns = 4
 
-[node name="PackStrap" type="Control" parent="Work/Row/Column/PackPanel/PackBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 10)
-layout_mode = 2
-mouse_filter = 2
-script = ExtResource("3_meter")
-mode = "strap"
-
 [node name="PackWord" type="Label" parent="Work/Row/Column/PackPanel/PackBox"]
 unique_name_in_owner = true
 visible = false

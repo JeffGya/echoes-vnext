@@ -26,7 +26,6 @@ const DISCARD_MODAL := &"inventory.discard"
 const REFUSE_SECONDS := 3.2
 const LETGO_LOCK_MSEC := 600
 const PULSE_SECONDS := 0.4
-const TONE_SECONDS := 0.25
 const PATH_TOP_EXTRA := 64
 const BED_STANDARD := 72
 const BED_WIDE := 80
@@ -58,7 +57,6 @@ const COLUMN_WIDE := 400.0
 @onready var _path_readonly: Label = %PathReadonly
 @onready var _path_token: Label = %PathToken
 @onready var _pack_grid: GridContainer = %PackGrid
-@onready var _pack_strap: Control = %PackStrap
 @onready var _pack_word: Label = %PackWord
 @onready var _pack_refuse: PanelContainer = %PackRefuse
 @onready var _pack_refuse_label: Label = %PackRefuseLabel
@@ -101,6 +99,8 @@ var _move_blocked := ""
 var _letgo_blocked := ""
 var _hint_box := ""
 var _last_to := ""
+var _pack_level := 0
+var _tone_tween: Tween = null
 var _line_timer: Tween = null
 var _letgo_lock_until := 0
 
@@ -369,8 +369,9 @@ func _render_pack_state() -> void:
 	var level := int(load_info.get("level", 0))
 	var on_path := _mode == MODE_PATH
 	_load_mark.level = level
-	_pack_strap.level = "full" if level >= 3 else ("near" if level == 2 else "")
-	_pack_panel.theme_type_variation = &"ItemPanelPackHeavy" if level >= 3 else &"ItemPanelPack"
+	_pack_level = level
+	# Three levels read apart by tone and wording: plain, darker near full, darkest at full.
+	_pack_panel.theme_type_variation = &"ItemPanelPackHeavy" if level >= 3 else (&"ItemPanelPackNear" if level == 2 else &"ItemPanelPack")
 	_pack_word.visible = level >= 2
 	if level >= 3:
 		_pack_word.text = ItemUiText.PACK_FULL_PATH if on_path else ItemUiText.PACK_HEAVY
@@ -386,21 +387,30 @@ func _render_pack_state() -> void:
 ## One pulse on every transition into full (D-36, D-39). The first render only records the state.
 func _update_pulses() -> void:
 	var sanct_full: bool = _sanct_meter.level == "full"
-	var pack_full: bool = _pack_strap.level == "full"
+	var pack_full := _pack_level >= 3
 	if _have_prev:
 		var reduced := StopMarkMotion.reduced
 		var seconds := 0.15 if reduced else PULSE_SECONDS
 		if sanct_full and not _prev_full[SANCT] and _sanct_panel.visible:
 			_sanct_meter.pulse(seconds, reduced)
 		if pack_full and not _prev_full[PACK] and _pack_panel.visible:
-			_pack_strap.pulse(seconds, reduced)
-			if not reduced:
-				var tone := create_tween()
-				_pack_panel.modulate = Color(1.3, 1.3, 1.3, 1.0)
-				tone.tween_property(_pack_panel, "modulate", Color.WHITE, TONE_SECONDS)
+			_pulse_pack_tone(seconds, reduced)
 	_prev_full[SANCT] = sanct_full
 	_prev_full[PACK] = pack_full
 	_have_prev = true
+
+
+## The pack pulse acts on the panel tone only: a brightness flash (0.4 s), or a 0.15 s fade in reduced motion.
+func _pulse_pack_tone(seconds: float, reduced: bool) -> void:
+	if _tone_tween != null and _tone_tween.is_valid():
+		_tone_tween.kill()
+	_tone_tween = create_tween()
+	if reduced:
+		_pack_panel.modulate = Color(1.0, 1.0, 1.0, 0.0)
+		_tone_tween.tween_property(_pack_panel, "modulate:a", 1.0, seconds)
+	else:
+		_pack_panel.modulate = Color(1.3, 1.3, 1.3, 1.0)
+		_tone_tween.tween_property(_pack_panel, "modulate", Color.WHITE, seconds)
 
 
 func _refresh_selection() -> void:

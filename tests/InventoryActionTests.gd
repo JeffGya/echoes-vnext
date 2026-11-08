@@ -716,7 +716,7 @@ static func _t_leave_chain() -> Dictionary:
 	# The leave.
 	var out: Dictionary = rt.dispatch({ "type": "stage.return_home" })
 	var data: Dictionary = out.get("data", {})
-	var want_kept: Array = [_row_of("ph_relic_a", 1, "held", 3, "ok"), _row_of("ph_armor_a", 1, "gathered", 4, "to_pack"),
+	var want_kept: Array = [_row_of("ph_relic_a", 1, "held", 3, "ok"), _row_of("ph_armor_a", 1, "gathered", 4, "ok"),
 		_row_of("ph_consumable_a", 2, "gathered", -1, "ok")]
 	var want_items := { "kept": want_kept, "lost": [] }
 	if str(out.get("type", "")) != FlowStateIds.RESOLVE or str(data.get("run_type", "")) != "scout_return" \

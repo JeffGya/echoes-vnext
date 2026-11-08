@@ -531,3 +531,71 @@ ASSUMED: 1. A refusal republishes the current snapshot with a refreshed `data.in
 ASSUMED: 2. `not_in_sanctum` cannot be carried because the screens that refuse it have no `data.inventory`. The UI gets it from the dispatch result `error_code` only if it reads it; otherwise it needs no message there.
 ASSUMED: 3. `name` is absent (not an empty string) when the type has no definition or no name, so the UI can test the key.
 BLOCKED: None.
+
+## New finds stay in the pack (D-49)
+
+Source: decision D-49 (Jeff, 2026-11-08, play test). Same private save dir. No commit.
+
+### The placement rule
+
+| Case | Rule |
+|---|---|
+| A surviving gathered find at a path end or after a kept early leave | It goes to the PACK, never to the Sanctum, also when the Sanctum is empty. The player moves it later with `inventory.move.apply`. Nothing moves by itself (D-42). |
+| Unique piece | The pack slot its row owns: the lowest free pack slot (one above the size only if none is free, as before). |
+| Stack find | 1) merge into a same-type pack stack with room; 2) new pack stacks in free pack slots. The first new stack uses the slot the row owns; each further chunk needs `pack_free(later_rows) > 0` (F3-01, F4-01 rules, `later_rows` includes rows of other Realms). 3) What no free pack slot holds is lost as `overflow` (D-46). |
+| Leave draws | Unchanged: one draw per gathered find; a lost find is not placed. Defeat still loses everything gathered and everything carried. |
+| `direct` (debug producer) and `gathered` (service mode) | Unchanged: Sanctum first, then the pack. |
+| Pack size | The pack never holds more entries than its size after a settlement (`validate` empty), also with carried pieces and open rows in other Realms. |
+
+### Changes
+
+| Item | Change | File:line |
+|---|---|---|
+| New intake mode | `MODE_PACK_ONLY` (`"pack_only"`). `_intake_stack` and `_intake_unique` now take the mode string (not a bool). `pack_only` skips the Sanctum steps; it has the `gathered` ownership rule for pack slots; a full fit returns `stored`/`ok`, a lost rest returns `partial`/`overflow`. `direct` and `gathered` behave as before. The `intake` doc is updated. | `core/inventory/InventoryService.gd:35-38`, :258-285, :463-475, `_intake_stack`, `_intake_unique` |
+| Callers | The only caller that used `gathered` was the settlement (`_settle_item_row`, used by `_bank_rows` for the path end and the preview, and by `_settle_leave_items` for the leave). It now passes `pack_only`. The other caller is the debug producer (`direct`, unchanged). | `core/economy/StageSettlementService.gd:548` |
+| Preview | Runs the same `_bank_rows`, so it equals the payout (test `path_end_preview_equals_the_payout_report` passes). | none |
+
+### Result rows the UI sees now
+
+Field names are unchanged. A surviving gathered find has `source` `gathered`, it is in the `kept` list, and `reason_key` is `ok` (a pack placement is the normal place). `to_pack` is no longer produced by the settlement. `overflow` with `lost_quantity` still marks a stack find whose rest found no pack slot (kept part in `kept`). Carried survivors still have `source` `held` and `ok`. Lost rows are as before (`leave_none`, `leave_some`, `defeat`, `overflow`, intake refusal keys). `name` is on every row when the type has a definition.
+
+Consequence for the next leave: a kept find is now a carried piece in the pack, so a later early leave rolls for it again (D-19, D-22) and a defeat loses it (D-20).
+
+### Tests
+
+| Test | What it pins |
+|---|---|
+| `inventory_moves/pack_only_intake_never_touches_the_sanctum` (new) | Piece and stack in the pack with the Sanctum empty and full; pack merge; big find with the later-rows rule (`partial`/`overflow`, stored + lost = find); `direct` and `gathered` still Sanctum first. |
+| `inventory_paths/new_finds_land_in_the_pack_and_stay_there` (new) | Path end, early leave all, some, none; Sanctum empty and full; a carried piece in the pack; Sanctum byte-equal; `reason_key` `ok`; nothing survives for none; pack within its size and `validate` empty. The same invariant with a carried piece, an open row in Realm B and a big find; stored + lost = 9. |
+| `inventory_paths/a_find_in_the_pack_is_moved_by_the_player_only` (new) | Finds in the pack stay there; `inventory.move.apply` takes them to the Sanctum; census equal. |
+| Updated for D-49 | `item_packs/item_only_pack_draws_the_outcome_roll` (kept find in the pack; a repeat leave draws it as a carried piece), `survivor_stays_held_when_the_sanctum_is_full`, `path_end_banks_item_rows_once`, `path_end_with_a_full_sanctum_keeps_pieces_held`, `report_rows_carry_source_and_mark_index`; `inventory_actions/leave_item_report_reaches_the_card_and_survives_a_reload`; `inventory_paths/a_new_stack_find_is_kept_in_the_pack_when_the_sanctum_is_full` (`to_pack` became `ok`). |
+
+Mutations by hand (each restored, `cmp` equal): the settlement routed to `gathered` again fails 7 tests (`new_finds_land_in_the_pack_and_stay_there` and 6 others); `pack_only` disabled in `_intake_stack` fails 5 (`pack_only_intake_never_touches_the_sanctum` and 4 others); `pack_only` disabled in `_intake_unique` fails 8.
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=seam,realm_ui,inventory_paths,inventory_moves,inventory_actions,inventory_service,inventory_save,item_packs,item_packs_char` | `Tests: 210 total, 210 passed, 0 failed` |
+| `=flow_transaction,snapshot_fingerprint,snapshot_purity,snapshot_contract,save_integrity,pending_result,sanctum.layout,sanctum.party,echo_party` | `Tests: 107 total, 107 passed, 0 failed` |
+| `=econ_char` | `Tests: 103 total, 103 passed, 0 failed` |
+| `=economy,payout_ui,inventory_ui,traversal,venture_char,stop_short` | `Tests: 231 total, 231 passed, 0 failed` |
+
+Compile check (`--check-only --quit`): 0 `SCRIPT ERROR` lines. The machine is slower now, so the groups were split to stay under 2 minutes. No suite added or removed (shard map unchanged). Three tests added: the expected sharded total is 2692.
+
+### Recorded values
+
+None moved. `snapshot_fingerprint` passes 2 of 2 with the recorded hashes. No pinned literal changed.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"`, Bash `timeout` 3600000.
+2. Expected duration: about 18 to 31 minutes (the machine is slower than in earlier rounds).
+3. Files the run edits: none in the checkout (it writes `/tmp/echoes-vnext-sharded/`). No `trap` needed.
+4. Verify: `git status --short` and `git diff --stat` are the same before and after.
+5. Read back: the `COMBINED:` line (expect 2692), any shard log without a `Tests:` line, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. The reason of a kept gathered find is `ok` for every placement in the pack. The UI cannot tell from the row whether the pack was almost full; the pack count and `pack_load` in `data.inventory` say that.
+ASSUMED: 2. A kept find is a carried piece afterwards (D-19, D-22): it is rolled again on a later early leave and lost on defeat until the player moves it to the Sanctum. This follows from "it stays in the pack" and D-42; say if Jeff wants a gathered find to be safe until the next path.
+ASSUMED: 3. A gathered unique piece keeps the existing rule "one slot above the size if no slot below it is free". In play every row owns a slot, so this is not reached.
+BLOCKED: None.

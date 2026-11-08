@@ -1073,6 +1073,23 @@ corner_radius_bottom_right = 14
 corner_radius_bottom_left = 14
 corner_detail = 1
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_item_panel_pack_near"]
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 12.0
+bg_color = Color(0.2431, 0.1804, 0.1216, 1.0)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.1412, 0.0980, 0.0627, 1.0)
+corner_radius_top_left = 30
+corner_radius_top_right = 30
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+corner_detail = 1
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_item_details"]
 content_margin_left = 14.0
 content_margin_top = 12.0
@@ -2225,3 +2242,5 @@ ItemButtonBlocked/styles/pressed = SubResource("StyleBoxFlat_item_btn_disabled_n
 ItemButtonBlocked/styles/hover_pressed = SubResource("StyleBoxFlat_item_btn_disabled_nofill")
 ItemButtonBlocked/styles/disabled = SubResource("StyleBoxFlat_item_btn_disabled_nofill")
 ItemButtonBlocked/styles/focus = SubResource("StyleBoxFlat_item_btn_focus")
+ItemPanelPackNear/base_type = &"PanelContainer"
+ItemPanelPackNear/styles/panel = SubResource("StyleBoxFlat_item_panel_pack_near")

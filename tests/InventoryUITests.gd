@@ -380,19 +380,20 @@ static func _t_pack_panel() -> Dictionary:
 	var word := panels.get_node("%PackWord") as Label
 	if not word.visible or word.text != ItemUiText.PACK_HEAVY:
 		return _fail(m, "a full pack must say the consequence: %s" % word.text)
-	if panels.get_node("%PackPanel").theme_type_variation != &"ItemPanelPackHeavy" or panels.get_node("%PackStrap").level != "full":
-		return _fail(m, "a full pack needs the heavy tone and the solid strap line")
+	if panels.get_node("%PackPanel").theme_type_variation != &"ItemPanelPackHeavy":
+		return _fail(m, "a full pack needs the darkest tone")
+	if panels.find_child("PackStrap", true, false) != null:
+		return _fail(m, "the strap line is back (D-49)")
 	for i in 4:
 		if _slot(panels, "%PackGrid", i).tile().get_node("%Glyphs").leaf == "":
 			return _fail(m, "carried piece %d has no leaf" % i)
-	# One piece less: near full has the dashed strap and its own word, no heavy tone.
+	# One piece less: near full has its own tone step and its own word.
 	var inv := FX.inventory(6, 4, [], [FX.piece(0, "gear", "g1", 0, "A"), FX.piece(1, "gear", "g1", 1, "B"), FX.piece(2, "gear", "g1", 2, "C")])
 	panels.set_snapshot(FX.sanctum_snap(inv))
-	if panels.get_node("%PackStrap").level != "near" or word.text != ItemUiText.PACK_NEAR \
-			or panels.get_node("%PackPanel").theme_type_variation == &"ItemPanelPackHeavy":
-		return _fail(m, "near full: strap=%s word=%s" % [panels.get_node("%PackStrap").level, word.text])
+	if word.text != ItemUiText.PACK_NEAR or panels.get_node("%PackPanel").theme_type_variation != &"ItemPanelPackNear":
+		return _fail(m, "near full: tone=%s word=%s" % [panels.get_node("%PackPanel").theme_type_variation, word.text])
 	panels.set_snapshot(FX.sanctum_snap(FX.inventory(6, 4, [], [FX.piece(0, "gear", "g1", 0, "A")])))
-	if word.visible or panels.get_node("%PackStrap").level != "":
+	if word.visible or panels.get_node("%PackPanel").theme_type_variation != &"ItemPanelPack":
 		return _fail(m, "a roomy pack shows a warning")
 	# The Sanctum panel keeps its gauge and its count.
 	panels.toggle_sanctum()
@@ -1258,16 +1259,15 @@ static func _t_pack_pulse() -> Dictionary:
 	var m := _panels(FX.sanctum_snap(FX.inventory(6, 4, [], three)))
 	var panels: Node = m[1]
 	panels.toggle_pack()
-	var strap: Control = panels.get_node("%PackStrap")
-	if strap.get("_tween") != null:
+	if panels.get("_tone_tween") != null:
 		return _fail(m, "the first render pulsed")
 	panels.set_snapshot(FX.sanctum_snap(FX.inventory(6, 4, [], four)))
-	var tw: Variant = strap.get("_tween")
+	var tw: Variant = panels.get("_tone_tween")
 	if tw == null or not (tw as Tween).is_valid():
-		return _fail(m, "the pack becoming full did not pulse the strap line")
-	strap.set("_tween", null)
+		return _fail(m, "the pack becoming full did not pulse the panel tone")
+	panels.set("_tone_tween", null)
 	panels.set_snapshot(FX.sanctum_snap(FX.inventory(6, 4, [], four)))
-	if strap.get("_tween") != null:
+	if panels.get("_tone_tween") != null:
 		return _fail(m, "a pack that stays full pulsed again")
 	return _pass(m)
 

@@ -309,3 +309,58 @@ NOT viewed: the old broken render (the QA PNGs from `/tmp/claude-0/qaui2-shots/`
 ASSUMED: 1. The 300 and 160 minimum widths are layout numbers, not design values.
 ASSUMED: 2. The refusal line may grow the pack panel by one or two text lines. The test allows 70 px. It cannot move the panels off screen.
 BLOCKED: none.
+
+## Strap line removed (D-49)
+
+Source: D-49, K4 (Jeff: the line design was not agreed). UI only. No `core/` file and no non-UI test touched (the other changed files in the tree belong to another agent). No wording changed. Compile check (`--quit`): 0 `SCRIPT ERROR` lines.
+
+### Changes
+
+| Item | Change | File |
+|---|---|---|
+| Strap node | `PackStrap` removed | `ui/components/InventoryPanels.tscn` |
+| Strap code | `_pack_strap` and its level removed; level kept as `_pack_level` | `ui/components/InventoryPanels.gd` (`_render_pack_state`, `_update_pulses`) |
+| Strap drawing | `strap` mode and `_draw_strap` removed; the ledger gauge is unchanged | `ui/components/ItemMeter.gd` |
+| Tone steps | Plain, near full and full are three tones: `ItemPanelPack`, new `ItemPanelPackNear` (`#3E2E1F`), `ItemPanelPackHeavy` (existing). Before, near full had the plain tone and only the line. The risk words are unchanged | `assets/theme/LivingTreeSystem.tres` (new `StyleBoxFlat_item_panel_pack_near`, variation at the end); `InventoryPanels.gd` (`_render_pack_state`) |
+| Pulse | The pulse on a transition into full now acts on the panel tone only: a brightness flash of 0.4 s, once; reduced motion is a 0.15 s fade. The sanctum ledger pulse is unchanged | `InventoryPanels.gd` (`_pulse_pack_tone`, `_tone_tween`) |
+| Screenshots | Fixtures `invs_party_lv0/2/3`, `invr_path_lv0/2/3` | `scripts/screenshot.gd` |
+
+### Tests
+
+Rewritten: `pack_panel_shows_no_counts_and_level_words` (checks the tone variation and the word at each level, and that no `PackStrap` node exists) and `pack_pulses_once_when_it_becomes_full` (checks the panel-tone tween). No strap assertion remains.
+
+| Mutation (restored, `cmp` equal) | Result |
+|---|---|
+| Near full gets the full tone | `pack_panel_shows_no_counts_and_level_words`: `near full: tone=ItemPanelPackHeavy` |
+| Full gets the near tone | same test: `a full pack needs the darkest tone` |
+| Pulse call removed | `pack_pulses_once_when_it_becomes_full`: `did not pulse the panel tone` |
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_ui` | `Tests: 38 total, 38 passed, 0 failed` |
+| `=inventory_ui,realm_ui,foundation_ui,sanctum.layout,sanctum.party,echo_party,payout_ui` | `Tests: 177 total, 177 passed, 0 failed` |
+
+### Viewed (xvfb-run, `scripts/screenshot.gd`, 1280x720)
+
+Pack panel at empty, near full (3 of 4) and full (4 of 4), in party details and on the path, in colour and in grayscale copies.
+
+| Check | Result |
+|---|---|
+| Colour | The three levels read apart: plain brown, darker, darkest; the words `Nearly full.` and `Heavy. They may lose what they carry.` (path: `Full. Nothing more fits.`); the satchel mark fills its bands |
+| Grayscale | The tone step alone is WEAK. Luma (0.299 R + 0.587 G + 0.114 B): plain 59.6, near 49.1, full 42.9. In the grayscale copies the near and full panels look almost the same, and the plain one only a little lighter. What still separates the levels in grayscale: the words, and the number of tiles. I added no decoration, as asked |
+
+NOT viewed: the pulse (motion); 1920x1080; the Sanctum panel next to a full pack; a real display (xvfb only).
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"` with Bash `timeout` 3600000.
+2. Duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files edited by the run: none in the checkout (`/tmp/echoes-vnext-sharded/`). No `trap`.
+4. Verify: `git status --short` unchanged; no untracked `.import` file.
+5. Read back: `COMBINED:` (no test added or removed by this change; the count is the other agent's count), any shard log without `Tests:`, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. "Keep the darker tone at near-full and full" means two darker steps. Near full had no tone step before; I added `ItemPanelPackNear`. If Jeff wants only one dark tone, delete the near variation and the near line in `_render_pack_state`.
+ASSUMED: 2. The grayscale weakness is for Jeff to judge. A bigger tone step needs only a colour change in two styles (no new token is needed beyond the one already added).
+BLOCKED: none.
