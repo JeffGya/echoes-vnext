@@ -633,9 +633,9 @@ func _enter_explore_mode(data: Dictionary, actions: Dictionary) -> void:
 	_hud_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_strip.show()
 	var inventory_v: Variant = data.get("inventory", {})
-	if inventory_v is Dictionary and not (inventory_v as Dictionary).is_empty():
+	_pack_hud.visible = inventory_v is Dictionary and not (inventory_v as Dictionary).is_empty()
+	if _pack_hud.visible:
 		_pack_hud.set_inventory(inventory_v as Dictionary)
-		_pack_hud.show()
 	_stage_complete_btn.show() if not _cached_stage_complete_action.is_empty() else _stage_complete_btn.hide()
 	_advance_btn.show()
 	_return_btn.show()
@@ -1648,10 +1648,11 @@ func _apply_responsive_layout() -> void:
 	_hud_strip.offset_top = top
 	_hud_strip.offset_right = left + hud_width
 	_hud_strip.offset_bottom = top + _TOP_HUD_HEIGHT
-	_pack_hud.offset_left = left
-	_pack_hud.offset_top = top + _TOP_HUD_HEIGHT + 8.0
-	_pack_hud.offset_right = left + 300.0
-	_pack_hud.offset_bottom = _pack_hud.offset_top + 106.0
+	if _pack_hud != null:
+		_pack_hud.offset_left = left
+		_pack_hud.offset_top = top + _TOP_HUD_HEIGHT + 8.0
+		_pack_hud.offset_right = left + 300.0
+		_pack_hud.offset_bottom = _pack_hud.offset_top + 106.0
 	var stage_info_height := (
 		_STAGE_INFO_COMPACT_HEIGHT
 		if profile == "compact"

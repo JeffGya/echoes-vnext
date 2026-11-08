@@ -32,6 +32,7 @@ var _fates: Array = []
 var _motion: Tween = null
 var _running := false
 var _final_msec := -100000
+var _on_dark := false
 
 
 ## Timing of the sequence for `n` tiles. Pure; tests read it.
@@ -47,7 +48,12 @@ static func plan(n: int, reduced: bool) -> Dictionary:
 
 ## The row sits on a dark surface (the leave confirmation) or a light card.
 func set_on_dark(on: bool) -> void:
+	_on_dark = on
 	var variation := &"ItemTextDark" if on else &"ItemTextLight"
+	_tiles.alignment = FlowContainer.ALIGNMENT_CENTER if on else FlowContainer.ALIGNMENT_BEGIN
+	var h := HORIZONTAL_ALIGNMENT_CENTER if on else HORIZONTAL_ALIGNMENT_LEFT
+	_name_line.horizontal_alignment = h
+	_risk_line.horizontal_alignment = h
 	_name_line.theme_type_variation = variation
 	_risk_line.theme_type_variation = variation
 
@@ -118,6 +124,7 @@ func _add_tile(row: Dictionary, fate: String, bed: int) -> void:
 	var tile := TileScene.instantiate() as Button
 	_tiles.add_child(tile)
 	tile.setup(row, { "state": fate, "source": str(row.get("source", "")), "bed": bed })
+	tile.get_node("%Glyphs").bracket_light = _on_dark
 	tile.focus_entered.connect(_show_name.bind(tile, fate))
 	tile.pressed.connect(_show_name.bind(tile, fate))
 	_tile_nodes.append(tile)

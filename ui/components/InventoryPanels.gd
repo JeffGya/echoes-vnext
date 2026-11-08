@@ -36,7 +36,8 @@ const COLUMN_WIDE := 400.0
 @onready var _dim: Control = %Dim
 @onready var _work: MarginContainer = %Work
 @onready var _spacer: Control = %Spacer
-@onready var _column: VBoxContainer = %Column
+@onready var _column: BoxContainer = %Column
+@onready var _details_panel: PanelContainer = %DetailsPanel
 @onready var _sanct_panel: PanelContainer = %SanctumPanel
 @onready var _sanct_title: Label = %SanctTitle
 @onready var _sanct_sub: Label = %SanctSub
@@ -91,14 +92,16 @@ var _sel_slot := -1
 var _wide := false
 var _margin_right := 16
 var _safe := Vector4.ZERO
+var _col_w := COLUMN_STANDARD
 var _awaiting := false
 var _awaiting_hash := 0
 var _prev_full := { SANCT: false, PACK: false }
 var _have_prev := false
 var _move_blocked := ""
 var _letgo_blocked := ""
-var _refuse_serial := 0
 var _hint_box := ""
+var _last_to := ""
+var _line_timer: Tween = null
 var _letgo_lock_until := 0
 
 
@@ -150,9 +153,19 @@ func set_snapshot(snap: Dictionary) -> void:
 	if _mode.is_empty() or _inv.is_empty():
 		_inv = {}
 		_awaiting = false
+		_reset_local()
 		_apply_visibility()
+		open_state_changed.emit()
 		return
-	if _awaiting:
+	# The refusal line lives for one snapshot: a snapshot without the key clears it.
+	var refused_v: Variant = _inv.get("refused", null)
+	_clear_lines()
+	if refused_v is Dictionary:
+		_awaiting = false
+		var reason := str((refused_v as Dictionary).get("reason", ""))
+		var is_move := str((refused_v as Dictionary).get("action", "")) == "move"
+		_flash(_refusal_box(is_move), ItemUiText.reason_text(reason, _last_to))
+	elif _awaiting:
 		_awaiting = false
 		if _inv.hash() == _awaiting_hash:
 			_flash(_sel_box if not _sel_box.is_empty() else SANCT, ItemUiText.R_UNKNOWN)
@@ -164,7 +177,9 @@ func set_layout(layout: Dictionary) -> void:
 	_wide = layout.get("profile", &"standard") == &"wide"
 	_safe = layout.get("safe_insets", Vector4.ZERO)
 	_apply_margins()
-	_column.custom_minimum_size.x = COLUMN_WIDE if _wide else COLUMN_STANDARD
+	_col_w = COLUMN_WIDE if _wide else COLUMN_STANDARD
+	_pack_panel.custom_minimum_size.x = _col_w
+	_details_panel.custom_minimum_size.x = _col_w
 	if not _inv.is_empty():
 		_render()
 
@@ -193,7 +208,7 @@ func toggle_sanctum() -> void:
 
 
 func toggle_pack() -> void:
-	if _mode.is_empty():
+	if _mode.is_empty() or _inv.is_empty():
 		return
 	if _pack_open:
 		_close_pack()
@@ -223,7 +238,7 @@ func close_all() -> void:
 ## Width the host screen gives up on the right while the column is docked there. 0 when nothing is docked.
 func right_inset() -> int:
 	if _dock == "right" and _column.visible:
-		return int(_column.custom_minimum_size.x) + 12 + _margin_right
+		return int(_col_w) + 12 + _margin_right
 	return 0
 
 
@@ -281,6 +296,8 @@ func _apply_visibility() -> void:
 	_sanct_panel.visible = sanct_vis
 	_pack_panel.visible = pack_vis
 	_column.visible = sanct_vis or pack_vis
+	# On a path the pack and the details sit side by side, so the column stays short and clears the bottom buttons.
+	_column.vertical = _mode != MODE_PATH
 	_dim.visible = _column.visible
 	_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL if _dock == "right" else 0
 	var show_toggle := _dock == "left" and _mode == MODE_SANCTUM
@@ -393,6 +410,7 @@ func _refresh_selection() -> void:
 	for grid in [_sanct_grid, _pack_grid]:
 		for slot in grid.get_children():
 			slot.tile().set_selected(slot.box == _sel_box and slot.index == _sel_slot and slot.has_content())
+	_hint_label.text = ItemUiText.PATH_HINT if _mode == MODE_PATH else ItemUiText.DETAILS_HINT
 	_details_empty.visible = row.is_empty()
 	_details_full.visible = not row.is_empty()
 	if row.is_empty():
@@ -421,10 +439,11 @@ func _refresh_selection() -> void:
 	_move_button.text = ItemUiText.BTN_MOVE_SANCT if in_pack else ItemUiText.BTN_MOVE_PACK
 	var move_plan := ItemMovePlan.plan(_inv, _sel_box, _sel_slot, to_box, -1)
 	_move_blocked = str(move_plan.get("reason", "")) if str(move_plan.get("kind", "")) == "refuse" else ""
-	_move_button.theme_type_variation = &"ItemButtonOutline" if not _move_blocked.is_empty() else &"ItemButtonGold"
+	_move_button.theme_type_variation = &"ItemButtonBlocked" if not _move_blocked.is_empty() else &"ItemButtonGold"
 	_move_reason.visible = not _move_blocked.is_empty()
 	_move_reason.text = "%s: %s" % [_move_button.text, ItemUiText.reason_text(_move_blocked, to_box)]
 	_letgo_blocked = ItemMovePlan.discard_block(_inv, _sel_box)
+	_letgo_button.theme_type_variation = &"ItemButtonBlocked" if not _letgo_blocked.is_empty() else &"ItemButtonOutline"
 	_letgo_reason.visible = not _letgo_blocked.is_empty()
 	_letgo_reason.text = "%s: %s" % [ItemUiText.BTN_LET_GO, ItemUiText.reason_text(_letgo_blocked)]
 	_path_note.visible = _mode == MODE_PATH and _letgo_blocked.is_empty()
@@ -525,6 +544,7 @@ func _do_move(from: String, slot: int, to: String, to_slot: int) -> void:
 		"refuse":
 			_flash(to, ItemUiText.reason_text(str(plan.get("reason", "")), to))
 			return
+	_last_to = to
 	_sel_box = to
 	_sel_slot = int(plan.get("to_slot", -1))
 	_awaiting = true
@@ -537,18 +557,32 @@ func _do_move(from: String, slot: int, to: String, to_slot: int) -> void:
 
 # ── Reason line ────────────────────────────────────────────────
 
+func _clear_lines() -> void:
+	_show_line(SANCT, "")
+	_show_line(PACK, "")
+
+
+## The panel that shows a refusal from the core: the target of a move, else the selected piece's box, else the open panel.
+func _refusal_box(is_move: bool) -> String:
+	if is_move and not _last_to.is_empty():
+		return _last_to
+	if not _sel_box.is_empty():
+		return _sel_box
+	return SANCT if _sanct_panel.visible else PACK
+
+
 func _flash(box: String, text: String) -> void:
 	var target := box
 	if (target == PACK and not _pack_panel.visible) or (target == SANCT and not _sanct_panel.visible):
 		target = SANCT if _sanct_panel.visible else PACK
 	_show_line(target, text)
-	_refuse_serial += 1
-	var serial := _refuse_serial
+	if _line_timer != null and _line_timer.is_valid():
+		_line_timer.kill()
 	if text.is_empty() or not is_inside_tree():
 		return
-	await get_tree().create_timer(REFUSE_SECONDS).timeout
-	if serial == _refuse_serial:
-		_show_line(target, "")
+	_line_timer = create_tween()
+	_line_timer.tween_interval(REFUSE_SECONDS)
+	_line_timer.tween_callback(_show_line.bind(target, ""))
 
 
 func _show_line(box: String, text: String) -> void:

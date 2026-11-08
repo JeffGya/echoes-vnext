@@ -108,6 +108,10 @@ func _fixtures() -> Dictionary:
 		"invr_leave_result_midmotion": [_combat(6, { "type": "recover" }), _items_card(_return_card("some", 7, 2), fx.items_block())],
 		"invr_defeat_items": [_combat(7, { "type": "recover" }), _defeat_items(), "skip_motion"],
 		"invr_stage_clear_items": [_combat(6, { "type": "recover" }), _items_card(_payout_stage_end(true), fx.items_block()), "skip_motion"],
+		"invs_refusal": [fx.sanctum_snap(fx.full_both()), "inv:toggle_sanct", "inv:toggle_pack", "inv:select:pack:1",
+			fx.sanctum_snap(_refused(fx.full_both(), "move", "container_full"))],
+		"invs_refusal_slot": [fx.sanctum_snap(fx.standard()), "inv:toggle_sanct", "inv:select:sanctum:0",
+			fx.sanctum_snap(_refused(fx.standard(), "move", "slot_taken"))],
 		"invs_both_full": [fx.sanctum_snap(fx.full_both()), "inv:toggle_sanct", "inv:toggle_pack", "inv:select:pack:1"],
 		"combat_pace_full":    [_combat(3, _with(recover, "pace_state", "full"))],
 		"combat_pace_partial": [_combat(6, _with(recover, "pace_state", "partial"))],
@@ -458,6 +462,12 @@ func _payout_defeat_packs_lost() -> Dictionary:
 	var snap := _payout_defeat()
 	snap["data"]["reward_breakdown"].append(_row("Packs lost", 0, "packs_lost", { "lost_ase": 12, "lost_ekwan": 0 }))
 	return snap
+
+
+func _refused(inv: Dictionary, action: String, reason: String) -> Dictionary:
+	var copy := inv.duplicate(true)
+	copy["refused"] = { "action": action, "reason": reason }
+	return copy
 
 
 func _items_card(snap: Dictionary, items: Dictionary) -> Dictionary:

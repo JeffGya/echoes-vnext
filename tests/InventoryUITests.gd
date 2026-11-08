@@ -55,6 +55,14 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_ui/leave_confirmation_shows_at_risk_tiles_and_guards_confirm", Callable(InventoryUITests, "_t_leave_confirm"))
 	runner.register_test("inventory_ui/new_ui_files_never_read_the_save_or_the_core", Callable(InventoryUITests, "_t_source_grep"))
 	runner.register_test("inventory_ui/theme_additions_use_no_forbidden_colour", Callable(InventoryUITests, "_t_theme_colours"))
+	runner.register_test("inventory_ui/core_refusal_key_shows_its_line_for_one_snapshot", Callable(InventoryUITests, "_t_refused_key"))
+	runner.register_test("inventory_ui/result_and_at_risk_tiles_show_the_row_name_or_the_kind_word", Callable(InventoryUITests, "_t_row_names"))
+	runner.register_test("inventory_ui/blocked_buttons_look_disabled_and_path_hint_has_no_drag", Callable(InventoryUITests, "_t_blocked_look"))
+	runner.register_test("inventory_ui/path_column_is_side_by_side_and_clears_the_bottom_buttons", Callable(InventoryUITests, "_t_path_layout"))
+	runner.register_test("inventory_ui/a_path_snapshot_without_inventory_closes_the_pack", Callable(InventoryUITests, "_t_path_no_inventory"))
+	runner.register_test("inventory_ui/let_it_go_lock_after_the_modal_closes", Callable(InventoryUITests, "_t_letgo_lock"))
+	runner.register_test("inventory_ui/pack_pulses_once_when_it_becomes_full", Callable(InventoryUITests, "_t_pack_pulse"))
+	runner.register_test("inventory_ui/a_tap_anywhere_finishes_the_card_motion", Callable(InventoryUITests, "_t_tap_finishes"))
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -495,10 +503,13 @@ static func _t_refused_drops() -> Dictionary:
 	_slot(panels, "%SanctGrid", 7)._drop_data(Vector2.ZERO, _drag("sanctum", 3))
 	if not got.is_empty() or line.text != ItemUiText.R_TYPE:
 		return _fail(m, "type mismatch: sent %s, line '%s'" % [str(got), line.text])
-	# A stack at its limit takes no more.
-	_slot(panels, "%SanctGrid", 7)._drop_data(Vector2.ZERO, _drag("sanctum", 12))
-	if not got.is_empty() or line.text != ItemUiText.R_TYPE:
-		return _fail(m, "different stack onto a limit stack: '%s'" % line.text)
+	# A stack at its limit takes no more (same type, target at 20 of 20).
+	var limit_inv := FX.inventory(20, 4, [FX.stack(7, "material", 20, 20, "Test fibre", "ph_fibre"), FX.stack(9, "material", 3, 20, "Test fibre", "ph_fibre")], [])
+	panels.set_snapshot(FX.sanctum_snap(limit_inv))
+	_slot(panels, "%SanctGrid", 7)._drop_data(Vector2.ZERO, _drag("sanctum", 9))
+	if not got.is_empty() or line.text != ItemUiText.R_STACK_LIMIT:
+		return _fail(m, "a stack onto a stack at its limit: sent %s, line '%s'" % [str(got), line.text])
+	panels.set_snapshot(FX.sanctum_snap(FX.standard()))
 	# Full containers.
 	panels.set_snapshot(FX.sanctum_snap(FX.full_both()))
 	panels._on_panel_drop(_drag("sanctum", 0), "pack")
@@ -525,7 +536,12 @@ static func _t_reason_keys() -> Dictionary:
 	if ItemUiText.reason_text("container_full", "pack") != ItemUiText.R_PACK_FULL \
 			or ItemUiText.reason_text("container_full", "sanctum") != ItemUiText.R_SANCT_FULL:
 		return _fail(m, "container_full must name the full container")
-	for key in ["unknown_entry", "bad_slot", "bad_box", "bad_state", "bad_payload", "count_range", "no_change", "zzz", ""]:
+	var more := { "no_change": ItemUiText.R_NO_CHANGE, "unknown_entry": ItemUiText.R_GONE, "not_found": ItemUiText.R_GONE,
+		"bad_slot": ItemUiText.R_BAD_SLOT, "count_range": ItemUiText.R_COUNT }
+	for key in more:
+		if ItemUiText.reason_text(key) != more[key]:
+			return _fail(m, "reason %s maps to '%s'" % [key, ItemUiText.reason_text(key)])
+	for key in ["bad_box", "bad_state", "bad_payload", "not_unique", "no_stage", "zzz", ""]:
 		if ItemUiText.reason_text(key) != ItemUiText.R_UNKNOWN:
 			return _fail(m, "unmapped key %s did not use the generic line" % key)
 	return _pass(m)
@@ -1067,4 +1083,206 @@ static func _t_theme_colours() -> Dictionary:
 					return _fail(m, "the item styles use the forbidden %s: %s" % [name, line])
 	if checked < 40:
 		return _fail(m, "the scan checked only %d colours" % checked)
+	return _pass(m)
+
+
+# ── Fix round after the UI QA (D-48) ───────────────────────────────────────
+
+static func _with_refusal(inv: Dictionary, action: String, reason: String) -> Dictionary:
+	var copy := inv.duplicate(true)
+	copy["refused"] = { "action": action, "reason": reason }
+	return copy
+
+
+static func _t_refused_key() -> Dictionary:
+	var m := _panels(FX.sanctum_snap(FX.standard()))
+	var panels: Node = m[1]
+	panels.toggle_sanctum()
+	panels.toggle_pack()
+	panels._on_slot_chosen("sanctum", 0)
+	var line := panels.get_node("%SanctRefuseLabel") as Label
+	var move_keys := ["bad_payload", "path_open", "bad_box", "unknown_entry", "bad_slot", "no_change", "slot_taken", "type_mismatch",
+		"stack_limit", "container_full", "bad_state"]
+	var discard_keys := ["not_found", "not_unique", "count_range", "equipped", "not_in_pack", "path_used", "no_stage"]
+	var all: Array = []
+	for k in move_keys:
+		all.append(["move", k])
+	for k in discard_keys:
+		all.append(["discard", k])
+	for pair in all:
+		panels.set_snapshot(FX.sanctum_snap(_with_refusal(FX.standard(), pair[0], pair[1])))
+		var want := ItemUiText.reason_text(pair[1], panels.get("_last_to"))
+		if line.text != want or not panels.get_node("%SanctRefuse").visible or want.is_empty():
+			return _fail(m, "key %s shows '%s', wanted '%s'" % [pair[1], line.text, want])
+		# One shot: the next snapshot has no key and the line is gone.
+		panels.set_snapshot(FX.sanctum_snap(FX.standard()))
+		if panels.get_node("%SanctRefuse").visible or line.text != "":
+			return _fail(m, "the line stayed after a snapshot without the key (%s)" % pair[1])
+	panels.set_snapshot(FX.sanctum_snap(_with_refusal(FX.standard(), "move", "zzz_new_key")))
+	if line.text != ItemUiText.R_UNKNOWN:
+		return _fail(m, "an unknown key shows '%s'" % line.text)
+	# The exact key wins over the prediction: a prediction of "allowed" still shows the core's reason.
+	panels.set_snapshot(FX.sanctum_snap(FX.standard()))
+	panels._on_slot_chosen("sanctum", 0)
+	panels.get_node("%MoveButton").pressed.emit()
+	panels.set_snapshot(FX.sanctum_snap(_with_refusal(FX.standard(), "move", "slot_taken")))
+	if panels.get_node("%PackRefuseLabel").text != ItemUiText.R_OCCUPIED:
+		return _fail(m, "the refused key did not win: '%s'" % panels.get_node("%PackRefuseLabel").text)
+	# Path view: the key reaches the pack panel.
+	var path_inv := FX.inventory(20, 4, [], [FX.piece(0, "gear", "g1", 0, "A")], FX.path_data(true))
+	panels.set_snapshot(FX.path_snap(path_inv))
+	panels.toggle_pack()
+	panels._on_slot_chosen("pack", 0)
+	panels.set_snapshot(FX.path_snap(_with_refusal(path_inv, "discard", "path_used")))
+	if panels.get_node("%PackRefuseLabel").text != ItemUiText.R_DISCARD_USED:
+		return _fail(m, "path refusal line '%s'" % panels.get_node("%PackRefuseLabel").text)
+	return _pass(m)
+
+
+static func _t_row_names() -> Dictionary:
+	var m := _mount(preload("res://ui/components/ItemResultRow.tscn"))
+	var row: Control = m[1]
+	var named := FX.report_row("gear", "g2", 1, "held", "ok", 1, "Test gear A")
+	var plain := FX.report_row("relic", "g1", 2, "held", "ok")
+	row.show_report([named, plain], [])
+	row.tiles()[0].pressed.emit()
+	if not row.get_node("%NameLine").text.begins_with("Test gear A"):
+		return _fail(m, "a named result tile shows '%s'" % row.get_node("%NameLine").text)
+	row.tiles()[1].focus_entered.emit()
+	if not row.get_node("%NameLine").text.begins_with(ItemUiText.KIND_NAMES["relic"]):
+		return _fail(m, "an unnamed result tile shows '%s'" % row.get_node("%NameLine").text)
+	row.show_at_risk([named, plain])
+	row.tiles()[0].pressed.emit()
+	if not row.get_node("%NameLine").text.begins_with("Test gear A"):
+		return _fail(m, "an at-risk tile shows '%s'" % row.get_node("%NameLine").text)
+	row.tiles()[1].pressed.emit()
+	if not row.get_node("%NameLine").text.begins_with(ItemUiText.KIND_NAMES["relic"]) or row.get_node("%NameLine").text.contains("ph_"):
+		return _fail(m, "an unnamed at-risk tile shows '%s'" % row.get_node("%NameLine").text)
+	# Through the leave confirmation itself.
+	var modal_m := _mount(ReturnModalScene)
+	var modal: Control = modal_m[1]
+	modal.present({ "confirm": true, "action": { "type": "stage.return_home" },
+		"carry": { "ase": 0, "ekwan": 0, "gathered": { "ase": 0, "ekwan": 0 }, "items_at_risk": [named, plain] } })
+	modal.get_node("%ItemRow").tiles()[0].pressed.emit()
+	var shown: String = modal.get_node("%ItemRow/%NameLine").text
+	modal_m[0].free()
+	if not shown.begins_with("Test gear A"):
+		return _fail(m, "the leave confirmation names '%s'" % shown)
+	return _pass(m)
+
+
+static func _t_blocked_look() -> Dictionary:
+	var pack := [FX.piece(0, "gear", "g2", 3, "Test gear G")]
+	var m := _panels(FX.path_snap(FX.inventory(20, 4, [], pack, FX.path_data(false))))
+	var panels: Node = m[1]
+	var letgo := panels.get_node("%LetGoButton") as Button
+	var move := panels.get_node("%MoveButton") as Button
+	panels.toggle_pack()
+	if panels.get_node("%HintLabel").text != ItemUiText.PATH_HINT or panels.get_node("%HintLabel").text.to_lower().contains("drag"):
+		return _fail(m, "the path details hint says '%s'" % panels.get_node("%HintLabel").text)
+	panels._on_slot_chosen("pack", 0)
+	if letgo.theme_type_variation != &"ItemButtonOutline" or move.theme_type_variation != &"ItemButtonBlocked":
+		return _fail(m, "path, discard unused: let go=%s move=%s" % [letgo.theme_type_variation, move.theme_type_variation])
+	panels.set_snapshot(FX.path_snap(FX.inventory(20, 4, [], pack, FX.path_data(true))))
+	if letgo.theme_type_variation != &"ItemButtonBlocked":
+		return _fail(m, "a blocked Let it go keeps its normal look: %s" % letgo.theme_type_variation)
+	panels.set_snapshot(FX.sanctum_snap(FX.standard()))
+	panels.toggle_sanctum()
+	if panels.get_node("%HintLabel").text != ItemUiText.DETAILS_HINT:
+		return _fail(m, "the Sanctum hint changed")
+	return _pass(m)
+
+
+static func _t_path_layout() -> Dictionary:
+	var m := _panels(FX.path_snap(FX.inventory(20, 4, [], [FX.piece(0, "gear", "g1", 0, "A")], FX.path_data(false))))
+	var panels: Node = m[1]
+	panels.toggle_pack()
+	var column := panels.get_node("%Column") as BoxContainer
+	if column.vertical:
+		return _fail(m, "on a path the pack and the details must sit side by side")
+	panels.set_snapshot(FX.sanctum_snap(FX.standard()))
+	panels.toggle_pack()
+	if not column.vertical:
+		return _fail(m, "the Sanctum column must stay stacked")
+	var rm := _mount(RealmShellScene)
+	var realm: Control = rm[1]
+	realm.set_layout({ "profile": &"standard", "logical_size": Vector2(1280, 720), "safe_insets": Vector4.ZERO })
+	var margin := int((realm.get_node("%InventoryPanels/Work") as MarginContainer).get_theme_constant("margin_bottom"))
+	rm[0].free()
+	# Echo bar 88 + edge 16, bottom HUD 100 + gap 12, 8 of air.
+	if margin < 88 + 16 + 100 + 12:
+		return _fail(m, "the path panels reach into the bottom buttons: bottom margin %d" % margin)
+	return _pass(m)
+
+
+static func _t_path_no_inventory() -> Dictionary:
+	var inv := FX.inventory(20, 4, [], [FX.piece(0, "gear", "g1", 0, "A")], FX.path_data(false))
+	var m := _panels(FX.path_snap(inv))
+	var panels: Node = m[1]
+	panels.toggle_pack()
+	if not panels.is_pack_open():
+		return _fail(m, "the pack did not open")
+	panels.set_snapshot({ "type": "flow.stage_explore", "meta": { "t": 2 }, "data": {}, "actions": {} })
+	if panels.is_pack_open() or panels.get_node("%PackPanel").visible or panels.get_node("%Column").visible:
+		return _fail(m, "a path snapshot without inventory left the pack panel open")
+	panels.toggle_pack()
+	if panels.get_node("%PackPanel").visible:
+		return _fail(m, "an empty pack panel opened")
+	return _pass(m)
+
+
+static func _t_letgo_lock() -> Dictionary:
+	var m := _panels(FX.sanctum_snap(FX.standard()))
+	var panels: Node = m[1]
+	panels.toggle_sanctum()
+	var modals: Array = []
+	panels.modal_requested.connect(func(id: StringName, payload: Dictionary) -> void: modals.append(id))
+	panels._on_slot_chosen("sanctum", 0)
+	panels.note_discard_modal_closed()
+	panels.get_node("%LetGoButton").pressed.emit()
+	if not modals.is_empty():
+		return _fail(m, "Let it go opened a second confirmation inside the 0.6 s lock")
+	panels.set("_letgo_lock_until", Time.get_ticks_msec() - 1)
+	panels.get_node("%LetGoButton").pressed.emit()
+	if modals.size() != 1:
+		return _fail(m, "Let it go stayed locked after the lock ended")
+	return _pass(m)
+
+
+static func _t_pack_pulse() -> Dictionary:
+	var three := [FX.piece(0, "gear", "g1", 0, "A"), FX.piece(1, "gear", "g1", 1, "B"), FX.piece(2, "gear", "g1", 2, "C")]
+	var four := three + [FX.piece(3, "gear", "g1", 3, "D")]
+	var m := _panels(FX.sanctum_snap(FX.inventory(6, 4, [], three)))
+	var panels: Node = m[1]
+	panels.toggle_pack()
+	var strap: Control = panels.get_node("%PackStrap")
+	if strap.get("_tween") != null:
+		return _fail(m, "the first render pulsed")
+	panels.set_snapshot(FX.sanctum_snap(FX.inventory(6, 4, [], four)))
+	var tw: Variant = strap.get("_tween")
+	if tw == null or not (tw as Tween).is_valid():
+		return _fail(m, "the pack becoming full did not pulse the strap line")
+	strap.set("_tween", null)
+	panels.set_snapshot(FX.sanctum_snap(FX.inventory(6, 4, [], four)))
+	if strap.get("_tween") != null:
+		return _fail(m, "a pack that stays full pulsed again")
+	return _pass(m)
+
+
+static func _t_tap_finishes() -> Dictionary:
+	var before := _set_reduced(false)
+	var m := _mount(ResolveScene)
+	var screen: ResolveScreen = m[1]
+	screen.set_snapshot(_scout_snap(FX.items_block()))
+	var row := screen.get_node("%ItemRow")
+	if not row.is_running():
+		_set_reduced(before)
+		return _fail(m, "the motion did not start")
+	var tap := InputEventMouseButton.new()
+	tap.button_index = MOUSE_BUTTON_LEFT
+	tap.pressed = true
+	screen._input(tap)
+	_set_reduced(before)
+	if row.is_running() or row.tiles()[2].state != "lost":
+		return _fail(m, "a tap anywhere did not finish the item motion")
 	return _pass(m)

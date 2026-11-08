@@ -43,6 +43,7 @@ const BTN_KEEP := "Keep it"  # PLACEHOLDER
 const PATH_READONLY := "On a path: read-only"  # PLACEHOLDER
 const PATH_LEFT := "Let it go: 1 left this path"  # PLACEHOLDER
 const PATH_USED := "Let it go: used"  # PLACEHOLDER
+const PATH_HINT := "On a path, pieces cannot be moved."  # PLACEHOLDER
 const PATH_RULE := "Only one piece may be let go on a path."  # PLACEHOLDER
 const PATH_PREVIEW := "Preview. Read-only."  # PLACEHOLDER
 
@@ -64,6 +65,10 @@ const R_TYPE := "Only the same kind of stack can merge."  # PLACEHOLDER
 const R_STACK_LIMIT := "That stack is at its limit."  # PLACEHOLDER
 const R_EQUIPPED := "It is in use."  # PLACEHOLDER
 const R_SANCTUM_ONLY := "This can only be done in the Sanctum."  # PLACEHOLDER
+const R_NO_CHANGE := "Nothing changed."  # PLACEHOLDER
+const R_GONE := "That piece is not there any more."  # PLACEHOLDER
+const R_BAD_SLOT := "That slot is not available."  # PLACEHOLDER
+const R_COUNT := "That count is not possible."  # PLACEHOLDER
 const R_UNKNOWN := "That did not work. Nothing changed."  # PLACEHOLDER
 
 # ── Drop hints ─────────────────────────────────────────────────
@@ -110,6 +115,14 @@ static func reason_text(key: String, box: String = "") -> String:
 			return R_EQUIPPED
 		"not_in_sanctum":
 			return R_SANCTUM_ONLY
+		"no_change":
+			return R_NO_CHANGE
+		"unknown_entry", "not_found":
+			return R_GONE
+		"bad_slot":
+			return R_BAD_SLOT
+		"count_range":
+			return R_COUNT
 	return R_UNKNOWN
 
 

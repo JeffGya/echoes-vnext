@@ -49,6 +49,11 @@ var leaf_tone := "ink":
 	set(v):
 		leaf_tone = v
 		queue_redraw()
+## Brackets on a dark card: cream with an ink keyline, drawn just outside the bed.
+var bracket_light := false:
+	set(v):
+		bracket_light = v
+		queue_redraw()
 var lost := 0.0:
 	set(v):
 		lost = clampf(v, 0.0, 1.0)
@@ -195,16 +200,25 @@ func _draw_leaf(origin: Vector2, side: float, alpha: float) -> void:
 
 
 func _draw_brackets(s: float) -> void:
-	var ink := _color("ink")
 	var m := 22.0 * s / 72.0
-	var t := 2.0
+	var out := 3.0 if bracket_light else -1.0
 	for corner in 4:
-		var cx := 1.0 if corner % 2 == 0 else s - 1.0
-		var cy := 1.0 if corner < 2 else s - 1.0
+		var cx := -out if corner % 2 == 0 else s + out
+		var cy := -out if corner < 2 else s + out
 		var dx := 1.0 if corner % 2 == 0 else -1.0
 		var dy := 1.0 if corner < 2 else -1.0
-		draw_line(Vector2(cx, cy), Vector2(cx + dx * m, cy), ink, t)
-		draw_line(Vector2(cx, cy), Vector2(cx, cy + dy * m), ink, t)
+		var a := Vector2(cx, cy)
+		var b := Vector2(cx + dx * m, cy)
+		var c := Vector2(cx, cy + dy * m)
+		if bracket_light:
+			var keyline := _color("ink")
+			draw_line(a - Vector2(dx, dy) * 1.5, b, keyline, 5.0)
+			draw_line(a - Vector2(dx, dy) * 1.5, c, keyline, 5.0)
+			draw_line(a, b, _color("cream"), 3.0)
+			draw_line(a, c, _color("cream"), 3.0)
+		else:
+			draw_line(a, b, _color("ink"), 2.0)
+			draw_line(a, c, _color("ink"), 2.0)
 
 
 static func _bezier(out: PackedVector2Array, p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, n: int) -> void:

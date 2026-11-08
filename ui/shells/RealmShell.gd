@@ -27,6 +27,7 @@ const EchoCardScene := preload("res://ui/components/EchoCardItem.tscn")
 const _ECHO_BAR_HEIGHT := 88.0
 const _CHROME_EDGE_INSET := 16.0
 const _ECHO_BAR_MAX_WIDTH := 1440.0
+const _PATH_BUTTONS_CLEARANCE := 112  # the path view's bottom HUD (100) and its gap (12): panels stop above its buttons
 const _WHY_CARD_GAP := 8.0  # between the why card and the Advance bar
 
 var _scene_by_flow_type: Dictionary = {}
@@ -461,7 +462,7 @@ func _apply_shell_layout() -> void:
 		_echo_bar_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	if _inventory_panels != null:
 		_inventory_panels.set_layout(_layout)
-		_inventory_panels.set_bottom_content_exclusion(int(_ECHO_BAR_HEIGHT + safe_bottom))
+		_inventory_panels.set_bottom_content_exclusion(int(_ECHO_BAR_HEIGHT + safe_bottom) + _PATH_BUTTONS_CLEARANCE)
 	if _why_card != null and _why_card.is_open():
 		_place_why_card()
 

@@ -179,3 +179,69 @@ ASSUMED: 11. The stage-clear row plays the same sequence as the leave card, with
 ASSUMED: 12. The dim layer behind open panels does not take input (it only dims). A tap on a panel background inside the Sanctum board can still reach the board tap handler (existing `SanctumShell._classify_press` treats a panel as tappable). Tiles and buttons are interactive and are protected.
 
 Not built, by the brief: encounter-card tile row (parked), pack-shrink rule (D-41), controller focus order beyond Godot defaults.
+
+## Fixes after UI QA (D-48)
+
+Source: `step8-qa-report.md`, D-48, backend section `Refusal key (D-48)`. UI only. No `core/` change. No commit. Compile check (`--quit`): 0 `SCRIPT ERROR` lines.
+
+### Changes
+
+| Item | Change | File |
+|---|---|---|
+| F8-01 | `_pack_hud` guarded with `if _pack_hud != null`; the test sets `_pack_hud` like the other nodes | `ui/screens/venture/StageExploreScreen.gd` (layout block, `_apply_responsive_layout`); `tests/Stage004SeamTests.gd` (line after `_hud_strip`) |
+| Refusal key | `set_snapshot` reads `data.inventory.refused.reason`; shows its line (placeholder per key, unknown key gives `R_UNKNOWN`); every snapshot first clears both lines, so the key is never kept. The prediction still drives the button looks; the key wins on screen. Line shows in the target box of a move, else the selected box | `ui/components/InventoryPanels.gd` (`set_snapshot`, `_clear_lines`, `_refusal_box`) |
+| New lines | `R_NO_CHANGE`, `R_GONE`, `R_BAD_SLOT`, `R_COUNT`, `PATH_HINT`; `reason_text` maps `no_change`, `unknown_entry`, `not_found`, `bad_slot`, `count_range` | `ui/components/ItemUiText.gd` |
+| Names | No change needed: `ItemUiText.display_name` already prefers `row.name`. Tests cover named, unnamed, at-risk, and the real leave confirmation | tests only |
+| F8-03 | Blocked `Move` and `Let it go` use new variation `ItemButtonBlocked` (muted text, thin border, no fill) | `assets/theme/LivingTreeSystem.tres` (end of file); `InventoryPanels.gd` (`_refresh_selection`) |
+| F8-04 | On a path the pack and details sit side by side (`Column` is a `BoxContainer`, vertical off in path mode); the panels stop 112 above the bottom edge of the bottom HUD | `InventoryPanels.tscn`, `InventoryPanels.gd` (`_apply_visibility`); `ui/shells/RealmShell.gd` (`_PATH_BUTTONS_CLEARANCE`) |
+| F8-05 | Path details hint: `PATH_HINT` | `InventoryPanels.gd` (`_refresh_selection`) |
+| F8-06 | Brackets on a dark card: cream, 3 wide, ink keyline, outside the bed; row and lines centred in the confirmation. Cream `#F5E6D3` on the card `#10 0E 1A` measures 15.7:1 | `ui/components/ItemTileGlyphs.gd` (`_draw_brackets`), `ItemResultRow.gd` (`set_on_dark`) |
+| F8-07 | A snapshot with no `data.inventory` resets and closes the panels; `toggle_pack` does nothing without inventory; the HUD pack button hides | `InventoryPanels.gd` (`set_snapshot`, `toggle_pack`); `StageExploreScreen.gd` |
+| Leak | The ObjectDB warning came from my code: `_flash` awaited a `SceneTreeTimer`. Now a node Tween. `--verbose` shows no leaked instance | `InventoryPanels.gd` (`_flash`) |
+| Refusal line on dark | Pack panel refusal line uses the light text variation | `InventoryPanels.tscn` |
+| Screenshots | Fixtures `invs_refusal`, `invs_refusal_slot` | `scripts/screenshot.gd` |
+| F8-02 | DEFERRED by Jeff (D-48). Not built. Known gap: on a path the pack can read full with empty sockets because finds are open rows, not listed in `data.inventory.pack` | none |
+
+### Tests
+
+`inventory_ui` now has 35 tests (8 new, 1 repaired). F8-09: the step "stack at its limit" now drops a same-type stack on a stack at 20 of 20 and expects `R_STACK_LIMIT`.
+
+| Mutation (restored, `cmp` equal) | Test that fails |
+|---|---|
+| Directive badge width 204 to 300 | `realm_ui/target_minima_and_spatial_caps` (badge not capped). Without the fix round change it proved nothing |
+| Lock check removed (`Time.get_ticks_msec() < _letgo_lock_until` to `false`) | `inventory_ui/let_it_go_lock_after_the_modal_closes` |
+| `_pack_strap.pulse(...)` removed | `inventory_ui/pack_pulses_once_when_it_becomes_full` |
+| `ResolveScreen._input` item finish disabled | `inventory_ui/a_tap_anywhere_finishes_the_card_motion` |
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=realm_ui` (after the fix, no `SCRIPT ERROR`) | `Tests: 20 total, 20 passed, 0 failed` |
+| `=inventory_ui` | `Tests: 35 total, 35 passed, 0 failed` |
+| `=inventory_ui,realm_ui,payout_ui,foundation_ui,sanctum.layout,sanctum.party,echo_party,stage_stop_ui,seam,inventory_paths,inventory_actions` | `Tests: 308 total, 308 passed, 0 failed` |
+
+### Viewed (xvfb-run, `scripts/screenshot.gd`, 1280x720 and 1920x1080)
+
+| Screen | Result |
+|---|---|
+| Path view, pack open (`invr_path`), both sizes | Details beside the pack; `To the Sanctum` clear |
+| Path, discard used (`invr_path_used`), 1280 | Both buttons look disabled; reason lines show |
+| Leave confirmation (`invr_leave_confirm`), 1280 | Cream brackets with keyline visible; row centred |
+| Leave result (`invr_leave_result`), 1920 | Survivors and ghosts in one row |
+| Refusal line in a panel (`invs_refusal`), 1280 | `The Sanctum is full. Free a slot first.` readable (viewed as a crop) |
+
+NOT viewed: names appearing on focus or tap (tests only); `invr_leave_confirm` at 1920; `invs_refusal` at 1920; `invr_path_used` at 1920; the path view with the real bottom HUD buttons (the fixture draws a bar and the `To the Sanctum` button only); any motion.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"` with Bash `timeout` 3600000.
+2. Duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files edited by the run: none in the checkout (`/tmp/echoes-vnext-sharded/`). No `trap`.
+4. Verify: `git status --short` unchanged; no untracked `.import` file.
+5. Read back: `COMBINED:` (expected 2716 + 8 = 2724, 0 failed), any shard log without `Tests:`, the `movement_fallback` merge line, no `SCRIPT ERROR` in the `realm_ui` shard.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. A refusal from the core shows in the target box of the last move, else the selected piece's box. After a refused move the selection points at the target slot (empty) and the details clear.
+ASSUMED: 2. New wording (`R_NO_CHANGE`, `R_GONE`, `R_BAD_SLOT`, `R_COUNT`, `PATH_HINT`) is placeholder. `bad_payload`, `bad_box`, `bad_state`, `not_unique`, `no_stage` use the generic line.
+ASSUMED: 3. On a path the details sit right of the pack (side by side), 360 wide each; at 1280 the pair spans x 536 to 1264.
+BLOCKED: none.
