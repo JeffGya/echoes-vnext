@@ -48,20 +48,15 @@
  "MODAL_COUNT_LABEL": "How many?",
  "COUNT_FEWER": "One less",
  "COUNT_MORE": "One more",
- "LEAVE_RISK_LABEL": "At risk",
  "CARD_SURVIVED": "Made it through.",
  "CARD_LOST": "Lost",
- "ITEMS_GROUP_LABEL": "Items.",
  "KIND gear": "Gear",
  "KIND relic": "Relic",
  "KIND consumable": "Supply",
  "KIND material": "Material",
  "slots_word(3,20)": "3 / 20 spots filled",
  "sockets_word(2,4)": "2 / 4 spots filled",
- "pack_button(2,4)": "Travel pack 2/4",
  "stack_count(3,20)": "x3 of 20",
  "leave_risk(3)": "3 items can be lost",
- "leave_risk(1)": "1 item can be lost.",
- "moved_toast(pack)": "Placed in pack.",
- "moved_toast(sanctum)": "Placed in storehouse"
+ "leave_risk(1)": "1 item can be lost."
 }

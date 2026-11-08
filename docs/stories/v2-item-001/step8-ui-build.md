@@ -500,3 +500,62 @@ ASSUMED: 3. `WHERE_SANCT` is `Storehouse` and `WHERE_PACK` is `Pack` as picked, 
 ASSUMED: 4. The leaf mark on tiles keeps no spoken label. The tile's own accessible name is its item name and kind, as before.
 ASSUMED: 5. `DROP_*` hints show while dragging in the panel reason line; `moved_toast` has no on-screen use yet (approved text only).
 ASSUMED: 6. The `ItemPanelPack*` theme names and the `last_pulse_seconds` test seam in `InventoryPanels.gd` are kept.
+
+## Cleanup after QA round 10 (D-52)
+
+Source: D-52, `step10-qa-report.md` F11-01 to F11-07. UI only. No `core/` file touched. No wording of a line that stays was changed. No commit. Compile check (`--quit`): 0 `SCRIPT ERROR` lines.
+
+### Deleted (F11-01, Jeff: delete)
+
+Grep of `ui/`, `tests/`, `scripts/`: none of the four was used by a screen. Only the fixture and the fixture test used them. The pack button's spoken name is unchanged: it is built in `PartyPackButton.gd:38` from `PARTY_PACK_BUTTON` and the count text, not from `pack_button()`.
+
+| Id | Text | Also removed |
+|---|---|---|
+| `pack_button(count, total)` | Travel pack 2/4 | Fixture key `pack_button(2,4)`; its entry in the copy test |
+| `moved_toast(to_box)` | Placed in pack. / Placed in storehouse | Fixture keys `moved_toast(pack)`, `moved_toast(sanctum)`; its entries in the copy test |
+| `LEAVE_RISK_LABEL` | At risk | Fixture key |
+| `ITEMS_GROUP_LABEL` | Items. | Fixture key |
+
+Files: `ui/components/ItemUiText.gd`, `tests/fixtures/ItemUiApprovedCopy.json` (65 keys to 60), `tests/InventoryUITests.gd` (`_t_approved_copy`). The four lines stay in `copy-approval-jeff.md`. BLOCKED: none.
+
+### Tests added (F11-02)
+
+| Test | Pins |
+|---|---|
+| `inventory_ui/a_refused_button_shows_only_the_refusal_line` | On a path, `Move` and `Destroy` blocked: each reason line equals the bare refusal text and does not contain its button text; a full-storehouse refusal in the Sanctum shows the bare line |
+| `inventory_ui/a_single_piece_shows_count_1_and_a_stack_its_count` | A single piece shows `Count: 1`, never `Count: 1 piece`; a stack shows `Count: x12 of 20` |
+
+| Mutation (restored; `cmp` equal to the saved copy) | Result |
+|---|---|
+| Button name put back before the `Move` reason line | `a_refused_button_shows_only_the_refusal_line`: `%MoveReason shows 'Place in storehouse: While on the move...'` |
+| `Count: 1` changed to `Count: 1 piece` | `a_single_piece_shows_count_1...`: `shows 'Count: 1 piece', wanted 'Count: 1'` |
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_ui` | `Tests: 43 total, 43 passed, 0 failed` |
+| `=inventory_ui,realm_ui,payout_ui,foundation_ui,sanctum.layout,sanctum.party,echo_party` | `Tests: 182 total, 182 passed, 0 failed` |
+
+Expected sharded total: 2733 (last verified) + 2 new tests = 2735. No test was removed (the copy test lost entries, not a test).
+
+### Not changed
+
+| Finding | Status |
+|---|---|
+| F11-03 (two refusal lines under two disabled buttons on a path) | Left for Jeff's UX redesign |
+| F11-04 (full tone panel edge 1.31:1 on the dark path world) | Left for Jeff's UX redesign |
+| F11-05 | Informational. No change |
+| F11-06 | Informational. No change |
+| F11-07 (pack button label looks dim in the screenshot harness) | Jeff checks it in his own play test |
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"` with Bash `timeout` 3600000.
+2. Duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files edited by the run: none in the checkout (`/tmp/echoes-vnext-sharded/`). No `trap`.
+4. Verify: `git status --short` unchanged; no untracked `.import` file.
+5. Read back: `COMBINED:` (expected 2735, 0 failed), any shard log without `Tests:`, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+BLOCKED: none.
+ASSUMED: 1. Deleting `pack_button()` does not change the spoken name; I confirmed the name is built in `PartyPackButton.gd`.

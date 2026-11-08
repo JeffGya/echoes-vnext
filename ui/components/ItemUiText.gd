@@ -74,10 +74,8 @@ const COUNT_FEWER := "One less"  # APPROVED (Jeff 2026-11-08)
 const COUNT_MORE := "One more"  # APPROVED (Jeff 2026-11-08)
 
 # ── Leave confirmation and result cards ────────────────────────
-const LEAVE_RISK_LABEL := "At risk"  # APPROVED (Jeff 2026-11-08)
 const CARD_SURVIVED := "Made it through."  # APPROVED (Jeff 2026-11-08)
 const CARD_LOST := "Lost"  # APPROVED (Jeff 2026-11-08)
-const ITEMS_GROUP_LABEL := "Items."  # APPROVED (Jeff 2026-11-08)
 
 ## Refusal reason key -> line. `box` is the target container of a move ("sanctum" or "pack"). `not_in_pack` has no
 ## line of its own (Jeff: it should not be possible), so it gives the unknown line.
@@ -122,20 +120,12 @@ static func sockets_word(used: int, total: int) -> String:
 	return "%d / %d spots filled" % [used, total]  # APPROVED (Jeff 2026-11-08)
 
 
-static func pack_button(count: int, total: int) -> String:
-	return "Travel pack %d/%d" % [count, total]  # APPROVED (Jeff 2026-11-08)
-
-
 static func stack_count(count: int, limit: int) -> String:
 	return "x%d of %d" % [count, limit]  # APPROVED (Jeff 2026-11-08)
 
 
 static func leave_risk(n: int) -> String:
 	return "1 item can be lost." if n == 1 else "%d items can be lost" % n  # APPROVED (Jeff 2026-11-08)
-
-
-static func moved_toast(to_box: String) -> String:
-	return "Placed in pack." if to_box == "pack" else "Placed in storehouse"  # APPROVED (Jeff 2026-11-08)
 
 
 ## The name shown for a tile. The row `name` when it has one; else the kind word (never a type id).

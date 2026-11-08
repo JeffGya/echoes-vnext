@@ -65,6 +65,8 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_ui/approved_copy_matches_the_fixture_word_for_word", Callable(InventoryUITests, "_t_approved_copy"))
 	runner.register_test("inventory_ui/pack_tones_are_the_approved_steps", Callable(InventoryUITests, "_t_pack_tones"))
 	runner.register_test("inventory_ui/pack_pulse_lengths_flash_and_reduced_fade", Callable(InventoryUITests, "_t_pulse_lengths"))
+	runner.register_test("inventory_ui/a_refused_button_shows_only_the_refusal_line", Callable(InventoryUITests, "_t_refusal_only"))
+	runner.register_test("inventory_ui/a_single_piece_shows_count_1_and_a_stack_its_count", Callable(InventoryUITests, "_t_count_line"))
 	runner.register_test("inventory_ui/refusal_line_never_resizes_or_moves_the_path_panels", Callable(InventoryUITests, "_t_refusal_layout"))
 	runner.register_test("inventory_ui/container_full_line_names_the_destination", Callable(InventoryUITests, "_t_full_destination"))
 	runner.register_test("inventory_ui/hud_pack_button_hides_without_inventory", Callable(InventoryUITests, "_t_hud_hide"))
@@ -1400,9 +1402,8 @@ static func _t_approved_copy() -> Dictionary:
 		if approved.get(key, "") != ItemUiText.KIND_NAMES[kind]:
 			return _fail(m, "%s is '%s', approved '%s'" % [key, ItemUiText.KIND_NAMES[kind], approved.get(key, "")])
 	var built := { "slots_word(3,20)": ItemUiText.slots_word(3, 20), "sockets_word(2,4)": ItemUiText.sockets_word(2, 4),
-		"pack_button(2,4)": ItemUiText.pack_button(2, 4), "stack_count(3,20)": ItemUiText.stack_count(3, 20),
-		"leave_risk(3)": ItemUiText.leave_risk(3), "leave_risk(1)": ItemUiText.leave_risk(1),
-		"moved_toast(pack)": ItemUiText.moved_toast("pack"), "moved_toast(sanctum)": ItemUiText.moved_toast("sanctum") }
+		"stack_count(3,20)": ItemUiText.stack_count(3, 20),
+		"leave_risk(3)": ItemUiText.leave_risk(3), "leave_risk(1)": ItemUiText.leave_risk(1) }
 	for key in built:
 		seen[key] = true
 		if approved.get(key, "") != built[key]:
@@ -1465,3 +1466,42 @@ static func _t_pulse_lengths() -> Dictionary:
 		m[0].free()
 	_set_reduced(before)
 	return { "ok": true }
+
+
+static func _t_refusal_only() -> Dictionary:
+	# Path view: Move is blocked (path_open) and Let it go is blocked (path_used).
+	var pack := [FX.piece(0, "gear", "g2", 3, "Test gear G")]
+	var m := _panels(FX.path_snap(FX.inventory(20, 4, [], pack, FX.path_data(true))))
+	var panels: Node = m[1]
+	panels.toggle_pack()
+	panels._on_slot_chosen("pack", 0)
+	var cases := [["%MoveReason", ItemUiText.R_PATH, "%MoveButton"], ["%LetGoReason", ItemUiText.R_DISCARD_USED, "%LetGoButton"]]
+	for c in cases:
+		var line: Label = panels.get_node(c[0])
+		var button: Button = panels.get_node(c[2])
+		if not line.visible or line.text != c[1]:
+			return _fail(m, "%s shows '%s', wanted exactly '%s'" % [c[0], line.text, c[1]])
+		if line.text.contains(button.text):
+			return _fail(m, "the refusal line names its button: '%s'" % line.text)
+	# A Sanctum move refused for a full container shows the bare line too.
+	panels.set_snapshot(FX.sanctum_snap(FX.full_both()))
+	panels.toggle_sanctum()
+	panels._on_slot_chosen("pack", 0)
+	var move_line: Label = panels.get_node("%MoveReason")
+	if move_line.text != ItemUiText.R_SANCT_FULL:
+		return _fail(m, "the full-Sanctum line is '%s'" % move_line.text)
+	return _pass(m)
+
+
+static func _t_count_line() -> Dictionary:
+	var m := _panels(FX.sanctum_snap(FX.standard()))
+	var panels: Node = m[1]
+	panels.toggle_sanctum()
+	panels._on_slot_chosen("sanctum", 0)
+	var count: Label = panels.get_node("%CountLabel")
+	if count.text != "%s: 1" % ItemUiText.COUNT_LABEL or count.text.to_lower().contains("piece"):
+		return _fail(m, "a single piece shows '%s', wanted 'Count: 1'" % count.text)
+	panels._on_slot_chosen("sanctum", 3)
+	if count.text != "%s: %s" % [ItemUiText.COUNT_LABEL, ItemUiText.stack_count(12, 20)]:
+		return _fail(m, "a stack shows '%s'" % count.text)
+	return _pass(m)
