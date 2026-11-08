@@ -4,7 +4,7 @@ One animated page. Three modes play the same Advance run on the same real stage 
 
 ## Open it
 
-Open `index.html` in a browser. No server is needed. `assets/` holds the tile, the fonts and `maps.js` (the four real stage maps).
+Open `index.html` in a browser. No server is needed. `assets/` holds the tile and `maps.js` (the four real stage maps). The font files were removed on the final cleanup (D-108), so the page uses fallback fonts.
 The page plays one Advance on load. One small strip above the frame holds all controls. The frame is 1280x720 at true size.
 
 | Control | Use |

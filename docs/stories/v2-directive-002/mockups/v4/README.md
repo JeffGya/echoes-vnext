@@ -7,10 +7,12 @@ The stop glyph sits on the named Echo's card, or on the party card when no Echo 
 
 | File | Shows |
 |---|---|
-| `overview-1280x720.png`, `overview-1920x1080.png` | Three variants side by side. Parties of 1, 3 and 5 Echoes. Four states each. Scaled down (0.5 and 0.4). |
-| `detail-<size>-p1/p3/p5.png` | Same content at true size. Variants stacked. Magenta dashed box = tap target. |
-| `anatomy.png` | Card sizes, tap targets, glyph corner options, the 5-Echo scroll, the width table. |
-| `*.html`, `assets/` | Sources. Fonts come from `../v3/assets/`. Glyphs in `assets/` are SVG draft copies; the finished glyphs are PNG files in `assets/ui/stage_stop_glyphs/` (D-93). |
+| `overview-1280x720.html`, `overview-1920x1080.html` | Three variants side by side. Parties of 1, 3 and 5 Echoes. Four states each. Scaled down (0.5 and 0.4). |
+| `detail-<size>-p1/p3/p5.html` | Same content at true size. Variants stacked. Magenta dashed box = tap target. |
+| `anatomy.html` | Card sizes, tap targets, glyph corner options, the 5-Echo scroll, the width table. |
+| `assets/` | Glyphs are SVG draft copies; the finished glyphs are PNG files in `assets/ui/stage_stop_glyphs/` (D-93). |
+
+The PNG renders and the font files were removed on the final cleanup (D-108). Open the `.html` files in a browser. The pages use fallback fonts. They stay in git history.
 
 States: (1) no stop yet. (2) stop, no Echo named: glyph on the party card. (3) stop, Echo named: glyph on that Echo's card; the party card has no glyph. (4) why card open from the party card: centred above the card, above the step row, clamped inside the 16 px safe margin.
 
@@ -61,5 +63,5 @@ V1: one card shape, one tap size, a readable label, and no cost in visible cards
 2. Portrait: blue token with P (as on the board) or another icon. No party icon art exists. P is drawn from the board token only.
 3. Label text: Jeff's wording (V1 and V3 only).
 4. Tap with no stop mark: nothing, or open the last journey entry if one exists.
-5. Glyph corner: top-left of the portrait (today, shown on all sheets), top-right or bottom-right (see `anatomy.png`). One corner for every card.
+5. Glyph corner: top-left of the portrait (today, shown on all sheets), top-right or bottom-right (see `anatomy.html`). One corner for every card.
 6. Gap between the party card and the first Echo card: this sheet uses 16 (the card gap). Today the chip gap is 58.

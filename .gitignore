@@ -22,3 +22,5 @@ Thumbs.db
 
 # Claude Code scratch (agent worktrees, local tooling state)
 .claude/
+# Godot import metadata for files under docs/ (rebuilt by the editor)
+docs/**/*.import
