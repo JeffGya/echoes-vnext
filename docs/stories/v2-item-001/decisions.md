@@ -260,6 +260,14 @@ From Jeff's play test of the plan (`playtest-plan.md`):
 - Play-test finding F (finds gathered with `inventory produce gather` show nothing until the path resolves) is the known gap F8-02, deferred to the finds story (D-48). Jeff: finds should not be handled here. Recorded as a UX concern for that story: a player sees no sign of a find until the path ends.
 - COPY: Jeff approves every player-facing line. Placeholder text is not final even when it shows in the game. `copy-approval.md` lists every line with a suggestion. Nothing is applied until Jeff approves a line. Jeff writes or approves the final text.
 
+## D-50 — QA round 9 decisions (Jeff, 2026-11-08)
+From `step9-qa-report.md`:
+- F10-01: accepted for now. A find larger than one stack can lose units under pack-only placement while the Sanctum has free room (example: 20 consumables, limit 3, empty pack of 4: 12 stored, 8 lost). Only the debug producer makes such finds. The finds story (ITEM-002) decides the rule for leftover units. Nothing is minted and the pack never exceeds its size.
+- F10-04: Jeff wants a bigger tone step between near-full and full in the pack panel (tone only, no decoration). Builder shows candidate looks (colour and grayscale) to Jeff BEFORE anything is applied.
+- F10-05: delete the old `gathered` intake mode (Sanctum first) and the tests that only guard it. Debug `direct` mode stays.
+- F10-02 (a pack-size change can overfill the pack when rows are written by hand): relevant to the pack-shrink story (D-41). Recorded, no change in 001a.
+- F10-03 (UI test gaps), F10-06 (move-after-settlement test skips settlement), F10-07 (stale expected total in a report): builder tasks.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
