@@ -1,5 +1,7 @@
 # V2-ITEM-001 decisions
 
+> **Cleanup note (2026-11-08).** Reports that this file cites by name but that are no longer in this folder were removed in the story cleanup. Their last copy is in git history at commit `11d566f`. Read one with `git show 11d566f:docs/stories/v2-item-001/<file name>`. The design and research files were merged into `basis-for-001b-and-later.md`.
+
 Written in STE. Source for every line: Jeff's answers in the story chat (2026-10-27) and the live Notion rows.
 Project-wide answers go to `ANSWERS.md` only when Jeff says so.
 

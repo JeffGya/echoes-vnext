@@ -1,5 +1,7 @@
 # V2-ITEM-001a step 8: inventory UI build (ui-ux-designer)
 
+> **Cleanup note (2026-11-08).** Reports that this file cites by name but that are no longer in this folder were removed in the story cleanup. Their last copy is in git history at commit `11d566f`. Read one with `git show 11d566f:docs/stories/v2-item-001/<file name>`. The design and research files were merged into `basis-for-001b-and-later.md`.
+
 Written in STE. UI only. No `core/` change. No commit. Private save dir: `ECHOES_TEST_SAVE_DIR=/tmp/echoes-vnext-tests/ui-ITEM001` (deleted before each run).
 Contract: `docs/visual-plans/inventory-ui-mockup-v2.html` (D-44) and `decisions.md` D-33 to D-47. All wording is PLACEHOLDER.
 

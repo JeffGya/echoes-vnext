@@ -3,7 +3,7 @@
 # FlowRuntime.dispatch, and the data.inventory projection of the flow.sanctum snapshot.
 # Tests use their own inventory cfg (InventoryServiceTests._cfg) and the placeholder fixture. They never read
 # the PROVISIONAL numbers (D-25).
-# Report: docs/stories/v2-item-001/step5-actions.md
+# Report: (removed in the story cleanup) git show 11d566f:docs/stories/v2-item-001/step5-actions.md
 
 class_name InventoryActionTests
 extends RefCounted

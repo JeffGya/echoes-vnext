@@ -8,7 +8,7 @@
 #   "some" keeps an entry when its own draw is below 50. Seed 1, stream `...0.0.0`: row draws for
 #   item:s0:0..3 are 14, 2, 65, 67; held draws for it.1..it.4 are 69, 33, 66, 90.
 #   Seed 7, stream `...0.0.1`: held draws for it.1..it.4 are 59, 42, 85, 54.
-# Report: docs/stories/v2-item-001/step4-packs-rules.md
+# Report: (removed in the story cleanup) git show 11d566f:docs/stories/v2-item-001/step4-packs-rules.md
 
 class_name ItemPacksTests
 extends RefCounted

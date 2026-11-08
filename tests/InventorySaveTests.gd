@@ -4,7 +4,7 @@
 # id counter floor), the JSON round trip, `ConfigService.get_inventory_cfg`, the stage `held_fates`
 # default, the placeholder leak guard and `economy.relics` staying as it was.
 # Tests never depend on the PROVISIONAL numbers (D-25); `config_shape` checks key types only.
-# Report: docs/stories/v2-item-001/step2-config-save.md
+# Report: (removed in the story cleanup) git show 11d566f:docs/stories/v2-item-001/step2-config-save.md
 
 class_name InventorySaveTests
 extends RefCounted

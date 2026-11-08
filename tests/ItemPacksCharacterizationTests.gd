@@ -4,7 +4,7 @@
 #
 # The two known defects of step 1 (an item-only row refused; `nothing_new` ignoring items) were inverted in
 # step 4; every other assertion is the unchanged proof that item-free behaviour did not move.
-# Report: docs/stories/v2-item-001/step1-characterization.md
+# Report: (removed in the story cleanup) git show 11d566f:docs/stories/v2-item-001/step1-characterization.md
 #
 # Fixtures come from EconomyCharacterizationTests (`_carry_ctx` and friends). Values: realm.01, run 0,
 # shrine 30 Ase / 6 Ekwan, recover 24 / 5, protect 24 / 3, fight 6 / 0, five party Echoes (stipend 10).

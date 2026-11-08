@@ -1,7 +1,7 @@
 # res://tests/InventoryServiceTests.gd
 # V2-ITEM-001a step 3: InventoryService (reads, intake, move, discard, snapshot, validate, take_in_order).
 # Tests use their own cfg dictionaries and never depend on the PROVISIONAL numbers (D-25).
-# Report: docs/stories/v2-item-001/step3-inventory-service.md
+# Report: (removed in the story cleanup) git show 11d566f:docs/stories/v2-item-001/step3-inventory-service.md
 
 class_name InventoryServiceTests
 extends RefCounted

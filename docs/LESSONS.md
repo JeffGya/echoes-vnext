@@ -16,7 +16,7 @@ Reviewed at the start of each session.
 ### 46 — A green suite proved nothing in these cases; a deliberate rule break found each one
 
 **Rule:** For every rule a story adds, break the rule on purpose in the code (a mutation), run the suite, and expect a red test. If the suite stays green, the rule has no test. Add the test, then restore the code and compare it with `cmp`.
-**Why:** V2-ITEM-001a QA. `step7-qa-report-2.md` F2-04 and F2-05: the draw order counted stacks of all types, and the debug fallback ignored reserved slots; all 134 tests passed in both cases. `step7-qa-report-3.md` F3-01 (High): the pack held more entries than its size; mutation M9 passed, and probes P10 and P11 found it. `step10-qa-report.md` F11-02: the refusal line with the button name in front, and `Count: 1 piece`, passed all 41 tests (mutations R1 and R4).
+**Why:** V2-ITEM-001a QA (removed reports: `git show 11d566f:docs/stories/v2-item-001/<file name>`). `step7-qa-report-2.md` F2-04 and F2-05: the draw order counted stacks of all types, and the debug fallback ignored reserved slots; all 134 tests passed in both cases. `step7-qa-report-3.md` F3-01 (High): the pack held more entries than its size; mutation M9 passed, and probes P10 and P11 found it. `step10-qa-report.md` F11-02: the refusal line with the button name in front, and `Count: 1 piece`, passed all 41 tests (mutations R1 and R4).
 **How to apply:** In the build report, list each new rule with the mutation that breaks it and the test that goes red. A rule with no red test is a finding. Do not accept a green `Tests:` line as proof of a rule.
 **Mistake count:** 4 (F2-04, F2-05, F3-01, F11-02)
 

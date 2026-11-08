@@ -1,5 +1,7 @@
 # V2-ITEM-001a handoff
 
+> **Cleanup note (2026-11-08).** Reports that this file cites by name but that are no longer in this folder were removed in the story cleanup. Their last copy is in git history at commit `11d566f`. Read one with `git show 11d566f:docs/stories/v2-item-001/<file name>`. The design and research files were merged into `basis-for-001b-and-later.md`.
+
 Written in STE. Date: 2026-11-08. Status: built, tested and approved by Jeff after his play test (`decisions.md` D-53). The main chat commits, pushes and marks the PR ready; Jeff merges (D-53). Each statement below cites a file or a decision. Where a fact comes only from the task brief, the text says so.
 
 Terms. Player words: Storehouse (the Sanctum inventory) and Travel pack (the party pack). Code words: `sanctum` container and `pack` container. A held piece is an entry that was already in the pack before the path started (D-19).
@@ -108,42 +110,36 @@ What Part B must decide (these are questions for Jeff and the designer; 001a dec
 4. How a cost relates to materials (D-06 and D-07: crafting inputs, not a price).
 5. Whether Part B needs a Notion row. `decisions.md` OPEN says no row exists for ECONOMY-004 Part B.
 
-## 6. Reports in this folder
+## 6. Files in this folder, and the files that were removed
+
+The folder holds seven files. Everything else was removed in the story cleanup (Jeff, 2026-11-08). The last copy of every removed file is in git history at commit `11d566f`. Read one with `git show 11d566f:docs/stories/v2-item-001/<file name>`.
+
+**Kept**
 
 | File | Purpose |
 |---|---|
-| `decisions.md` | D-01 to D-53. The later decision wins. |
-| `research-comparison.md` | How other games handle shared inventory, loot, loss and cap pressure (D-10). |
-| `research-ui-best-practices.md` | UI best-practice research for the item screens (web summaries only, weak evidence). |
-| `design-round1-sr-game-designer.md` | Design round 1: model, rules, scope, open questions. |
-| `design-round2-game-feel-developer.md` | Feel design round 2. |
-| `design-sr-game-designer-v2.md` | Consolidated design, corrected for D-17 to D-21. |
-| `design-feel-game-feel-developer-v2.md` | Feel design v2, corrected for D-17 to D-21. |
-| `mockup-proposal-1-ui-ux.md` | UI/UX proposal: structure, layout, flows. |
-| `mockup-proposal-2-artist.md` | Artist proposal: look, marks, colour. Holds the measured contrast numbers. |
-| `mockup-proposal-3-game-feel.md` | Game-feel proposal: motion, timing, feedback. |
-| `mockup-proposal-merged.md` | Merged proposal with Jeff's answers (D-31, D-32). |
-| `pack-debuff-options-designer.md`, `pack-debuff-options-feel.md` | Options for a full-pack penalty. Jeff chose no penalty (D-36). |
-| `pack-shrink-options-designer.md`, `pack-shrink-options-feel.md` | Options for a pack shrink with a full Sanctum. Jeff chose feel option B (D-41). |
-| `step1-characterization.md` | Characterization of the item-free packs before any change. |
-| `step2-config-save.md` | Config block `data.inventory` and the save block. |
-| `step3-inventory-service.md` | The inventory service API and invariants. |
-| `step4-packs-rules.md` | Item rows, leave draws, defeat and path end. |
-| `step5-actions.md` | The discard action, the debug producer and the snapshot field. |
-| `step6-fixes.md` | Fix pass after the first combined QA. |
-| `step6-qa-report.md` | Combined-tree QA of steps 1 to 5. |
-| `step7-backend-moves-slots.md` | Slots, moves, count discards, one discard per path, and every later core fix round. Its last sections win. |
-| `step7-qa-report.md`, `step7-qa-report-2.md`, `step7-qa-report-3.md`, `step7-qa-report-4.md` | QA rounds 1 to 4 of the step 7 core work. |
-| `step8-ui-build.md` | UI build and every later UI fix round, including the approved copy and tone C. Its last sections win. |
-| `step8-qa-report.md`, `step8-qa-report-2.md` | QA of the UI build and of its first fix round. |
-| `step9-qa-report.md` | QA of the D-49 changes (finds stay in the pack, strap line removed). |
-| `step10-qa-report.md` | QA of the approved copy, the removals and tone C. |
-| `copy-approval.md` | Every player line with a suggestion, sent to Jeff. |
-| `copy-approval-jeff.md` | Jeff's marked-up picks. The source of the approved wording (D-51). |
-| `playtest-plan.md` | The second-round play-test plan. |
-| `step11-docs-report.md` | Report of the docs pass that wrote this file. |
+| `decisions.md` | Every decision, D-01 to D-53. The authority. Later decisions override earlier ones. |
+| `handoff.md` | This file. |
+| `playtest-plan.md` | The play-test plan, second round. Reuse it for regression and for 001b. |
+| `copy-approval-jeff.md` | Jeff's marked-up copy. The source of every approved line (ANSWERS #89). |
+| `step7-backend-moves-slots.md` | The core contract: slots, moves, destroy, finds in the pack, row contract, reason keys, every core fix round. Its last sections win. |
+| `step8-ui-build.md` | The UI contract: snapshot fields the UI reads, dispatches, approved copy and tone C, every UI fix round. Its last sections win. |
+| `basis-for-001b-and-later.md` | Ten files in one: the 001b design (Echo choice, left list, keeper swap), the research, the pack shrink and debuff options, the artist proposal with the contrast finding, the merged mockup proposal. Each section says what later decisions override. |
 
-Also in the repo: the prototype `docs/visual-plans/inventory-ui-mockup-v2.html` (the UI contract, D-44).
+**Removed (read with git)**
+
+| Removed file | Purpose |
+|---|---|
+| `design-round1-sr-game-designer.md`, `design-round2-game-feel-developer.md` | Design rounds 1 and 2. Superseded by the v2 designs (now in the basis file). |
+| `mockup-proposal-1-ui-ux.md`, `mockup-proposal-3-game-feel.md` | UI/UX and game-feel mockup proposals. Superseded by the approved interactive prototype `docs/visual-plans/inventory-ui-mockup-v2.html`. |
+| `design-sr-game-designer-v2.md`, `design-feel-game-feel-developer-v2.md`, `research-comparison.md`, `research-ui-best-practices.md`, `pack-shrink-options-*.md`, `pack-debuff-options-*.md`, `mockup-proposal-2-artist.md`, `mockup-proposal-merged.md` | Merged into `basis-for-001b-and-later.md`. |
+| `mockups/v1/` (static sheets, about 10 MB) | The first static mockups. Replaced by the approved interactive prototype. |
+| `copy-approval.md` | The copy list sent to Jeff. `copy-approval-jeff.md` holds the full table with his picks. |
+| `step1-characterization.md` to `step6-qa-report.md` | Build reports of steps 1 to 6: characterization, config and save, inventory service, packs rules, actions, fixes and the combined QA. Their contracts live on in `step7-backend-moves-slots.md`. |
+| `step7-qa-report.md`, `step7-qa-report-2.md`, `step7-qa-report-3.md`, `step7-qa-report-4.md` | QA rounds 1 to 4 of the core (F-, F2-, F3-, F4- findings). |
+| `step8-qa-report.md`, `step8-qa-report-2.md` | QA of the UI build and its first fix round (F8-, F9- findings). |
+| `step9-qa-report.md`, `step10-qa-report.md` | QA of the D-49 changes (F10- findings) and of the approved copy and tone C (F11- findings). |
+| `step11-docs-report.md` | Report of the docs pass that wrote the first version of this file. |
 
 ## 7. Open items for Jeff
 

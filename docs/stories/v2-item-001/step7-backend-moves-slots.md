@@ -1,5 +1,7 @@
 # V2-ITEM-001 step 7: slots, moves, count discards, one discard per path
 
+> **Cleanup note (2026-11-08).** Reports that this file cites by name but that are no longer in this folder were removed in the story cleanup. Their last copy is in git history at commit `11d566f`. Read one with `git show 11d566f:docs/stories/v2-item-001/<file name>`. The design and research files were merged into `basis-for-001b-and-later.md`.
+
 Author role: mechanics-developer. Date: 2026-11-06. Written in STE. Core only, no UI. No commit.
 Source: decisions D-33 to D-39, ANSWERS #83, #87, #88, the approved prototype `docs/visual-plans/inventory-ui-mockup-v2.html` (section G and the move, merge and discard code).
 Private save dir for every run: `ECHOES_TEST_SAVE_DIR=/tmp/echoes-vnext-tests/backend-ITEM001` (deleted before each run). Godot: `/tmp/claude-0/godot-bin/godot`.
