@@ -39,7 +39,6 @@ const COLUMN_WIDE := 400.0
 @onready var _details_panel: PanelContainer = %DetailsPanel
 @onready var _sanct_panel: PanelContainer = %SanctumPanel
 @onready var _sanct_title: Label = %SanctTitle
-@onready var _sanct_sub: Label = %SanctSub
 @onready var _show_pack: Button = %ShowPackButton
 @onready var _sanct_close: Button = %SanctClose
 @onready var _sanct_grid: GridContainer = %SanctGrid
@@ -51,16 +50,13 @@ const COLUMN_WIDE := 400.0
 @onready var _pack_panel: PanelContainer = %PackPanel
 @onready var _load_mark: Control = %LoadMark
 @onready var _pack_title: Label = %PackTitle
-@onready var _pack_sub: Label = %PackSub
 @onready var _pack_close: Button = %PackClose
 @onready var _path_bar: VBoxContainer = %PathBar
-@onready var _path_readonly: Label = %PathReadonly
 @onready var _path_token: Label = %PathToken
 @onready var _pack_grid: GridContainer = %PackGrid
 @onready var _pack_word: Label = %PackWord
 @onready var _pack_refuse: PanelContainer = %PackRefuse
 @onready var _pack_refuse_label: Label = %PackRefuseLabel
-@onready var _details_title: Label = %DetailsTitle
 @onready var _details_empty: VBoxContainer = %DetailsEmpty
 @onready var _empty_label: Label = %EmptyLabel
 @onready var _hint_label: Label = %HintLabel
@@ -70,14 +66,11 @@ const COLUMN_WIDE := 400.0
 @onready var _kind_label: Label = %KindLabel
 @onready var _grade_label: Label = %GradeLabel
 @onready var _count_label: Label = %CountLabel
-@onready var _stake_row: HBoxContainer = %StakeRow
-@onready var _stake_label: Label = %StakeLabel
 @onready var _where_label: Label = %WhereLabel
 @onready var _move_button: Button = %MoveButton
 @onready var _letgo_button: Button = %LetGoButton
 @onready var _move_reason: Label = %MoveReason
 @onready var _letgo_reason: Label = %LetGoReason
-@onready var _path_note: Label = %PathNote
 
 var _mode := ""
 var _dock := "left"
@@ -101,23 +94,20 @@ var _hint_box := ""
 var _last_to := ""
 var _pack_level := 0
 var _tone_tween: Tween = null
+## Length of the last pack pulse (a test reads it).
+var last_pulse_seconds := 0.0
 var _line_timer: Tween = null
 var _letgo_lock_until := 0
 
 
 func _ready() -> void:
 	_sanct_title.text = ItemUiText.SANCT_TITLE
-	_sanct_sub.text = ItemUiText.SANCT_SUB
 	_sanct_close.tooltip_text = ItemUiText.CLOSE_SANCT
 	_pack_title.text = ItemUiText.PACK_TITLE
-	_pack_sub.text = ItemUiText.PACK_SUB
 	_pack_close.tooltip_text = ItemUiText.CLOSE_PACK
 	_full_label.text = ItemUiText.FULL_WORD
-	_details_title.text = ItemUiText.DETAILS_TITLE
 	_empty_label.text = ItemUiText.DETAILS_EMPTY
-	_hint_label.text = ItemUiText.DETAILS_HINT
 	_letgo_button.text = ItemUiText.BTN_LET_GO
-	_path_readonly.text = ItemUiText.PATH_READONLY
 	_sanct_close.pressed.connect(_close_sanctum)
 	_pack_close.pressed.connect(_close_pack)
 	_show_pack.pressed.connect(toggle_pack)
@@ -241,7 +231,7 @@ func right_inset() -> int:
 	return 0
 
 
-## The discard modal closed (Keep it or Let it go). `Let it go` ignores presses for 0.6 s so a double tap cannot
+## The discard modal closed (Keep or Destroy). `Destroy` ignores presses for 0.6 s so a double tap cannot
 ## open a second confirmation.
 func note_discard_modal_closed() -> void:
 	_letgo_lock_until = Time.get_ticks_msec() + LETGO_LOCK_MSEC
@@ -372,9 +362,10 @@ func _render_pack_state() -> void:
 	_pack_level = level
 	# Three levels read apart by tone and wording: plain, darker near full, darkest at full.
 	_pack_panel.theme_type_variation = &"ItemPanelPackHeavy" if level >= 3 else (&"ItemPanelPackNear" if level == 2 else &"ItemPanelPack")
-	_pack_word.visible = level >= 2
+	# Full in party details shows the tone and the departure line only; on a path the word stays.
+	_pack_word.visible = level == 2 or (level >= 3 and on_path)
 	if level >= 3:
-		_pack_word.text = ItemUiText.PACK_FULL_PATH if on_path else ItemUiText.PACK_HEAVY
+		_pack_word.text = ItemUiText.PACK_FULL_PATH
 	elif level == 2:
 		_pack_word.text = ItemUiText.PACK_NEAR
 	_path_bar.visible = on_path
@@ -402,6 +393,7 @@ func _update_pulses() -> void:
 
 ## The pack pulse acts on the panel tone only: a brightness flash (0.4 s), or a 0.15 s fade in reduced motion.
 func _pulse_pack_tone(seconds: float, reduced: bool) -> void:
+	last_pulse_seconds = seconds
 	if _tone_tween != null and _tone_tween.is_valid():
 		_tone_tween.kill()
 	_tone_tween = create_tween()
@@ -420,7 +412,8 @@ func _refresh_selection() -> void:
 	for grid in [_sanct_grid, _pack_grid]:
 		for slot in grid.get_children():
 			slot.tile().set_selected(slot.box == _sel_box and slot.index == _sel_slot and slot.has_content())
-	_hint_label.text = ItemUiText.PATH_HINT if _mode == MODE_PATH else ItemUiText.DETAILS_HINT
+	_hint_label.text = ItemUiText.PATH_HINT
+	_hint_label.visible = _mode == MODE_PATH
 	_details_empty.visible = row.is_empty()
 	_details_full.visible = not row.is_empty()
 	if row.is_empty():
@@ -441,9 +434,7 @@ func _refresh_selection() -> void:
 		_count_label.text = "%s: %s%s" % [ItemUiText.COUNT_LABEL, limit_text,
 			(" " + ItemUiText.AT_LIMIT) if bool(row.get("at_limit", false)) else ""]
 	else:
-		_count_label.text = "%s: %s" % [ItemUiText.COUNT_LABEL, ItemUiText.ONE_PIECE]
-	_stake_row.visible = in_pack
-	_stake_label.text = ItemUiText.AT_STAKE
+		_count_label.text = "%s: 1" % ItemUiText.COUNT_LABEL
 	_where_label.text = ItemUiText.WHERE_PACK if in_pack else ItemUiText.WHERE_SANCT
 	var to_box := SANCT if in_pack else PACK
 	_move_button.text = ItemUiText.BTN_MOVE_SANCT if in_pack else ItemUiText.BTN_MOVE_PACK
@@ -451,13 +442,11 @@ func _refresh_selection() -> void:
 	_move_blocked = str(move_plan.get("reason", "")) if str(move_plan.get("kind", "")) == "refuse" else ""
 	_move_button.theme_type_variation = &"ItemButtonBlocked" if not _move_blocked.is_empty() else &"ItemButtonGold"
 	_move_reason.visible = not _move_blocked.is_empty()
-	_move_reason.text = "%s: %s" % [_move_button.text, ItemUiText.reason_text(_move_blocked, to_box)]
+	_move_reason.text = ItemUiText.reason_text(_move_blocked, to_box)
 	_letgo_blocked = ItemMovePlan.discard_block(_inv, _sel_box)
 	_letgo_button.theme_type_variation = &"ItemButtonBlocked" if not _letgo_blocked.is_empty() else &"ItemButtonOutline"
 	_letgo_reason.visible = not _letgo_blocked.is_empty()
-	_letgo_reason.text = "%s: %s" % [ItemUiText.BTN_LET_GO, ItemUiText.reason_text(_letgo_blocked)]
-	_path_note.visible = _mode == MODE_PATH and _letgo_blocked.is_empty()
-	_path_note.text = ItemUiText.PATH_RULE
+	_letgo_reason.text = ItemUiText.reason_text(_letgo_blocked)
 
 
 # ── Input ──────────────────────────────────────────────────────

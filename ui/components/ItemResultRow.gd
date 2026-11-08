@@ -25,7 +25,6 @@ const CONTINUE_GUARD_MSEC := 250
 @onready var _tiles: HFlowContainer = %Tiles
 @onready var _name_line: Label = %NameLine
 @onready var _risk_line: Label = %RiskLine
-@onready var _preview_tag: Label = %PreviewTag
 
 var _tile_nodes: Array = []
 var _fates: Array = []
@@ -68,13 +67,12 @@ func clear() -> void:
 	_fates = []
 	_name_line.text = ""
 	_risk_line.visible = false
-	_preview_tag.visible = false
 	visible = false
 
 
 ## Builds the row from a report: `kept` rows first, then `lost` rows. A kept stack with `lost_quantity` adds a
 ## ghost tile for the part that was lost. No motion: call `play()` or `finish()`.
-func show_report(kept: Array, lost: Array, preview: bool = false, bed: int = 72) -> void:
+func show_report(kept: Array, lost: Array, bed: int = 72) -> void:
 	clear()
 	for r in kept:
 		if not (r is Dictionary):
@@ -89,8 +87,6 @@ func show_report(kept: Array, lost: Array, preview: bool = false, bed: int = 72)
 	for r in lost:
 		if r is Dictionary:
 			_add_tile(r, "lost", bed)
-	_preview_tag.text = ItemUiText.CARD_PREVIEW
-	_preview_tag.visible = preview and not _tile_nodes.is_empty()
 	visible = not _tile_nodes.is_empty()
 
 

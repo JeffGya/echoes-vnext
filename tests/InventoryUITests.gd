@@ -62,6 +62,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_ui/a_path_snapshot_without_inventory_closes_the_pack", Callable(InventoryUITests, "_t_path_no_inventory"))
 	runner.register_test("inventory_ui/let_it_go_lock_after_the_modal_closes", Callable(InventoryUITests, "_t_letgo_lock"))
 	runner.register_test("inventory_ui/pack_pulses_once_when_it_becomes_full", Callable(InventoryUITests, "_t_pack_pulse"))
+	runner.register_test("inventory_ui/approved_copy_matches_the_fixture_word_for_word", Callable(InventoryUITests, "_t_approved_copy"))
+	runner.register_test("inventory_ui/pack_tones_are_the_approved_steps", Callable(InventoryUITests, "_t_pack_tones"))
+	runner.register_test("inventory_ui/pack_pulse_lengths_flash_and_reduced_fade", Callable(InventoryUITests, "_t_pulse_lengths"))
 	runner.register_test("inventory_ui/refusal_line_never_resizes_or_moves_the_path_panels", Callable(InventoryUITests, "_t_refusal_layout"))
 	runner.register_test("inventory_ui/container_full_line_names_the_destination", Callable(InventoryUITests, "_t_full_destination"))
 	runner.register_test("inventory_ui/hud_pack_button_hides_without_inventory", Callable(InventoryUITests, "_t_hud_hide"))
@@ -319,13 +322,15 @@ static func _t_placeholders() -> Dictionary:
 		var s := line.strip_edges()
 		if s.begins_with("#") or s.is_empty():
 			continue
-		var holds_text := s.contains(":= \"") or s.contains("return \"") or s.contains("\": \"")
+		if line.contains("# PLACEHOLDER"):
+			return _fail(m, "ItemUiText.gd line %d still holds a placeholder: %s" % [i + 1, s])
+		var holds_text := s.contains(":= \"") or s.contains("return \"") or s.contains("\": \"") or s.contains("else \"")
 		if not holds_text:
 			continue
 		strings += 1
-		if not line.ends_with("# PLACEHOLDER"):
-			return _fail(m, "ItemUiText.gd line %d holds wording without `# PLACEHOLDER`: %s" % [i + 1, s])
-	if strings < 60:
+		if not line.ends_with("# APPROVED (Jeff 2026-11-08)"):
+			return _fail(m, "ItemUiText.gd line %d holds wording with neither marker: %s" % [i + 1, s])
+	if strings < 50:
 		return _fail(m, "the scan found only %d string lines" % strings)
 	# Words live in ItemUiText.gd. The new scenes hold only glyphs and a default count.
 	var allowed := ["×", "−", "+", "x1"]
@@ -378,8 +383,8 @@ static func _t_pack_panel() -> Dictionary:
 			if ch >= "0" and ch <= "9":
 				return _fail(m, "a count shows in the pack panel: %s" % text)
 	var word := panels.get_node("%PackWord") as Label
-	if not word.visible or word.text != ItemUiText.PACK_HEAVY:
-		return _fail(m, "a full pack must say the consequence: %s" % word.text)
+	if word.visible:
+		return _fail(m, "a full pack in party details shows the tone and the departure line only: '%s'" % word.text)
 	if panels.get_node("%PackPanel").theme_type_variation != &"ItemPanelPackHeavy":
 		return _fail(m, "a full pack needs the darkest tone")
 	if panels.find_child("PackStrap", true, false) != null:
@@ -531,7 +536,7 @@ static func _t_refused_drops() -> Dictionary:
 
 static func _t_reason_keys() -> Dictionary:
 	var m := _mount(TileScene)
-	var plain := { "path_open": ItemUiText.R_PATH, "path_used": ItemUiText.R_DISCARD_USED, "not_in_pack": ItemUiText.R_NOT_IN_PACK,
+	var plain := { "path_open": ItemUiText.R_PATH, "path_used": ItemUiText.R_DISCARD_USED,
 		"slot_taken": ItemUiText.R_OCCUPIED, "type_mismatch": ItemUiText.R_TYPE, "stack_limit": ItemUiText.R_STACK_LIMIT,
 		"equipped": ItemUiText.R_EQUIPPED, "not_in_sanctum": ItemUiText.R_SANCTUM_ONLY }
 	for key in plain:
@@ -545,7 +550,7 @@ static func _t_reason_keys() -> Dictionary:
 	for key in more:
 		if ItemUiText.reason_text(key) != more[key]:
 			return _fail(m, "reason %s maps to '%s'" % [key, ItemUiText.reason_text(key)])
-	for key in ["bad_box", "bad_state", "bad_payload", "not_unique", "no_stage", "zzz", ""]:
+	for key in ["not_in_pack", "bad_box", "bad_state", "bad_payload", "not_unique", "no_stage", "zzz", ""]:
 		if ItemUiText.reason_text(key) != ItemUiText.R_UNKNOWN:
 			return _fail(m, "unmapped key %s did not use the generic line" % key)
 	return _pass(m)
@@ -790,7 +795,7 @@ static func _t_result_row() -> Dictionary:
 	var m := _mount(preload("res://ui/components/ItemResultRow.tscn"))
 	var row: Control = m[1]
 	var block := FX.items_block()
-	row.show_report(block["kept"], block["lost"], false)
+	row.show_report(block["kept"], block["lost"])
 	if row.tile_count() != 5 or row.fates() != ["kept", "kept", "lost", "lost", "lost"]:
 		return _fail(m, "row fates %s" % str(row.fates()))
 	var labels := _label_texts(row)
@@ -806,7 +811,7 @@ static func _t_result_row() -> Dictionary:
 	if row.fates() != ["kept", "lost"] or row.tiles()[1].stack_count_of(row.tiles()[1].row) != 5:
 		return _fail(m, "the stack surplus ghost: %s" % str(row.fates()))
 	# Names show on focus or tap, never a place.
-	row.show_report(block["kept"], block["lost"], false)
+	row.show_report(block["kept"], block["lost"])
 	row.tiles()[2].pressed.emit()
 	var shown: String = row.get_node("%NameLine").text
 	if not shown.contains("Test relic B") or not shown.contains(ItemUiText.CARD_LOST):
@@ -821,10 +826,9 @@ static func _t_result_row() -> Dictionary:
 	row.tiles()[0].pressed.emit()
 	if not row.get_node("%NameLine").text.begins_with(ItemUiText.KIND_NAMES["gear"]) or row.get_node("%NameLine").text.contains("ph_"):
 		return _fail(m, "a nameless report row shows '%s'" % row.get_node("%NameLine").text)
-	# Preview tag only for the stage-clear card. Empty report: no row.
-	row.show_report(block["kept"], [], true)
-	if not row.get_node("%PreviewTag").visible:
-		return _fail(m, "the preview mark is missing")
+	# No preview mark exists on any card (D-51). Empty report: no row.
+	if row.find_child("PreviewTag", true, false) != null:
+		return _fail(m, "a preview mark is back")
 	row.show_report([], [])
 	if row.visible:
 		return _fail(m, "an empty report shows a row")
@@ -836,7 +840,7 @@ static func _t_row_motion() -> Dictionary:
 	var m := _mount(preload("res://ui/components/ItemResultRow.tscn"))
 	var row: Control = m[1]
 	var block := FX.items_block()
-	row.show_report(block["kept"], block["lost"], false)
+	row.show_report(block["kept"], block["lost"])
 	# The cap: 1 to 14 tiles never run longer than 2.4 s.
 	for n in range(1, 15):
 		var p := ItemResultRow.plan(n, false)
@@ -888,7 +892,7 @@ static func _t_reduced_motion() -> Dictionary:
 		_set_reduced(before)
 		return _fail(m, "reduced plan %s" % str(p))
 	var block := FX.items_block()
-	row.show_report(block["kept"], block["lost"], false)
+	row.show_report(block["kept"], block["lost"])
 	row.play()
 	if not row.is_running():
 		_set_reduced(before)
@@ -928,9 +932,9 @@ static func _t_resolve_cards() -> Dictionary:
 	if not row.visible or row.tile_count() != 5 or row.fates() != ["kept", "kept", "lost", "lost", "lost"]:
 		_set_reduced(before)
 		return _fail(m, "leave card row: visible=%s fates=%s" % [row.visible, str(row.fates())])
-	if row.get_node("%PreviewTag").visible:
+	if row.find_child("PreviewTag", true, false) != null:
 		_set_reduced(before)
-		return _fail(m, "a leave card is not a preview")
+		return _fail(m, "a preview mark is back on the leave card")
 	if not row.is_running():
 		_set_reduced(before)
 		return _fail(m, "the item motion did not start")
@@ -975,9 +979,9 @@ static func _t_resolve_cards() -> Dictionary:
 	(clear["data"] as Dictionary)["victory"] = true
 	(clear["data"] as Dictionary)["stage_payout_rows"] = []
 	screen.set_snapshot(clear)
-	if row.tile_count() != 5 or not row.get_node("%PreviewTag").visible or row.get_node("%PreviewTag").text != ItemUiText.CARD_PREVIEW:
+	if row.tile_count() != 5 or row.find_child("PreviewTag", true, false) != null:
 		_set_reduced(before)
-		return _fail(m, "stage clear row: tiles=%d preview=%s" % [row.tile_count(), row.get_node("%PreviewTag").visible])
+		return _fail(m, "stage clear row: tiles=%d, the preview mark must be gone" % row.tile_count())
 	# No place word, no lane title anywhere in the row.
 	for t in _texts(row):
 		for word in PLACE_WORDS:
@@ -1182,7 +1186,7 @@ static func _t_blocked_look() -> Dictionary:
 	var letgo := panels.get_node("%LetGoButton") as Button
 	var move := panels.get_node("%MoveButton") as Button
 	panels.toggle_pack()
-	if panels.get_node("%HintLabel").text != ItemUiText.PATH_HINT or panels.get_node("%HintLabel").text.to_lower().contains("drag"):
+	if not panels.get_node("%HintLabel").visible or panels.get_node("%HintLabel").text != ItemUiText.PATH_HINT or panels.get_node("%HintLabel").text.to_lower().contains("drag"):
 		return _fail(m, "the path details hint says '%s'" % panels.get_node("%HintLabel").text)
 	panels._on_slot_chosen("pack", 0)
 	if letgo.theme_type_variation != &"ItemButtonOutline" or move.theme_type_variation != &"ItemButtonBlocked":
@@ -1192,8 +1196,8 @@ static func _t_blocked_look() -> Dictionary:
 		return _fail(m, "a blocked Let it go keeps its normal look: %s" % letgo.theme_type_variation)
 	panels.set_snapshot(FX.sanctum_snap(FX.standard()))
 	panels.toggle_sanctum()
-	if panels.get_node("%HintLabel").text != ItemUiText.DETAILS_HINT:
-		return _fail(m, "the Sanctum hint changed")
+	if panels.get_node("%HintLabel").visible:
+		return _fail(m, "the Sanctum details show a hint line (removed)")
 	return _pass(m)
 
 
@@ -1372,3 +1376,92 @@ static func _t_hud_hide() -> Dictionary:
 	if hud.visible:
 		return _fail(m, "the HUD pack button stays visible without inventory")
 	return _pass(m)
+
+
+static func _t_approved_copy() -> Dictionary:
+	var m := _mount(TileScene)
+	var fx: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://tests/fixtures/ItemUiApprovedCopy.json"))
+	if not (fx is Dictionary):
+		return _fail(m, "the approved-copy fixture does not parse")
+	var approved: Dictionary = fx
+	var seen := {}
+	var map: Dictionary = (ItemUiText as GDScript).get_script_constant_map()
+	for id in map:
+		var v: Variant = map[id]
+		if v is String:
+			seen[id] = true
+			if not approved.has(id):
+				return _fail(m, "%s is not in the approved fixture" % id)
+			if approved[id] != v:
+				return _fail(m, "%s is '%s', approved '%s'" % [id, v, approved[id]])
+	for kind in ItemUiText.KIND_NAMES:
+		var key := "KIND " + str(kind)
+		seen[key] = true
+		if approved.get(key, "") != ItemUiText.KIND_NAMES[kind]:
+			return _fail(m, "%s is '%s', approved '%s'" % [key, ItemUiText.KIND_NAMES[kind], approved.get(key, "")])
+	var built := { "slots_word(3,20)": ItemUiText.slots_word(3, 20), "sockets_word(2,4)": ItemUiText.sockets_word(2, 4),
+		"pack_button(2,4)": ItemUiText.pack_button(2, 4), "stack_count(3,20)": ItemUiText.stack_count(3, 20),
+		"leave_risk(3)": ItemUiText.leave_risk(3), "leave_risk(1)": ItemUiText.leave_risk(1),
+		"moved_toast(pack)": ItemUiText.moved_toast("pack"), "moved_toast(sanctum)": ItemUiText.moved_toast("sanctum") }
+	for key in built:
+		seen[key] = true
+		if approved.get(key, "") != built[key]:
+			return _fail(m, "%s is '%s', approved '%s'" % [key, built[key], approved.get(key, "")])
+	for key in approved:
+		if not seen.has(key):
+			return _fail(m, "the fixture holds %s, which ItemUiText no longer has" % key)
+	return _pass(m)
+
+
+static func _lum(c: Color) -> float:
+	var f := func(v: float) -> float: return v / 12.92 if v <= 0.03928 else pow((v + 0.055) / 1.055, 2.4)
+	return 0.2126 * f.call(c.r) + 0.7152 * f.call(c.g) + 0.0722 * f.call(c.b)
+
+
+static func _t_pack_tones() -> Dictionary:
+	var m := _mount(TileScene)
+	var theme := ThemeDB.get_project_theme()
+	var tones: Array[Color] = []
+	for name in ["ItemPanelPack", "ItemPanelPackNear", "ItemPanelPackHeavy"]:
+		tones.append((theme.get_stylebox("panel", name) as StyleBoxFlat).bg_color)
+	var want := [Color8(0x7A, 0x5B, 0x3E), Color8(0x4F, 0x3B, 0x28), Color8(0x12, 0x0E, 0x0C)]
+	for i in 3:
+		if tones[i].to_html(false) != (want[i] as Color).to_html(false):
+			return _fail(m, "tone %d is #%s, approved #%s" % [i, tones[i].to_html(false), (want[i] as Color).to_html(false)])
+	if tones[0].to_html(false) == tones[1].to_html(false) or tones[1].to_html(false) == tones[2].to_html(false):
+		return _fail(m, "near full has the same tone as plain or as full")
+	var y: Array[float] = [_lum(tones[0]), _lum(tones[1]), _lum(tones[2])]
+	if (y[0] + 0.05) / (y[1] + 0.05) < 1.3 or (y[1] + 0.05) / (y[2] + 0.05) < 1.5:
+		return _fail(m, "the tone steps are too small: %.2f and %.2f" % [(y[0] + 0.05) / (y[1] + 0.05), (y[1] + 0.05) / (y[2] + 0.05)])
+	var cream := _lum(Color8(0xF5, 0xE6, 0xD3))
+	for i in 3:
+		if (cream + 0.05) / (y[i] + 0.05) < 4.5:
+			return _fail(m, "cream text on tone %d reads %.2f:1" % [i, (cream + 0.05) / (y[i] + 0.05)])
+	return _pass(m)
+
+
+static func _t_pulse_lengths() -> Dictionary:
+	var three := [FX.piece(0, "gear", "g1", 0, "A"), FX.piece(1, "gear", "g1", 1, "B"), FX.piece(2, "gear", "g1", 2, "C")]
+	var four := three + [FX.piece(3, "gear", "g1", 3, "D")]
+	var before := _set_reduced(false)
+	for reduced in [false, true]:
+		_set_reduced(reduced)
+		var m := _panels(FX.sanctum_snap(FX.inventory(6, 4, [], three)))
+		var panels: Node = m[1]
+		panels.toggle_pack()
+		panels.set_snapshot(FX.sanctum_snap(FX.inventory(6, 4, [], four)))
+		var secs := float(panels.get("last_pulse_seconds"))
+		var tone := (panels.get_node("%PackPanel") as Control).modulate
+		var want_secs := 0.15 if reduced else 0.4
+		if absf(secs - want_secs) > 0.0001:
+			_set_reduced(before)
+			return _fail(m, "reduced=%s: the pulse lasts %.3f s, wanted %.2f s" % [reduced, secs, want_secs])
+		if reduced and tone.a != 0.0:
+			_set_reduced(before)
+			return _fail(m, "the reduced pulse must start as a fade from transparent")
+		if not reduced and tone.r < 1.2:
+			_set_reduced(before)
+			return _fail(m, "the pulse must flash the panel tone (brightness %.2f)" % tone.r)
+		m[0].free()
+	_set_reduced(before)
+	return { "ok": true }

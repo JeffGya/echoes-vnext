@@ -829,15 +829,14 @@ func _input(event: InputEvent) -> void:
 		skip_motion()
 
 
-## The item tile row: `data.items` on a leave card and a stage-clear card (the clear card is a read-only
-## preview), or the lost items of the `packs_lost` ledger row on a defeat card. Nothing is built without rows.
+## The item tile row: `data.items` on a leave card and a stage-clear card,
+## or the lost items of the `packs_lost` ledger row on a defeat card. Nothing is built without rows.
 func _item_blocks(data: Dictionary) -> Dictionary:
 	var items_v: Variant = data.get("items", null)
 	if items_v is Dictionary:
 		var kept_v: Variant = (items_v as Dictionary).get("kept", [])
 		var lost_v: Variant = (items_v as Dictionary).get("lost", [])
-		return { "kept": kept_v if kept_v is Array else [], "lost": lost_v if lost_v is Array else [],
-			"preview": str(data.get("run_type", "")) != "scout_return" }
+		return { "kept": kept_v if kept_v is Array else [], "lost": lost_v if lost_v is Array else [] }
 	var rows_v: Variant = data.get("reward_breakdown", [])
 	if rows_v is Array:
 		for row_v in (rows_v as Array):
@@ -845,7 +844,7 @@ func _item_blocks(data: Dictionary) -> Dictionary:
 				var params_v: Variant = (row_v as Dictionary).get("params", {})
 				var lost_items: Variant = (params_v as Dictionary).get("items", []) if params_v is Dictionary else []
 				if lost_items is Array and not (lost_items as Array).is_empty():
-					return { "kept": [], "lost": lost_items, "preview": false }
+					return { "kept": [], "lost": lost_items }
 	return {}
 
 
@@ -853,7 +852,7 @@ func _present_items(data: Dictionary, same_result: bool) -> void:
 	var blocks := _item_blocks(data)
 	if blocks.is_empty():
 		return
-	_item_row.show_report(blocks["kept"], blocks["lost"], bool(blocks["preview"]))
+	_item_row.show_report(blocks["kept"], blocks["lost"])
 	if same_result:
 		_item_row.finish()
 	else:

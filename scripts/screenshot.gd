@@ -121,6 +121,8 @@ func _fixtures() -> Dictionary:
 		"invr_path_lv0": [fx.path_snap(fx.inventory(20, 4, [], [], fx.path_data(false))), "inv:toggle_pack"],
 		"invr_path_lv2": [fx.path_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g1", 0, "A"), fx.piece(1, "gear", "g1", 1, "B"), fx.piece(2, "relic", "g2", 2, "C")], fx.path_data(false))), "inv:toggle_pack"],
 		"invr_path_lv3": [fx.path_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g1", 0, "A"), fx.piece(1, "gear", "g1", 1, "B"), fx.piece(2, "relic", "g2", 2, "C"), fx.piece(3, "gear", "g1", 3, "D")], fx.path_data(false))), "inv:toggle_pack"],
+		"invr_discard_stack": [_combat(6, { "type": "recover" }), { "_modal": { "id": &"inventory.discard", "payload": {
+			"row": fx.stack(2, "consumable", 12, 20, "Test potion C"), "box": "pack", "slot": 2, "stack": true, "count_max": 12, "path": true } } }],
 		"invs_both_full": [fx.sanctum_snap(fx.full_both()), "inv:toggle_sanct", "inv:toggle_pack", "inv:select:pack:1"],
 		"combat_pace_full":    [_combat(3, _with(recover, "pace_state", "full"))],
 		"combat_pace_partial": [_combat(6, _with(recover, "pace_state", "partial"))],

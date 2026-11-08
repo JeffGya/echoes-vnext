@@ -364,3 +364,139 @@ NOT viewed: the pulse (motion); 1920x1080; the Sanctum panel next to a full pack
 ASSUMED: 1. "Keep the darker tone at near-full and full" means two darker steps. Near full had no tone step before; I added `ItemPanelPackNear`. If Jeff wants only one dark tone, delete the near variation and the near line in `_render_pack_state`.
 ASSUMED: 2. The grayscale weakness is for Jeff to judge. A bigger tone step needs only a colour change in two styles (no new token is needed beyond the one already added).
 BLOCKED: none.
+
+## Approved copy and tone C (D-51)
+
+Source: D-51, `copy-approval-jeff.md` (Pick column), D-50. UI only. No `core/` file touched. No commit. Compile check (`--quit`): 0 `SCRIPT ERROR` lines. Every shown string comes from Jeff's Pick column, with his four spelling fixes and his two answers (COUNT_LABEL "Count"; a refused button shows only the refusal line). A script cross-checked all 54 picks against `ItemUiText.gd`; the only differences are the confirmed fixes and the removed `ONE_PIECE`.
+
+### Constants changed
+
+| Id | Old | New |
+|---|---|---|
+| RAIL_LABEL | Stores | Storehouse |
+| SANCT_TITLE | Sanctum storage | Storehouse |
+| PACK_TITLE | Party pack | Travel pack |
+| SHOW_PACK / HIDE_PACK | Show pack / Hide pack | Open pack / Close pack |
+| CLOSE_SANCT / CLOSE_PACK | Close Sanctum storage / Close party pack | Close the storehouse / Close the pack |
+| PARTY_PACK_BUTTON | Party pack | Travel pack |
+| FULL_WORD | Full | Full (approved, same) |
+| PACK_NEAR | Nearly full. | Almost full. |
+| PACK_FULL_PATH | Full. Nothing more fits. | Pack is full. Nothing else fits. |
+| DEPART_LINE | Carried pieces can be lost on a defeat or an early leave. | There are items in the travel pack. Items can be lost. |
+| DETAILS_EMPTY | Select a piece to see its details. | Select an item to learn more. |
+| WHERE_SANCT / WHERE_PACK | In the Sanctum / In the pack | Storehouse / Pack |
+| KIND_LABEL, GRADE_LABEL | Kind, Grade | same |
+| COUNT_LABEL | Count | Count (Jeff's answer; a single piece shows `Count: 1`) |
+| AT_LIMIT | At the limit | Full stack |
+| BTN_MOVE_PACK / BTN_MOVE_SANCT | Move to pack / Move to Sanctum | Put in pack / Place in storehouse |
+| BTN_LET_GO | Let it go | Destroy |
+| BTN_KEEP | Keep it | Keep |
+| PATH_LEFT | Let it go: 1 left this path | 1 destroy action left on this path. |
+| PATH_USED | Let it go: used | No destroy action left. |
+| PATH_HINT | On a path, pieces cannot be moved. | While on the move you can't reorganize your pack. |
+| KIND consumable | Consumable | Supply (gear, relic, material unchanged) |
+| R_PATH | Moves are closed on a path. | While on the move you can't organize your pack. |
+| R_PACK_FULL / R_SANCT_FULL | ...Free a socket first. / ...Free a slot first. | The pack is full. / The storehouse is full. |
+| R_DISCARD_USED | The one discard of this path is used. | No destroy actions left. |
+| R_OCCUPIED | That slot is taken. Drop on an empty slot. | This spot is taken. Choose an empty spot. |
+| R_TYPE | Only the same kind of stack can merge. | Only similar items can be joined. |
+| R_STACK_LIMIT | That stack is at its limit. | This stack is already full. |
+| R_EQUIPPED | It is in use. | This is in use. |
+| R_SANCTUM_ONLY, R_NO_CHANGE | unchanged | same |
+| R_GONE | That piece is not there any more. | It's no longer there. |
+| R_BAD_SLOT | That slot is not available. | That spot is not available. |
+| R_COUNT | That count is not possible. | This is not possible. |
+| R_UNKNOWN | That did not work. Nothing changed. | Nothing was changed. |
+| DROP_REORDER / DROP_MERGE / DROP_PACK / DROP_SANCT | long forms | Drop to place / Drop to combine / Move to pack / Move to storehouse |
+| MODAL_TITLE | Let this go? | Are you sure? |
+| MODAL_PATH_LINE | This is the one discard of this path. | There is only 1 chance to destroy on this path. |
+| MODAL_COUNT_LABEL, COUNT_FEWER, COUNT_MORE | How many? / Fewer / More | How many? / One less / One more |
+| LEAVE_RISK_LABEL, CARD_SURVIVED, CARD_LOST, ITEMS_GROUP_LABEL | At stake / Survived / Lost / Pieces | At risk / Made it through. / Lost / Items. |
+| slots_word, sockets_word | `3 / 20 slots`, `2 / 4 sockets` | `3 / 20 spots filled`, `2 / 4 spots filled` |
+| pack_button | Party pack 2/4 | Travel pack 2/4 |
+| stack_count | x3 of 20 | same |
+| leave_risk | They may lose 3 pieces. | `3 items can be lost` and `1 item can be lost.` (as typed) |
+| moved_toast | It is now in the pack. / ...Sanctum. | Placed in pack. / Placed in storehouse (as typed) |
+| Refusal line pattern | `Put in pack: The pack is full...` | only the refusal line |
+
+### Constants removed (and the element that showed them)
+
+| Id | Element removed | File |
+|---|---|---|
+| SANCT_SUB, PACK_SUB | `SanctSub`, `PackSub` labels | `InventoryPanels.tscn`, `.gd` |
+| PACK_HEAVY | The pack word in party details at full (tone and departure line only). `PackWord` shows only at near full, or at full on a path | `InventoryPanels.gd` (`_render_pack_state`) |
+| AT_STAKE, AT_STAKE_LABEL | `StakeRow` (leaf and line) in the details area. The leaf on the tiles stays and has no spoken label | `InventoryPanels.tscn`, `.gd` |
+| DETAILS_TITLE | `DetailsTitle` label | same |
+| DETAILS_HINT | The hint line in the Sanctum details. `HintLabel` shows only on a path (`PATH_HINT`) | `InventoryPanels.gd` (`_refresh_selection`) |
+| PATH_READONLY | `PathReadonly` label | same |
+| PATH_RULE | `PathNote` label | same |
+| PATH_PREVIEW, CARD_PREVIEW | `PreviewTag` on the result row; the `preview` argument of `ItemResultRow.show_report` and the `preview` key of `_item_blocks` | `ItemResultRow.tscn`, `.gd`; `ResolveScreen.gd` |
+| R_NOT_IN_PACK | The key falls back to `R_UNKNOWN` | `ItemUiText.reason_text` |
+| MODAL_LINE, MODAL_PACK_LINE, MODAL_SANCT_LINE | `LineLabel`, `WhereLabel` in the modal | `ItemDiscardModal.tscn`, `.gd` |
+| ONE_PIECE | Details show `Count: 1` | `InventoryPanels.gd` |
+
+Panels close up (viewed): no gap where a removed line was.
+
+### Marker, fixture, tests
+
+`ItemUiText.gd`: every string line ends with `# APPROVED (Jeff 2026-11-08)`; no `# PLACEHOLDER` remains. Leftover scan: no player-facing "discard", "let it go", "release", "stage", "home" in the new UI files (only code identifiers, action names and comments remain).
+
+Fixture `tests/fixtures/ItemUiApprovedCopy.json` (65 keys: every constant, `KIND *`, and the built lines). New and rewritten tests in `inventory_ui` (41 tests):
+
+| Test | Pins |
+|---|---|
+| `placeholder_strings_are_marked_and_scenes_hold_no_words` (rewritten) | Every string line has the approved marker; no `# PLACEHOLDER`; scenes hold no words |
+| `approved_copy_matches_the_fixture_word_for_word` (new) | Every constant, kind name and built line equals the fixture; a constant missing from the fixture, or a fixture key missing from the code, fails |
+| `pack_tones_are_the_approved_steps` (new, F10-03) | Three tones `#7A5B3E`, `#4F3B28`, `#120E0C`; near differs from plain and full; steps at least 1.3:1 and 1.5:1; cream text at least 4.5:1 on each |
+| `pack_pulse_lengths_flash_and_reduced_fade` (new, F10-03) | Pulse 0.4 s with a brightness flash; reduced motion 0.15 s fade from transparent |
+| Rewritten for removals | `pack_panel_shows_no_counts...` (no word at full in party details), `refusal_keys_map_to_text` (`not_in_pack` gives the unknown line), `blocked_buttons_look_disabled...` (no hint in the Sanctum, path hint without "drag"), `result_row_is_one_row...`, `resolve_cards_show_items...` (no preview mark on any card) |
+
+| Mutation (restored, `cmp` equal) | Result |
+|---|---|
+| `Are you sure?` to `Are you certain?` | `approved_copy_matches...`: `MODAL_TITLE is 'Are you certain?', approved 'Are you sure?'` |
+| Marker removed from `RAIL_LABEL` | marker test: `holds wording with neither marker` |
+| `# PLACEHOLDER` put on `RAIL_LABEL` | marker test: `still holds a placeholder` |
+| Flash 0.4 to 0.5 | `pack_pulse_lengths...`: `lasts 0.500 s, wanted 0.40 s` |
+| Reduced fade 0.15 to 0.2 | same: `lasts 0.200 s, wanted 0.15 s` |
+| Near tone set equal to plain | `pack_tones...`: `tone 1 is #7a5b3e, approved #4f3b28` |
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_ui` | `Tests: 41 total, 41 passed, 0 failed` |
+| `=inventory_ui,realm_ui,payout_ui,foundation_ui,sanctum.layout,sanctum.party,echo_party,seam,stage_stop_ui` | `Tests: 262 total, 262 passed, 0 failed` |
+
+### Tone C
+
+Applied in `assets/theme/LivingTreeSystem.tres` (`StyleBoxFlat_item_panel_pack`, `_near`, `_heavy` `bg_color`). Tone only. No decoration.
+
+| Tone | Hex | Cream `#F5E6D3` text contrast |
+|---|---|---|
+| Plain | `#7A5B3E` | 5.1:1 |
+| Near full | `#4F3B28` | 8.6:1 |
+| Full | `#120E0C` | 15.7:1 |
+
+Sockets on the near-black tone: a full pack has no empty socket (all slots hold a tile), so no hole is ever drawn on `#120E0C`; the tiles sit on their own beds and read clearly (viewed in party details and on the path). The empty sockets (`#2B1F14`) show on the plain and near-full tones and read as holes there (viewed). The panel edge (`#241910`) on the dark path world is subtle but the panel is still clear. No token change needed. BLOCKED: none.
+
+### Viewed (xvfb-run, `scripts/screenshot.gd`)
+
+1280x720: Sanctum panel with the pack open; pack in party details at plain, near full and full (colour and grayscale); path view with the full pack; destroy confirmation for a stack with the count picker; leave confirmation; leave result card; a refusal line in the pack panel and in the details. 1920x1080 images were rendered for the same fixtures; I viewed none of them.
+
+NOT viewed: any 1920x1080 image; motion (the flash and the reduced fade have tests only); the Sanctum panel refusal line; the stage-clear and defeat cards; a real display.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"` with Bash `timeout` 3600000.
+2. Duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files edited by the run: none in the checkout (`/tmp/echoes-vnext-sharded/`). No `trap`.
+4. Verify: `git status --short` unchanged; no untracked `.import` file.
+5. Read back: `COMBINED:` (expected 2730 + 3 = 2733, 0 failed), any shard log without `Tests:`, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+BLOCKED: none.
+ASSUMED: 1. Typed forms kept as Jeff wrote them: `3 items can be lost` has no full stop while `1 item can be lost.` has one; `Placed in storehouse` has no full stop; `Made it through.` and `Items.` have one.
+ASSUMED: 2. `R_PATH` ("organize") and `PATH_HINT` ("reorganize") differ as typed.
+ASSUMED: 3. `WHERE_SANCT` is `Storehouse` and `WHERE_PACK` is `Pack` as picked, shown as the line under the tile in the details.
+ASSUMED: 4. The leaf mark on tiles keeps no spoken label. The tile's own accessible name is its item name and kind, as before.
+ASSUMED: 5. `DROP_*` hints show while dragging in the panel reason line; `moved_toast` has no on-screen use yet (approved text only).
+ASSUMED: 6. The `ItemPanelPack*` theme names and the `last_pulse_seconds` test seam in `InventoryPanels.gd` are kept.

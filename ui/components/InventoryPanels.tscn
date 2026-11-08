@@ -89,11 +89,6 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"ItemTitleLight"
 
-[node name="SanctSub" type="Label" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader/SanctTitles"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTextLightMuted"
-
 [node name="ShowPackButton" type="Button" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(48, 48)
@@ -212,11 +207,6 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"ItemTitleDark"
 
-[node name="PackSub" type="Label" parent="Work/Row/Column/PackPanel/PackBox/PackHeader/PackTitles"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTextDark"
-
 [node name="PackClose" type="Button" parent="Work/Row/Column/PackPanel/PackBox/PackHeader"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(48, 48)
@@ -230,11 +220,6 @@ visible = false
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 2
-
-[node name="PathReadonly" type="Label" parent="Work/Row/Column/PackPanel/PackBox/PathBar"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTextDark"
 
 [node name="PathToken" type="Label" parent="Work/Row/Column/PackPanel/PackBox/PathBar"]
 unique_name_in_owner = true
@@ -285,11 +270,6 @@ theme_type_variation = &"ItemDetailsPanel"
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 8
-
-[node name="DetailsTitle" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTitleLight"
 
 [node name="DetailsEmpty" type="VBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox"]
 unique_name_in_owner = true
@@ -357,30 +337,6 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"ItemTextLight"
 
-[node name="StakeRow" type="HBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
-unique_name_in_owner = true
-visible = false
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 6
-
-[node name="StakeLeaf" type="Control" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines/StakeRow"]
-custom_minimum_size = Vector2(16, 16)
-layout_mode = 2
-size_flags_vertical = 4
-mouse_filter = 2
-script = ExtResource("5_glyph")
-leaf = "held"
-leaf_only = true
-
-[node name="StakeLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines/StakeRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 0)
-layout_mode = 2
-size_flags_horizontal = 3
-theme_type_variation = &"ItemTextLight"
-autowrap_mode = 3
-
 [node name="WhereLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -426,10 +382,3 @@ layout_mode = 2
 theme_type_variation = &"ItemTextLight"
 autowrap_mode = 3
 
-[node name="PathNote" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Reasons"]
-unique_name_in_owner = true
-visible = false
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-theme_type_variation = &"ItemTextLightMuted"
-autowrap_mode = 3

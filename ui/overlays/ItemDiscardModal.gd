@@ -1,7 +1,7 @@
 extends Control
 
-## The "let it go" confirmation (ModalHost, layer 40). Default focus is `Keep it`. Esc, Back, B and a tap outside
-## the card all mean `Keep it`. `Let it go` ignores presses for 0.25 s after the card opens. A stack asks how many
+## The destroy confirmation (ModalHost, layer 40). Default focus is `Keep`. Esc, Back, B and a tap outside
+## the card all mean `Keep`. `Destroy` ignores presses for 0.25 s after the card opens. A stack asks how many
 ## (default the whole stack, minimum 1). No hold, swipe or drag confirms. One press sends one action.
 ## payload: { row, box, slot, stack, count_max, path, layout }.
 
@@ -16,8 +16,6 @@ const OPEN_WINDOW_SECONDS := 0.25
 @onready var _title: Label = %TitleLabel
 @onready var _tile: Button = %Tile
 @onready var _name: Label = %NameLabel
-@onready var _where: Label = %WhereLabel
-@onready var _line: Label = %LineLabel
 @onready var _path_line: Label = %PathLabel
 @onready var _picker: HBoxContainer = %Picker
 @onready var _picker_label: Label = %PickerLabel
@@ -65,8 +63,6 @@ func present(payload: Dictionary) -> void:
 	_sent = false
 	_tile.setup(row, { "box": _box, "bed": 72 })
 	_name.text = ItemUiText.display_name(row)
-	_where.text = ItemUiText.MODAL_PACK_LINE if _box == "pack" else ItemUiText.MODAL_SANCT_LINE
-	_line.text = ItemUiText.MODAL_LINE
 	_path_line.text = ItemUiText.MODAL_PATH_LINE
 	_path_line.visible = bool(payload.get("path", false))
 	_picker.visible = _stack
