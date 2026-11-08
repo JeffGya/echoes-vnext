@@ -20,7 +20,8 @@ extends RefCounted
 ## Invariants (the tests assert them after every mutation):
 ##  1. Piece ids are unique across `items` and `pack`.
 ##  2. `intake` never puts an entry in `items`/`stacks` above `unique_cap`.
-##  3. `intake` never puts a piece in `pack` while the Sanctum has room (`sanctum_room > 0`).
+##  3. Mode `direct` (the debug producer) never puts a piece in `pack` while the Sanctum has room (`sanctum_room > 0`).
+##     Mode `pack_only` (D-49) puts finds in the pack by design, whatever the Sanctum holds.
 ##  4. No two entries of one container share a slot.
 ##  5. A move, a merge and a discard never mint an item. A move or a merge keeps the total quantity.
 ## Reads never repair. `validate` lists problems; a read or a mutation skips a malformed entry.
