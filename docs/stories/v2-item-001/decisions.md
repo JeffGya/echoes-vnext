@@ -248,7 +248,7 @@ From `step7-qa-report-4.md`:
 From `step8-qa-report.md`:
 - F8-02 (finds gathered on a path are not drawn in the pack panel and not counted by the pack button): deferred to the story that configures finds (ITEM-002 and 001b). Not built in 001a. Known gap: until then the pack can read full while showing empty sockets on a path.
 - Core gap 1: ADD a one-shot refusal key. After a refused move or discard, the rebuilt snapshot carries `data.inventory.refused` with a stable reason key, so the UI shows the exact reason. One-shot: it is present for one snapshot only.
-- Core gap 2 (names on at-risk and result rows): Jeff wants a visual of the current and the proposed behaviour first. Pending his answer.
+- Core gap 2: ADD the item display `name` to the at-risk rows and the result rows (`at_risk_row`, `report_row`), taken from the item definition like the inventory rows. Jeff saw the current and proposed visual and approved it (2026-11-08).
 - F8-01 and the Low findings F8-03 to F8-09 go to the UI builder.
 
 ## OPEN
