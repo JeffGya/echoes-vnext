@@ -268,6 +268,18 @@ From `step9-qa-report.md`:
 - F10-02 (a pack-size change can overfill the pack when rows are written by hand): relevant to the pack-shrink story (D-41). Recorded, no change in 001a.
 - F10-03 (UI test gaps), F10-06 (move-after-settlement test skips settlement), F10-07 (stale expected total in a report): builder tasks.
 
+## D-51 — Approved copy and the pack tone (Jeff, 2026-11-08)
+Jeff marked up `copy-approval.md` with his picks. His file is saved as `copy-approval-jeff.md` and is the SOURCE of the approved wording. Rules for applying it:
+- Apply the text in the `Pick` column exactly, with four spelling fixes Jeff confirmed: "That spot is not available." (R_BAD_SLOT), "destroy" (MODAL_PATH_LINE), "Travel pack 2/4" (pack_button), "1 destroy action left on this path." (PATH_LEFT). Keep his capitals as typed (some "storehouse" are lowercase).
+- "[remove]" means the line is removed: no text, no replacement. The element that showed it goes away. A removed AT_STAKE_LABEL means the leaf mark gets no spoken label (Jeff's choice). A removed R_NOT_IN_PACK falls back to the generic unknown line.
+- The Kind names are approved as listed (consumable = Supply).
+- "Let it go" becomes "Destroy" (BTN_LET_GO) and the related lines use "destroy".
+- PACK_HEAVY is removed on purpose: a full pack in party details shows the tone and the departure line only.
+- COUNT_LABEL is "Count" (the detail pattern pick wins): a single piece shows "Count: 1". ONE_PIECE is no longer shown.
+- A refused button shows only the refusal line, without the button name: "The pack is full." Every refusal shows only its own line.
+- Marker: approved strings carry `# APPROVED (Jeff 2026-11-08)` in `ItemUiText.gd`. A test compares every string with a fixture of the approved text. A string that changes without a new approval fails the test.
+- Pack tone: Jeff chose candidate C (plain #7A5B3E, near full #4F3B28, full #120E0C). Tone only, no decoration.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
