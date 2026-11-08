@@ -894,3 +894,12 @@
 **Date:** 2026-11-06
 
 ---
+\n
+## #89 — Player-facing copy: Jeff approves every line (2026-11-08)
+
+**Q:** May placeholder text be shown in the game as if it were final?
+**A:** No. Jeff approves every single player-facing line. An agent proposes wording and marks it as a proposal. Text marked placeholder in the code is still shown to a player and then reads as final, so the work is not done until Jeff approves the lines. Approved lines carry an `APPROVED (Jeff <date>)` marker in the code and sit in a fixture with a test that fails when an approved line changes without a new approval. Jeff's marked-up file is the source of the wording. This applies to all stories, not only to V2-ITEM-001a.
+**Source:** Jeff, 2026-11-08 (V2-ITEM-001a; decisions.md D-49, D-51)
+**Date:** 2026-11-08
+
+---

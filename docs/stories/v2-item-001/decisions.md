@@ -287,6 +287,9 @@ From `step10-qa-report.md`:
 - F11-02 (no test for "no button name before a refusal line" and "Count: 1, not Count: 1 piece"): builder adds tests that fail without those behaviours.
 - F11-05, F11-06 and F11-07 are informational. F11-07 (the pack button label looks dim in the screenshot harness) is to be checked in Jeff's own play test.
 
+## D-53 — Play test approved (Jeff, 2026-11-08)
+Jeff play-tested build a59a23d with `playtest-plan.md` (second round). Parts A to K: approved, everything crossed off (Part F confirmed passed). Kept finds: carried means at risk. A find that survives a path sits in the pack as a carried piece; a later early leave rolls for it again and a defeat loses it (D-19, D-20, D-22). It is not safe until the next path. Jeff moves it to the Storehouse to make it safe. Step 7 and step 8 (UI) are complete. Remaining: docs (step 8 of the plan), commit and push, mark the PR ready, Jeff merges.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
