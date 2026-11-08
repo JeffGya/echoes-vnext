@@ -163,8 +163,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	if refused_v is Dictionary:
 		_awaiting = false
 		var reason := str((refused_v as Dictionary).get("reason", ""))
-		var is_move := str((refused_v as Dictionary).get("action", "")) == "move"
-		_flash(_refusal_box(is_move), ItemUiText.reason_text(reason, _last_to))
+		_flash(_refusal_box(), ItemUiText.reason_text(reason, _last_to))
 	elif _awaiting:
 		_awaiting = false
 		if _inv.hash() == _awaiting_hash:
@@ -259,6 +258,7 @@ func _reset_local() -> void:
 	_pack_open = false
 	_sel_box = ""
 	_sel_slot = -1
+	_last_to = ""
 	_awaiting = false
 	_have_prev = false
 	_prev_full = { SANCT: false, PACK: false }
@@ -562,10 +562,8 @@ func _clear_lines() -> void:
 	_show_line(PACK, "")
 
 
-## The panel that shows a refusal from the core: the target of a move, else the selected piece's box, else the open panel.
-func _refusal_box(is_move: bool) -> String:
-	if is_move and not _last_to.is_empty():
-		return _last_to
+## The panel that shows a refusal from the core: the selected piece's box (a move already selects its target), else the open panel.
+func _refusal_box() -> String:
 	if not _sel_box.is_empty():
 		return _sel_box
 	return SANCT if _sanct_panel.visible else PACK

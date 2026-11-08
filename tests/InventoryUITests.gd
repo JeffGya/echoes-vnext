@@ -62,6 +62,9 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_ui/a_path_snapshot_without_inventory_closes_the_pack", Callable(InventoryUITests, "_t_path_no_inventory"))
 	runner.register_test("inventory_ui/let_it_go_lock_after_the_modal_closes", Callable(InventoryUITests, "_t_letgo_lock"))
 	runner.register_test("inventory_ui/pack_pulses_once_when_it_becomes_full", Callable(InventoryUITests, "_t_pack_pulse"))
+	runner.register_test("inventory_ui/refusal_line_never_resizes_or_moves_the_path_panels", Callable(InventoryUITests, "_t_refusal_layout"))
+	runner.register_test("inventory_ui/container_full_line_names_the_destination", Callable(InventoryUITests, "_t_full_destination"))
+	runner.register_test("inventory_ui/hud_pack_button_hides_without_inventory", Callable(InventoryUITests, "_t_hud_hide"))
 	runner.register_test("inventory_ui/a_tap_anywhere_finishes_the_card_motion", Callable(InventoryUITests, "_t_tap_finishes"))
 
 
@@ -1285,4 +1288,87 @@ static func _t_tap_finishes() -> Dictionary:
 	_set_reduced(before)
 	if row.is_running() or row.tiles()[2].state != "lost":
 		return _fail(m, "a tap anywhere did not finish the item motion")
+	return _pass(m)
+
+
+static func _wrap_labels(root: Node, out: Array = []) -> Array:
+	if root is Label and (root as Label).autowrap_mode != TextServer.AUTOWRAP_OFF:
+		out.append(root)
+	for c in root.get_children():
+		_wrap_labels(c, out)
+	return out
+
+
+## Root cause of the path-view shift: an autowrap label with no minimum width asks for a one-character column, so
+## its height (and the panel's) explodes while a refusal line is laid out. Every wrapping label keeps a minimum width.
+static func _t_refusal_layout() -> Dictionary:
+	for size in [Vector2i(1280, 720), Vector2i(1920, 1080)]:
+		var m := _mount(PanelsScene)
+		(m[0] as SubViewport).size = size
+		var panels: Node = m[1]
+		panels.set_layout({ "profile": &"wide" if size.x > 1280 else &"standard", "logical_size": Vector2(size), "safe_insets": Vector4.ZERO })
+		panels.set_bottom_content_exclusion(88 + 16 + 112)
+		var pack := [FX.piece(0, "gear", "g2", 3, "Test gear G"), FX.piece(1, "relic", "g3", 0, "Test relic H")]
+		var inv := FX.inventory(20, 4, [], pack, FX.path_data(false))
+		panels.set_snapshot(FX.path_snap(inv))
+		panels.toggle_pack()
+		panels._on_slot_chosen("pack", 0)
+		var row := panels.get_node("%Row") as Control
+		var before := row.get_combined_minimum_size().y
+		for reason in ["path_used", "bad_state", "container_full"]:
+			panels.set_snapshot(FX.path_snap(_with_refusal(inv, "discard", reason)))
+			if not panels.get_node("%PackRefuse").visible or panels.get_node("%PackRefuseLabel").text.is_empty():
+				return _fail(m, "%s: the refusal line is not shown" % reason)
+			for label in _wrap_labels(panels):
+				if (label as Label).get_combined_minimum_size().y > 120.0:
+					return _fail(m, "%s at %s: %s needs %.0f px of height" % [reason, str(size), label.name, (label as Label).get_combined_minimum_size().y])
+			var shown := row.get_combined_minimum_size().y
+			if shown > float(size.y) * 0.6 or shown > before + 70.0:
+				return _fail(m, "%s at %s: the panels grew from %.0f to %.0f high" % [reason, str(size), before, shown])
+			panels.set_snapshot(FX.path_snap(inv))
+			if absf(row.get_combined_minimum_size().y - before) > 0.5:
+				return _fail(m, "the height did not return after the line hid")
+		m[0].free()
+	return { "ok": true }
+
+
+static func _t_full_destination() -> Dictionary:
+	var m := _panels(FX.sanctum_snap(FX.standard()))
+	var panels: Node = m[1]
+	panels.toggle_sanctum()
+	panels.toggle_pack()
+	# A move to the pack: the core says container_full. The line names the pack, in the pack panel.
+	panels._on_slot_chosen("sanctum", 0)
+	panels.get_node("%MoveButton").pressed.emit()
+	panels.set_snapshot(FX.sanctum_snap(_with_refusal(FX.standard(), "move", "container_full")))
+	if panels.get_node("%PackRefuseLabel").text != ItemUiText.R_PACK_FULL or panels.get_node("%SanctRefuse").visible:
+		return _fail(m, "move to the pack: pack line '%s', sanctum line shown=%s" % [panels.get_node("%PackRefuseLabel").text, panels.get_node("%SanctRefuse").visible])
+	# A move to the Sanctum.
+	panels.set_snapshot(FX.sanctum_snap(FX.standard()))
+	panels._on_slot_chosen("pack", 0)
+	panels.get_node("%MoveButton").pressed.emit()
+	panels.set_snapshot(FX.sanctum_snap(_with_refusal(FX.standard(), "move", "container_full")))
+	if panels.get_node("%SanctRefuseLabel").text != ItemUiText.R_SANCT_FULL or panels.get_node("%PackRefuse").visible:
+		return _fail(m, "move to the Sanctum: sanctum line '%s'" % panels.get_node("%SanctRefuseLabel").text)
+	# The destination memory is cleared with the screen state.
+	panels.set_snapshot(FX.party_snap(FX.standard()))
+	if str(panels.get("_last_to")) != "":
+		return _fail(m, "_last_to survived a screen change")
+	return _pass(m)
+
+
+static func _t_hud_hide() -> Dictionary:
+	var m := _mount(preload("res://ui/screens/venture/StageExploreScreen.tscn"))
+	var screen: Control = m[1]
+	var snap := { "type": "flow.stage_explore", "meta": { "t": 1 }, "actions": {},
+		"data": { "inventory": FX.inventory(20, 4, [], [FX.piece(0, "gear", "g1", 0, "A")], FX.path_data(false)) } }
+	screen.set_snapshot(snap)
+	var hud := screen.get_node("%PackHudButton") as Control
+	if not hud.visible:
+		return _fail(m, "the HUD pack button is hidden with inventory")
+	var bare: Dictionary = snap.duplicate(true)
+	(bare["data"] as Dictionary).erase("inventory")
+	screen.set_snapshot(bare)
+	if hud.visible:
+		return _fail(m, "the HUD pack button stays visible without inventory")
 	return _pass(m)

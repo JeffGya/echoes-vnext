@@ -49,6 +49,7 @@ static func plan(n: int, reduced: bool) -> Dictionary:
 ## The row sits on a dark surface (the leave confirmation) or a light card.
 func set_on_dark(on: bool) -> void:
 	_on_dark = on
+	_tiles.add_theme_constant_override("h_separation", 16 if on else 10)
 	var variation := &"ItemTextDark" if on else &"ItemTextLight"
 	_tiles.alignment = FlowContainer.ALIGNMENT_CENTER if on else FlowContainer.ALIGNMENT_BEGIN
 	var h := HORIZONTAL_ALIGNMENT_CENTER if on else HORIZONTAL_ALIGNMENT_LEFT

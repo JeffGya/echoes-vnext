@@ -245,3 +245,67 @@ ASSUMED: 1. A refusal from the core shows in the target box of the last move, el
 ASSUMED: 2. New wording (`R_NO_CHANGE`, `R_GONE`, `R_BAD_SLOT`, `R_COUNT`, `PATH_HINT`) is placeholder. `bad_payload`, `bad_box`, `bad_state`, `not_unique`, `no_stage` use the generic line.
 ASSUMED: 3. On a path the details sit right of the pack (side by side), 360 wide each; at 1280 the pair spans x 536 to 1264.
 BLOCKED: none.
+
+## Fixes after UI QA round 2
+
+Source: `step8-qa-report-2.md`. UI only. No `core/` change. No commit. Compile check (`--quit`): 0 `SCRIPT ERROR` lines.
+
+### Root cause of F9-01
+
+An autowrap label with no minimum width asks for a one-character column while the container lays out. Its height, and so the panel's, grows to hundreds of pixels (`PackRefuseLabel` measured 679 px). The path layout is side by side, so the tall panel pushed both panels off the top of the screen. It showed only when the refusal line was laid out, because the other wrapping labels had a width from their parents. Fix: every wrapping label in `InventoryPanels.tscn` keeps a minimum width (300, or 160 in the narrow details column). The line never changes the panel size: it wraps inside a width that exists.
+
+### Changes
+
+| Item | Change | File |
+|---|---|---|
+| F9-01 | `custom_minimum_size` on all 9 autowrap labels | `ui/components/InventoryPanels.tscn` |
+| F9-02 | The `_refusal_box` branch on `_last_to` was dead code (a move already selects its target box). Removed. The mutation at the old :167 now fails a test | `ui/components/InventoryPanels.gd` (`_refusal_box`, `set_snapshot`) |
+| F9-06 | `_last_to` reset with the screen state | `InventoryPanels.gd` (`_reset_local`) |
+| F9-04 | Tile gap on a dark card 10 to 16, so the brackets of neighbours do not touch | `ui/components/ItemResultRow.gd` (`set_on_dark`) |
+| F9-05 | Left as built. Existing disabled buttons use `disabled = true` (not focusable). A blocked `Move` and `Let it go` stay focusable on purpose, so a press or a screen reader reaches the reason line | none |
+| Screenshots | Fixture `invr_path_refused` | `scripts/screenshot.gd` |
+
+### Tests
+
+Three new tests in `inventory_ui` (38 tests).
+
+| Test | Pins |
+|---|---|
+| `refusal_line_never_resizes_or_moves_the_path_panels` | At 1280x720 and 1920x1080, path view with a selection, three refusal keys: every wrapping label needs at most 120 px, the panel row stays under 60 percent of the viewport and within 70 px of its height without the line, and returns to the same height when the line hides |
+| `container_full_line_names_the_destination` | `container_full` after a move to the pack shows `R_PACK_FULL` in the pack panel only; after a move to the Sanctum shows `R_SANCT_FULL` in the Sanctum panel only; `_last_to` clears on a screen change |
+| `hud_pack_button_hides_without_inventory` | A path snapshot without `data.inventory` hides `%PackHudButton` (real `StageExploreScreen`) |
+
+| Mutation (restored, `cmp` equal) | Result |
+|---|---|
+| Old `InventoryPanels.tscn` (no label widths) | `refusal_line_never_resizes...`: `PackRefuseLabel needs 679 px of height` |
+| `reason_text(reason, "")` (old :167) | `container_full_line_names_the_destination`: `pack line 'The Sanctum is full...'` |
+| `_refusal_box` ignores `_last_to` (old :567) | Equivalent mutant: the move already selects its target, so no test can differ. The branch was removed instead |
+| HUD pack button always visible | `hud_pack_button_hides_without_inventory` |
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_ui` | `Tests: 38 total, 38 passed, 0 failed` |
+| `=inventory_ui,realm_ui,payout_ui,foundation_ui,sanctum.layout,sanctum.party,echo_party,seam,inventory_paths` | `Tests: 248 total, 248 passed, 0 failed` |
+
+### Viewed (xvfb-run, `scripts/screenshot.gd`)
+
+| Screen | Sizes | Result |
+|---|---|---|
+| Path view, pack open, a refusal snapshot (`invr_path_refused`) | 1280x720, 1920x1080 | Both panels stay in place (y 80 to 385, and 100 to 480); the line wraps inside the pack panel; `To the Sanctum` clear |
+| Leave confirmation | 1920x1080 | Brackets of neighbour tiles no longer touch |
+
+NOT viewed: the old broken render (the QA PNGs from `/tmp/claude-0/qaui2-shots/` were not reopened; the old code is proved by the failing test above); the leave confirmation at 1280 after the gap change; any motion; the compact profile.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"` with Bash `timeout` 3600000.
+2. Duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files edited by the run: none in the checkout (`/tmp/echoes-vnext-sharded/`). No `trap`.
+4. Verify: `git status --short` unchanged; no untracked `.import` file.
+5. Read back: `COMBINED:` (expected 2724 + 3 = 2727, 0 failed), any shard log without `Tests:`, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. The 300 and 160 minimum widths are layout numbers, not design values.
+ASSUMED: 2. The refusal line may grow the pack panel by one or two text lines. The test allows 70 px. It cannot move the panels off screen.
+BLOCKED: none.

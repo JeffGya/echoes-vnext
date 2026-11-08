@@ -264,6 +264,7 @@ mode = "strap"
 [node name="PackWord" type="Label" parent="Work/Row/Column/PackPanel/PackBox"]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTextDark"
 autowrap_mode = 3
@@ -277,6 +278,7 @@ theme_type_variation = &"ItemRefuseLine"
 
 [node name="PackRefuseLabel" type="Label" parent="Work/Row/Column/PackPanel/PackBox/PackRefuse"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTextDark"
 autowrap_mode = 3
@@ -304,12 +306,14 @@ mouse_filter = 2
 
 [node name="EmptyLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsEmpty"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTextLight"
 autowrap_mode = 3
 
 [node name="HintLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsEmpty"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTextLightMuted"
 autowrap_mode = 3
@@ -341,6 +345,7 @@ theme_override_constants/separation = 2
 
 [node name="NameLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTitleLight"
 autowrap_mode = 3
@@ -378,6 +383,7 @@ leaf_only = true
 
 [node name="StakeLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines/StakeRow"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"ItemTextLight"
@@ -415,6 +421,7 @@ theme_override_constants/separation = 2
 [node name="MoveReason" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Reasons"]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTextLight"
 autowrap_mode = 3
@@ -422,6 +429,7 @@ autowrap_mode = 3
 [node name="LetGoReason" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Reasons"]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTextLight"
 autowrap_mode = 3
@@ -429,6 +437,7 @@ autowrap_mode = 3
 [node name="PathNote" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Reasons"]
 unique_name_in_owner = true
 visible = false
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_type_variation = &"ItemTextLightMuted"
 autowrap_mode = 3
