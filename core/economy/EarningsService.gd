@@ -232,16 +232,20 @@ static func held_record(piece: Dictionary, token: String, fate: String, reason_k
 
 ## One item as the result screens and the leave confirmation show it. No id. `source` is "gathered" (an item row
 ## on the path) or "held" (a piece carried from an earlier path). `mark_index` is the piece mark
-## (`InventoryService.mark_index_of`), or -1 when the item has no piece id yet.
-static func at_risk_row(e: Dictionary, source: String, mark_index: int) -> Dictionary:
-	return { "type_id": str(e.get("type_id", "")), "kind": str(e.get("kind", "")), "grade": str(e.get("grade", "")),
+## (`InventoryService.mark_index_of`), or -1 when the item has no piece id yet. `name` is the definition name
+## (`InventoryService.name_of`); the key is present only when it is not empty.
+static func at_risk_row(e: Dictionary, source: String, mark_index: int, name: String = "") -> Dictionary:
+	var row := { "type_id": str(e.get("type_id", "")), "kind": str(e.get("kind", "")), "grade": str(e.get("grade", "")),
 		"quantity": int(e.get("quantity", 1)), "source": source, "mark_index": mark_index }
+	if not name.is_empty():
+		row["name"] = name
+	return row
 
 
 ## A row of a leave, defeat or path-end item report: `at_risk_row` plus the `reason_key`, and `lost_quantity`
 ## when a stack surplus was lost. The one builder for all three reports.
-static func report_row(e: Dictionary, reason: String, source: String, mark_index: int) -> Dictionary:
-	var out := at_risk_row(e, source, mark_index)
+static func report_row(e: Dictionary, reason: String, source: String, mark_index: int, name: String = "") -> Dictionary:
+	var out := at_risk_row(e, source, mark_index, name)
 	out["reason_key"] = reason
 	if int(e.get("lost_quantity", 0)) > 0:
 		out["lost_quantity"] = int(e["lost_quantity"])

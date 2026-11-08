@@ -443,3 +443,91 @@ Block: `{ kept: [row], lost: [row] }`. Present only when at least one row exists
 ASSUMED: 1. The test settles Realm B's row with a direct `gathered` intake and a settled mark, not with a second full path end. The slot arithmetic is the same (`later_rows` 0 for the last row).
 ASSUMED: 2. F4-02 (over-reservation: a later row that merges still holds its slot, so a big find can lose a few units) stays as built per D-47.
 BLOCKED: None.
+
+## Refusal key (D-48)
+
+Source: decision D-48 (Jeff, 2026-11-08): core gap 1 (one-shot refusal key) and core gap 2 (item names on at-risk and result rows). Same private save dir. No commit.
+
+### Changes
+
+| Item | Change | File:line |
+|---|---|---|
+| Refusal one-shot field | `FlowContext.pending_inventory_refusal` `{ action, reason }`. Never saved (FlowContext is not in the save). Same pattern as `pending_return_confirm`. | `core/state/flow/FlowContext.gd:149` |
+| Refusal handed to the snapshot | `InventoryController._deny` sets the field and publishes a COPY of the current snapshot whose `data.inventory` is rebuilt by `InventoryRules.projection` (no re-enter, no save, no new flow state, no `actions`). It does this only when the current snapshot has `data.inventory` (Sanctum, party prep, path view). Elsewhere (for example the stage map) nothing is set. The outcome still carries `error_code`. | `core/runtime/controllers/InventoryController.gd:119-136` |
+| Builder | `projection` adds `refused` when the field is set. | `core/inventory/InventoryRules.gd:91` |
+| One-shot clear | After the snapshot is published, `dispatch` spends the field, gives the caller a copy that carries the key, and erases it from `last_snapshot`. | `core/runtime/FlowRuntime.gd:779` |
+| Names on rows | `InventoryService.name_of(cfg, type_id)` is now public (one function for inventory rows, at-risk rows and result rows). `EarningsService.at_risk_row` and `report_row` take an optional `name`; the key is added only when it is not empty. Callers pass it: leave, path end, preview, items at risk, defeat. | `core/inventory/InventoryService.gd:800`; `core/economy/EarningsService.gd:236`, :246; `core/economy/StageSettlementService.gd:489`, :495, :561, :587, :593; `core/realms/ActiveStageService.gd:548`, :556 |
+| Replay after a reload | No code change: the stored result keeps the row as data, so `name` comes back through `PendingResultService`. Test below. | none |
+
+### Snapshot field shape
+
+`data.inventory.refused` (Sanctum, party prep, path view), present only in the one snapshot built right after a refused action:
+
+| Key | Type | Content |
+|---|---|---|
+| `action` | String | `move` or `discard` |
+| `reason` | String | One reason key from the list below |
+
+The key is absent in every other snapshot, in an accepted action's snapshot, in the save, and after a reload. A refusal changes nothing else (save byte-equal, no flush, no extra save request). The other `data.inventory` fields are rebuilt from the current save, so they are current.
+
+### Reason keys that reach the field
+
+| Action | Reason keys |
+|---|---|
+| `move` | `bad_payload`, `path_open`, `bad_box`, `unknown_entry`, `bad_slot`, `no_change`, `slot_taken`, `type_mismatch`, `stack_limit` (target stack at its limit), `container_full`, `bad_state` |
+| `discard` | `bad_payload`, `bad_box`, `unknown_entry`, `not_found`, `not_unique`, `count_range`, `equipped`, `not_in_pack`, `path_used`, `no_stage`, `bad_state` |
+| Not carried | `not_in_sanctum` (the screen has no `data.inventory`, so there is no snapshot to carry it; the outcome `error_code` still has it) |
+
+### Tests
+
+| Test | What it pins |
+|---|---|
+| `inventory_paths/a_refusal_key_is_in_the_next_snapshot_only` | The dispatch result has the key; `last_snapshot` and the next dispatch do not; discard is named `discard`; the save is byte-equal; an accepted move and discard give none; a refusal on the stage map sets nothing. |
+| `inventory_paths/each_refusal_reason_reaches_the_snapshot` | 14 reasons from the Sanctum, `container_full`, and `path_open`, `not_in_pack`, `path_used` from the path view. |
+| `inventory_paths/the_refusal_key_is_never_saved_and_does_not_survive_a_reload` | No refusal field in the save; none after a real reload. |
+| `inventory_paths/item_names_are_on_at_risk_and_result_rows` | Names on at-risk rows, stage-clear preview and payout rows, leave rows (kept and lost), defeat rows. |
+| `inventory_paths/item_names_survive_a_reload_of_the_result` | Names on the leave card and on the replay by `PendingResultService` after a JSON reload. |
+| `inventory_paths/a_type_without_a_definition_has_no_name_key` | No `name` key and no crash when the type has no definition. |
+| Updated | `inventory_actions/discard_a_sanctum_piece` and `discard_refusals_change_nothing` (a refusal now republishes the snapshot, current inventory, same save); `item_packs` and `inventory_actions` row literals gain `name`; the defeat-card test uses unnamed rows (the real `balance.json` has no definitions). |
+
+Mutations by hand (each restored, `cmp` equal): the one-shot clear removed fails `a_refusal_key_is_in_the_next_snapshot_only` (the key stays); `name` dropped from `report_row` fails 9 tests (`item_names_are_on_at_risk_and_result_rows`, `item_names_survive_a_reload_of_the_result`, and 7 row-literal tests).
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=inventory_paths,inventory_moves,inventory_actions,inventory_service,inventory_save,item_packs,item_packs_char` | `Tests: 143 total, 143 passed, 0 failed` |
+| `=flow_transaction,snapshot_fingerprint,snapshot_purity,snapshot_contract,save_integrity,pending_result,econ_char,economy,payout_ui,sanctum.layout,sanctum.party,echo_party` | `Tests: 277 total, 277 passed, 0 failed` |
+| `=inventory_ui,traversal,venture_char,seam,stop_short,realm_ui` | `Tests: 217 total, 217 passed, 0 failed` |
+
+Compile check (`--check-only --quit`): 0 `SCRIPT ERROR` lines. No suite added or removed (shard map unchanged). Six tests added: the expected sharded total is 2689.
+
+### Recorded values
+
+None moved. `snapshot_fingerprint` passes 2 of 2 with the recorded hashes: `refused` is absent unless a refusal just happened, and `name` is an additive key on rows that exist only in the item-bearing snapshots and results (the fingerprint snapshots hold none). The D-27 projection rule for `data.inventory` is unchanged.
+
+### Final contract of the `data.items` rows (and `items_at_risk`)
+
+One row: `{ type_id, kind, grade, quantity, source, mark_index, name?, reason_key, lost_quantity? }`. An at-risk row has the same fields without `reason_key` and `lost_quantity`.
+
+| Field | Content |
+|---|---|
+| `name` (NEW, D-48) | The definition name, the same source as the inventory rows. Present only when the type has a definition with a name. Without it the UI uses the kind word. Never an id. |
+| `source` | `held` (carried before this path) or `gathered` (a NEW find) |
+| `reason_key`, kept `held` | `ok` |
+| `reason_key`, kept `gathered` | `ok`, `to_pack`, `overflow` (only with `lost_quantity`) |
+| `reason_key`, lost | `leave_none`, `leave_some`, `defeat`, `overflow`, or an intake refusal key |
+| Other fields | As in "Fixes after QA round 4 (D-47)" |
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"`, Bash `timeout` 3600000.
+2. Expected duration: about 18 minutes on 4 cores, about 31 on 2.
+3. Files the run edits: none in the checkout (it writes `/tmp/echoes-vnext-sharded/`). No `trap` needed.
+4. Verify: `git status --short` and `git diff --stat` are the same before and after.
+5. Read back: the `COMBINED:` line (expect 2689), any shard log without a `Tests:` line, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. A refusal republishes the current snapshot with a refreshed `data.inventory` (not a full state rebuild). The rest of the snapshot is the previous one. Say if the UI needs a full rebuild.
+ASSUMED: 2. `not_in_sanctum` cannot be carried because the screens that refuse it have no `data.inventory`. The UI gets it from the dispatch result `error_code` only if it reads it; otherwise it needs no message there.
+ASSUMED: 3. `name` is absent (not an empty string) when the type has no definition or no name, so the UI can test the key.
+BLOCKED: None.

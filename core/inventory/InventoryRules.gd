@@ -81,11 +81,15 @@ static func clear_discard_used(stage: Dictionary) -> void:
 ## `data.inventory` for the Sanctum, party prep and the path view: `InventoryService.snapshot` with `reserved`
 ## = the open item rows of the whole save. With `force_path` (the path view) it adds
 ## `path: { move_reason, discard_used, discard_pack_reason, discard_sanctum_reason }`. A reason is "" when the
-## action is allowed. Outside the path view there is no `path` key.
+## action is allowed. Outside the path view there is no `path` key. `refused` `{ action, reason }` is present only
+## in the snapshot built right after a refused move or discard.
 static func projection(ctx: FlowContext, force_path: bool = false) -> Dictionary:
 	var save: Dictionary = ctx.save_data if ctx.save_data != null else {}
 	var cfg := ConfigService.get_inventory_cfg(ctx.config_service) if ctx.config_service != null else {}
 	var inv := InventoryService.snapshot(save, cfg, EarningsService.open_item_rows_in_save(save))
+	# One-shot: the refusal of the action that was just dispatched (see InventoryController, FlowRuntime.dispatch).
+	if not ctx.pending_inventory_refusal.is_empty():
+		inv["refused"] = ctx.pending_inventory_refusal.duplicate()
 	if force_path:
 		var used := discard_used(ctx)
 		inv["path"] = {

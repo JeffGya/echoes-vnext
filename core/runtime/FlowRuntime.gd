@@ -774,6 +774,16 @@ func dispatch(action: Dictionary) -> Dictionary:
 			(flow_ctx.last_snapshot["data"] as Dictionary).erase("return_confirm_requested")
 		flow_ctx.pending_return_confirm = false
 
+	# The refusal key of a refused inventory action is shown by exactly one snapshot: the caller gets a copy that
+	# carries `data.inventory.refused`, last_snapshot loses it, and the field is spent.
+	if not flow_ctx.pending_inventory_refusal.is_empty():
+		flow_ctx.pending_inventory_refusal = {}
+		var _ir_data: Variant = flow_ctx.last_snapshot.get("data", null)
+		if _ir_data is Dictionary and (_ir_data as Dictionary).get("inventory", null) is Dictionary \
+				and ((_ir_data as Dictionary)["inventory"] as Dictionary).has("refused"):
+			out = out.duplicate(true)
+			((_ir_data as Dictionary)["inventory"] as Dictionary).erase("refused")
+
 	# V2-INFRA-003 Phase 3 (slice C): consume _bark_line here, exactly once, AFTER the snapshot
 	# that surfaced it (flow.encounter / flow.keeper_trial / flow.resolve, built by
 	# EncounterSnapshotBuilder.build_round_snapshot()/build_final_snapshot() via the pure, read-only

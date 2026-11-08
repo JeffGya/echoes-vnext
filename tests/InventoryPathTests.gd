@@ -30,6 +30,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_paths/a_big_stack_find_stays_within_the_pack_through_the_real_seam", Callable(InventoryPathTests, "_t_big_find_seam"))
 	runner.register_test("inventory_paths/a_big_stack_find_leaves_the_slots_of_later_rows", Callable(InventoryPathTests, "_t_big_find_later_rows"))
 	runner.register_test("inventory_paths/a_big_stack_find_leaves_the_slots_of_rows_in_other_realms", Callable(InventoryPathTests, "_t_big_find_other_realm"))
+	runner.register_test("inventory_paths/a_refusal_key_is_in_the_next_snapshot_only", Callable(InventoryPathTests, "_t_refusal_key_one_shot"))
+	runner.register_test("inventory_paths/each_refusal_reason_reaches_the_snapshot", Callable(InventoryPathTests, "_t_refusal_key_reasons"))
+	runner.register_test("inventory_paths/the_refusal_key_is_never_saved_and_does_not_survive_a_reload", Callable(InventoryPathTests, "_t_refusal_key_not_saved"))
+	runner.register_test("inventory_paths/item_names_are_on_at_risk_and_result_rows", Callable(InventoryPathTests, "_t_row_names"))
+	runner.register_test("inventory_paths/item_names_survive_a_reload_of_the_result", Callable(InventoryPathTests, "_t_row_names_reload"))
+	runner.register_test("inventory_paths/a_type_without_a_definition_has_no_name_key", Callable(InventoryPathTests, "_t_row_no_definition"))
 	runner.register_test("inventory_paths/dispatches_are_deterministic", Callable(InventoryPathTests, "_t_determinism"))
 	runner.register_test("inventory_paths/new_save_and_config_hold_no_placeholder", Callable(InventoryPathTests, "_t_no_placeholder"))
 
@@ -63,11 +69,15 @@ static func _controller(rt: FlowRuntime, env: Dictionary) -> InventoryController
 ## The reason the controller gives for an action it refuses. Run it only for an action that is refused: a
 ## successful action would run twice.
 static func _move_key(env: Dictionary, action: Dictionary) -> String:
-	return _controller(env["rt"], env).handle_move(action, 9).error_code
+	var key := _controller(env["rt"], env).handle_move(action, 9).error_code
+	(env["rt"] as FlowRuntime).flow_ctx.pending_inventory_refusal = {}
+	return key
 
 
 static func _drop_key(env: Dictionary, action: Dictionary) -> String:
-	return _controller(env["rt"], env).handle_discard(action, 9).error_code
+	var key := _controller(env["rt"], env).handle_discard(action, 9).error_code
+	(env["rt"] as FlowRuntime).flow_ctx.pending_inventory_refusal = {}
+	return key
 
 
 static func _json_of(env: Dictionary) -> String:
@@ -474,7 +484,7 @@ static func _t_path_snapshot() -> Dictionary:
 ## defeat, and stays in the pack at the path end or when the leave keeps it. Its report row has no mark.
 static func _stack_row(reason: String) -> Dictionary:
 	return { "type_id": "ph_material_a", "kind": "material", "grade": "", "quantity": 2, "source": "held",
-		"mark_index": -1, "reason_key": reason }
+		"mark_index": -1, "name": "Placeholder material A", "reason_key": reason }
 
 
 static func _stack_ctx(seed_value: int, cap: int) -> FlowContext:
@@ -633,7 +643,7 @@ static func _t_move_respects_reserved() -> Dictionary:
 static func _t_find_stack_to_pack() -> Dictionary:
 	var m: Array = []
 	var want := { "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 2, "source": "gathered",
-		"mark_index": -1, "reason_key": "to_pack" }
+		"mark_index": -1, "name": "Placeholder consumable A", "reason_key": "to_pack" }
 	var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 1, 3)
 	InventoryService.intake(ctx.save_data, ConfigService.get_inventory_cfg(ctx.config_service), InventoryServiceTests._e("ph_weapon_a"), "direct")
 	ItemPacksTests._add_rows(ctx, "s0", [0], "ph_consumable_a")
@@ -775,6 +785,233 @@ static func _t_big_find_other_realm() -> Dictionary:
 		if str(res["result"]) != "packed" or _pack_entries(ctx) > 3 or not InventoryService.validate(ctx.save_data, cfg).is_empty():
 			m.append("%s after Realm B: %s, entries %d, validate %s" % [how, str(res["result"]), _pack_entries(ctx),
 				str(InventoryService.validate(ctx.save_data, cfg))])
+	return _result(m)
+
+
+## `data.inventory.refused` of a snapshot, or {}.
+static func _refused_of(snap: Dictionary) -> Dictionary:
+	var d: Variant = snap.get("data", null)
+	if d is Dictionary and (d as Dictionary).get("inventory", null) is Dictionary:
+		var r: Variant = ((d as Dictionary)["inventory"] as Dictionary).get("refused", null)
+		return r if r is Dictionary else {}
+	return {}
+
+
+## D-48: a refused move or discard publishes `data.inventory.refused = { action, reason }` in exactly the next
+## snapshot. The snapshot after it (a later dispatch, or `last_snapshot`) does not carry it. An accepted action
+## gives none.
+static func _t_refusal_key_one_shot() -> Dictionary:
+	var m: Array = []
+	var env := _stocked("rk_one", 2)
+	var rt: FlowRuntime = env["rt"]
+	InventoryActionTests._dispatch(env, { "type": "debug.seed.show" })
+	var out := rt.dispatch(_mv("sanctum", 0, "sanctum", 1))  # slot taken
+	if _refused_of(out) != { "action": "move", "reason": "slot_taken" }:
+		m.append("the dispatch result has %s" % str(_refused_of(out)))
+	if not _refused_of(rt.flow_ctx.last_snapshot).is_empty():
+		m.append("last_snapshot keeps the key")
+	if not _refused_of(rt.dispatch({ "type": "debug.seed.show" })).is_empty():
+		m.append("the next dispatch carries the key again")
+	# A discard refusal is named `discard`.
+	out = rt.dispatch(_drop("sanctum", 9))
+	if _refused_of(out) != { "action": "discard", "reason": "unknown_entry" }:
+		m.append("discard refusal: %s" % str(_refused_of(out)))
+	# Nothing else changed: the save is byte-equal across a refusal.
+	var before := _json_of(env)
+	rt.dispatch(_mv("sanctum", 0, "sanctum", 1))
+	if _json_of(env) != before:
+		m.append("a refusal changed the save")
+	# An accepted move and an accepted discard give no key.
+	if not _refused_of(rt.dispatch(_mv("sanctum", 0, "pack"))).is_empty() or not _refused_of(rt.dispatch(_drop("sanctum", 1))).is_empty():
+		m.append("an accepted action carries a refusal key")
+	if not _refused_of(rt.flow_ctx.last_snapshot).is_empty() or not rt.flow_ctx.pending_inventory_refusal.is_empty():
+		m.append("state left over after accepted actions")
+	# A refusal on a screen without data.inventory sets nothing.
+	rt.flow_machine.transition(FlowStateIds.STAGE_MAP, rt.flow_ctx, env["logger"], 4, "test")
+	var away := rt.dispatch(_mv("sanctum", 0, "pack"))
+	if not _refused_of(away).is_empty() or not rt.flow_ctx.pending_inventory_refusal.is_empty():
+		m.append("a refusal on the stage map set a key")
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+## Each refusal reason maps to its key, from the Sanctum and from the path view.
+static func _t_refusal_key_reasons() -> Dictionary:
+	var m: Array = []
+	var env := InventoryActionTests._env("rk_reasons", 6, 3)
+	var rt: FlowRuntime = env["rt"]
+	var save := InventoryActionTests._save(env)
+	var cfg: Dictionary = env["inv_cfg"]
+	cfg["stack_limit_default"] = 3  # the live test config: a stack of 3 is full
+	for t in ["ph_weapon_a", "ph_charm_a"]:
+		InventoryService.intake(save, cfg, InventoryServiceTests._e(t), "direct")
+	InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_consumable_a", 3), "direct")
+	InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_material_a", 2), "direct")
+	InventoryService.move_entry(save, cfg, "sanctum", 2, "pack", 0)
+	InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_consumable_a", 3), "direct")
+	rt.flow_machine.reenter(rt.flow_ctx, env["logger"], 3)
+	InventoryActionTests._dispatch(env, { "type": "debug.seed.show" })
+	var cases: Array = [
+		["move", _mv("sanctum", 0, "sanctum", 1), "slot_taken"],
+		["move", _mv("sanctum", 0, "sanctum", 6), "bad_slot"],
+		["move", _mv("sanctum", 5, "pack"), "unknown_entry"],
+		["move", _mv("sanctum", 3, "sanctum", 2), "type_mismatch"],
+		["move", _mv("pack", 0, "sanctum", 2), "stack_limit"],
+		["move", _mv("sanctum", 0, "sanctum", 0), "no_change"],
+		["move", _mv("sanctum", 0, "moon"), "bad_box"],
+		["move", { "type": _MOVE }, "bad_payload"],
+		["discard", _drop("sanctum", 0, 2), "count_range"],
+		["discard", _drop("sanctum", 5), "unknown_entry"],
+		["discard", _drop("moon", 0), "bad_box"],
+		["discard", { "type": _DISCARD, "payload": {} }, "bad_payload"],
+		["discard", InventoryActionTests._discard("it.99"), "not_found"],
+		["discard", InventoryActionTests._discard("ph_material_a"), "not_unique"],
+	]
+	for c in cases:
+		var got := _refused_of(rt.dispatch(c[1]))
+		if got != { "action": c[0], "reason": c[2] }:
+			m.append("%s %s: %s (inventory %s)" % [c[0], c[2], str(got), JSON.stringify(save["inventory"])])
+	# container_full: a pack of 1 that is full.
+	var full := _stocked("rk_full", 1)
+	InventoryActionTests._dispatch(full, _mv("sanctum", 0, "pack"))
+	var got_full := _refused_of((full["rt"] as FlowRuntime).dispatch(_mv("sanctum", 1, "pack")))
+	if got_full != { "action": "move", "reason": "container_full" }:
+		m.append("container_full: %s" % str(got_full))
+	InventoryActionTests._done(full)
+	InventoryActionTests._done(env)
+	# The path view: path_open, not_in_pack, path_used.
+	var ex := _path_env("rk_path")
+	if not bool(ex.get("ok", false)):
+		return ex
+	var prt: FlowRuntime = ex["rt"]
+	for c in [["move", _mv("sanctum", 0, "pack"), "path_open"], ["discard", _drop("sanctum", 0), "not_in_pack"]]:
+		var g := _refused_of(prt.dispatch(c[1]))
+		if g != { "action": c[0], "reason": c[2] }:
+			m.append("path view %s: %s" % [c[2], str(g)])
+	prt.dispatch(_drop("pack", 0))
+	var used := _refused_of(prt.dispatch(_drop("pack", 1)))
+	if used != { "action": "discard", "reason": "path_used" }:
+		m.append("path_used: %s" % str(used))
+	if str(prt.flow_ctx.last_snapshot.get("type")) != FlowStateIds.STAGE_EXPLORE:
+		m.append("the path view lost its snapshot type")
+	return _result(m)
+
+
+## The key is not in the save and does not come back after a quit and Continue.
+static func _t_refusal_key_not_saved() -> Dictionary:
+	var m: Array = []
+	var env := _stocked("rk_save", 2)
+	var rt: FlowRuntime = env["rt"]
+	rt.dispatch(_mv("sanctum", 0, "sanctum", 1))
+	rt.flow_ctx.request_save("test.refusal")
+	rt.dispatch({ "type": "debug.seed.show" })
+	if JSON.stringify(InventoryActionTests._save(env)).contains("refus"):
+		m.append("the save holds a refusal field")
+	var re := InventoryActionTests._reload(env)
+	if not _refused_of((re["rt"] as FlowRuntime).flow_ctx.last_snapshot).is_empty() \
+			or not (re["rt"] as FlowRuntime).flow_ctx.pending_inventory_refusal.is_empty():
+		m.append("the key came back after a reload")
+	InventoryActionTests._done(re)
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+static func _all_rows_named(rows: Array, want: Dictionary) -> String:
+	for r in rows:
+		var row: Dictionary = r
+		if str(row.get("name", "<none>")) != str(want.get(str(row["type_id"]), "<unknown>")):
+			return "row %s has name '%s'" % [str(row["type_id"]), str(row.get("name", "<none>"))]
+	return ""
+
+
+const _NAMES := { "ph_weapon_a": "Placeholder weapon A", "ph_relic_a": "Placeholder relic A", "ph_armor_a": "Placeholder armor A",
+	"ph_consumable_a": "Placeholder consumable A", "ph_material_a": "Placeholder material A" }
+
+
+## D-48: `name` (the definition name, as on the inventory rows) is on the at-risk rows, the leave rows (kept and lost),
+## the defeat rows and the stage-clear preview and payout rows. It is additive: the old keys stay.
+static func _t_row_names() -> Dictionary:
+	var m: Array = []
+	var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 4, 4)
+	var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+	ItemPacksTests._hold(ctx, 1, 1, "ph_relic_a")
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "0", ItemPacksTests._entry("ph_armor_a"))
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "1", ItemPacksTests._entry("ph_consumable_a", 2))
+	var risk := StageSettlementService.items_at_risk(ctx, ctx.config_service)
+	var bad := _all_rows_named(risk, _NAMES)
+	if risk.size() != 3 or bad != "" or not (risk[0] as Dictionary).has("mark_index"):
+		m.append("at risk: %s %s" % [bad, str(risk)])
+	# Stage-clear preview and payout.
+	var preview: Dictionary = ItemPacksTests._preview(ctx).get("items", {})
+	bad = _all_rows_named((preview.get("kept", []) as Array) + (preview.get("lost", []) as Array), _NAMES)
+	if (preview.get("kept", []) as Array).size() != 2 or bad != "":
+		m.append("preview: %s %s" % [bad, str(preview)])
+	var paid: Dictionary = ItemPacksTests._settle_path(ctx, 5)["items"]
+	if JSON.stringify(StageSettlementService.card_items(paid), "", true) != JSON.stringify(preview, "", true):
+		m.append("the payout rows differ from the preview")
+	# Early leave: kept (a held and a gathered row) and lost rows.
+	for outcome_seed in [[ItemPacksTests._SEED_ALL, "kept"], [ItemPacksTests._SEED_NONE, "lost"]]:
+		var c2 := ItemPacksTests._ctx(int(outcome_seed[0]), 4, 4)
+		ItemPacksTests._hold(c2, 1, 1, "ph_relic_a")
+		EarningsService.record_item(ItemPacksTests._stage(c2), "s0", "0", ItemPacksTests._entry("ph_armor_a"))
+		var items: Dictionary = ItemPacksTests._leave(c2)["result"]["items"]
+		var rows: Array = items[str(outcome_seed[1])]
+		bad = _all_rows_named(rows, _NAMES)
+		if rows.size() != 2 or bad != "":
+			m.append("leave %s: %s %s" % [str(outcome_seed[1]), bad, str(rows)])
+	# Defeat (a context with an encounter): rows and held pieces.
+	var c3 := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 4, 4)
+	c3.encounter_ctx = EncounterContext.new()
+	ItemPacksTests._hold(c3, 1, 1, "ph_relic_a")
+	EarningsService.record_item(ItemPacksTests._stage(c3), "s0", "0", ItemPacksTests._entry("ph_armor_a"))
+	ActiveStageService.lose_unsettled_packs(c3, 3)
+	var lost_rows: Array = (c3.encounter_ctx.packs_lost.get("items", []) as Array)
+	bad = _all_rows_named(lost_rows, _NAMES)
+	if lost_rows.size() != 2 or bad != "":
+		m.append("defeat: %s %s" % [bad, str(lost_rows)])
+	if cfg.is_empty():
+		m.append("test setup: no inventory cfg")
+	return _result(m)
+
+
+## The result rows are stored with the durable result and replayed after a reload: the name comes back.
+static func _t_row_names_reload() -> Dictionary:
+	var env := _path_env("names_reload")
+	if not bool(env.get("ok", false)):
+		return env
+	var m: Array = []
+	var rt: FlowRuntime = env["rt"]
+	EarningsService.record_item(InventoryActionTests._stage_of(env), "s0", "a", ItemPacksTests._entry("ph_armor_a"))
+	if not InventoryActionTests._force_leave_all(env):
+		return { "ok": false, "error": "test setup failed: no seed rolls all with a successful escape" }
+	var out: Dictionary = rt.dispatch({ "type": "stage.return_home" })
+	var kept: Array = ((out.get("data", {}) as Dictionary).get("items", {}) as Dictionary).get("kept", [])
+	if kept.is_empty() or _all_rows_named(kept, _NAMES) != "":
+		m.append("the leave card rows: %s" % str(kept))
+	var fc2 := FlowContext.new()
+	fc2.save_data = JSON.parse_string(JSON.stringify(rt.get_save_data()))
+	var replay: Dictionary = PendingResultService.build_snapshot(fc2, 9)
+	var rkept: Array = (((replay.get("data", {}) as Dictionary).get("items", {}) as Dictionary).get("kept", []) as Array)
+	if rkept.is_empty() or _all_rows_named(rkept, _NAMES) != "":
+		m.append("the replayed card rows: %s" % str(rkept))
+	return _result(m)
+
+
+## A type with no definition: no `name` key on any row, and no crash. The real balance.json has no definitions.
+static func _t_row_no_definition() -> Dictionary:
+	var m: Array = []
+	var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 4, 4)
+	(ctx.config_service as ItemPacksTests._Cfg).inv["definitions"] = {}
+	ItemPacksTests._hold(ctx, 1, 1, "ph_relic_a")
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "0", ItemPacksTests._entry("ph_armor_a"))
+	var risk := StageSettlementService.items_at_risk(ctx, ctx.config_service)
+	var items: Dictionary = ItemPacksTests._leave(ctx)["result"]["items"]
+	var rows: Array = risk + (items["kept"] as Array) + (items["lost"] as Array)
+	if rows.size() != 4:
+		m.append("expected 4 rows, got %d" % rows.size())
+	for r in rows:
+		if (r as Dictionary).has("name"):
+			m.append("a row without a definition has a name: %s" % str(r))
 	return _result(m)
 
 

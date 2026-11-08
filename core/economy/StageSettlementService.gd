@@ -487,12 +487,14 @@ static func _settle_leave_items(ctx: FlowContext, cfg_service: ConfigService, st
 		var p: Dictionary = p_v
 		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "lost", lost_reason))
 		(report["lost"] as Array).append(EarningsService.report_row(
-			p, lost_reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
+			p, lost_reason, "held", InventoryService.mark_index_of(inv_cfg, str(p["id"])),
+			InventoryService.name_of(inv_cfg, str(p["type_id"]))))
 	for p_v in held_kept:
 		var p: Dictionary = p_v
 		EarningsService.put_held_fate(stage_ref, EarningsService.held_record(p, token, "carried", "ok"))
 		(report["kept"] as Array).append(EarningsService.report_row(
-			p, "ok", "held", InventoryService.mark_index_of(inv_cfg, str(p["id"]))))
+			p, "ok", "held", InventoryService.mark_index_of(inv_cfg, str(p["id"])),
+			InventoryService.name_of(inv_cfg, str(p["type_id"]))))
 
 	var other := _other_open_rows(ctx.save_data, rows)
 	for i in rows.size():
@@ -556,7 +558,7 @@ static func _settle_item_row(save: Dictionary, inv_cfg: Dictionary, row: Diction
 		e["reason_key"] = reason
 		row_kept = row_kept and fate == "carried"
 		var bucket: Array = report["kept"] if fate == "carried" else report["lost"]
-		bucket.append(EarningsService.report_row(e, reason, "gathered", mark))
+		bucket.append(EarningsService.report_row(e, reason, "gathered", mark, InventoryService.name_of(inv_cfg, str(e.get("type_id", "")))))
 	row["settled"] = true
 	row["settled_share"] = 100 if row_kept else 0
 
@@ -583,10 +585,12 @@ static func items_at_risk(ctx: FlowContext, cfg_service: ConfigService) -> Array
 	for r_v in EarningsService.open_item_rows(stage_ref):
 		for e_v in ((r_v as Dictionary)["items"] as Array):
 			if e_v is Dictionary:
-				out.append(EarningsService.at_risk_row(e_v as Dictionary, "gathered", -1))
+				out.append(EarningsService.at_risk_row(e_v as Dictionary, "gathered", -1,
+					InventoryService.name_of(cfg, str((e_v as Dictionary).get("type_id", "")))))
 	for p_v in InventoryService.held_pieces(ctx.save_data):
 		var p: Dictionary = p_v
-		out.append(EarningsService.at_risk_row(p, "held", InventoryService.mark_index_of(cfg, str(p["id"]))))
+		out.append(EarningsService.at_risk_row(p, "held", InventoryService.mark_index_of(cfg, str(p["id"])),
+			InventoryService.name_of(cfg, str(p["type_id"]))))
 	return out
 
 

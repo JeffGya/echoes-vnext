@@ -170,7 +170,7 @@ static func snapshot(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> Di
 				var qty := _to_int(s["quantity"])
 				var limit := _stack_limit(cfg, _def_of(cfg, type_id))
 				(stacks_out if box == BOX_SANCTUM else pack_stacks_out).append({
-					"type_id": type_id, "kind": str(s["kind"]), "name": _name_of(cfg, type_id),
+					"type_id": type_id, "kind": str(s["kind"]), "name": name_of(cfg, type_id),
 					"slot": int(ref["slot"]), "count": qty, "stack_limit": limit, "at_limit": qty >= limit })
 			else:
 				var p: Dictionary = pieces[ref["index"]]
@@ -181,7 +181,7 @@ static func snapshot(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> Di
 					"id": p["id"], "type_id": p["type_id"], "kind": p["kind"], "grade": str(p.get("grade", "")),
 					"mark_index": maxi(0, _seq_of(p["id"])) % mark_count(cfg),
 					"equipped": str(p.get("held_by", "")) != "",
-					"name": _name_of(cfg, str(p["type_id"])), "slot": int(ref["slot"]) })
+					"name": name_of(cfg, str(p["type_id"])), "slot": int(ref["slot"]) })
 	var room := sanctum_room(save, cfg)
 	var load_info := pack_load(save, cfg, reserved)
 	return {
@@ -795,8 +795,9 @@ static func _live_arr(save: Dictionary, key: String) -> Array:
 	return inv[key]
 
 
-## The definition name of a type, or "" when there is none. Never the type id.
-static func _name_of(cfg: Dictionary, type_id: String) -> String:
+## The definition name of a type, or "" when there is none. Never the type id. The rows of the snapshot, the
+## at-risk rows and the result rows use this one function.
+static func name_of(cfg: Dictionary, type_id: String) -> String:
 	var n: Variant = _def_of(cfg, type_id).get("name", "")
 	return n if n is String else ""
 

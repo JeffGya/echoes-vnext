@@ -60,6 +60,12 @@ static func _cfg(cap: int, pack: int, limit: int = 5, warn_room: int = 1, warn_p
 	}
 
 
+## The fixture display name of a type ("Placeholder weapon A"), "" for an unknown type.
+static func _name_of(type_id: String) -> String:
+	var def: Variant = _defs().get(type_id, {})
+	return str((def as Dictionary).get("name", "")) if def is Dictionary else ""
+
+
 static func _kind_of(type_id: String) -> String:
 	var def: Variant = _defs().get(type_id, {})
 	return str((def as Dictionary).get("kind", "")) if def is Dictionary else ""

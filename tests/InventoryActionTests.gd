@@ -146,7 +146,9 @@ static func _inv_snap(env: Dictionary) -> Dictionary:
 static func _refusal_key(env: Dictionary, action: Dictionary) -> String:
 	var rt: FlowRuntime = env["rt"]
 	var c := InventoryController.new(rt.flow_ctx, rt.config_service, env["logger"])
-	return c.handle_discard(action, 9).error_code
+	var key := c.handle_discard(action, 9).error_code
+	rt.flow_ctx.pending_inventory_refusal = {}  # a direct call never reaches dispatch(), which spends the one-shot
+	return key
 
 
 ## Top-level save keys whose value differs between a saved copy and the live save.
@@ -204,8 +206,8 @@ static func _t_discard_sanctum() -> Dictionary:
 	if str(out.save_reasons) != str(["inventory.discard"]) or not out.requires_reenter or out.error_code != "":
 		m.append("outcome: reasons %s reenter %s error '%s'" % [str(out.save_reasons), str(out.requires_reenter), out.error_code])
 	var refused := InventoryController.new(rt2.flow_ctx, rt2.config_service, env2["logger"]).handle_discard(_discard("it.99"), 9)
-	if not refused.save_reasons.is_empty() or refused.requires_reenter or refused.has_replacement_snapshot:
-		m.append("a refusal asked for a save or a snapshot")
+	if not refused.save_reasons.is_empty() or refused.requires_reenter:
+		m.append("a refusal asked for a save or a re-entry")
 	_done(env2)
 	return _result(m)
 
@@ -234,6 +236,8 @@ static func _t_refusals() -> Dictionary:
 	var m: Array = []
 	var env := _env("refuse", 3, 2)
 	_seed(env, ["ph_weapon_a", "ph_charm_a", "ph_consumable_a", "ph_relic_a"])
+	(env["rt"] as FlowRuntime).flow_machine.reenter((env["rt"] as FlowRuntime).flow_ctx, env["logger"], 3)
+	_dispatch(env, { "type": "debug.seed.show" })  # the snapshot now shows the seeded inventory; flushes the queued save
 	var before := JSON.stringify(_save(env), "", true)
 	var before_copy: Dictionary = JSON.parse_string(before)
 	var snap_before := JSON.stringify(_snap(env), "", true)
@@ -680,7 +684,7 @@ static func _force_leave_all(env: Dictionary) -> bool:
 
 static func _row_of(type_id: String, qty: int, source: String, mark: int, reason: String = "") -> Dictionary:
 	var out := { "type_id": type_id, "kind": InventoryServiceTests._kind_of(type_id), "grade": "g1", "quantity": qty,
-		"source": source, "mark_index": mark }
+		"source": source, "mark_index": mark, "name": InventoryServiceTests._name_of(type_id) }
 	if not reason.is_empty():
 		out["reason_key"] = reason
 	return out

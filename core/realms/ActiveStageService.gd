@@ -536,6 +536,7 @@ static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 	var lost_ase := RewardCalc.round_payout(float(sums["scaled_ase"]) * k)
 	var lost_ekwan := RewardCalc.round_payout(float(sums["scaled_ekwan"]) * k)
 	var lost_items := 0
+	var inv_cfg := ConfigService.get_inventory_cfg(flow_ctx_arg.config_service)
 	var item_report: Array = []
 	for r_v in losable:
 		if EarningsService.is_item_row(r_v):
@@ -543,7 +544,8 @@ static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 				if e_v is Dictionary:
 					(e_v as Dictionary)["fate"] = "lost"
 					(e_v as Dictionary)["reason_key"] = "defeat"
-					item_report.append(EarningsService.report_row(e_v as Dictionary, "defeat", "gathered", -1))
+					item_report.append(EarningsService.report_row(e_v as Dictionary, "defeat", "gathered", -1,
+						InventoryService.name_of(inv_cfg, str((e_v as Dictionary).get("type_id", "")))))
 					lost_items += 1
 	var lost := EarningsService.mark_lost(stage)
 	InventoryRules.clear_discard_used(stage)
@@ -553,7 +555,7 @@ static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 		var p: Dictionary = p_v
 		EarningsService.put_held_fate(stage, EarningsService.held_record(p, "defeat", "lost", "defeat"))
 		item_report.append(EarningsService.report_row(p, "defeat", "held",
-			InventoryService.mark_index_of(ConfigService.get_inventory_cfg(flow_ctx_arg.config_service), str(p["id"]))))
+			InventoryService.mark_index_of(inv_cfg, str(p["id"])), InventoryService.name_of(inv_cfg, str(p["type_id"]))))
 	if flow_ctx_arg.encounter_ctx != null:
 		var packs_lost: Dictionary = {}
 		if lost > 0 and (lost_ase > 0 or lost_ekwan > 0):

@@ -436,7 +436,7 @@ static func _t_held_rolled() -> Dictionary:
 	if str(_held_fates(ctx)) != str(want):
 		m.append("held fates %s" % str(_held_fates(ctx)))
 	if int(r["items"]["kept_count"]) != 1 or int(r["items"]["lost_count"]) != 3 or _has_id_key(r["items"]) \
-			or str((r["items"]["kept"] as Array)[0]) != str({ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 2, "reason_key": "ok" }):
+			or str((r["items"]["kept"] as Array)[0]) != str({ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 2, "name": "Placeholder weapon A", "reason_key": "ok" }):
 		m.append("items report %s" % str(r["items"]))
 	var item_logs := _logs(got, "economy.settle.items")
 	if item_logs.size() != 1 or int(item_logs[0]["draws"]) != 4 or int(item_logs[0]["held"]) != 4:
@@ -928,7 +928,7 @@ static func _t_find_order() -> Dictionary:
 static func _t_partial_stack() -> Dictionary:
 	var m: Array = []
 	var want_row := { "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 3,
-		"source": "gathered", "mark_index": -1, "reason_key": "overflow", "lost_quantity": 5 }
+		"source": "gathered", "mark_index": -1, "name": "Placeholder consumable A", "reason_key": "overflow", "lost_quantity": 5 }
 	for c in ["leave", "path"]:
 		# Sanctum of 1 slot, taken; pack of 1 slot: one stack of 3 fits in the pack, 5 are lost.
 		var ctx := _ctx(_SEED_ALL, 1, 1)
@@ -1036,10 +1036,17 @@ static func _t_defeat_log() -> Dictionary:
 # 7. Step 6 fixes: report rows, card data, room across Realms
 # ---------------------------------------------------------------------------
 
+## The same row for a type with no definition (the real balance.json has none): no `name` key.
+static func _xrow_unnamed(type_id: String, qty: int, source: String, mark: int, reason: String) -> Dictionary:
+	var row := _xrow(type_id, qty, source, mark, reason)
+	row.erase("name")
+	return row
+
+
 ## The row a report holds, written out as a literal (key order is part of the shape).
 static func _xrow(type_id: String, qty: int, source: String, mark: int, reason: String) -> Dictionary:
 	return { "type_id": type_id, "kind": InventoryServiceTests._kind_of(type_id), "grade": "g1", "quantity": qty,
-		"source": source, "mark_index": mark, "reason_key": reason }
+		"source": source, "mark_index": mark, "name": InventoryServiceTests._name_of(type_id), "reason_key": reason }
 
 
 ## A leave report row has `source` ("held" or "gathered") and `mark_index` (the piece mark; -1 for an item with
@@ -1115,9 +1122,9 @@ static func _t_items_at_risk() -> Dictionary:
 	var save_before := JSON.stringify(ctx.save_data)
 	var pre := StageExploreSnapshotBuilder._carry_preview(ctx)
 	var want: Array = [
-		{ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "gathered", "mark_index": -1 },
-		{ "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 2, "source": "gathered", "mark_index": -1 },
-		{ "type_id": "ph_relic_a", "kind": "relic", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 1 }]
+		{ "type_id": "ph_weapon_a", "kind": "gear", "grade": "g1", "quantity": 1, "source": "gathered", "mark_index": -1, "name": "Placeholder weapon A" },
+		{ "type_id": "ph_consumable_a", "kind": "consumable", "grade": "g1", "quantity": 2, "source": "gathered", "mark_index": -1, "name": "Placeholder consumable A" },
+		{ "type_id": "ph_relic_a", "kind": "relic", "grade": "g1", "quantity": 1, "source": "held", "mark_index": 1, "name": "Placeholder relic A" }]
 	var keys := pre.keys()
 	keys.sort()
 	if str(keys) != str(["ase", "ekwan", "gathered", "items_at_risk", "nothing_new", "overcome", "total"]) \
@@ -1151,7 +1158,7 @@ static func _t_items_at_risk() -> Dictionary:
 ## item keeps `{ lost_ase, lost_ekwan }` exactly, and a defeat with nothing lost has no packs_lost row at all.
 static func _t_defeat_card_items() -> Dictionary:
 	var m: Array = []
-	var row_a := _xrow("ph_armor_a", 1, "gathered", -1, "defeat")
+	var row_a := _xrow_unnamed("ph_armor_a", 1, "gathered", -1, "defeat")
 	# 1. Item row only: packs_lost appears with 0 Ase and 0 Ekwan.
 	var e1 := EconomyCharacterizationTests._fight_env("item_packs_defeat_rows", false)
 	if e1.is_empty():
@@ -1169,7 +1176,7 @@ static func _t_defeat_card_items() -> Dictionary:
 	_hold(e2["flow_ctx"], 2)
 	EconomyCharacterizationTests._fight_build(e2)
 	var p2 := _packs_lost_params(e2)
-	var want2: Array = [_xrow("ph_weapon_a", 1, "held", 1, "defeat"), _xrow("ph_weapon_a", 1, "held", 2, "defeat")]
+	var want2: Array = [_xrow_unnamed("ph_weapon_a", 1, "held", 1, "defeat"), _xrow_unnamed("ph_weapon_a", 1, "held", 2, "defeat")]
 	if str(p2) != str({ "lost_ase": 0, "lost_ekwan": 0, "items": want2 }):
 		m.append("held only: params %s" % str(p2))
 	# 3. Both, with Ase and Ekwan in the packs: rows first, then held; the amounts stay.
@@ -1179,7 +1186,7 @@ static func _t_defeat_card_items() -> Dictionary:
 	_hold(e3["flow_ctx"], 1)
 	EconomyCharacterizationTests._fight_build(e3)
 	var p3 := _packs_lost_params(e3)
-	if str(p3) != str({ "lost_ase": 9, "lost_ekwan": 2, "items": [row_a, _xrow("ph_weapon_a", 1, "held", 1, "defeat")] }):
+	if str(p3) != str({ "lost_ase": 9, "lost_ekwan": 2, "items": [row_a, _xrow_unnamed("ph_weapon_a", 1, "held", 1, "defeat")] }):
 		m.append("both: params %s" % str(p3))
 	# The stored card survives a JSON round trip with the same block.
 	var card_data: Dictionary = e3["card"]["data"]

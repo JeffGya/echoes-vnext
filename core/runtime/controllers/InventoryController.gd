@@ -23,7 +23,8 @@
 #     not_in_sanctum, path_open (rules); bad_payload
 #     (controller); unknown_entry, bad_slot, no_change, slot_taken, type_mismatch, stack_limit, container_full,
 #     bad_box, bad_state (service).
-# A refusal changes nothing: the outcome carries the reason key in `error_code`; no save, no snapshot.
+# A refusal changes nothing in the save: the outcome carries the reason key in `error_code`; no save. On the
+# Sanctum, party prep and path view it also republishes the snapshot with `data.inventory.refused` (one-shot).
 # A success rebuilds the snapshot of the screen it came from and requests one save.
 
 class_name InventoryController
@@ -115,10 +116,22 @@ func _rebuilt(t: int) -> FlowActionOutcome:
 	return FlowActionOutcome.handled_outcome()
 
 
+## A refusal changes nothing in the save. On a screen that carries `data.inventory` it publishes a copy of the
+## current snapshot whose `data.inventory` also holds `refused: { action, reason }` (one-shot, never saved).
 func _deny(log_type: String, reason: String, t: int, extra: Dictionary = {}) -> FlowActionOutcome:
 	var data := extra.duplicate()
 	data["reason_key"] = reason
 	logger.info(t, log_type, "Inventory action denied", data)
+	var snap := flow_ctx.last_snapshot
+	var snap_data: Variant = snap.get("data", null)
+	if snap_data is Dictionary and (snap_data as Dictionary).get("inventory", null) is Dictionary:
+		flow_ctx.pending_inventory_refusal = { "action": "move" if log_type.contains("move") else "discard", "reason": reason }
+		var shown := snap.duplicate(true)
+		(shown["data"] as Dictionary)["inventory"] = InventoryRules.projection(flow_ctx,
+			str(snap.get("type", "")) == FlowStateIds.STAGE_EXPLORE)
+		var outcome := FlowActionOutcome.snapshot_outcome(shown)
+		outcome.error_code = reason
+		return outcome
 	return FlowActionOutcome.error_outcome(reason)
 
 

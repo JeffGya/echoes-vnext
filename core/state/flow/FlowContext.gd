@@ -146,6 +146,7 @@ var pending_scout_return_intel_count: int = 0      # situations revealed on retu
 var pending_scout_return_ekwan: int = 0            # Ekwan settled on return_home
 var pending_scout_return_settle_outcome: String = ""  # "none"|"some"|"all"|"nothing_new" after a return home; "" otherwise
 var pending_scout_return_items: Dictionary = {}    # { kept, lost } item report of the leave (StageSettlementService.card_items); {} when no item was settled
+var pending_inventory_refusal: Dictionary = {}  # one-shot: { action: "move"|"discard", reason: String } of a refused inventory action; the rebuilt snapshot shows it as data.inventory.refused, then dispatch() clears it. Never persisted
 var pending_return_confirm: bool = false      # one-shot: the standoff card asked for the Sanctum return confirmation; the next stage_explore snapshot shows it, then dispatch() clears it. Never persisted
 
 # V2-INFRA-003: single choke point for requesting a save. Sets save_request and, when a
