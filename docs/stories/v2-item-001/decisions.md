@@ -1,304 +1,76 @@
-# V2-ITEM-001 decisions
+# V2-ITEM-001 decisions (in force)
 
-> **Cleanup note (2026-11-08).** Reports that this file cites by name but that are no longer in this folder were removed in the story cleanup. Their last copy is in git history at commit `11d566f`. Read one with `git show 11d566f:docs/stories/v2-item-001/<file name>`. The design and research files were merged into `basis-for-001b-and-later.md`.
+Written in STE. This is the short list of decisions that hold today. When two decisions conflicted, the later one won and the earlier one was removed. IDs in brackets point to the original entries, which are in git history at commit `11d566f` (`git show 11d566f:docs/stories/v2-item-001/decisions.md`). Project-wide answers: `ANSWERS.md` (#83, #86, #87, #88, #89).
 
-Written in STE. Source for every line: Jeff's answers in the story chat (2026-10-27) and the live Notion rows.
-Project-wide answers go to `ANSWERS.md` only when Jeff says so.
+## 1. Items, containers, numbers
+- Gear and relics are unique pieces (own id, `held_by: ""` reserved). Consumables and materials are stacks (type id and quantity). (D-01, D-09)
+- Every piece and every stack fills ONE slot and keeps a saved slot position. A new entry takes the first free slot. (D-33, D-37, D-40)
+- Two containers: the Sanctum inventory (Storehouse) and the party pack (Travel pack). Shipping sizes: Sanctum 20 slots, pack 4 slots. Both are config values in `data.inventory`, provisional, may grow, tuned after play. The Sanctum never shrinks. (D-05, D-13, D-34, D-40)
+- The stack limit is a config value (default 20). Cap warnings use config thresholds. (D-05, D-25)
+- Materials are crafting inputs only: never a price, never sold, never shown as a balance. (D-06)
+- Holding and moving are free. No selling. A recycle-yield key per grade is reserved and empty (Ekwan only). Recycling waits for ITEM-004. (D-02)
+- No repairs or bridges for old saves until Jeff says a 1.0 version is live. (D-38, ANSWERS #88)
 
-## D-01 — Mixed item model (Jeff, 2026-10-27)
-Gear and relics: one record per piece, each with a unique id. Gear 1.1 differs from gear 1.2; one may be equipped and the other not.
-Consumables and materials: stacks (item type id + quantity).
+## 2. Moving and arranging
+- Moves between containers and reorders: drag and drop, or select then a Move button. Allowed on the Sanctum and party-prep screens, also while a saved path is live. Refused on the path view. (D-33, D-40)
+- Reorder only into an EMPTY slot. No swap onto an occupied slot. A stack dropped on a same-type stack merges, up to the limit. A moved stack moves whole. (D-34, D-40)
+- Nothing moves between pack and Sanctum by itself: not at path end, not after a leave, not in intake. The player moves things. (D-42)
+- Inventory is panels over the Sanctum, not screens. A Storehouse panel opens from a rail button. The pack opens from party details, to the right of it. Each panel opens alone. Open state is UI-local, with no flow state. (D-33, D-34, D-35)
 
-## D-02 — Free hold, free move, recycle hook only (Jeff, 2026-10-27)
-No fee to hold or to move an item. No sell action. This story reserves a recycle-yield key per grade (Ekwan only). Values are left for ECONOMY-004 Part B.
+## 3. Destroy (discard)
+- In the Sanctum and party prep: unlimited, any entry in either container, a confirmation each time, a count picker for a stack. (D-33, D-34, D-40)
+- On the path view: ONE per path, on a pack entry only. The used mark is saved and cleared at leave, defeat and path end. (D-33, D-34)
+- Confirmation: `Keep` has focus. Esc, Back, B and an outside tap mean Keep. 0.25 s open window. 0.6 s lock after confirm. No hold, swipe or drag to confirm. (D-32)
 
-## D-03 — Early-leave roll and items (Jeff, 2026-10-27)
-Outcome "nothing": items are lost. Outcome "everything": items go to intake. Outcome "some": each item draws on its own at the "some" share (50%).
-The draws use a new seed path. The existing currency roll stream does not change.
+## 4. Finds, leaves, defeat
+- A find is an item row in the packs (`source: item`, zero currency). It owns one reserved pack slot. Open rows of other Realms count. (D-17, D-47)
+- Early leave: nothing = items lost, everything = kept, some = one seeded draw per item AND per carried piece at the "some" share (50%). Every early leave draws again. New draw roots. The `stage.settle` stream is unchanged. A carried stack's draw key uses its type and its order among same-type stacks, not its slot. (D-03, D-19, D-22, D-43)
+- Defeat: all finds and all carried pieces are lost. (D-20)
+- A find that survives a path (clear or early leave) lands in the PACK and stays there. The Sanctum is never touched. A kept find is a carried piece, so carried means at risk. (D-49, D-53)
+- A find is lost (`overflow`) only when no pack slot can hold it. A lost remainder always reports `overflow`. The pack never holds more entries than its size. A find bigger than one stack can lose units; accepted for now. (D-16, D-46, D-47, D-50)
+- The debug producer `direct` mode places Sanctum first, then pack. The old `gathered` mode was deleted. (D-45, D-50)
 
-## D-04 — Cap full: the item is lost (Jeff, 2026-10-27)
-When intake finds the cap full, the item is lost with the reason `overflow`. The player must see cap pressure before a path ends.
-Consequence: the path view needs a cap warning (see D-08).
+## 5. What the player sees
+- Result cards (leave, defeat, stage-clear) show ONE row of tiles: survivors in the kept state, lost pieces as ghosts. No place words, no lane titles, no preview mark. The stage-clear card shows the row before the payout from the same code on a copy of the save, and keeps it through a reload. The leave confirmation shows the at-risk tiles with the leaf mark. (D-23, D-30, D-42, D-51)
+- First tap finishes the animation. Continue ignores taps for 0.25 s. Sequence cap 2.4 s. Reduced motion: 0.15 s fade. Loss tone: calm, a small lift, no red, no shake, no sound. (D-32)
+- The pack panel shows no counts and no bead gauge. The count is on the party pack button only. Three panel tones (plain `#7A5B3E`, near full `#4F3B28`, full `#120E0C`), no decoration. (D-39, D-49, D-51)
+- A full pack has NO mechanical penalty. The risk shows through the leaf mark, the departure line and the tone. (D-17, D-36)
+- Tile rules: kind shapes, at most 3 marks, grade pips 1 to 3 with no rarity colour, six twin-notch shapes, two leaf glyphs, lost tile at 35% fill and 60% marks. (D-32)
+- Item `name` comes from the item definition on inventory, at-risk and result rows. No definition means the kind word. (D-48)
+- A refused move or destroy sets a one-shot `data.inventory.refused` in the next snapshot, never saved. A refused button shows only its refusal line. (D-48, D-51)
+- Snapshot keys: party prep and the path view always carry `data.inventory`. Other item keys appear only when non-empty. (D-28, D-29, D-43)
+- The approved UI contract is the interactive prototype `docs/visual-plans/inventory-ui-mockup-v2.html`. (D-44)
 
-## D-05 — One total cap (Jeff, 2026-10-27)
-One total count caps unique gear and relics together. Stacks have a per-stack limit in config. Numbers live in `data/balance.json` (ANSWERS #83). Jeff has not set the numbers.
+## 6. Text
+- Jeff approves every player-facing line. Approved lines carry `# APPROVED (Jeff <date>)` in `ItemUiText.gd`, a fixture holds them and a test guards them. The source of the wording is `copy-approval-jeff.md`. (D-51, ANSWERS #89)
 
-## D-06 — Item kinds and materials (Jeff, 2026-10-27)
-Intake accepts gear, relics, consumables and materials. Materials stack like consumables.
-Guardrail: materials are crafting inputs only. They are never a price, never sold, never shown as a balance. Recycling returns Ekwan only.
+## 7. Technical rules
+- The Sanctum fingerprint test erases `data.inventory` before it hashes. The recorded hash is unchanged. (D-27)
+- Move and destroy rules read the saved path state, so they work after a quit and Continue. `stage.return_home` is refused unless the party is on a path. (D-28, D-29)
+- The debug producer `inventory produce [direct|gather]` works in debug builds only. It reads `tests/fixtures/inventory_placeholders.json`. (D-27, D-28)
+- `data.inventory.mark_count` (default 6) and `data.inventory.grades` (ordered, empty in shipping) are config keys. (D-26, D-28)
 
-## D-07 — Crafting follow-up story (Jeff, 2026-10-27)
-A later ITEM-area story expands crafting from Ase + Ekwan + item to include materials. A Notion row for it needs Jeff's yes. Not written yet.
+## 8. Not built in 001a (later work)
+- **001b:** the Echoes choose what they take (`standing_v1`: Standing sets how well the party picks; Calling, vectors and emotion are reserved inputs), the left list, one keeper swap per path (take one left item, drop one taken), the pack view on the path. `stage.pick_stamps` belongs to 001b. It needs a Notion row with Jeff's yes. (D-12, D-14, D-15, D-18, D-26)
+- **Pack shrink rule:** the pieces in closing slots move to the Sanctum. If the Sanctum is full, the surplus is lost and the player chooses at party prep. It needs a saved pending state and a party-prep step. Never on a live path. Built in the story that shrinks packs. (D-41)
+- **Pack size** by Sanctum progression (note on V2-CONTINUITY-002) and per Echo (note on V2-ITEM-003). (D-34)
+- **Finds** drawn in the pack while a path is live, and finds with no room (the encounter-card tile row and mini pack row, parked): the finds story (ITEM-002). (D-32, D-48)
+- **Other stories:** real drops ITEM-002, equipping ITEM-003, recycling ITEM-004, crafting with materials (note on ECONOMY-003, D-07), the item catalogue (note on ITEM-002), ECONOMY-004 Part B (inputs in `handoff.md`).
+- **UX redesign (Jeff):** panel placement and hierarchy, pack discoverability, text size, two refusal lines on a path, the weak full-tone edge on the dark path. (D-49, D-52)
+- **Pack debuff:** closed. Revisit only if play shows nobody feels the pack. (D-36)
 
-## D-08 — Scope (Jeff, 2026-10-27)
-Build: intake, packs rules for item rows, a test-only producer, placeholder items to prove the chain, a Sanctum inventory view (read-only), and a packs view on the path.
-Do not build work that belongs to other stories (real drops: ITEM-002; equipping: ITEM-003; recycling: ITEM-004).
-Not selected: Resolve-card reason lines; inventory actions (recycle, drop).
+## 9. Removed because a later decision replaced them
+| Removed | Replaced by |
+|---|---|
+| D-04 (cap full: item lost) | D-16, D-46, D-49 |
+| D-08 (scope list), D-11 (one free-a-slot action), D-21 (discard rules) | D-33, D-34, D-40 (Destroy) |
+| D-31 (inventory as a rail destination with its own flow state) | D-33, D-35 (panels) |
+| D-24 (a survivor moves to the Sanctum when room exists), the move part of D-20 | D-42 |
+| D-25 (provisional numbers 8 and 4) | D-34 (20 and 4) |
+| D-36 strap line and consequence word, D-39 strap line | D-49, D-51 |
+| D-34 and D-32 three result lanes and the preview mark | D-42, D-51 |
+| D-40 and D-45 Sanctum-first intake for finds, D-45 `stack_limit` loss reason | D-49, D-46 |
+| D-10 (research), D-44 (prototype approved), D-47 to D-53 findings lists | Done. Their results are in sections 1 to 8. |
 
-## D-09 — held_by field (Jeff, 2026-10-27)
-Each gear record carries `held_by: ""`. It is reserved and unused here. ITEM-003 and INFRA-005 use it.
-
-## D-10 — Comparison research before the design round (Jeff, 2026-10-27)
-Before the design round, research how Gears Tactics, XCOM, Tomodachi Life and similar games handle shared inventory, loot, loss and cap pressure. Output: `research-comparison.md`.
-
-## D-11 — Cap relief: one "free a slot" action (Jeff, 2026-10-27)
-Finding (design round 1): D-04 plus D-08 left the player no way to free a slot. Junk could fill the cap for good.
-Jeff chose option D: one pre-departure action in the Sanctum inventory view that discards one unique piece.
-This amends D-08: that one discard action is in scope. Equip, recycle and sell stay out of scope.
-Consequences to design: the save write for the discard, the action path through the single choke point, a confirmation, and the exact rule (unique pieces only? stacks?). Round 2 and the build plan settle these.
-Source: `design-round1-sr-game-designer.md` section 7 and the options table.
-
-## D-12 — Echoes choose what to take at pickup (Jeff, 2026-10-27) — DESIGN DIRECTION, details open
-After each encounter, the Echoes decide which finds go into the packs and which stay on the path. A higher Standing or a "smarter" Calling chooses better. Jeff also sees a link to Storyweight, Standing, vectors and emotion.
-The keeper's one intervention is the swap (see D-11; the exact form is still being clarified).
-This design round 1 and round 2 were written BEFORE D-12. Both need a pass 3 that adds the Echo choice. D-03 (per-item draw on an early leave) and D-04 stay until Jeff says otherwise.
-Scope risk: an Echo decision model touches Echo behavior, vectors and Calling data. One story, one subject: Jeff decides whether the full model is this story or a follow-up. This story would build the selection seam.
-
-## D-13 — The packs have their own small capacity (Jeff, 2026-10-27)
-The party carries a limited number of item slots on the path (a config number, not set yet). Echoes choose which finds fill them. The Sanctum cap (D-05) still applies when items arrive.
-
-## D-14 — Choice moment and the keeper's swap (Jeff, 2026-10-27)
-The Echoes choose at pickup, after each encounter (D-12).
-The keeper has one swap per path: take one item the Echoes left, and drop one they took. The Sanctum discard (D-11) stays as the way to free house room.
-ASSUMED (not yet confirmed): the packs still go through the early-leave roll (D-03) and the path-end bank, as ANSWERS #87 says. The Echo choice happens before the roll.
-
-## D-15 — Scope of the Echo choice (Jeff, 2026-10-27)
-This story builds: the packs capacity (D-13), the pickup decision point (a selection seam), the one keeper swap, and a simple seeded rule in which Standing sets how well the party picks.
-Calling, vectors and emotion are reserved inputs. They are not used yet.
-A follow-up story builds the full Echo decision model. It needs a new Notion row (Jeff's yes first).
-
-## D-16 — The party pack is separate from the Sanctum inventory (Jeff, 2026-10-27)
-The party pack and the Sanctum inventory are two containers. The pack can be filled while the party is in the Sanctum. It works as overflow: when the Sanctum inventory is full, an arriving item stays in the pack and is not lost.
-A filled pack goes on the next path. The party starts with less free pack room. This is a deliberate disadvantage.
-If the Sanctum inventory AND the pack are both full, the next arriving item is lost (reason `overflow`). D-04 survives for this one case.
-This amends D-04, D-13 and the packs rules. Open for the design rounds: how the pack empties (keeper action? automatically when room appears?), how the pack interacts with the early-leave roll (D-03) when it already holds old items, whether items in the pack from an earlier path are rolled again on a new early leave, and where the player sees the carried-over load.
-
-## D-17 — The pack makes loss at a full cap rare (Jeff, 2026-10-27)
-Confirmed: through the Echo choice, nothing is lost to a full cap, because every gathered item already owns a pack slot. The "Sanctum and pack both full, item lost" rule (D-16) stays as a safety net for arrivals that skip the Echo choice.
-The real pressure is lost room: a full pack limits the Echoes' choices on the next path.
-Jeff: a full pack should also be detrimental to the Echoes' state and cause debuffs. That is for ANOTHER story. This story builds no debuff. It must leave the hook visible (the carried load is readable data), so the later story can read it.
-Source: `design-sr-game-designer-v2.md` section 2 and A1.
-
-## D-18 — Story split into V2-ITEM-001a and V2-ITEM-001b (Jeff, 2026-10-28)
-001a: containers (Sanctum inventory and party pack), intake, item rows in the packs, per-item early-leave draws, the Sanctum discard, and the Sanctum inventory view. In 001a the pack fills in find order through a default seam function.
-001b: the Echo choice (`standing_v1`), the left list, the keeper swap, and the packs view on the path.
-001a is played and verified before 001b starts. A Notion row for 001b needs Jeff's yes.
-Source: `design-sr-game-designer-v2.md` section 10.
-
-## D-19 — Held pieces are rolled again on an early leave (Jeff, 2026-10-28)
-Held pieces are items carried in the pack from an earlier path because the Sanctum was full. Jeff chose: they ARE rolled again on an early leave (each draws alone, as D-03).
-This reverses the designer's recommendation (A2: held pieces safe). A full pack now risks lost pieces, not only lost room.
-Open: defeat and path end for held pieces; the designer's invariant and the feel design (lit "safe" tiles, no lift on carried pieces) must be redone.
-
-## D-20 — Defeat takes held pieces too (Jeff, 2026-10-28)
-Follows D-19. A defeat empties the pack: gathered items and held pieces are both lost (reason `defeat`). Finishing a path moves held pieces into the Sanctum when room exists.
-
-## D-21 — Discard rules (Jeff, 2026-10-28)
-- In the Sanctum: the player may discard as many times as wanted, with a confirmation each time. It works on Sanctum pieces and on carried (pack) pieces. Only while in the Sanctum.
-- On the path: one discard per path. It is the keeper swap's drop (D-14). There is no separate path discard.
-- Recycling: not built in 001a. D-02 stands (recycle hook only). Jeff's wish "discard or recycle as many times as wanted in the Sanctum" is built when ITEM-004 lands.
-- Unique pieces only (the designer's rule, unchanged). Stacks are not discarded.
-
-## D-22 — Held pieces are drawn at every early leave (Jeff, 2026-10-28)
-A9 answered: every early leave draws the held pieces again, including repeat leaves on the same path. No exemption for a survivor. Rule: carried means at risk.
-
-## D-23 — A tile row shows what is at risk (Jeff, 2026-10-28)
-A8 / C-9 answered: the leave confirmation and the leave and defeat result screens get a small row of item tiles (at risk before, kept or lost after). It is not a count line only. 001b's path view can reuse the row.
-
-## D-24 — A survivor with a full Sanctum stays held (Jeff, 2026-10-28)
-A10 answered: a held piece that survives an early-leave draw while the Sanctum is full stays in the pack as a held piece. It can be drawn again (D-22) and lost on defeat (D-20).
-
-## D-25 — Provisional starting numbers (Jeff, 2026-10-28)
-Jeff chose provisional small values to tune after his play test. They are marked PROVISIONAL in `data/balance.json`: `unique_cap` 8, `pack_capacity` 4, `stack_limit_default` 20, `warn_room_at` 2, `warn_pack_free_at` 1. Tests use their own test config and never depend on these values.
-
-## D-26 — Two small save/config items (Jeff, 2026-10-28)
-- `stage.pick_stamps` is NOT saved in 001a. It belongs to the parked Echo choice (001b). The design text that lists it for 001a is corrected.
-- `data.inventory.grades` (an ordered list, empty in shipping) is approved as an extra config key. The 001b pick rule reads it.
-Source: Opus review of step 2 (`step2-config-save.md`).
-
-## D-27 — Technical decisions of step 5 (main chat, from the Opus review; Jeff may reverse)
-- The Sanctum fingerprint test (`snapshot_fingerprint/sanctum`) erases `data.inventory` before it hashes, for the Sanctum snapshot only. The recorded hash `a26556e1…` is unchanged. Reason: the key carries tunable numbers from `balance.json` (D-25: tests must not depend on them). The `inventory_actions` suite pins the key's shape with its own config.
-- A discard is refused with reason `path_open` while the live path has unsettled item rows. Reason: the encounter "Back" route reaches the Sanctum with the path still open; a discard there would move held pieces to safety and dodge the early-leave draw (D-22).
-- The play-test producer reads `res://tests/fixtures/inventory_placeholders.json` at runtime. The file ships with the project like all of `res://`. The dependency is documented; a release build may refuse with `fixture_missing`.
-
-## D-28 — Step 6 fix pass (main chat decisions from the combined QA; Jeff may reverse)
-- New snapshot keys (leave item report, defeat item report, `items_at_risk`, party-prep inventory) appear ONLY when they hold something, so item-free snapshots stay byte-identical and no recorded hash moves.
-- Pack room counts open item rows across all Realms.
-- `stage.return_home` is refused unless the party is on a path (stops a repeated draw of held pieces).
-- A discard is also refused while a live, unsettled path holds held pieces (M4), with the reason key in the snapshot as `discard_blocked`.
-- The F1 producer command works in debug builds only.
-- `mark_count` moves into config (`data.inventory.mark_count`, default 6).
-Source: `step6-qa-report.md`.
-
-## D-29 — Amendment to D-28 after the fix-pass review (main chat; Jeff may reverse)
-- `flow.echo_party` `data.inventory` is ALWAYS present (amends D-28). Party prep must draw empty pack sockets and the cap, so the UI needs the data even for an item-free save. No fingerprint hashes that snapshot; the `snapshot.emitted` log field count for that snapshot rises by 1.
-- The discard guard (D-27) must work after a quit and Continue: it finds the live path from saved state, not from `flow_ctx.stage_id` (which `boot()` does not restore).
-- `stage_clear_items` is erased from `last_snapshot` after it is published, so a later dispatch cannot resend it.
-- OPEN for Jeff (UI step): where the path-end item report shows when the party goes to the stage map instead of the Sanctum.
-
-## D-30 — The path-end item report shows on the stage-clear card (Jeff, 2026-11-01)
-The item report of a finished path (what will be kept, what stays in the pack, what is lost) shows on the stage-clear card, beside the Ase and Ekwan lines. It shows once, whatever the destination (stage map or Sanctum).
-The card is built BEFORE the path-end payout runs (it shows a read-only preview). So core builds the item part as a read-only preview from the same intake code on a copy of the save, only when non-empty, and keeps it through a reload.
-`stage_clear_items` on the Sanctum snapshot (D-29) stays only if it is still needed after this change; the UI step does not read it.
-
-## D-31 — The inventory is a BottomRail destination with its own flow state (Jeff, 2026-11-01)
-Jeff chose option B of the merged mockup proposal: the Sanctum inventory view is a new rail destination with its own flow state (like Vows and Weaving Rite), not a hub panel.
-Consequences (core work BEFORE the UI build): a new flow state id and snapshot type (`flow.inventory`, SanctumShell family), a builder that carries the inventory projection, a nav action in the Sanctum rail (adds an `actions` key, so `snapshot_fingerprint/sanctum` is re-recorded ONCE with a named cause), a controller route, the keeper-intro gate, shell routing in `AppRoot`/`SanctumShell`, tests, and the doc tables (`AGENTS.md` Shell Routing).
-The discard's "in the Sanctum" check accepts `flow.inventory`. The party-prep chip navigates to the inventory screen; party choices are saved state and survive the trip. The hub `data.inventory` key stays for the count on the hub and for the chip.
-Supersedes the panel-based wording of the UI proposal (placement A). Decision 2 of the merged proposal (widen the discard to `flow.echo_party`) becomes moot.
-
-## D-32 — Mockup proposal decisions (Jeff, 2026-11-01)
-From `mockup-proposal-merged.md`:
-- Decision 3: result cards (leave result, defeat, stage-clear): the first tap finishes the motion, the second continues; `Continue` guards input for 0.25 s after the final state. Item sequence cap 2.4 s. Reduced motion = 0.15 s fade.
-- Decision 4: finds with no room: the mockups DRAW the encounter-card tile row and the mini pack-socket row as PARKED for ITEM-002. 001a builds only the core keys (left finds and pack free count on the encounter card snapshot, present only when non-empty). No encounter-card UI in 001a.
-- Decision 5: a blocked discard (`path_open`) shows `Let it go` disabled with a quiet reason line.
-- Decisions 6 and 7: all defaults accepted: grade pips 1 to 3 and no rarity colour for grade; six twin-notch shapes; two leaf glyphs (carried vs found this path); lost tiles at 35% fill and 60% marks; a 0.25 s open window on the modal `Let it go` and on the leave `Confirm`; one gauge-pip pulse on first becoming full; the carried-piece glide after a discard.
-- Decisions 1 and 2: see D-31.
-
-## D-33 — Inventory as two panels, moves both ways, realm discard (Jeff, 2026-11-06)
-Jeff reviewed the first interactive prototype and rejected its layout. These answers supersede D-31 (full-screen destination) and the "discard only in the Sanctum" part of D-21.
-- Panels, not screens. The rail button opens the Sanctum inventory as a panel over the Sanctum, placed next to the Sanctum button. Party prep opens party details, and the party pack opens from there. Both panels can be open side by side.
-- Move rule: pieces move both ways between the Sanctum inventory and the party pack, anywhere in the Sanctum or party prep. Move by drag and drop, or by select, see details, then `Move to pack` / `Move to Sanctum`. Design reference: a normal RPG chest and held inventory. Keep it simple.
-- On a path nothing moves, except one discard per path, on a pack piece only (Jeff: "1 per path, pack pieces only"). In the Sanctum, discard stays unlimited.
-- Stacks are not special. A stack is an item that fills one slot, sits among the other items, and moves like them. The same item type may exist as several stacks on either side. The player decides. No separate stack area, no forced merge.
-- Result screens (leave result, defeat, stage-clear) show items inside the existing cards, not as a new pack panel.
-- Pack and Sanctum must look clearly different. The first prototype put them too close together.
-- Jeff: UX and game feel lead. Core may change to fit. Built systems are not a constraint.
-Consequences for core (later, not now): `flow.inventory` as a separate flow state is probably not needed. A move action (`inventory.move.apply`) is needed. The one-per-path counter must be saved. The stack-merge rule in intake needs review.
-
-## D-34 — Answers to the prototype v2 open questions (Jeff, 2026-11-06)
-From `docs/visual-plans/inventory-ui-mockup-v2.html`, section F, plus Jeff's review notes.
-- Layout: the party pack opens to the RIGHT of party details. In the rail panel the Sanctum panel is on the left and the pack on the right. The Sanctum panel keeps a `Show pack` toggle.
-- Rail button: right of the Sanctum button, same selected look as the other buttons. Label is placeholder.
-- Sizes: Sanctum 20 slots, pack 4 slots in the prototype. Both numbers stay in config and must be able to grow. Start values may be smaller. Overrides D-25's 8/4 for the prototype only; final values come from play. Out of scope here (to note in Notion on the stories that own them): pack size per Echo (each Echo 1 slot, more with progression) and Sanctum progression setting the party's maximum pack size.
-- Stack discard: the player picks a count in the modal. A stack is otherwise an item like any other.
-- The one discard per path (pack pieces only): a saved value, kept through quit and Continue. Core owns it.
-- Drop rules inside a container: a piece may be dragged into an EMPTY slot (reorder). No swap onto an occupied slot. Dropping a stack on a same-type stack with room MERGES them up to the stack limit. Across containers the piece takes the first free slot.
-- Result cards: no pack panel after Continue. Items sit in lanes inside the card. The stage-clear preview uses the same three lanes with a read-only mark. Wording is not final.
-- Discard token uses a shape other than the grade diamond. Artist decides.
-- Dim layer: Ase and Ekwan cards stay dimmed.
-- Controller focus order: built in Godot with the same order as the keyboard. No prototype for it.
-- Moves while a path is open: core decides; the party cannot be in the Sanctum on a path.
-- Open for the prototype v3 pass: card "grow to 560" (Q3 of v1) was answered YES (D-33 context); rail result-tile size (v1 Q4) was not answered. Ask again only if the UI build needs it.
-Consequences for core (later): `inventory.move.apply` with reorder, merge and count-discard; saved per-path discard counter; stack merge rule on move (intake merge rule stays).
-
-## D-35 — Panels open alone (Jeff, 2026-11-06)
-Reviewing prototype v2, Jeff found that Stores and party details opened together. Rule: each panel opens alone. Stores opens only the Sanctum panel. Party opens only party details. The pack opens only from party details (or from the Sanctum panel's `Show pack` toggle). A panel opens beside another only if the player opens both. No screen or scenario starts with extra panels open.
-
-## D-36 — No mechanical pack penalty; show the risk (Jeff, 2026-11-06)
-Jeff accepted Option A from `pack-debuff-options-designer.md` and `pack-debuff-options-feel.md`. A full or carried pack has NO mechanical penalty. The cost stays what D-16 to D-20 already set: lost room, and held pieces rolled again on an early leave or lost on defeat. The pack must make that risk visible:
-- a heavy look for a full pack (beads lower, darker tone, thin strap line; no extra gold);
-- the loose-leaf "at stake" glyph on every carried piece, also on the path;
-- a consequence word at full, in place of `Full` (placeholder wording; Jeff writes final text);
-- the gauge pulse on every transition into full (0.4 s, no loop; reduced motion = 0.15 s fade);
-- one departure line that says carried pieces can be lost on a defeat or an early leave.
-Options B (presentational walk/idle change), C and D stay unbuilt. Revisit B only if play shows nobody feels the pack. This closes the "pack debuff story" idea: there is no rule to own.
-
-## D-37 — Pieces keep a saved slot position (Jeff, 2026-11-06)
-Each piece and stack keeps a saved slot position inside its container (Sanctum or pack). The player arranges the chest and the pack. Reorder by drag into an empty slot (D-34) changes the saved position. Core needs a new saved field per entry (the slot index) through SaveService, a rule for where an intake or a move places a piece (first free slot), and a validation (no two entries in one slot, slot inside the container size). When a container shrinks below an occupied slot, the piece must keep a valid place. Mechanics developer proposes the rule for Jeff.
-
-## D-40 — Backend rules decided after the step-7 report (Jeff, 2026-11-06)
-Answers to the mechanics developer's assumptions (`step7-backend-moves-slots.md`):
-- Sanctum size never goes down. It only grows. So the shrink rule applies to the pack only.
-- Pack size changes (a smaller pack): the pieces in slots that no longer exist move to the Sanctum inventory. If the Sanctum is full, the piece may be lost or destroyed. Jeff wants the designer and feel agents to review this last case before it is built. Until they report, core builds no rule for it.
-- Stacks fill one slot and count against the Sanctum slots and the pack slots (changes D-05). A new stack into a full Sanctum is lost as overflow. A merge into an existing stack needs no slot.
-- A live path with the party back on a Sanctum or party-prep screen (encounter Back route, Continue into a live path): treat it as the Sanctum. Moves and unlimited discard are allowed. The player may empty the pack mid path. Penalties for not completing the path (lower scores and others) are outside this story. This reverses assumption 6 of the report. The path VIEW keeps the path rules (no moves, one discard per path on a pack piece).
-- The unique-piece intake no longer pulls the pack into the Sanctum. Settlement flows still move kept pieces at path end.
-- Accepted without comment: moves and discards also work in party prep; moves of a stack move the whole entry; an occupied target slot is refused with `slot_taken` (also across containers).
-
-## D-41 — Pack shrink rule (Jeff, 2026-11-06)
-After the designer and feel reviews (`pack-shrink-options-designer.md`, `pack-shrink-options-feel.md`), Jeff chose feel option B with a player choice:
-- A pack shrink moves the pieces in the closing slots to the Sanctum inventory, with one quiet report line.
-- Only when the Sanctum has no room, the surplus is lost. The player chooses at party prep which pieces to keep. Core therefore needs a saved pending-shrink state and a party-prep step. Lost pieces use the existing lost-tile motion and a loss line the player dismisses. A preview shows before the shrink applies when a player action causes it.
-- A shrink never happens on a live path.
-- No Echo or progression story can shrink the pack yet. In 001a nothing triggers a shrink (sizes come from config only). Jeff (2026-11-06): DEFERRED. Build this rule in the story that contains shrinking packs. It is not part of 001a. Core builds nothing for it in 001a.
-
-## D-42 — Nothing moves automatically (Jeff, 2026-11-06)
-Jeff: movement between the party pack and the Sanctum inventory is up to the player. No automatic move at the end of a finished path, and none after an early leave. This reverses the move parts of D-20 ("finishing a path moves held pieces into the Sanctum when room exists") and D-24 (a survivor moves to the Sanctum when room exists).
-- Pieces in the pack stay in the pack until the player moves them, or until they are lost (early-leave draw D-19/D-22, defeat D-20).
-- Newly gathered items still go through intake: Sanctum first, then a free pack slot, then lost (D-16, `overflow`).
-- This removes QA findings F-01 (new stacks lost behind carried pieces) and F-02 (carried stacks not merging at path end).
-- UI: show, do not tell (Jeff). A result card shows what survived and what was lost. It does not name the pack as a place, and it adds no extra text or states. A survivor shown as kept implies it is still in the pack. The prototype result cards (lanes "Kept in the Sanctum" / "Left in the pack" / "Lost") need a simplification.
-
-## D-43 — QA step 7 decisions (Jeff, 2026-11-06)
-From `step7-qa-report.md`:
-- F-03: the early-leave draw of a carried stack does not depend on its pack slot. Reordering the pack never changes a result. Key the draw on the stack's type and its order among stacks of that type.
-- F-06: the path view always carries `data.inventory` (the pack HUD needs it), like party details (D-29). This is an exception to D-28 (keys only when non-empty). No code change.
-- F-01 and F-02 are closed by D-42. F-04, F-05, F-07 and F-08 go to the builder (test gap for the mark on a failed return home, item-row slot reservation, stale comments).
-
-## D-44 — Prototype v2 approved (Jeff, 2026-11-06)
-Jeff approved interactive prototype v2 (`docs/visual-plans/inventory-ui-mockup-v2.html`, published as a private artifact, Version 5) including the simplified result cards (D-42). It is the UI contract for step 7. The UI build starts after the backend (D-42 and D-43 fixes) is verified. Open questions still listed in its section F are decided at the build, or by Jeff when raised.
-
-## D-45 — Stack intake order and QA round 2 decisions (Jeff, 2026-11-06)
-From `step7-qa-report-2.md`:
-- F2-01: a new find of a stack type starts a new stack in a free slot even when the same-type Sanctum stack is at its limit. A find is lost only when both containers are full.
-- F2-02: intake MAY merge a new find into a same-type pack stack with room. Intake order for a stack find: 1) merge into a same-type Sanctum stack with room, 2) new stack in a free Sanctum slot, 3) merge into a same-type pack stack with room, 4) new stack in a free pack slot, 5) lost (`overflow`; or `stack_limit` for a surplus above the limit when no slot can hold it). Sanctum first stays (D-16).
-- F2-03: accepted as built. The early-leave draw of a carried stack is keyed on type and order among same-type carried stacks (D-43). Swapping two same-type stacks may swap their results.
-- Builder tasks (no decision needed): F2-04 to F2-06 test gaps; F2-07 stale text.
-
-## D-46 — Lost remainder reason, pack never above its size (Jeff, 2026-11-06/07)
-From `step7-qa-report-3.md`:
-- F3-02: when no slot is left for the rest of a stack find, the lost remainder always reports `overflow` (D-16, D-45). A find is not refused for its size. This supersedes the `stack_limit` split the builder assumed in D-45's fix round.
-- F3-01 (High): the pack must never hold more entries than its size. A gathered stack find larger than one stack must respect the slots that open item rows reserve. Each open item row owns one pack slot. Builder fixes this and adds tests.
-
-## D-47 — QA round 4 decisions (Jeff, 2026-11-07)
-From `step7-qa-report-4.md`:
-- F4-02: accepted for now. A big stack find can lose a few units because a later row keeps a pack slot it may not use. Rare. The pack never goes above its size and nothing is minted. Revisit if play shows it.
-- F4-01: the slot hold counts open item rows of OTHER stages and Realms too, so the pack never goes above its size later. F4-03 (test for the early-leave caller) and F4-04 (stale `stack_limit` text in the step reports) go to the builder.
-
-## D-48 — UI QA decisions (Jeff, 2026-11-08)
-From `step8-qa-report.md`:
-- F8-02 (finds gathered on a path are not drawn in the pack panel and not counted by the pack button): deferred to the story that configures finds (ITEM-002 and 001b). Not built in 001a. Known gap: until then the pack can read full while showing empty sockets on a path.
-- Core gap 1: ADD a one-shot refusal key. After a refused move or discard, the rebuilt snapshot carries `data.inventory.refused` with a stable reason key, so the UI shows the exact reason. One-shot: it is present for one snapshot only.
-- Core gap 2: ADD the item display `name` to the at-risk rows and the result rows (`at_risk_row`, `report_row`), taken from the item definition like the inventory rows. Jeff saw the current and proposed visual and approved it (2026-11-08).
-- F8-01 and the Low findings F8-03 to F8-09 go to the UI builder.
-
-## D-49 — Play-test review decisions (Jeff, 2026-11-08)
-From Jeff's play test of the plan (`playtest-plan.md`):
-- Placement and hierarchy of the two panels (play-test parts A and C), the pack feeling hidden (K1) and text that is very small on large and small screens (K2): DEFERRED to Jeff's larger UX redesign of everything. Not changed in 001a. Technically the buttons and panels work.
-- Parts B, D, E, H, J, K3, K5: no issues. K6: ignored (no reduced-motion option yet). Part I: Jeff still tests.
-- Newly found items: when a path ends (clear or early leave) they land in the PARTY PACK and stay there. The player moves them to the Sanctum later. Nothing moves automatically (D-42 stands in full). Each find already owns a reserved pack slot (D-17), so a find is not lost for lack of room. This replaces the "Sanctum first, then pack, then lost" intake order for FINDS (D-16, D-45). The debug producer's `direct` mode is unchanged. Carried pieces still never move by themselves.
-- K4: remove the strap line decoration of the pack panel. Keep the darker heavy tone and the risk text. (Jeff: the line design was not agreed.)
-- Play-test finding F (finds gathered with `inventory produce gather` show nothing until the path resolves) is the known gap F8-02, deferred to the finds story (D-48). Jeff: finds should not be handled here. Recorded as a UX concern for that story: a player sees no sign of a find until the path ends.
-- COPY: Jeff approves every player-facing line. Placeholder text is not final even when it shows in the game. `copy-approval.md` lists every line with a suggestion. Nothing is applied until Jeff approves a line. Jeff writes or approves the final text.
-
-## D-50 — QA round 9 decisions (Jeff, 2026-11-08)
-From `step9-qa-report.md`:
-- F10-01: accepted for now. A find larger than one stack can lose units under pack-only placement while the Sanctum has free room (example: 20 consumables, limit 3, empty pack of 4: 12 stored, 8 lost). Only the debug producer makes such finds. The finds story (ITEM-002) decides the rule for leftover units. Nothing is minted and the pack never exceeds its size.
-- F10-04: Jeff wants a bigger tone step between near-full and full in the pack panel (tone only, no decoration). Builder shows candidate looks (colour and grayscale) to Jeff BEFORE anything is applied.
-- F10-05: delete the old `gathered` intake mode (Sanctum first) and the tests that only guard it. Debug `direct` mode stays.
-- F10-02 (a pack-size change can overfill the pack when rows are written by hand): relevant to the pack-shrink story (D-41). Recorded, no change in 001a.
-- F10-03 (UI test gaps), F10-06 (move-after-settlement test skips settlement), F10-07 (stale expected total in a report): builder tasks.
-
-## D-51 — Approved copy and the pack tone (Jeff, 2026-11-08)
-Jeff marked up `copy-approval.md` with his picks. His file is saved as `copy-approval-jeff.md` and is the SOURCE of the approved wording. Rules for applying it:
-- Apply the text in the `Pick` column exactly, with four spelling fixes Jeff confirmed: "That spot is not available." (R_BAD_SLOT), "destroy" (MODAL_PATH_LINE), "Travel pack 2/4" (pack_button), "1 destroy action left on this path." (PATH_LEFT). Keep his capitals as typed (some "storehouse" are lowercase).
-- "[remove]" means the line is removed: no text, no replacement. The element that showed it goes away. A removed AT_STAKE_LABEL means the leaf mark gets no spoken label (Jeff's choice). A removed R_NOT_IN_PACK falls back to the generic unknown line.
-- The Kind names are approved as listed (consumable = Supply).
-- "Let it go" becomes "Destroy" (BTN_LET_GO) and the related lines use "destroy".
-- PACK_HEAVY is removed on purpose: a full pack in party details shows the tone and the departure line only.
-- COUNT_LABEL is "Count" (the detail pattern pick wins): a single piece shows "Count: 1". ONE_PIECE is no longer shown.
-- A refused button shows only the refusal line, without the button name: "The pack is full." Every refusal shows only its own line.
-- Marker: approved strings carry `# APPROVED (Jeff 2026-11-08)` in `ItemUiText.gd`. A test compares every string with a fixture of the approved text. A string that changes without a new approval fails the test.
-- Pack tone: Jeff chose candidate C (plain #7A5B3E, near full #4F3B28, full #120E0C). Tone only, no decoration.
-
-## D-52 — QA round 10 decisions (Jeff, 2026-11-08)
-From `step10-qa-report.md`:
-- F11-01: delete the four approved lines that no player sees or hears today (`pack_button`, `moved_toast`, `LEAVE_RISK_LABEL`, `ITEMS_GROUP_LABEL`). They stay in `copy-approval-jeff.md`. If a screen-reader label or a move message is added later, Jeff approves it again then.
-- F11-03 (two refusal lines under two disabled buttons on a path) and F11-04 (the full tone's panel edge is 1.31:1 against the dark path world): left for Jeff's larger UX redesign.
-- F11-02 (no test for "no button name before a refusal line" and "Count: 1, not Count: 1 piece"): builder adds tests that fail without those behaviours.
-- F11-05, F11-06 and F11-07 are informational. F11-07 (the pack button label looks dim in the screenshot harness) is to be checked in Jeff's own play test.
-
-## D-53 — Play test approved (Jeff, 2026-11-08)
-Jeff play-tested build a59a23d with `playtest-plan.md` (second round). Parts A to K: approved, everything crossed off (Part F confirmed passed). Kept finds: carried means at risk. A find that survives a path sits in the pack as a carried piece; a later early leave rolls for it again and a defeat loses it (D-19, D-20, D-22). It is not safe until the next path. Jeff moves it to the Storehouse to make it safe. Step 7 and step 8 (UI) are complete. Remaining: docs (step 8 of the plan), commit and push, mark the PR ready, Jeff merges.
-
-## OPEN
-- No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
-- Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
-- Notion has no row for ECONOMY-004 Part B.
-
-## D-38 — No save repairs for old saves (Jeff, 2026-11-06)
-Jeff: the game is not live; he makes a new save. D-37's slot field needs no repair or bridge for old saves. This is project-wide until Jeff says a 1.0 version is live (ANSWERS #88). Existing repairs from this story (`_repair_inventory_block`) stay unless Jeff asks to remove them.
-
-## D-39 — The party pack panel shows no counts (Jeff, 2026-11-06)
-The pack panel showed the fill three ways (bead gauge, `n / n sockets`, `Load n of n`). Jeff: one is enough, and the party details pack button already carries it. Remove all three from the pack panel. Keep the slots, the leaf mark on carried pieces, the consequence line, and the heavy tone with its strap line (D-36). The pulse on a transition into full moves to the strap line and panel tone (0.4 s; reduced motion 0.15 s fade). The Sanctum panel gauge stays.
+## Open
+- Which Notion rows are open for ITEM-005 (Order 249.2 and 259) and ECONOMY-002 (Order 242 and 360)? Not needed for this story.
