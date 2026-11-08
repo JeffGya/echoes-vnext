@@ -13,6 +13,33 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 46 — A green suite proved nothing in these cases; a deliberate rule break found each one
+
+**Rule:** For every rule a story adds, break the rule on purpose in the code (a mutation), run the suite, and expect a red test. If the suite stays green, the rule has no test. Add the test, then restore the code and compare it with `cmp`.
+**Why:** V2-ITEM-001a QA. `step7-qa-report-2.md` F2-04 and F2-05: the draw order counted stacks of all types, and the debug fallback ignored reserved slots; all 134 tests passed in both cases. `step7-qa-report-3.md` F3-01 (High): the pack held more entries than its size; mutation M9 passed, and probes P10 and P11 found it. `step10-qa-report.md` F11-02: the refusal line with the button name in front, and `Count: 1 piece`, passed all 41 tests (mutations R1 and R4).
+**How to apply:** In the build report, list each new rule with the mutation that breaks it and the test that goes red. A rule with no red test is a finding. Do not accept a green `Tests:` line as proof of a rule.
+**Mistake count:** 4 (F2-04, F2-05, F3-01, F11-02)
+
+---
+
+### 45 — Run a long suite through the tool's own background mode, not a process started by hand
+
+**Rule:** For a run that can take more than 2 minutes, use the Bash tool with `run_in_background` and the `timeout` and `alarm` that AGENTS.md gives. Do not start the process with `&`, `nohup` or `setsid` inside a command and walk away.
+**Why:** V2-ITEM-001a. The main chat reported that a sharded run started by hand in the background was killed within about a minute, on 2026-11-07 and again on 2026-11-08. No log of the killed runs is in the repo; the long-run rule is in `CLAUDE.md`, section "Long runs: you run them".
+**How to apply:** The main chat starts the run in the tool's background mode, waits to be woken, and reads the raw `Tests:` and `COMBINED:` lines. A subagent never starts it; the subagent ends its turn with a RUN REQUEST (AGENTS.md).
+**Mistake count:** 2
+
+---
+
+### 44 — Text marked placeholder in the code still shows in the game and reads as final; Jeff approves every line
+
+**Rule:** An agent proposes player-facing wording, marks it as a proposal, and stops. Jeff writes or approves every line. Do not ship a screen whose text still says `PLACEHOLDER` in the code.
+**Why:** V2-ITEM-001a. The item screens showed `PLACEHOLDER` strings to the player in the play test, and they read as final. Jeff set the rule (ANSWERS #89; `decisions.md` D-49 and D-51). His marked-up file `copy-approval-jeff.md` is now the source of the wording.
+**How to apply:** Put every line in one text file. Mark approved lines `# APPROVED (Jeff <date>)`. Keep the approved text in a fixture with a test that fails when a line changes without a new approval (`tests/fixtures/ItemUiApprovedCopy.json`; CONVENTIONS.md, last section).
+**Mistake count:** 1
+
+---
+
 ### 43 — A guard that reads process-wide state needs a proof that it can fail, in the mode you rely on
 
 **Rule:** Before you trust a green `movement_fallback` (or any guard that reads a process-wide ledger), induce one real violation and watch the guard fail. Do this in the run mode you rely on (serial, sharded, CI). Read what the guard clears or consumes before it reads.

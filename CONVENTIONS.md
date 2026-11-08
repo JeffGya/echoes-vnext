@@ -1316,3 +1316,44 @@ world point and player zoom rather than resetting the camera.
 - Sanctum bark spatial popup above echo tokens: deferred to V2-SANCTUM-005 (Phase D Alive Layer). Data pipeline (`_sanctum_bark` dict on echo save entries + `roster_preview.sanctum_bark`) is fully built by V2-VOICE-001. Text display in SanctumScreen roster cards ships in VOICE-001. Spatial positioning requires per-echo node identity which doesn't exist until SANCTUM-005.
 - Multiple save slots (one slot is the current contract)
 - Sanctuary upgrades affecting trait rolls (`generation_context` reserved for future modifiers)
+
+---
+
+## Item Containers, Item Text and One-Shot Snapshot Fields (V2-ITEM-001a)
+
+No earlier section covers these four conventions, so they sit here. Story record: `docs/stories/v2-item-001/`.
+
+### Player-facing item text (ANSWERS #89, decisions D-49, D-51)
+- All item text lives in one file: `ui/components/ItemUiText.gd`. A scene (`.tscn`) holds no item words. A screen shows no item text of its own.
+- Jeff approves every player-facing line. An agent proposes wording and stops. Text marked `PLACEHOLDER` still shows in the game and then reads as final, so do not ship it.
+- Each approved line ends with the marker `# APPROVED (Jeff <date>)`. Today the date is `2026-11-08`.
+- The fixture `tests/fixtures/ItemUiApprovedCopy.json` holds the approved text. The test `inventory_ui/approved_copy_matches_the_fixture_word_for_word` compares every constant and every built line with the fixture. It fails when a line changes without a new approval, when a constant has no fixture key, and when a fixture key has no constant. A second test fails when a line has neither marker.
+- To change a line: get Jeff's new approval, change the string, change the fixture, change the date in the marker.
+- No id is ever shown as text. A row shows `name` from the item definition, or the kind word.
+
+### Slot model of the item containers
+| Rule | Detail |
+|---|---|
+| Containers | The Sanctum inventory (`inventory.items`, `inventory.stacks`; size `data.inventory.unique_cap`) and the party pack (`inventory.pack`, `inventory.pack_stacks`; size `pack_capacity`). |
+| Slot | Each entry has a saved integer `slot` inside its container. A piece and a stack each fill one slot. No two entries of one container share a slot. A slot is a whole number from 0 and below the container size. |
+| Placement | An intake or a move takes the first free slot of the container. A caller may give a target slot (`to_slot`); it is used if free. |
+| No swap | A move onto an occupied slot is refused with `slot_taken`. There is no swap. The player reorders by moving an entry into an empty slot. |
+| Merge | A stack dropped on a stack of the same type merges up to the stack limit. The rest stays in the source slot. An emptied source is removed. A merge needs no free slot. |
+| Reads | A read never repairs an entry. `InventoryService.validate` lists problems. A stored slot at or above the size is kept; the UI draws `max(size, highest slot + 1)` slots. |
+| Owners | `InventoryService` (containers), `InventoryRules` (which screen allows which action; the `data.inventory` builder), `InventoryController` (actions). |
+
+### One-shot snapshot field pattern
+Use this pattern when a snapshot must show a fact once and the fact must not be saved. Reference case: `data.inventory.refused`.
+1. Keep the fact in a volatile `FlowContext` field. Here: `FlowContext.pending_inventory_refusal` `{ action, reason }`. FlowContext is not in the save.
+2. The controller sets the field when it refuses an action (`InventoryController._deny`). It changes nothing else and requests no save.
+3. The snapshot builder adds the key only while the field is set (`InventoryRules.projection` adds `data.inventory.refused`).
+4. `FlowRuntime.dispatch` spends the field after the snapshot is published. The caller gets a copy that carries the key. `last_snapshot` loses it. The next snapshot has no key.
+5. A test proves three things: the key is in exactly one snapshot, it is never in the save, and it is gone after a reload (`inventory_paths/a_refusal_key_is_in_the_next_snapshot_only`, `.../the_refusal_key_is_never_saved_and_does_not_survive_a_reload`).
+`FlowContext.pending_return_confirm` is an earlier case of the same pattern.
+
+### Panels are UI-local state, not flow states
+- The Storehouse panel, the Travel pack panel and the destroy modal add no flow state, no snapshot type and no `snapshot.actions` slot (decisions D-33, D-35; AGENTS.md, Shell Routing).
+- The panels read `data.inventory` from the snapshot of the current screen. Each panel opens alone. No panel starts open. The open or closed state lives in the panel and the shell, and is not saved.
+- The party pack button and the path HUD button emit `ui.toggle_pack_panel`. The shell intercepts it and never forwards it to `FlowRuntime`.
+- A move or a discard is a per-row action: `inventory.move.apply` and `inventory.discard.apply`. The panel emits it and `AppRoot` dispatches it. Neither is in `snapshot.actions`.
+- The shared scene `ui/components/InventoryPanels.tscn` serves both `SanctumShell` and `RealmShell`.
