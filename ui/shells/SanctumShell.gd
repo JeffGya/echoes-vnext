@@ -24,6 +24,8 @@ class_name SanctumShell
 @onready var _notification_amount: Label = %NotificationAmount
 @onready var _notification_dismiss: Button = %NotificationDismiss
 @onready var _bottom_rail: Control = %BottomRail
+@onready var _inventory_button: Button = %InventoryButton
+@onready var _inventory_panels: Control = %InventoryPanels
 @onready var _party_button: Button = %PartyButton
 @onready var _summon_button: Button = %SummonButton
 @onready var _realm_button: Button = %RealmButton
@@ -32,6 +34,8 @@ class_name SanctumShell
 
 signal action_requested(action: Dictionary)
 signal modal_requested(modal_id: StringName, payload: Dictionary)
+
+const ItemUiText := preload("res://ui/components/ItemUiText.gd")
 
 var _active_overlay: Control = null
 var _layout: Dictionary = {}
@@ -123,6 +127,7 @@ var _modal_scene_by_id: Dictionary = {
 	&"vow_moment": preload("res://ui/overlays/sanctum/VowMomentModal.tscn"),
 	&"institution_detail": preload("res://ui/overlays/sanctum/InstitutionDetailModal.tscn"),
 	&"calling_info": preload("res://ui/overlays/sanctum/CallingInfoModal.tscn"),
+	&"inventory.discard": preload("res://ui/overlays/ItemDiscardModal.tscn"),
 }
 
 func _ready() -> void:
@@ -149,6 +154,11 @@ func _ready() -> void:
 	visibility_changed.connect(_sync_ui_layer_visibility)
 	_sync_ui_layer_visibility()
 	_bind_nav_bar()
+	_inventory_button.pressed.connect(Callable(_inventory_panels, "toggle_sanctum"))
+	_inventory_panels.action_requested.connect(_on_overlay_action_requested)
+	_inventory_panels.modal_requested.connect(_on_overlay_modal_requested)
+	_inventory_panels.open_state_changed.connect(_on_inventory_state_changed)
+	_bind_inventory_button()
 	_notification_panel.visible = false
 	_notification_panel.modulate.a = 0.0
 	_notification_overlay.visible = false
@@ -195,6 +205,8 @@ func set_snapshot(snap: Dictionary) -> void:
 
 	# 2) Swap overlay UI based on flow snapshot type
 	_show_overlay_for_type(_current_snap_type, snap)
+	_inventory_panels.set_snapshot(snap)
+	_on_inventory_state_changed()
 
 	# 3) Cache nav actions from flow.sanctum and rebuild the persistent shell nav bar.
 	# The cache is safe: cta.enter_stage (only conditional action) can only change via
@@ -229,6 +241,8 @@ func set_blocking_modal_active_check(check: Callable) -> void:
 	_blocking_modal_active_check = check
 
 func on_modal_dismissed(modal_id: StringName) -> void:
+	if modal_id == &"inventory.discard":
+		_inventory_panels.note_discard_modal_closed()
 	if _active_modal_id != modal_id:
 		return
 	_active_modal_id = &""
@@ -302,6 +316,9 @@ func _update_safe_layout_frames() -> void:
 		_bottom_rail.offset_left = rail_left
 		_bottom_rail.offset_right = rail_left + rail_w
 	_update_notification_layout()
+	if _inventory_panels != null:
+		_inventory_panels.set_layout(_layout)
+		_inventory_panels.set_bottom_content_exclusion(bottom_content_exclusion())
 	if _active_overlay != null:
 		if _active_overlay.has_method("set_bottom_content_exclusion"):
 			_active_overlay.call("set_bottom_content_exclusion", bottom_content_exclusion())
@@ -456,6 +473,9 @@ func _on_overlay_action_requested(action: Dictionary) -> void:
 	if action_type == "ui.close_institutions_panel":
 		close_institutions_panel()
 		return
+	if action_type == "ui.toggle_pack_panel":
+		_inventory_panels.toggle_pack()
+		return
 	action_requested.emit(action)
 
 func _on_overlay_modal_requested(modal_id: StringName, payload: Dictionary) -> void:
@@ -484,6 +504,24 @@ func _payload_with_layout(payload: Dictionary) -> Dictionary:
 
 func _on_overlay_echo_detail_closed() -> void:
 	_restore_echo_detail_shell_state()
+
+## The Stores button opens the Sanctum panel on the two screens that hold items. The panel is UI-local state, so
+## the button is not a snapshot action. Its selected look shows while the panel is open.
+func _bind_inventory_button() -> void:
+	var usable := _current_snap_type == "flow.sanctum" or _current_snap_type == "flow.echo_party"
+	_inventory_button.text = ItemUiText.RAIL_LABEL
+	_inventory_button.disabled = not usable
+	_inventory_button.theme_type_variation = &"RailButtonSelected" if _inventory_panels.is_sanctum_open() else &"ButtonSecondary"
+
+
+func _on_inventory_state_changed() -> void:
+	_bind_inventory_button()
+	if _active_overlay != null:
+		if _active_overlay.has_method("set_content_inset_right"):
+			_active_overlay.call("set_content_inset_right", _inventory_panels.right_inset())
+		if _active_overlay.has_method("set_pack_open"):
+			_active_overlay.call("set_pack_open", _inventory_panels.is_pack_open())
+
 
 func _bind_nav_bar() -> void:
 	_bind_button(_party_button, _action_for_slot("nav.echo_party"), "Party")

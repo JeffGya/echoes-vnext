@@ -457,6 +457,10 @@ static func build(flow_ctx: FlowContext, t: int) -> Dictionary:
 	data["active_directive_id"] = DirectiveService.active_id(flow_ctx.save_data if flow_ctx.save_data != null else {})
 	data["available_directives"] = DirectiveService.available_ids(dir_cfg)
 
+	# Inventory projection (data only): a fresh tree with no Ase, Ekwan or Thread key. Per-row actions
+	# (`inventory.discard.apply`, `inventory.move.apply`) are dispatched by the row, not slots in `actions`.
+	data["inventory"] = InventoryRules.projection(flow_ctx)
+
 	return {
 		"type": FlowStateIds.SANCTUM,
 		"data": data,

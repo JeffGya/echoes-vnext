@@ -382,9 +382,13 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"params": { "kind": str(_fight_row.get("kind", "")), "gathered_ase": int(_fight_row.get("ase", 0)) } })
 	# A defeat that lost unsettled packs says so, with the amounts. Nothing reaches the balance, so delta is 0.
 	if not victory and ectx != null and not ectx.packs_lost.is_empty():
+		var _lost_params := { "lost_ase": int(ectx.packs_lost.get("lost_ase", 0)),
+			"lost_ekwan": int(ectx.packs_lost.get("lost_ekwan", 0)) }
+		# `items` (report rows, no id) only when an item or held piece was lost.
+		if ectx.packs_lost.get("items", null) is Array and not (ectx.packs_lost["items"] as Array).is_empty():
+			_lost_params["items"] = (ectx.packs_lost["items"] as Array).duplicate(true)
 		_breakdown.append({ "label": "Packs lost", "delta": 0, "currency": "ase", "cause": "packs_lost",
-			"params": { "lost_ase": int(ectx.packs_lost.get("lost_ase", 0)),
-				"lost_ekwan": int(ectx.packs_lost.get("lost_ekwan", 0)) } })
+			"params": _lost_params })
 	var _vow_outcome: Dictionary = flow_ctx.vow_outcome.duplicate() if not flow_ctx.vow_outcome.is_empty() else {}
 
 	# A defeat shows nothing about pace (design §7): no colour on the result round line.
@@ -412,6 +416,9 @@ static func build_final_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	if not _stage_preview.is_empty():
 		ResolveSnapshotBuilder.add_stage_payout(
 			_data, _stage_preview["rows"], int(_stage_preview["ase"]), int(_stage_preview["ekwan"]))
+		# The path-end item report (D-30): `data.items`, the key the scout-return card uses. This card type has no
+		# other `items` key (the defeat `packs_lost.items` sits inside a ledger row). Written only when non-empty.
+		ResolveSnapshotBuilder.add_items(_data, _stage_preview.get("items", {}))
 	if victory and flow_ctx.encounter_start_revealed_count >= 0:
 		ResolveSnapshotBuilder.add_intel_gained(_data, maxi(0,
 			ActiveStageService.count_revealed_situations(flow_ctx) - flow_ctx.encounter_start_revealed_count))

@@ -66,6 +66,7 @@ const _RADAR_AXIS_MAX: float = 100.0
 @onready var calling_info_desc: Label = %CallingInfoDesc
 @onready var calling_info_close_btn: Button = %CallingInfoCloseBtn
 
+@onready var _pack_button: Control = %PartyPackButton
 @onready var party_cards: VBoxContainer = %PartyCards
 @onready var party_card_template: PanelContainer = %PartyCardTemplate
 
@@ -77,6 +78,8 @@ var _max_party_size: int = 5
 var _thread_count: int = 0
 var _show_party_average: bool = false
 var _bottom_content_exclusion := 108
+var _layout: Dictionary = {}
+var _inset_right := 0
 
 
 func _ready() -> void:
@@ -87,6 +90,7 @@ func _ready() -> void:
 
 	if not back_button.pressed.is_connected(_on_back_pressed):
 		back_button.pressed.connect(_on_back_pressed)
+	_pack_button.toggle_requested.connect(func() -> void: action_requested.emit({ "type": "ui.toggle_pack_panel" }))
 	if not detail_assign_party_btn.pressed.is_connected(_on_assign_party_pressed):
 		detail_assign_party_btn.pressed.connect(_on_assign_party_pressed)
 	if not detail_assign_job_btn.pressed.is_connected(_on_begin_rite_pressed):
@@ -140,6 +144,10 @@ func set_snapshot(snap: Dictionary) -> void:
 		if first_v is Dictionary:
 			_selected_echo_id = str((first_v as Dictionary).get("id", ""))
 
+	var inventory_v: Variant = data.get("inventory", {})
+	if inventory_v is Dictionary:
+		_pack_button.set_inventory(inventory_v as Dictionary)
+
 	_rebuild_echo_list()
 	_rebuild_party_cards()
 
@@ -158,7 +166,22 @@ func set_snapshot(snap: Dictionary) -> void:
 			"rank_up_event": rank_up_event_v as Dictionary,
 		})
 
+## The shell asks for room on the right while the pack column is docked there (the pack opens to the right of party
+## details). The three panels share what is left.
+func set_content_inset_right(px: int) -> void:
+	if px == _inset_right:
+		return
+	_inset_right = px
+	if not _layout.is_empty():
+		set_layout(_layout)
+
+
+func set_pack_open(open: bool) -> void:
+	_pack_button.set_open(open)
+
+
 func set_layout(layout: Dictionary) -> void:
+	_layout = layout
 	var safe: Vector4 = layout.get("safe_insets", Vector4.ZERO)
 	var profile: StringName = layout.get("profile", &"standard")
 	var logical_size_v: Variant = layout.get("logical_size", Vector2(1280, 720))
@@ -170,7 +193,7 @@ func set_layout(layout: Dictionary) -> void:
 	var left := float(16 + int(ceilf(safe.x))) + maxf(0.0, (available_w - content_w) * 0.5)
 	offset_left = left
 	offset_top = float(16 + int(ceilf(safe.y)))
-	offset_right = -(viewport_w - left - content_w)
+	offset_right = -(viewport_w - left - content_w) - float(_inset_right)
 	offset_bottom = -float(_bottom_content_exclusion)
 	var panel_grid := three_panel_row if three_panel_row != null else find_child("ThreePanelRow", true, false) as GridContainer
 	if panel_grid != null:
@@ -181,7 +204,7 @@ func set_layout(layout: Dictionary) -> void:
 		party_panel if party_panel != null else find_child("PartyPanel", true, false) as PanelContainer,
 	]:
 		if panel != null:
-			panel.custom_minimum_size.x = 0.0 if profile == &"compact" else 300.0
+			panel.custom_minimum_size.x = 0.0 if profile == &"compact" else (200.0 if _inset_right > 0 else 300.0)
 
 func set_bottom_content_exclusion(value: int) -> void:
 	_bottom_content_exclusion = maxi(0, value)

@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://d1px4m6lxvynp" path="res://ui/sanctum/SanctumSpatialRenderer.tscn" id="2_iy4vj"]
 [ext_resource type="Theme" uid="uid://8qssuuodths2" path="res://assets/theme/LivingTreeSystem.tres" id="2_q4uf4"]
 [ext_resource type="Script" path="res://ui/shared/BoardCamera.gd" id="3_bcam1"]
+[ext_resource type="PackedScene" path="res://ui/components/InventoryPanels.tscn" id="5_invpanels"]
 
 [node name="SanctumShell" type="Control" unique_id=995803856]
 layout_mode = 3
@@ -77,6 +78,10 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
+[node name="InventoryPanels" parent="UILayer/Control" instance=ExtResource("5_invpanels")]
+unique_name_in_owner = true
+layout_mode = 1
+
 [node name="ChromeLayer" type="CanvasLayer" parent="."]
 layer = 20
 
@@ -115,6 +120,13 @@ theme_override_constants/margin_bottom = 16
 [node name="RailButtons" type="HBoxContainer" parent="ChromeLayer/ChromeControl/BottomRail/MarginContainer" unique_id=100000003]
 layout_mode = 2
 theme_override_constants/separation = 14
+
+[node name="InventoryButton" type="Button" parent="ChromeLayer/ChromeControl/BottomRail/MarginContainer/RailButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ButtonSecondary"
 
 [node name="PartyButton" type="Button" parent="ChromeLayer/ChromeControl/BottomRail/MarginContainer/RailButtons" unique_id=1271814168]
 unique_name_in_owner = true

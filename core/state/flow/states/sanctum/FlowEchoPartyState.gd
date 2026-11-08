@@ -147,6 +147,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			"active_party_ids": party_ids,
 			"party_count": party_ids.size(),
 			"thread_count": thread_count,
+			# The pack for party prep and the departure chip. Same projection as the Sanctum's.
+			"inventory": InventoryRules.projection(flow_ctx),
 		},
 		"actions": {
 			"nav.back": {

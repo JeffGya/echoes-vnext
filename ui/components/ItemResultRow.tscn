@@ -1,0 +1,32 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/components/ItemResultRow.gd" id="1_row"]
+
+[node name="ItemResultRow" type="VBoxContainer"]
+visible = false
+theme_override_constants/separation = 6
+script = ExtResource("1_row")
+
+[node name="TileMargin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_bottom = 4
+
+[node name="Tiles" type="HFlowContainer" parent="TileMargin"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 12
+
+[node name="NameLine" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="RiskLine" type="Label" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+autowrap_mode = 3
+

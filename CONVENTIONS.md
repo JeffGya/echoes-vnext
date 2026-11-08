@@ -1101,6 +1101,8 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `vow.break` | Calls VowService.break_vow(). Applies morale/fear delta to all roster echoes. |
 | **sanctum (companion, V2-STAGE-004 P4)** | `sanctum.companion.accept` | No payload. Reads `sanctum.companion_invite`, calls `RecruitmentService.promote_ally_to_echo()`, clears the invite. Handled by `FlowRuntime._handle_companion_accept()`. |
 | | `sanctum.companion.decline` | No payload. Clears `sanctum.companion_invite` with no roster mutation. Handled by `FlowRuntime._handle_companion_decline()`. |
+| **inventory** | `inventory.move.apply` | V2-ITEM-001a. Payload `{ from, slot, to, to_slot? }` (`from` and `to` are `"sanctum"` or `"pack"`). Moves an entry between containers, reorders it into an EMPTY slot, or merges a stack onto a same-type stack with room. `to_slot` absent = lowest free slot. No swap (`slot_taken`). Allowed on `flow.sanctum` and `flow.echo_party`, refused on the path view (`path_open`). A refusal changes nothing and sets the one-shot `data.inventory.refused` for the next snapshot. Per-row action: never in `snapshot.actions`. |
+| | `inventory.discard.apply` | V2-ITEM-001a (player word: Destroy). Payload `{ item_id }` or `{ from, slot }`, plus optional `count` for a stack. Unlimited in the Sanctum and party prep. On the path view: ONE per path, on a pack entry only; the used mark is the saved stage field `discard_used`. Refusal keys include `not_in_sanctum`, `not_in_pack`, `path_used`, `no_stage`, `bad_payload`. Per-row action: never in `snapshot.actions`. |
 | **debug** | `debug.seed.show/set/reset` | seed tooling (dev only). Like every action, it runs at the tick `dispatch()` computes for it — not `t = -1`. |
 | | `debug.echo.gen_test` | generates test echo (dev only) |
 | | `debug.vow.unlock` | payload: `{ vow_id }`. Unlocks a vow at tier 1 without scenario trigger (dev only) |
@@ -1112,6 +1114,7 @@ EncounterStateMachine phases (scaffold): `setup → blessing → rounds → reso
 | | `debug.charge_pressure.set` | V2-STAGE-004 P4 (S13). `force_charge_pressure [on|off]` (default `on`) debug-panel command; payload `{ on: bool }`. Only usable in `flow.stage_explore`; sets/clears `explore_map.hostile_charge_sit_id` (dev only). |
 | | `debug.emotion.set` | `emotion set <echo_id> <fear|fear_base|morale> <0-100>` debug-panel command; payload `{ echo_id, field: "fear"|"fear_base"|"morale", value }` (clamped 0-100). Writes through `EmotionService`; denied (logged, no change) for an unknown Echo or field. Combat actors copy the values at fight start, so the change shows from the next combat. Requests a save (dev only). |
 | | `debug.stop_short.set` | `stopshort [on|off]` debug-panel command; payload `{ mode: "on"|"off" }`. Overrides `data.actor.stop_short.enabled` through `FlowContext.dev_stop_short`. Runtime-only: not saved, and applies from the NEXT encounter start, not the current fight. Any other mode is denied (logged, no change) (dev only). |
+| | `debug.inventory.produce` | V2-ITEM-001a play-test producer. `inventory produce [direct|gather]` debug-panel command (debug builds only); payload `{ mode: "direct"|"gather", ids? }`. `direct` places the fixture items (`tests/fixtures/inventory_placeholders.json`) through intake, Sanctum first. `gather` writes item rows into the packs of a live path. The definitions are laid over a COPY of the config for one call and are never saved. |
 | | *(no action type)* `force_recruit <success\|fail\|clear>` | V2-STAGE-004 P4 (S14). Debug-panel command handled entirely client-side in `AppRoot._run_force_recruit_command()` — sets `runtime.flow_ctx.dev_force_recruit` directly ("success"/"fail"/"") without dispatching an action. The next `RecruitmentService.roll()` draws-then-overrides so the seeded RNG order is preserved (dev only). |
 
 ---
@@ -1316,3 +1319,44 @@ world point and player zoom rather than resetting the camera.
 - Sanctum bark spatial popup above echo tokens: deferred to V2-SANCTUM-005 (Phase D Alive Layer). Data pipeline (`_sanctum_bark` dict on echo save entries + `roster_preview.sanctum_bark`) is fully built by V2-VOICE-001. Text display in SanctumScreen roster cards ships in VOICE-001. Spatial positioning requires per-echo node identity which doesn't exist until SANCTUM-005.
 - Multiple save slots (one slot is the current contract)
 - Sanctuary upgrades affecting trait rolls (`generation_context` reserved for future modifiers)
+
+---
+
+## Item Containers, Item Text and One-Shot Snapshot Fields (V2-ITEM-001a)
+
+No earlier section covers these four conventions, so they sit here. Story record: `docs/stories/v2-item-001/`.
+
+### Player-facing item text (ANSWERS #89, decisions D-49, D-51)
+- All item text lives in one file: `ui/components/ItemUiText.gd`. A scene (`.tscn`) holds no item words. A screen shows no item text of its own.
+- Jeff approves every player-facing line. An agent proposes wording and stops. Text marked `PLACEHOLDER` still shows in the game and then reads as final, so do not ship it.
+- Each approved line ends with the marker `# APPROVED (Jeff <date>)`. Today the date is `2026-11-08`.
+- The fixture `tests/fixtures/ItemUiApprovedCopy.json` holds the approved text. The test `inventory_ui/approved_copy_matches_the_fixture_word_for_word` compares every constant and every built line with the fixture. It fails when a line changes without a new approval, when a constant has no fixture key, and when a fixture key has no constant. A second test fails when a line has neither marker.
+- To change a line: get Jeff's new approval, change the string, change the fixture, change the date in the marker.
+- No id is ever shown as text. A row shows `name` from the item definition, or the kind word.
+
+### Slot model of the item containers
+| Rule | Detail |
+|---|---|
+| Containers | The Sanctum inventory (`inventory.items`, `inventory.stacks`; size `data.inventory.unique_cap`) and the party pack (`inventory.pack`, `inventory.pack_stacks`; size `pack_capacity`). |
+| Slot | Each entry has a saved integer `slot` inside its container. A piece and a stack each fill one slot. No two entries of one container share a slot. A slot is a whole number from 0 and below the container size. |
+| Placement | An intake or a move takes the first free slot of the container. A caller may give a target slot (`to_slot`); it is used if free. |
+| No swap | A move onto an occupied slot is refused with `slot_taken`. There is no swap. The player reorders by moving an entry into an empty slot. |
+| Merge | A stack dropped on a stack of the same type merges up to the stack limit. The rest stays in the source slot. An emptied source is removed. A merge needs no free slot. |
+| Reads | A read never repairs an entry. `InventoryService.validate` lists problems. A stored slot at or above the size is kept; the UI draws `max(size, highest slot + 1)` slots. |
+| Owners | `InventoryService` (containers), `InventoryRules` (which screen allows which action; the `data.inventory` builder), `InventoryController` (actions). |
+
+### One-shot snapshot field pattern
+Use this pattern when a snapshot must show a fact once and the fact must not be saved. Reference case: `data.inventory.refused`.
+1. Keep the fact in a volatile `FlowContext` field. Here: `FlowContext.pending_inventory_refusal` `{ action, reason }`. FlowContext is not in the save.
+2. The controller sets the field when it refuses an action (`InventoryController._deny`). It changes nothing else and requests no save.
+3. The snapshot builder adds the key only while the field is set (`InventoryRules.projection` adds `data.inventory.refused`).
+4. `FlowRuntime.dispatch` spends the field after the snapshot is published. The caller gets a copy that carries the key. `last_snapshot` loses it. The next snapshot has no key.
+5. A test proves three things: the key is in exactly one snapshot, it is never in the save, and it is gone after a reload (`inventory_paths/a_refusal_key_is_in_the_next_snapshot_only`, `.../the_refusal_key_is_never_saved_and_does_not_survive_a_reload`).
+`FlowContext.pending_return_confirm` is an earlier case of the same pattern.
+
+### Panels are UI-local state, not flow states
+- The Storehouse panel, the Travel pack panel and the destroy modal add no flow state, no snapshot type and no `snapshot.actions` slot (decisions D-33, D-35; AGENTS.md, Shell Routing).
+- The panels read `data.inventory` from the snapshot of the current screen. Each panel opens alone. No panel starts open. The open or closed state lives in the panel and the shell, and is not saved.
+- The party pack button and the path HUD button emit `ui.toggle_pack_panel`. The shell intercepts it and never forwards it to `FlowRuntime`.
+- A move or a discard is a per-row action: `inventory.move.apply` and `inventory.discard.apply`. The panel emits it and `AppRoot` dispatches it. Neither is in `snapshot.actions`.
+- The shared scene `ui/components/InventoryPanels.tscn` serves both `SanctumShell` and `RealmShell`.

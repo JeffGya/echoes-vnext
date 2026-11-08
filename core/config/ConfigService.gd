@@ -388,6 +388,21 @@ static func get_rewards_cfg(config_service: ConfigService) -> Dictionary:
 	return rewards_v if rewards_v is Dictionary else {}
 
 
+## data.inventory — V2-ITEM-001a item containers: caps, stack limit, warning thresholds,
+## kinds_enabled, grades, recycle yield and definitions. Returns {} when the block is missing.
+## Read by the inventory service and the Sanctum inventory view. Static: never constructs a service.
+static func get_inventory_cfg(config_service: ConfigService) -> Dictionary:
+	if config_service == null:
+		return {}
+	var balance := config_service.get_balance()
+	if balance.is_empty():
+		return {}
+	var data_v = balance.get("data", {})
+	var data: Dictionary = data_v if data_v is Dictionary else {}
+	var inventory_v = data.get("inventory", {})
+	return inventory_v if inventory_v is Dictionary else {}
+
+
 ## `realm_order` of data/realms.json: the realms the player can pick, in order. The prologue is not in it.
 static func get_realm_order(config_service: ConfigService) -> Array:
 	if config_service == null:

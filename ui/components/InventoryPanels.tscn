@@ -1,0 +1,384 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/components/InventoryPanels.gd" id="1_panels"]
+[ext_resource type="Script" path="res://ui/components/ItemPanelDrop.gd" id="2_drop"]
+[ext_resource type="Script" path="res://ui/components/ItemMeter.gd" id="3_meter"]
+[ext_resource type="Script" path="res://ui/components/ItemLoadMark.gd" id="4_load"]
+[ext_resource type="Script" path="res://ui/components/ItemTileGlyphs.gd" id="5_glyph"]
+[ext_resource type="PackedScene" path="res://ui/components/ItemTile.tscn" id="6_tile"]
+
+[node name="InventoryPanels" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_panels")
+
+[node name="Dim" type="Panel" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_type_variation = &"ItemDim"
+
+[node name="Work" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 116
+
+[node name="Row" type="HBoxContainer" parent="Work"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="SanctumPanel" type="PanelContainer" parent="Work/Row"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 0
+theme_type_variation = &"ItemPanelSanct"
+script = ExtResource("2_drop")
+
+[node name="SanctBox" type="VBoxContainer" parent="Work/Row/SanctumPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="SanctHeader" type="HBoxContainer" parent="Work/Row/SanctumPanel/SanctBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="RoofMark" type="Control" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader"]
+custom_minimum_size = Vector2(32, 30)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Roof" type="Polygon2D" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader/RoofMark"]
+color = Color(0.2392, 0.1569, 0.0902, 1)
+polygon = PackedVector2Array(16, 0, 32, 13.2, 27.5, 13.2, 27.5, 30, 18.6, 30, 18.6, 19.8, 13.4, 19.8, 13.4, 30, 4.5, 30, 4.5, 13.2, 0, 13.2)
+
+[node name="SanctTitles" type="VBoxContainer" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="SanctTitle" type="Label" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader/SanctTitles"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTitleLight"
+
+[node name="ShowPackButton" type="Button" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"ItemButtonOutline"
+toggle_mode = true
+
+[node name="SanctClose" type="Button" parent="Work/Row/SanctumPanel/SanctBox/SanctHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"ItemCloseButton"
+text = "×"
+
+[node name="SanctRule" type="HSeparator" parent="Work/Row/SanctumPanel/SanctBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="SanctGridCenter" type="CenterContainer" parent="Work/Row/SanctumPanel/SanctBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="SanctGrid" type="GridContainer" parent="Work/Row/SanctumPanel/SanctBox/SanctGridCenter"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 5
+
+[node name="SanctMeter" type="Control" parent="Work/Row/SanctumPanel/SanctBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3_meter")
+
+[node name="GaugeWords" type="HBoxContainer" parent="Work/Row/SanctumPanel/SanctBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="SlotsLabel" type="Label" parent="Work/Row/SanctumPanel/SanctBox/GaugeWords"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ItemTextLight"
+
+[node name="FullLabel" type="Label" parent="Work/Row/SanctumPanel/SanctBox/GaugeWords"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"ItemFullWord"
+
+[node name="SanctRefuse" type="PanelContainer" parent="Work/Row/SanctumPanel/SanctBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"ItemRefuseLine"
+
+[node name="SanctRefuseLabel" type="Label" parent="Work/Row/SanctumPanel/SanctBox/SanctRefuse"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+autowrap_mode = 3
+
+[node name="Spacer" type="Control" parent="Work/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Column" type="BoxContainer" parent="Work/Row"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 10
+vertical = true
+
+[node name="PackPanel" type="PanelContainer" parent="Work/Row/Column"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_type_variation = &"ItemPanelPack"
+script = ExtResource("2_drop")
+
+[node name="PackBox" type="VBoxContainer" parent="Work/Row/Column/PackPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="PackHeader" type="HBoxContainer" parent="Work/Row/Column/PackPanel/PackBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="LoadMark" type="Control" parent="Work/Row/Column/PackPanel/PackBox/PackHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(40, 35)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+script = ExtResource("4_load")
+
+[node name="PackTitles" type="VBoxContainer" parent="Work/Row/Column/PackPanel/PackBox/PackHeader"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="PackTitle" type="Label" parent="Work/Row/Column/PackPanel/PackBox/PackHeader/PackTitles"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTitleDark"
+
+[node name="PackClose" type="Button" parent="Work/Row/Column/PackPanel/PackBox/PackHeader"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"ItemCloseButtonDark"
+text = "×"
+
+[node name="PathBar" type="VBoxContainer" parent="Work/Row/Column/PackPanel/PackBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="PathToken" type="Label" parent="Work/Row/Column/PackPanel/PackBox/PathBar"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextDark"
+
+[node name="PackGridCenter" type="CenterContainer" parent="Work/Row/Column/PackPanel/PackBox"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PackGrid" type="GridContainer" parent="Work/Row/Column/PackPanel/PackBox/PackGridCenter"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 4
+
+[node name="PackWord" type="Label" parent="Work/Row/Column/PackPanel/PackBox"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextDark"
+autowrap_mode = 3
+
+[node name="PackRefuse" type="PanelContainer" parent="Work/Row/Column/PackPanel/PackBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_type_variation = &"ItemRefuseLine"
+
+[node name="PackRefuseLabel" type="Label" parent="Work/Row/Column/PackPanel/PackBox/PackRefuse"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextDark"
+autowrap_mode = 3
+
+[node name="DetailsPanel" type="PanelContainer" parent="Work/Row/Column"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_type_variation = &"ItemDetailsPanel"
+
+[node name="DetailsBox" type="VBoxContainer" parent="Work/Row/Column/DetailsPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="DetailsEmpty" type="VBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+
+[node name="EmptyLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsEmpty"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+autowrap_mode = 3
+
+[node name="HintLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsEmpty"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextLightMuted"
+autowrap_mode = 3
+
+[node name="DetailsFull" type="VBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Top" type="HBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="BigTile" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top" instance=ExtResource("6_tile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+focus_mode = 0
+mouse_filter = 2
+
+[node name="Lines" type="VBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="NameLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTitleLight"
+autowrap_mode = 3
+
+[node name="KindLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="GradeLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="CountLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="WhereLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLightMuted"
+
+[node name="Buttons" type="HBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="MoveButton" type="Button" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ItemButtonGold"
+
+[node name="LetGoButton" type="Button" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"ItemButtonOutline"
+
+[node name="Reasons" type="VBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="MoveReason" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Reasons"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+autowrap_mode = 3
+
+[node name="LetGoReason" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Reasons"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+autowrap_mode = 3
+

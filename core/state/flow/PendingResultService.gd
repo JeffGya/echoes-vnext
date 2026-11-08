@@ -509,6 +509,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 		ResolveSnapshotBuilder.add_ase_gathered(data, int(stored.get("ase_gathered", 0)))
 	if stored.has("settle_outcome"):
 		ResolveSnapshotBuilder.add_settle_outcome(data, str(stored.get("settle_outcome", "")))
+	if stored.has("items"):
+		ResolveSnapshotBuilder.add_items(data, _copy_dict(stored.get("items", {})))
 	if stored.has("pace_state"):
 		ResolveSnapshotBuilder.add_pace(
 			data,

@@ -1,0 +1,136 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/overlays/ItemDiscardModal.gd" id="1_modal"]
+[ext_resource type="Script" path="res://ui/components/SafeAreaContainer.gd" id="2_safe"]
+[ext_resource type="PackedScene" path="res://ui/components/ItemTile.tscn" id="3_tile"]
+
+[node name="ItemDiscardModal" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_modal")
+
+[node name="Outside" type="Button" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+focus_mode = 0
+theme_type_variation = &"ItemTileButton"
+
+[node name="SafeFrame" type="MarginContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_safe")
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="Center" type="CenterContainer" parent="SafeFrame"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Card" type="PanelContainer" parent="SafeFrame/Center"]
+custom_minimum_size = Vector2(520, 0)
+layout_mode = 2
+theme_type_variation = &"ItemDetailsPanel"
+
+[node name="Content" type="VBoxContainer" parent="SafeFrame/Center/Card"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="TitleLabel" type="Label" parent="SafeFrame/Center/Card/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTitleLight"
+
+[node name="Row" type="HBoxContainer" parent="SafeFrame/Center/Card/Content"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Tile" parent="SafeFrame/Center/Card/Content/Row" instance=ExtResource("3_tile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+focus_mode = 0
+mouse_filter = 2
+
+[node name="Lines" type="VBoxContainer" parent="SafeFrame/Center/Card/Content/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="NameLabel" type="Label" parent="SafeFrame/Center/Card/Content/Row/Lines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTitleLight"
+autowrap_mode = 3
+
+[node name="PathLabel" type="Label" parent="SafeFrame/Center/Card/Content/Row/Lines"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+autowrap_mode = 3
+
+[node name="Picker" type="HBoxContainer" parent="SafeFrame/Center/Card/Content/Row/Lines"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PickerLabel" type="Label" parent="SafeFrame/Center/Card/Content/Row/Lines/Picker"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="MinusButton" type="Button" parent="SafeFrame/Center/Card/Content/Row/Lines/Picker"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"ItemButtonOutline"
+text = "−"
+
+[node name="CountOutput" type="Label" parent="SafeFrame/Center/Card/Content/Row/Lines/Picker"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(88, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+horizontal_alignment = 1
+
+[node name="PlusButton" type="Button" parent="SafeFrame/Center/Card/Content/Row/Lines/Picker"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+theme_type_variation = &"ItemButtonOutline"
+text = "+"
+
+[node name="ButtonRow" type="HBoxContainer" parent="SafeFrame/Center/Card/Content"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 2
+
+[node name="KeepButton" type="Button" parent="SafeFrame/Center/Card/Content/ButtonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 56)
+layout_mode = 2
+theme_type_variation = &"ItemButtonGold"
+
+[node name="LetGoButton" type="Button" parent="SafeFrame/Center/Card/Content/ButtonRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 56)
+layout_mode = 2
+theme_type_variation = &"ItemButtonOutline"

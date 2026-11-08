@@ -88,6 +88,7 @@ const LEDGER_SEEN_ACTION := { "type": "resolve.ledger.mark_seen" }
 @onready var _rounds_key:        Label         = %RoundsKey
 @onready var _rounds_value:      Label         = %RoundsValue
 @onready var _summary_button:    Button        = %EarningsSummary
+@onready var _item_row:          Control       = %ItemRow
 @onready var _ase_total:         Label         = %AseTotalLabel
 @onready var _ekwan_total:       Label         = %EkwanTotalLabel
 @onready var _summary_hint:      Label         = %SummaryHintLabel
@@ -150,6 +151,7 @@ func set_snapshot(snap: Dictionary) -> void:
 	_result_key = key
 	_clear()
 	_render(data, snap.get("actions", {}))
+	_present_items(data, same_result)
 	_apply_profile_size()
 	_finish_ledger(data, same_result)
 
@@ -169,6 +171,7 @@ func set_layout(layout: Dictionary) -> void:
 
 
 func _clear() -> void:
+	_item_row.clear()
 	_sanctum_action    = {}
 	_next_stage_action = {}
 	_sanctum_button.visible    = false
@@ -795,6 +798,8 @@ func _set_row_lost(row: Node, who: String) -> void:
 
 ## A tap or a key press skips the motion to its final state. It never consumes the input.
 func skip_motion() -> void:
+	if _item_row.is_running():
+		_item_row.finish()
 	if _motion != null and _motion.is_valid():
 		_motion.kill()
 	_motion = null
@@ -816,9 +821,42 @@ func _stop_motion() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _item_row.is_running() and ((event is InputEventMouseButton and event.pressed) \
+			or (event is InputEventKey and event.pressed) or (event is InputEventScreenTouch and event.pressed)):
+		_item_row.finish()
 	if is_motion_running() and ((event is InputEventMouseButton and event.pressed) \
 			or (event is InputEventKey and event.pressed) or (event is InputEventScreenTouch and event.pressed)):
 		skip_motion()
+
+
+## The item tile row: `data.items` on a leave card and a stage-clear card,
+## or the lost items of the `packs_lost` ledger row on a defeat card. Nothing is built without rows.
+func _item_blocks(data: Dictionary) -> Dictionary:
+	var items_v: Variant = data.get("items", null)
+	if items_v is Dictionary:
+		var kept_v: Variant = (items_v as Dictionary).get("kept", [])
+		var lost_v: Variant = (items_v as Dictionary).get("lost", [])
+		return { "kept": kept_v if kept_v is Array else [], "lost": lost_v if lost_v is Array else [] }
+	var rows_v: Variant = data.get("reward_breakdown", [])
+	if rows_v is Array:
+		for row_v in (rows_v as Array):
+			if row_v is Dictionary and str((row_v as Dictionary).get("cause", "")) == "packs_lost":
+				var params_v: Variant = (row_v as Dictionary).get("params", {})
+				var lost_items: Variant = (params_v as Dictionary).get("items", []) if params_v is Dictionary else []
+				if lost_items is Array and not (lost_items as Array).is_empty():
+					return { "kept": [], "lost": lost_items }
+	return {}
+
+
+func _present_items(data: Dictionary, same_result: bool) -> void:
+	var blocks := _item_blocks(data)
+	if blocks.is_empty():
+		return
+	_item_row.show_report(blocks["kept"], blocks["lost"])
+	if same_result:
+		_item_row.finish()
+	else:
+		_item_row.play()
 
 
 func _key_of(data: Dictionary) -> int:
@@ -1044,12 +1082,16 @@ func _names_of(list_v: Variant) -> Array:
 # ─────────────────────────────────────────────────────────────
 
 func _on_sanctum_pressed() -> void:
+	if _item_row.absorb_continue():
+		return
 	if not _sanctum_action.is_empty():
 		dismiss_requested.emit()
 		action_requested.emit(_sanctum_action)
 
 
 func _on_next_stage_pressed() -> void:
+	if _item_row.absorb_continue():
+		return
 	if not _next_stage_action.is_empty():
 		dismiss_requested.emit()
 		action_requested.emit(_next_stage_action)
@@ -1160,6 +1202,7 @@ func _apply_profile_size() -> void:
 	if _compact_card:
 		_set_result_card_size(_compact_size)
 		return
+	var items_grow := 84.0 if _item_row.visible else 0.0
 	match profile:
 		&"wide":
 			_set_result_card_size(Vector2(840, 700))
@@ -1168,8 +1211,8 @@ func _apply_profile_size() -> void:
 			_set_result_card_size(Vector2(760, 600))
 			_body_viewport.custom_minimum_size = Vector2(0, 320)
 		_:
-			_set_result_card_size(Vector2(680, 476))
-			_body_viewport.custom_minimum_size = Vector2(0, 210)
+			_set_result_card_size(Vector2(680, 476.0 + items_grow))
+			_body_viewport.custom_minimum_size = Vector2(0, 210.0 + items_grow)
 
 func _set_result_card_size(card_size: Vector2) -> void:
 	_result_card.offset_left = -card_size.x * 0.5

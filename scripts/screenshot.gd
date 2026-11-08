@@ -20,6 +20,7 @@
 # A fixture copies the snapshot contract; update it when that contract changes.
 extends SceneTree
 
+const InventoryUIFixtures := preload("res://tests/fixtures/InventoryUIFixtures.gd")
 const HarnessScene := preload("res://scripts/screenshot_harness.tscn")
 const SanctumHarnessScene := preload("res://scripts/screenshot_harness_sanctum.tscn")
 const SETTLE_FRAMES := 45
@@ -55,7 +56,7 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 	ResponsiveLayoutController.apply_content_scale_size(root, layout)
 
 	# A fixture of flow.summon snapshots needs the Sanctum shell, which owns that screen.
-	var sanctum_fixture: bool = fixture_name.begins_with("summon_")
+	var sanctum_fixture: bool = fixture_name.begins_with("summon_") or fixture_name.begins_with("invs_")
 	var harness := (SanctumHarnessScene if sanctum_fixture else HarnessScene).instantiate()
 	root.add_child(harness)
 	var shell := harness.get_node("ContentLayer/SanctumShell" if sanctum_fixture else "ContentLayer/RealmShell") as Control
@@ -90,7 +91,39 @@ func _fixtures() -> Dictionary:
 	var recover := { "type": "recover", "hold_progress": 1, "hold_required": 3 }
 	var endure := { "type": "endure", "round": 4, "rounds_required": 8, "waves_remaining": 2 }
 	var escort := { "type": "guide_spirit", "guide_mode": "escort", "spirit_name": "Nana", "destination_reached": false }
+	var fx := InventoryUIFixtures
 	return {
+		"invs_sanctum": [fx.sanctum_snap(fx.standard()), "inv:toggle_sanct", "inv:select:sanctum:0"],
+		"invs_sanctum_empty_details": [fx.sanctum_snap(fx.standard()), "inv:toggle_sanct"],
+		"invs_both_panels": [fx.sanctum_snap(fx.standard()), "inv:toggle_sanct", "inv:toggle_pack", "inv:select:pack:0"],
+		"invs_stack_selected": [fx.sanctum_snap(fx.standard()), "inv:toggle_sanct", "inv:select:sanctum:3"],
+		"invs_party_pack": [fx.party_snap(fx.standard()), "inv:toggle_pack", "inv:select:pack:0"],
+		"invs_party_closed": [fx.party_snap(fx.standard())],
+		"invr_path": [fx.path_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g2", 3, "Test gear G"), fx.piece(1, "relic", "g3", 0, "Test relic H"), fx.piece(2, "gear", "g1", 4, "Test gear I"), fx.stack(3, "consumable", 4, 20, "Test potion C")], fx.path_data(false))), "inv:toggle_pack", "inv:select:pack:1"],
+		"invr_path_used": [fx.path_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g2", 3, "Test gear G")], fx.path_data(true))), "inv:toggle_pack", "inv:select:pack:0"],
+		"invr_leave_confirm": [_combat(6, { "type": "recover" }), _return_home_modal({ "ase": 4, "ekwan": 0, "overcome": 1, "total": 3, "nothing_new": false,
+			"items_at_risk": [fx.report_row("gear", "g2", 1, "held", "", 1, "Test gear A"), fx.report_row("relic", "g3", 4, "held", "", 1, "Test relic B"),
+				fx.report_row("consumable", "", -1, "gathered", "", 5, "Test potion C")] })],
+		"invr_leave_result": [_combat(6, { "type": "recover" }), _items_card(_return_card("some", 7, 2), fx.items_block()), "skip_motion"],
+		"invr_leave_result_midmotion": [_combat(6, { "type": "recover" }), _items_card(_return_card("some", 7, 2), fx.items_block())],
+		"invr_defeat_items": [_combat(7, { "type": "recover" }), _defeat_items(), "skip_motion"],
+		"invr_stage_clear_items": [_combat(6, { "type": "recover" }), _items_card(_payout_stage_end(true), fx.items_block()), "skip_motion"],
+		"invs_refusal": [fx.sanctum_snap(fx.full_both()), "inv:toggle_sanct", "inv:toggle_pack", "inv:select:pack:1",
+			fx.sanctum_snap(_refused(fx.full_both(), "move", "container_full"))],
+		"invs_refusal_slot": [fx.sanctum_snap(fx.standard()), "inv:toggle_sanct", "inv:select:sanctum:0",
+			fx.sanctum_snap(_refused(fx.standard(), "move", "slot_taken"))],
+		"invr_path_refused": [fx.path_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g2", 3, "Test gear G"), fx.piece(1, "relic", "g3", 0, "Test relic H")], fx.path_data(false))),
+			"inv:toggle_pack", "inv:select:pack:0",
+			fx.path_snap(_refused(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g2", 3, "Test gear G"), fx.piece(1, "relic", "g3", 0, "Test relic H")], fx.path_data(false)), "discard", "bad_state"))],
+		"invs_party_lv0": [fx.party_snap(fx.inventory(20, 4, [], [])), "inv:toggle_pack"],
+		"invs_party_lv2": [fx.party_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g1", 0, "A"), fx.piece(1, "gear", "g1", 1, "B"), fx.piece(2, "relic", "g2", 2, "C")])), "inv:toggle_pack"],
+		"invs_party_lv3": [fx.party_snap(fx.full_both()), "inv:toggle_pack"],
+		"invr_path_lv0": [fx.path_snap(fx.inventory(20, 4, [], [], fx.path_data(false))), "inv:toggle_pack"],
+		"invr_path_lv2": [fx.path_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g1", 0, "A"), fx.piece(1, "gear", "g1", 1, "B"), fx.piece(2, "relic", "g2", 2, "C")], fx.path_data(false))), "inv:toggle_pack"],
+		"invr_path_lv3": [fx.path_snap(fx.inventory(20, 4, [], [fx.piece(0, "gear", "g1", 0, "A"), fx.piece(1, "gear", "g1", 1, "B"), fx.piece(2, "relic", "g2", 2, "C"), fx.piece(3, "gear", "g1", 3, "D")], fx.path_data(false))), "inv:toggle_pack"],
+		"invr_discard_stack": [_combat(6, { "type": "recover" }), { "_modal": { "id": &"inventory.discard", "payload": {
+			"row": fx.stack(2, "consumable", 12, 20, "Test potion C"), "box": "pack", "slot": 2, "stack": true, "count_max": 12, "path": true } } }],
+		"invs_both_full": [fx.sanctum_snap(fx.full_both()), "inv:toggle_sanct", "inv:toggle_pack", "inv:select:pack:1"],
 		"combat_pace_full":    [_combat(3, _with(recover, "pace_state", "full"))],
 		"combat_pace_partial": [_combat(6, _with(recover, "pace_state", "partial"))],
 		"combat_pace_none":    [_combat(9, _with(recover, "pace_state", "none"))],
@@ -278,6 +311,16 @@ func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pac
 ## A fixture step that is a String acts on the live scene. "focus_cause:N" focuses the Nth (i) button.
 func _run_step(harness: Node, step: String) -> void:
 	var parts := step.split(":")
+	if parts[0] == "inv":
+		var panels := harness.find_child("InventoryPanels", true, false)
+		if panels == null:
+			return
+		if parts[1] == "toggle_sanct":
+			panels.call("toggle_sanctum")
+		elif parts[1] == "toggle_pack":
+			panels.call("toggle_pack")
+		elif parts[1] == "select":
+			panels.call("_on_slot_chosen", parts[2], int(parts[3]))
 	if parts[0] == "freeze_motion":
 		for node in harness.find_children("*", "Control", true, false):
 			if node.has_method("skip_motion") and node.get("_motion") != null:
@@ -429,6 +472,28 @@ func _found_money_card() -> Dictionary:
 func _payout_defeat_packs_lost() -> Dictionary:
 	var snap := _payout_defeat()
 	snap["data"]["reward_breakdown"].append(_row("Packs lost", 0, "packs_lost", { "lost_ase": 12, "lost_ekwan": 0 }))
+	return snap
+
+
+func _refused(inv: Dictionary, action: String, reason: String) -> Dictionary:
+	var copy := inv.duplicate(true)
+	copy["refused"] = { "action": action, "reason": reason }
+	return copy
+
+
+func _items_card(snap: Dictionary, items: Dictionary) -> Dictionary:
+	snap["data"]["items"] = items
+	return snap
+
+
+func _defeat_items() -> Dictionary:
+	var snap := _payout_defeat()
+	var lost: Array = []
+	for r in InventoryUIFixtures.items_block()["kept"] + InventoryUIFixtures.items_block()["lost"]:
+		var row: Dictionary = (r as Dictionary).duplicate()
+		row["reason_key"] = "defeat"
+		lost.append(row)
+	snap["data"]["reward_breakdown"].append(_row("Packs lost", 0, "packs_lost", { "lost_ase": 0, "lost_ekwan": 0, "items": lost }))
 	return snap
 
 

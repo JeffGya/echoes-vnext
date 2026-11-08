@@ -315,7 +315,10 @@ func _situation_resolve_outcome(verdict: Dictionary, t: int) -> FlowActionOutcom
 	return outcome
 
 
-## stage.return_home — party attempts to leave before completing all objectives.
+## stage.return_home — party attempts to leave before completing all objectives. Refused with `not_on_path`
+## unless the last snapshot is `flow.stage_explore` (the failed-escape overlay and the standoff confirmation are
+## that type too): a repeat from the scout-return card or the Sanctum would draw the held pieces a second time.
+## A refusal settles, draws, saves and publishes nothing.
 ## Escape check: seeded roll > (stages.escape_base_threshold - bent escape bonus) = success.
 ## Success → party_state = "escaped", the settle roll pays, transition to the scout-return card.
 ## Failure → return_home_result overlay on the explore snapshot.
@@ -323,6 +326,11 @@ func _situation_resolve_outcome(verdict: Dictionary, t: int) -> FlowActionOutcom
 ## DETERMINISM: the turn_count READ below is the counterpart of the increment inside
 ## StageExploreTurnService.advance_turn(). Do not move either relative to the other.
 func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
+	var _on_type := str(flow_ctx.last_snapshot.get("type", ""))
+	if _on_type != FlowStateIds.STAGE_EXPLORE:
+		logger.info(t, "stage.return.denied", "return_home refused: the party is not on the path", {
+			"reason_key": "not_on_path", "snapshot_type": _on_type })
+		return FlowActionOutcome.error_outcome("not_on_path")
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
 	if stage.is_empty():
 		logger.debug(t, "stage.return.no_stage", "return_home: no active stage", {})
@@ -358,6 +366,7 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 	if success:
 		explore_map["party_state"] = StageExploreModel.STATE_ESCAPED
 		stage["explore_map"] = explore_map
+		InventoryRules.clear_discard_used(stage)
 		FlowStageExploreState._write_stage_back(flow_ctx, stage)
 		flow_ctx.request_save("stage.escaped")
 
@@ -368,6 +377,7 @@ func handle_return_home(_action: Dictionary, t: int) -> FlowActionOutcome:
 		flow_ctx.pending_scout_return_ekwan          = _settle["ekwan"]
 		flow_ctx.pending_scout_return_intel_count    = _settle["intel_count"]
 		flow_ctx.pending_scout_return_settle_outcome = _settle["outcome"]
+		flow_ctx.pending_scout_return_items          = StageSettlementService.card_items(_settle["items"])
 
 		_emotion_consequence_service().apply_sanctum_emotion_tick(t)
 		var _outcome := FlowActionOutcome.snapshot_outcome_no_refresh(

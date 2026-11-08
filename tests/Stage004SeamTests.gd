@@ -3264,6 +3264,7 @@ static func _t_realm_target_minima_and_spatial_caps() -> Dictionary:
 	if stage_explore == null:
 		return { "ok": false, "error": "Failed to instantiate StageExploreScreen" }
 	stage_explore.set("_hud_strip", stage_explore.get_node("HudStrip"))
+	stage_explore.set("_pack_hud", stage_explore.get_node("%PackHudButton"))
 	stage_explore.set("_stage_info", stage_explore.get_node("StageInfoPanel"))
 	stage_explore.set("_back_btn", stage_explore.get_node("%BackButton"))
 	stage_explore.set("_bottom_hud_region", stage_explore.get_node("%BottomHudRegion"))

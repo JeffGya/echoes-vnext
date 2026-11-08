@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cgvsh3u4gahcb" path="res://ui/screens/sanctum/EchoPartyScreen.gd" id="1_echo_party"]
 [ext_resource type="Script" uid="uid://bufxvuj0p7rrq" path="res://ui/components/RadarStatChart.gd" id="2_radar_chart"]
 [ext_resource type="PackedScene" uid="uid://bond_tier_bar" path="res://ui/components/BondTierBar.tscn" id="3_bond_tier_bar"]
+[ext_resource type="PackedScene" path="res://ui/components/PartyPackButton.tscn" id="4_pack_button"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bond_tag"]
 bg_color = Color(0.38, 0.38, 0.38, 1)
@@ -593,6 +594,10 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 8
+
+[node name="PartyPackButton" parent="RootVBox/ThreePanelRow/PartyPanel/PartyMargin/PartyVBox" instance=ExtResource("4_pack_button")]
+unique_name_in_owner = true
+layout_mode = 2
 
 [node name="Templates" type="Control" parent="RootVBox" unique_id=719236291]
 visible = false
