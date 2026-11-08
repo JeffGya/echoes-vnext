@@ -396,14 +396,15 @@ static func test_two_encounters_same_stage_get_distinct_identity() -> Dictionary
 	if encounter_id_a == stage_identity:
 		return { "ok": false, "error": "encounter_id_a equals the bare stage id — situation id was not appended" }
 
-	# Retreat with a guaranteed roll (success_pct 100 → roll<100 always true, RetreatService.roll_retreat)
+	# Retreat with a guaranteed roll (core chance forced to 100 → roll<100 always true, RetreatService.roll_retreat)
 	# to clear encounter_ctx deterministically and free the second situation for engagement.
 	# stage.engage_situation carries no flow-state gate (FlowRuntime.dispatch matches on action
 	# type only), so the second dispatch below is exactly as valid as the first.
 	flow_ctx.save_data["economy"]["ase"] = 500
-	runtime.dispatch({ "type": "encounter.retreat", "success_pct": 100 })
+	RetreatTests.force_chance(flow_ctx, 100)
+	runtime.dispatch({ "type": "encounter.retreat" })
 	if flow_ctx.encounter_ctx != null:
-		return { "ok": false, "error": "retreat at success_pct=100 did not clear encounter_ctx" }
+		return { "ok": false, "error": "retreat at a forced 100 percent chance did not clear encounter_ctx" }
 
 	runtime.dispatch({ "type": "stage.engage_situation", "situation_id": str(sit_ids[1]) })
 	if flow_ctx.encounter_ctx == null:
@@ -441,9 +442,10 @@ static func test_two_encounters_same_stage_get_distinct_terrain_and_spawn() -> D
 			break
 
 	flow_ctx.save_data["economy"]["ase"] = 500
-	runtime.dispatch({ "type": "encounter.retreat", "success_pct": 100 })
+	RetreatTests.force_chance(flow_ctx, 100)
+	runtime.dispatch({ "type": "encounter.retreat" })
 	if flow_ctx.encounter_ctx != null:
-		return { "ok": false, "error": "retreat at success_pct=100 did not clear encounter_ctx" }
+		return { "ok": false, "error": "retreat at a forced 100 percent chance did not clear encounter_ctx" }
 
 	runtime.dispatch({ "type": "stage.engage_situation", "situation_id": str(sit_ids[1]) })
 	var ectx_b: EncounterContext = flow_ctx.encounter_ctx

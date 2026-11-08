@@ -7,7 +7,8 @@ class_name RewardCalc extends RefCounted
 
 ## THE single definition of a stage's base reward, for every reader. It sums the weights of the
 ## objectives selected by `mode`; no reader keeps its own copy.
-##   MODE_COMPLETED:             objectives with `completed` true (stage payer, partials).
+##   MODE_COMPLETED:             objectives with `completed` true. Only `stage_ekwan` selects it; no Ase
+##                               payer does (the stage payer and the leave sum the earnings rows).
 ##   MODE_COMPLETED_PLUS_FOUGHT: those, plus the objective at `fought_index` (the fight base_reward).
 ##   MODE_FOUGHT:                only the objective at `fought_index` (defeat consolation).
 ## Select first, then weigh: an objective that is not selected is never looked up, so it logs
@@ -91,7 +92,7 @@ static func cfg_num(reward_cfg: Dictionary, key: String, safe: float,
 	if typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT:
 		return float(v)
 	if logger != null:
-		logger.warn(t, "economy.reward.missing_config_key",
+		logger.error(t, "economy.reward.missing_config_key",
 			"data.rewards key is missing or not a number", { "key": key, "safe": safe })
 	else:
 		push_error("RewardCalc: data.rewards.%s is missing or not a number; using %s" % [key, safe])

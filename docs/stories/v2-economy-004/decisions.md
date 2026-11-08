@@ -885,3 +885,13 @@ Two Notion backlog rows changed, properties only (no page text, no status):
 - V2-ECONOMY-004 (339c3d1ede9281018fd2e58507871e0d): Dependencies "V2-ECONOMY-001, V2-ECONOMY-003, V2-ITEM-001" -> "V2-ECONOMY-001".
 - V2-ECONOMY-003 (339c3d1ede928118a5a1c81a35f276c0): Dependencies "V2-ITEM-001, V2-ITEM-003, V2-ECONOMY-002, V2-CONTINUITY-001" -> the same list plus "V2-ECONOMY-004".
 Not changed: statuses (ECONOMY-004 stays "Ready"; Part B waits for ITEM-001). Two rows with code V2-ECONOMY-001 exist (one Superseded, one Done); neither was touched.
+
+## D-121 — Technical debt round and follow-up triage (Jeff, 2026-10-27)
+Jeff's answers after the merge of PR 125:
+- **Fix the technical debt** (follow-ups 3, 25, 33, 34, 37, 38, 45, 50, 56) with agents until fixed; interview Jeff on related questions. Answer to the one question asked: the hardware back button (Android) with the return confirmation open does the same as Stay (closes it, changes nothing). On the retreat card and the standoff card, back does nothing (the player presses the button).
+- **Follow-up 22 confirmed:** the opening affords Echo 2 at 52 Ase. Closed, no change.
+- **Follow-up 12 (boss contract, D96):** belongs to the future story that implements the boss. Not worked here. No boss story exists in the Notion backlog yet (a stub exists in code). Closed here.
+- **Follow-up 2 (rank and Thread redesign):** belongs to a PROG or INFRA story; noted on V2-INFRA-005 (the death-ripple story, which owns the Thread rule when deaths are real). Closed here.
+- **A Claimant fight that ended in a standoff is gone and cannot be redone.** Closed. The card already says so (`fight_returns` false). Recorded on V2-INFRA-005.
+- **Permadeath note added** to V2-INFRA-005 in Notion: follow-up 2, the id-based death record (PR 125 review thread), and the permanent Claimant fight.
+Defaults chosen by the orchestrator for the build (Jeff may change): a hand-sent `flow.complete_stage` that fails `stage_completable` is refused with a log and no state change (follow-up 25); the retreat success chance is computed in core from the same function that builds the snapshot, and the action field is no longer read (follow-up 33); `StructuredLogger` gets a real `error` level and the config-error cases use it (follow-up 38).

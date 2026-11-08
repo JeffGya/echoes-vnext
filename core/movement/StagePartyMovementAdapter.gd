@@ -174,13 +174,14 @@ const GOAL_ROLE: String = "baseline"
 const TIER_OBJECTIVE: int = 1
 const TIER_WEIGHTED: int = 2
 const TIER_FRONTIER: int = 3
-const TIER_PASSED_OBJECTIVE: int = 4
+## A passed objective fight, or a normal fight a retreat passed, offered again.
+const TIER_PASSED_FIGHT: int = 4
 
 ## Urgency per tier: hard objective (1/4) outranks weighted non-objective (2)
 ## outranks frontier (3).
 const TIER_URGENCY: Dictionary = {
 	TIER_OBJECTIVE: 1.0,
-	TIER_PASSED_OBJECTIVE: 0.9,
+	TIER_PASSED_FIGHT: 0.9,
 	TIER_WEIGHTED: 0.6,
 	TIER_FRONTIER: 0.3,
 }
@@ -193,7 +194,7 @@ const TIER_URGENCY: Dictionary = {
 ## cutover. The tier is a fact about the selection state, so it is a `state.` token.
 const TIER_PRESSURE_SOURCE: Dictionary = {
 	TIER_OBJECTIVE: "state.tier_objective",
-	TIER_PASSED_OBJECTIVE: "state.tier_passed_objective",
+	TIER_PASSED_FIGHT: "state.tier_passed_fight",
 	TIER_WEIGHTED: "state.tier_weighted",
 	TIER_FRONTIER: "state.tier_frontier",
 }
@@ -333,7 +334,7 @@ static func build_profile(directive: Dictionary, effective_steps: int = -1) -> D
 ## toward. That is exactly the shape this adapter already emits, so the compromise
 ## is now unnecessary and is lifted — but only where it is TRUE:
 ##
-##   TIER_OBJECTIVE / TIER_PASSED_OBJECTIVE -> `advance`
+##   TIER_OBJECTIVE / TIER_PASSED_FIGHT -> `advance`
 ##       These target an AUTHORED stage objective, which is precisely what
 ##       docs/movement-model.md §9 says `advance` means: "reduce route distance to
 ##       an authored objective". The `objective.<id>` source is not manufactured
@@ -395,7 +396,7 @@ static func build_goal(
 		pressure_sources.append("objective.%s" % situation_id)
 
 	var targets_authored_objective: bool = (
-		tier == TIER_OBJECTIVE or tier == TIER_PASSED_OBJECTIVE
+		tier == TIER_OBJECTIVE or tier == TIER_PASSED_FIGHT
 	)
 
 	var purpose: String = "hold"
