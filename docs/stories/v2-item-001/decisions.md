@@ -280,6 +280,13 @@ Jeff marked up `copy-approval.md` with his picks. His file is saved as `copy-app
 - Marker: approved strings carry `# APPROVED (Jeff 2026-11-08)` in `ItemUiText.gd`. A test compares every string with a fixture of the approved text. A string that changes without a new approval fails the test.
 - Pack tone: Jeff chose candidate C (plain #7A5B3E, near full #4F3B28, full #120E0C). Tone only, no decoration.
 
+## D-52 — QA round 10 decisions (Jeff, 2026-11-08)
+From `step10-qa-report.md`:
+- F11-01: delete the four approved lines that no player sees or hears today (`pack_button`, `moved_toast`, `LEAVE_RISK_LABEL`, `ITEMS_GROUP_LABEL`). They stay in `copy-approval-jeff.md`. If a screen-reader label or a move message is added later, Jeff approves it again then.
+- F11-03 (two refusal lines under two disabled buttons on a path) and F11-04 (the full tone's panel edge is 1.31:1 against the dark path world): left for Jeff's larger UX redesign.
+- F11-02 (no test for "no button name before a refusal line" and "Count: 1, not Count: 1 piece"): builder adds tests that fail without those behaviours.
+- F11-05, F11-06 and F11-07 are informational. F11-07 (the pack button label looks dim in the screenshot harness) is to be checked in Jeff's own play test.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
