@@ -244,6 +244,13 @@ From `step7-qa-report-4.md`:
 - F4-02: accepted for now. A big stack find can lose a few units because a later row keeps a pack slot it may not use. Rare. The pack never goes above its size and nothing is minted. Revisit if play shows it.
 - F4-01: the slot hold counts open item rows of OTHER stages and Realms too, so the pack never goes above its size later. F4-03 (test for the early-leave caller) and F4-04 (stale `stack_limit` text in the step reports) go to the builder.
 
+## D-48 — UI QA decisions (Jeff, 2026-11-08)
+From `step8-qa-report.md`:
+- F8-02 (finds gathered on a path are not drawn in the pack panel and not counted by the pack button): deferred to the story that configures finds (ITEM-002 and 001b). Not built in 001a. Known gap: until then the pack can read full while showing empty sockets on a path.
+- Core gap 1: ADD a one-shot refusal key. After a refused move or discard, the rebuilt snapshot carries `data.inventory.refused` with a stable reason key, so the UI shows the exact reason. One-shot: it is present for one snapshot only.
+- Core gap 2 (names on at-risk and result rows): Jeff wants a visual of the current and the proposed behaviour first. Pending his answer.
+- F8-01 and the Low findings F8-03 to F8-09 go to the UI builder.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
