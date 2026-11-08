@@ -26,7 +26,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_service/remove_held_and_held_pieces", Callable(InventoryServiceTests, "_t_remove_held"))
 	runner.register_test("inventory_service/stack_above_a_lowered_limit", Callable(InventoryServiceTests, "_t_stack_below"))
 	runner.register_test("inventory_service/missing_cfg_keys_and_bad_next_seq", Callable(InventoryServiceTests, "_t_missing_keys"))
-	runner.register_test("inventory_service/gathered_above_capacity_is_reported", Callable(InventoryServiceTests, "_t_gathered_over"))
+	runner.register_test("inventory_service/pack_only_above_capacity_is_reported", Callable(InventoryServiceTests, "_t_gathered_over"))
 	runner.register_test("inventory_service/malformed_entries_do_not_throw", Callable(InventoryServiceTests, "_t_malformed"))
 	runner.register_test("inventory_service/json_round_trip_same_behavior", Callable(InventoryServiceTests, "_t_round_trip"))
 	runner.register_test("inventory_service/invariants_hold_after_every_mutation", Callable(InventoryServiceTests, "_t_invariants"))
@@ -212,7 +212,7 @@ static func _t_stacks() -> Dictionary:
 	if stacks.size() != 2 or int(stacks[0]["quantity"]) != 5 or int(stacks[1]["quantity"]) != 3:
 		m.append("stacks %s" % _json(stacks))
 	# The definition override (ph_consumable_a limit 3) beats the default 5.
-	var r4 := InventoryService.intake(save, cfg, _e("ph_consumable_a", 9), "gathered")
+	var r4 := InventoryService.intake(save, cfg, _e("ph_consumable_a", 9), "direct")
 	_expect(m, r4, "stored", "ok", "override limit 3: three stacks")
 	if r4["quantity"] != 9 or r4["lost_quantity"] != 0 or (_inv(save)["stacks"] as Array).size() != 5:
 		m.append("override quantities %s, stacks %s" % [_json(r4), _json(_inv(save)["stacks"])])
@@ -253,9 +253,9 @@ static func _t_order() -> Dictionary:
 	if e["lost_quantity"] != 1 or e["item_id"] != "" or int(_inv(save)["next_seq"]) != seq_before:
 		m.append("a lost piece must burn no id: %s" % _json(e))
 	_check_invariants(save, cfg, "order", m)
-	# A gathered piece owns its slot: it packs even when the pack count is at capacity.
-	var g := InventoryService.intake(save, cfg, _e("ph_armor_a"), "gathered")
-	_expect(m, g, "packed", "to_pack", "gathered with a full pack")
+	# A pack_only piece owns its slot: it goes to the pack even when the pack count is at capacity.
+	var g := InventoryService.intake(save, cfg, _e("ph_armor_a"), "pack_only")
+	_expect(m, g, "stored", "ok", "pack_only with a full pack")
 	# `reserved` slots count against a direct arrival.
 	var save2 := _fresh()
 	var small := _cfg(1, 2)
@@ -283,13 +283,13 @@ static func _t_duplicate() -> Dictionary:
 	var r3 := InventoryService.intake(save, cfg, _e("ph_charm_a", 1, "it.9"), "direct")
 	_expect(m, r3, "packed", "to_pack", "supplied id to pack")
 	var mid := _json(save)
-	var r4 := InventoryService.intake(save, cfg, _e("ph_armor_a", 1, "it.9"), "gathered")
+	var r4 := InventoryService.intake(save, cfg, _e("ph_armor_a", 1, "it.9"), "pack_only")
 	_expect(m, r4, "rejected", "duplicate", "same id in pack")
 	if _json(save) != mid:
 		m.append("a duplicate changed the save")
 	if before == mid:
 		m.append("test setup: the pack intake changed nothing")
-	var r5 := InventoryService.intake(save, cfg, _e("ph_armor_a"), "gathered")
+	var r5 := InventoryService.intake(save, cfg, _e("ph_armor_a"), "pack_only")
 	if r5["item_id"] != "it.10":
 		m.append("next minted id %s, expected it.10" % r5["item_id"])
 	return _result(m)
@@ -419,11 +419,11 @@ static func _t_pack_load() -> Dictionary:
 	var pl3 := InventoryService.pack_load(_fresh(), _cfg(1, 0), 0)
 	if pl3["level"] != 0 or pl3["capacity"] != 0:
 		m.append("capacity 0: %s" % _json(pl3))
-	# Capacity 0 with pieces carried (gathered pieces): full, and the warn flag is on.
+	# Capacity 0 with pieces carried (pack_only pieces): full, and the warn flag is on.
 	var zero_cfg := _cfg(1, 0)
 	var zero := _fresh()
 	_direct(zero, zero_cfg, "ph_weapon_a")
-	InventoryService.intake(zero, zero_cfg, _e("ph_charm_a"), "gathered")
+	InventoryService.intake(zero, zero_cfg, _e("ph_charm_a"), "pack_only")
 	var pl4 := InventoryService.pack_load(zero, zero_cfg, 0)
 	if pl4["carried"] != 1 or pl4["free"] != 0 or pl4["level"] != 3:
 		m.append("capacity 0 carrying: %s" % _json(pl4))
@@ -484,7 +484,7 @@ static func _script(save: Dictionary, cfg: Dictionary) -> Array:
 	var out: Array = []
 	for t in ["ph_weapon_a", "ph_weapon_a"]:
 		out.append(_direct(save, cfg, t))
-	out.append(InventoryService.intake(save, cfg, _e("ph_material_a", 4), "gathered"))
+	out.append(InventoryService.intake(save, cfg, _e("ph_material_a", 4), "direct"))
 	out.append(InventoryService.intake(save, cfg, _e("ph_consumable_a", 4), "direct"))
 	for t in ["ph_relic_a", "ph_charm_a", "ph_armor_a", "ph_armor_a"]:
 		out.append(_direct(save, cfg, t))
@@ -493,7 +493,7 @@ static func _script(save: Dictionary, cfg: Dictionary) -> Array:
 	out.append(InventoryService.discard(save, cfg, "it.4", true))
 	var mv := InventoryService.move_entry(save, cfg, "pack", 0, "sanctum")
 	out.append({ "result": mv["result"], "reason_key": mv["reason_key"], "item_id": "" })
-	out.append(InventoryService.intake(save, cfg, _e("ph_relic_a"), "gathered"))
+	out.append(InventoryService.intake(save, cfg, _e("ph_relic_a"), "direct"))
 	return out
 
 
@@ -589,7 +589,7 @@ static func _tail(save: Dictionary, cfg: Dictionary) -> Array:
 	var out: Array = []
 	out.append(InventoryService.intake(save, cfg, _e("ph_weapon_a"), "direct"))
 	out.append(InventoryService.intake(save, cfg, _e("ph_material_a", 4), "direct"))
-	out.append(InventoryService.intake(save, cfg, _e("ph_relic_a"), "gathered"))
+	out.append(InventoryService.intake(save, cfg, _e("ph_relic_a"), "direct"))
 	out.append(InventoryService.discard(save, cfg, "it.1", true))
 	out.append({ "moved": InventoryService.move_entry(save, cfg, "pack", 0, "sanctum")["result"] })
 	out.append(InventoryService.intake(save, cfg, _e("ph_charm_a"), "direct"))
@@ -641,7 +641,7 @@ static func _t_invariants() -> Dictionary:
 		if pick < 4:
 			InventoryService.intake(save, cfg, _e(type_id, qty), "direct", (x >> 3) % 2)
 		elif pick < 6:
-			InventoryService.intake(save, cfg, _e(type_id, qty), "gathered")
+			InventoryService.intake(save, cfg, _e(type_id, qty), "pack_only")
 		elif pick < 7:
 			InventoryService.intake(save, cfg, _e(types[(x >> 12) % 4], 1, "it.%d" % (1 + (x >> 5) % 40)), "direct")
 		elif pick < 10:
@@ -706,7 +706,7 @@ static func _t_cfg_types() -> Dictionary:
 		var save3 := _fresh()
 		var lbl := "numbers = %s" % _json(bad)
 		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_weapon_a"), "direct"), "lost", "overflow", lbl)
-		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_weapon_a"), "gathered"), "packed", "to_pack", lbl + " gathered")
+		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_weapon_a"), "pack_only"), "stored", "ok", lbl + " pack_only")
 		_expect(m, InventoryService.intake(save3, cfg3, _e("ph_material_a", 2), "direct"), "lost", "overflow", lbl + " stack")
 		InventoryService.snapshot(save3, cfg3, 1)
 		InventoryService.validate(save3, cfg3)
@@ -766,7 +766,7 @@ static func _t_move_first() -> Dictionary:
 	if _ids(a, "items") != ["it.1", "it.4"] or _ids(a, "pack") != ["it.2", "it.3"] or ra["item_id"] != "it.4":
 		m.append("cap 3: items %s pack %s result %s" % [str(_ids(a, "items")), str(_ids(a, "pack")), _json(ra)])
 	var c := save.duplicate(true)
-	_expect(m, InventoryService.intake(c, _cfg(2, 3), _e("ph_armor_a"), "gathered"), "stored", "ok", "gathered with Sanctum room")
+	_expect(m, InventoryService.intake(c, _cfg(2, 3), _e("ph_armor_a"), "direct"), "stored", "ok", "direct with Sanctum room")
 	if _ids(c, "items") != ["it.1", "it.4"] or _ids(c, "pack") != ["it.2", "it.3"]:
 		m.append("cap 2: items %s pack %s" % [str(_ids(c, "items")), str(_ids(c, "pack"))])
 	# A full Sanctum and a full pack: the piece is lost and the pack stays.
@@ -895,7 +895,7 @@ static func _t_gathered_over() -> Dictionary:
 	var save := _fresh()
 	_direct(save, cfg, "ph_weapon_a")
 	for t in ["ph_charm_a", "ph_relic_a", "ph_armor_a"]:
-		_expect(m, InventoryService.intake(save, cfg, _e(t), "gathered"), "packed", "to_pack", "gathered " + t)
+		_expect(m, InventoryService.intake(save, cfg, _e(t), "pack_only"), "stored", "ok", "pack_only " + t)
 	if InventoryService.pack_count(save) != 3 or InventoryService.pack_free(save, cfg) != 0:
 		m.append("pack %d, free %d" % [InventoryService.pack_count(save), InventoryService.pack_free(save, cfg)])
 	var probs := InventoryService.validate(save, cfg)

@@ -599,3 +599,76 @@ ASSUMED: 1. The reason of a kept gathered find is `ok` for every placement in th
 ASSUMED: 2. A kept find is a carried piece afterwards (D-19, D-22): it is rolled again on a later early leave and lost on defeat until the player moves it to the Sanctum. This follows from "it stays in the pack" and D-42; say if Jeff wants a gathered find to be safe until the next path.
 ASSUMED: 3. A gathered unique piece keeps the existing rule "one slot above the size if no slot below it is free". In play every row owns a slot, so this is not reached.
 BLOCKED: None.
+
+## Cleanup after QA round 9 (D-50)
+
+Source: decision D-50, `step9-qa-report.md` (F10-01 to F10-07). Same private save dir. No commit.
+
+### Changes
+
+| Item | Change | File:line |
+|---|---|---|
+| F10-05 (delete) | The intake mode `gathered` (Sanctum first, a row owns a pack slot) is deleted: constant `MODE_GATHERED`, its check in `_intake`, and the `gathered` variable in `_intake_stack` and `_intake_unique`. The two modes left are `direct` (Sanctum first, then a FREE pack slot; the F1 producer) and `pack_only` (D-49, the settlement). The row-owned first chunk and the one-slot-above-the-size fallback now belong to `pack_only` only. The `intake` doc and the comments name `pack_only` (this also fixes the comment QA named at `:510-512`). Production callers: `DebugController.gd:630` (`direct`) and `StageSettlementService.gd:548` (`pack_only`); no other caller existed. | `core/inventory/InventoryService.gd:34-38`, :270-285, :470, `_intake_stack`, `_intake_unique` |
+| Leave draws, recorded values | Not touched. | none |
+| F10-06 | `inventory_paths/a_find_in_the_pack_is_moved_by_the_player_only` now starts from a REAL path-end settlement (`StageSettlementService.settle` through `_settle_path`) with a relic row and a consumable row, asserts both finds are in the pack and the Sanctum is empty, then moves them with `InventoryController.handle_move`. It fails when the settlement does not leave the finds in the pack (shown by mutation). | `tests/InventoryPathTests.gd` (`_t_find_player_move`) |
+| F10-07 | The expected sharded totals in earlier sections were wrong because they left out the `inventory_ui` suite (38 tests). The real total of the last run is 2730. This cleanup adds and removes no test, so the expected total is 2730. | this section |
+| F10-01 | Accepted by Jeff (D-50): a stack find larger than one stack can lose units under pack-only placement; the finds story decides. No change. | none |
+| F10-02 | Recorded for the pack-shrink story (D-41). No change in 001a. | none |
+
+### Tests that used `gathered` (list of every use found by grep)
+
+| Test | Action | Reason |
+|---|---|---|
+| `inventory_service/intake_order_and_modes` | Piece with a full pack: `gathered` became `pack_only` (`stored`/`ok`). | The rule "a row-owned piece packs even when the pack is at capacity" still exists, under `pack_only`. |
+| `inventory_service/stack_merge_and_limit` (the 9-unit find) | `gathered` became `direct`. | It tested the Sanctum-first stack split; `direct` is the Sanctum-first mode. |
+| `inventory_service/duplicate_ids...` (supplied id, minted id) | `gathered` became `pack_only`. | It tested id rules, mode-independent. |
+| `inventory_service/pack_load_levels` | `gathered` became `pack_only`. | A carried piece with capacity 0. |
+| `inventory_service` pinned script and `_tail` | Two `gathered` calls became `direct`. | Same results (the pack had a free slot); the pinned results and save did not change. |
+| `inventory_service/invariants_hold_after_every_mutation` | `gathered` became `pack_only`. | Keeps the above-capacity invariant path in the random walk. |
+| `inventory_service/cfg_of_the_wrong_type_does_not_crash` | `gathered` became `pack_only` (`stored`/`ok`). | No-crash check. |
+| `inventory_service/intake_never_moves_the_pack` | The "gathered with Sanctum room" case became `direct`. | Same rule, Sanctum-first mode. |
+| `inventory_service/gathered_above_capacity_is_reported` | Renamed `pack_only_above_capacity_is_reported`, now `pack_only`. | `validate` reporting of a pack above its size still matters. |
+| `inventory_moves/a_new_stack_takes_a_pack_slot_when_the_sanctum_is_full` | Mode-difference and reserved-slot cases use `pack_only`. | Same rules under the surviving mode. |
+| `inventory_moves/pack_only_intake_never_touches_the_sanctum` | The loop over `direct` and `gathered` is now `direct` only. | The `gathered` check only guarded the deleted mode. |
+| `inventory_paths/a_big_stack_find_leaves_the_slots_of_rows_in_other_realms` | Realm B's banking intake uses `pack_only` (`stored`). | Models the real settlement of that row. |
+
+Removed tests: none. No test only guarded the deleted mode; each was kept with a surviving mode. Registered test names and counts against HEAD (`520395c`): `InventoryServiceTests` 22 and 22 (one rename), `InventoryMoveTests` 14 and 14, `InventoryPathTests` 29 and 29. The other modified files have none.
+
+### Mutations (each restored, `cmp` equal)
+
+| Mutation | Result |
+|---|---|
+| Settlement routed to `direct` (a find to the Sanctum again) | `Tests: 95 total, 87 passed, 8 failed` (includes `a_find_in_the_pack_is_moved_by_the_player_only`, `new_finds_land_in_the_pack_and_stay_there`, 5 in `item_packs`) |
+| `pack_only` disabled in `_intake_stack` / `_intake_unique` | `Tests: 95 total, 80 passed, 15 failed` |
+| Later-rows count (`rows.size()` in `_settle_leave_items`) | `Tests: 95 total, 94 passed, 1 failed` (`a_big_stack_find_leaves_the_slots_of_later_rows`) |
+
+### Tests run
+
+| Suites | Raw `Tests:` line |
+|---|---|
+| `=seam,inventory_paths,inventory_moves,inventory_actions,inventory_service,inventory_save,item_packs,item_packs_char` | `Tests: 190 total, 190 passed, 0 failed` |
+| `=flow_transaction,snapshot_fingerprint,snapshot_purity,snapshot_contract,save_integrity,pending_result,sanctum.layout,sanctum.party,echo_party,realm_ui` | `Tests: 127 total, 127 passed, 0 failed` |
+| `=econ_char` | `Tests: 103 total, 103 passed, 0 failed` |
+| `=economy,payout_ui,inventory_ui,stop_short` | `Tests: 154 total, 154 passed, 0 failed` |
+| `=traversal` | `Tests: 61 total, 61 passed, 0 failed` |
+| `=venture_char` | `Tests: 16 total, 16 passed, 0 failed` |
+
+Compile check (`--check-only --quit`): 0 `SCRIPT ERROR` lines. The machine is slow (`traversal` alone takes 96 s), so the groups were split. No suite added or removed (shard map unchanged).
+
+### Recorded values
+
+None moved. `snapshot_fingerprint` passes 2 of 2 with the recorded hashes. No pinned literal changed. No draw key or balance number changed.
+
+### RUN REQUEST (main chat)
+
+1. Command: `GODOT_BIN=/tmp/claude-0/godot-bin/godot scripts/run-tests-sharded.sh "$(git rev-parse --show-toplevel)"`, Bash `timeout` 3600000.
+2. Expected duration: 18 to 31 minutes (a slow machine may need more; the per-shard alarms are hang ceilings).
+3. Files the run edits: none in the checkout (it writes `/tmp/echoes-vnext-sharded/`). No `trap` needed.
+4. Verify: `git status --short` and `git diff --stat` are the same before and after.
+5. Read back: the `COMBINED:` line (expect 2730), any shard log without a `Tests:` line, the `movement_fallback` merge line.
+
+## OPEN — questions and assumptions
+
+ASSUMED: 1. Tests that used `gathered` only as "a mode that packs when the Sanctum is full" were moved to `direct` where the Sanctum-first order was the point, and to `pack_only` where the row-owned slot was the point.
+ASSUMED: 2. The expected sharded total is 2730 (no test added or removed, one renamed).
+BLOCKED: None.

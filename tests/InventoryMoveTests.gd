@@ -172,8 +172,8 @@ static func _t_stack_to_pack() -> Dictionary:
 	_put(f, cfg_f, "ph_relic_a")
 	_expect(m, _put(f, cfg_f, cons, 1), "lost", "overflow", "direct, pack full")
 	var g := f.duplicate(true)
-	r = InventoryService.intake(g, cfg_f, InventoryServiceTests._e(cons, 8), "gathered")
-	_expect(m, r, "partial", "overflow", "gathered, pack full: one stack above the size")
+	r = InventoryService.intake(g, cfg_f, InventoryServiceTests._e(cons, 8), "pack_only")
+	_expect(m, r, "partial", "overflow", "pack_only, pack full: one stack above the size")
 	var gp: Array = g["inventory"].get("pack_stacks", [])
 	if gp.size() != 1 or int(gp[0]["slot"]) < 1 or int(r["quantity"]) != 3:
 		m.append("gathered fallback: %s / %s" % [_json(r), _json(g["inventory"])])
@@ -184,12 +184,12 @@ static func _t_stack_to_pack() -> Dictionary:
 	_expect(m, InventoryService.intake(h, cfg_f, InventoryServiceTests._e(cons, 1), "direct", 1), "lost", "overflow", "direct, the last slot is reserved")
 	if _json(h) != before:
 		m.append("a direct stack took a reserved slot")
-	_expect(m, InventoryService.intake(h, cfg_f, InventoryServiceTests._e(cons, 1), "gathered", 1), "packed", "to_pack", "gathered, reserved slot")
+	_expect(m, InventoryService.intake(h, cfg_f, InventoryServiceTests._e(cons, 1), "pack_only", 1), "stored", "ok", "pack_only, reserved slot")
 	return _result(m)
 
 
 ## D-49: mode `pack_only` (a find at a path end or a kept leave) puts a piece or a stack in the pack, never in the
-## Sanctum, also when the Sanctum is empty. `direct` and `gathered` keep their Sanctum-first order.
+## Sanctum, also when the Sanctum is empty. `direct` keeps its Sanctum-first order.
 static func _t_pack_only() -> Dictionary:
 	var m: Array = []
 	var cons := "ph_consumable_a"
@@ -227,12 +227,11 @@ static func _t_pack_only() -> Dictionary:
 	_expect(m, r2, "partial", "overflow", "9 against a limit of 3 and one free slot after the held one")
 	if int(r2["quantity"]) != 3 or int(r2["lost_quantity"]) != 6 or not (tight["inventory"]["stacks"] as Array).is_empty():
 		m.append("tight pack: %s / %s" % [_json(r2), _json(tight["inventory"])])
-	# The other modes keep the Sanctum first.
-	for mode in ["direct", "gathered"]:
-		var sv := InventoryServiceTests._fresh()
-		var rr := InventoryService.intake(sv, InventoryServiceTests._cfg(2, 2), InventoryServiceTests._e("ph_relic_a"), mode, 0)
-		if InventoryService.locate_piece(sv, str(rr["item_id"])).get("box", "") != "sanctum":
-			m.append("%s: no longer Sanctum first" % mode)
+	# `direct` (the debug producer) keeps the Sanctum first.
+	var sv := InventoryServiceTests._fresh()
+	var rr := InventoryService.intake(sv, InventoryServiceTests._cfg(2, 2), InventoryServiceTests._e("ph_relic_a"), "direct", 0)
+	if InventoryService.locate_piece(sv, str(rr["item_id"])).get("box", "") != "sanctum":
+		m.append("direct: no longer Sanctum first")
 	return _result(m)
 
 

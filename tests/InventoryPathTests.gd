@@ -781,10 +781,10 @@ static func _t_big_find_other_realm() -> Dictionary:
 		if _quantity_in_stacks(ctx) != 6 or int(kept["quantity"]) != 6 or int(kept.get("lost_quantity", 0)) != 2 or _pack_entries(ctx) != 2:
 			m.append("%s: stacks hold %d, kept %s, pack entries %d" % [how, _quantity_in_stacks(ctx), str(kept), _pack_entries(ctx)])
 		# Realm B's path ends: its relic row is banked into the slot that was kept for it.
-		var res := InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_relic_a"), "gathered", 0)
+		var res := InventoryService.intake(ctx.save_data, cfg, InventoryServiceTests._e("ph_relic_a"), "pack_only", 0)
 		var row: Dictionary = ((other["stages"] as Array)[0]["earnings"] as Array)[0]
 		row["settled"] = true
-		if str(res["result"]) != "packed" or _pack_entries(ctx) > 3 or not InventoryService.validate(ctx.save_data, cfg).is_empty():
+		if str(res["result"]) != "stored" or _pack_entries(ctx) > 3 or not InventoryService.validate(ctx.save_data, cfg).is_empty():
 			m.append("%s after Realm B: %s, entries %d, validate %s" % [how, str(res["result"]), _pack_entries(ctx),
 				str(InventoryService.validate(ctx.save_data, cfg))])
 	return _result(m)
@@ -1081,27 +1081,28 @@ static func _t_finds_in_pack() -> Dictionary:
 	return _result(m)
 
 
-## After the path end the find sits in the pack; only the player's `inventory.move.apply` takes it to the Sanctum.
+## F10-06. A REAL settlement (the path end) puts the finds in the pack; only the player's `inventory.move.apply`
+## takes them to the Sanctum. The test fails if the settlement leaves a find outside the pack.
 static func _t_find_player_move() -> Dictionary:
 	var m: Array = []
-	var env := InventoryActionTests._env("find_move", 4, 3)
-	var rt: FlowRuntime = env["rt"]
-	var save := InventoryActionTests._save(env)
-	var cfg: Dictionary = env["inv_cfg"]
-	InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_relic_a"), "pack_only", 0)
-	InventoryService.intake(save, cfg, InventoryServiceTests._e("ph_consumable_a", 2), "pack_only", 0)
-	rt.flow_machine.reenter(rt.flow_ctx, env["logger"], 3)
-	InventoryActionTests._dispatch(env, { "type": "debug.seed.show" })
-	var inv := InventoryActionTests._inv_snap(env)
-	if int(inv["sanctum_used"]) != 0 or int(inv["pack_count"]) != 2:
-		m.append("before the move: %s" % JSON.stringify(inv))
-	var census := InventoryMoveTests._census(save)
-	InventoryActionTests._dispatch(env, _mv("pack", 0, "sanctum"))
-	InventoryActionTests._dispatch(env, _mv("pack", 1, "sanctum"))
-	inv = InventoryActionTests._inv_snap(env)
-	if int(inv["sanctum_used"]) != 2 or int(inv["pack_count"]) != 0 or InventoryMoveTests._census(save) != census:
-		m.append("after the player moves: %s" % JSON.stringify(inv))
-	InventoryActionTests._done(env)
+	var ctx := ItemPacksTests._ctx(ItemPacksTests._SEED_ALL, 4, 3)
+	var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "0", ItemPacksTests._entry("ph_relic_a"))
+	EarningsService.record_item(ItemPacksTests._stage(ctx), "s0", "1", ItemPacksTests._entry("ph_consumable_a", 2))
+	var paid: Dictionary = ItemPacksTests._settle_path(ctx, 5)["items"]
+	if int(paid["kept_count"]) != 2 or InventoryService.sanctum_used(ctx.save_data) != 0 or InventoryService.pack_count(ctx.save_data) != 2:
+		return { "ok": false, "error": "after the settlement the finds are not in the pack: %s, inventory %s" % [
+			str(paid), JSON.stringify(ctx.save_data["inventory"])] }
+	var census := InventoryMoveTests._census(ctx.save_data)
+	ctx.last_snapshot = { "type": FlowStateIds.SANCTUM, "data": { "inventory": {} } }
+	var c := InventoryController.new(ctx, ctx.config_service, ctx.logger)
+	var o1 := c.handle_move(_mv("pack", 0, "sanctum"), 6)
+	var o2 := c.handle_move(_mv("pack", 1, "sanctum"), 6)
+	if o1.error_code != "" or o2.error_code != "" or str(o1.save_reasons) != str(["inventory.move"]):
+		m.append("the player moves: '%s' '%s' %s" % [o1.error_code, o2.error_code, str(o1.save_reasons)])
+	if InventoryService.sanctum_used(ctx.save_data) != 2 or InventoryService.pack_count(ctx.save_data) != 0 \
+			or InventoryMoveTests._census(ctx.save_data) != census or not InventoryService.validate(ctx.save_data, cfg).is_empty():
+		m.append("after the moves: %s" % JSON.stringify(ctx.save_data["inventory"]))
 	return _result(m)
 
 
