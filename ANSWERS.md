@@ -894,7 +894,7 @@
 **Date:** 2026-11-06
 
 ---
-\n
+
 ## #89 — Player-facing copy: Jeff approves every line (2026-11-08)
 
 **Q:** May placeholder text be shown in the game as if it were final?
