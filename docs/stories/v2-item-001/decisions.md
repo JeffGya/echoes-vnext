@@ -251,6 +251,15 @@ From `step8-qa-report.md`:
 - Core gap 2: ADD the item display `name` to the at-risk rows and the result rows (`at_risk_row`, `report_row`), taken from the item definition like the inventory rows. Jeff saw the current and proposed visual and approved it (2026-11-08).
 - F8-01 and the Low findings F8-03 to F8-09 go to the UI builder.
 
+## D-49 — Play-test review decisions (Jeff, 2026-11-08)
+From Jeff's play test of the plan (`playtest-plan.md`):
+- Placement and hierarchy of the two panels (play-test parts A and C), the pack feeling hidden (K1) and text that is very small on large and small screens (K2): DEFERRED to Jeff's larger UX redesign of everything. Not changed in 001a. Technically the buttons and panels work.
+- Parts B, D, E, H, J, K3, K5: no issues. K6: ignored (no reduced-motion option yet). Part I: Jeff still tests.
+- Newly found items: when a path ends (clear or early leave) they land in the PARTY PACK and stay there. The player moves them to the Sanctum later. Nothing moves automatically (D-42 stands in full). Each find already owns a reserved pack slot (D-17), so a find is not lost for lack of room. This replaces the "Sanctum first, then pack, then lost" intake order for FINDS (D-16, D-45). The debug producer's `direct` mode is unchanged. Carried pieces still never move by themselves.
+- K4: remove the strap line decoration of the pack panel. Keep the darker heavy tone and the risk text. (Jeff: the line design was not agreed.)
+- Play-test finding F (finds gathered with `inventory produce gather` show nothing until the path resolves) is the known gap F8-02, deferred to the finds story (D-48). Jeff: finds should not be handled here. Recorded as a UX concern for that story: a player sees no sign of a find until the path ends.
+- COPY: Jeff approves every player-facing line. Placeholder text is not final even when it shows in the game. `copy-approval.md` lists every line with a suggestion. Nothing is applied until Jeff approves a line. Jeff writes or approves the final text.
+
 ## OPEN
 - No Notion row owns the item catalogue (names, categories, grades, art, descriptions). Proposal: a separate catalogue story before ITEM-002 builds real drops. Needs Jeff's decision.
 - Notion duplicates: ITEM-005 (Order 249.2 and 259), ECONOMY-002 (Order 242 and 360). Which row is open?
