@@ -106,7 +106,7 @@ const items=[
  [18,'Read the field','support','skip','Skip the battlefield scan: the broader field-read / reveal effect is not established. Exposed streak or cooldown detail belongs in compact UI.'],
  [19,'Refuse through fear','choice','refuse','A quick tremor and small backward flinch lead into one authored refusal bark. The actor stays alive and settled afterward; this is not guidance Refuse.'],
  [20,'Diverge from broad intent','choice','diverge','The chosen action carries emphasis. A supplied divergence reason appears only after its result, never as a command label.'],
- [21,'Purify shrine','choice','purify','Kweku commits and a warm ink-like flow travels into the stationary shrine. The resolved restoration draws a green signed gain inward and updates shrine HP.'],
+ [21,'Purify shrine','choice','purify','Kweku commits and a warm ink-like flow travels into the stationary shrine. Purify slows subsequent drain without restoring HP; the later red loss shows the shrine falling from 14 to 12 HP.'],
  [22,'Kill / defeat another actor','result','kill','Use the expressive strike, red loss and confirmed death state as one result sequence. Any actual emotion change follows; no second kill flash.',24],
  [23,'Near death','result','near','On the first low-health crossing, strongly emphasize the above-token HP bar and mirror damage on the card. A changed emotion chip follows; death does not repeat this HP emphasis.'],
  [24,'Death / inactive actor','result','death','Confirm death by dimming the person circle, retaining identity and clearing eligibility; keep focus on the living actor. Structures fracture in place, and neither death treatment repeats the low-HP glow.'],
@@ -258,11 +258,11 @@ function drawCombined(s,t){
  }
 }
 function drawPurify(s,t){
- const a=s.refs[0],b=s.refs[1];sourceBeat(s,0,t,.35);s.phase.textContent='Kweku · Purify Shrine';const p=clamp(ramp(t,1,2.4));
+ const a=s.refs[0],b=s.refs[1];sourceBeat(s,0,t,.35);s.phase.textContent=t<2.4?'Kweku · Purify Shrine':'Drain mitigated';const p=clamp(ramp(t,1,2.4));
  const dx=b.a.x-a.a.x,dy=b.a.y-a.a.y;
  attr(s.transferPath,'d',`M${a.a.x+18},${a.a.y} Q${a.a.x+dx*.55},${a.a.y+dy*.3-16} ${b.a.x-18},${b.a.y}`);opacity(s.transfer,pulse(t,.85,1.1,2.65));
  const x=a.a.x+18+(dx-36)*ease(p),y=a.a.y+dy*ease(p)-12*Math.sin(p*Math.PI);attr(s.transferBead,'cx',x.toFixed(2));attr(s.transferBead,'cy',y.toFixed(2));
- if(t<2.4)s.detail.textContent='Shrine · purification 2 / 3';else s.detail.textContent='Shrine restored · 3 / 3';attr(b.body,'fill',t<2.4?'#85858a':'#e5dbc1');healthFeedback(s,1,1,t,2.4);
+ s.detail.textContent='Shrine HP '+(t<3.8?'14':'12');healthFeedback(s,1,.6,t,3.8);
 }
 function makeCard(item){
  const card=document.createElement('figure');card.className='card';card.id=`action-${String(item.id).padStart(2,'0')}`;card.dataset.action=String(item.id);
