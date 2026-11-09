@@ -40,6 +40,97 @@ Reviewed at the start of each session.
 
 ---
 
+### Calling expression starts in the Echo and follows the action
+
+**Rule:** Anchor a Calling signature to the animated body, then let a small emission follow the actual strike, step, brace or support delivery.
+**Why:** Jeffrey rejected the large floor-drawn Calling options because they felt separate from the Echoes and obscured the battlefield.
+**How to apply:** Replace platforms, rails and board-sized ornaments with bounded body-local material motion. Use current animated emission points, protect initials and HP, and keep step accents at actual contacts rather than drawing a route. Cultural research informs material and construction; it does not justify unrelated shapes or invented symbol meanings.
+**Mistake count:** 1
+
+### Calling signatures must read beyond material accents
+
+**Rule:** Give a Calling contribution a brief, recognisable shape and motion while preserving the ordinary action underneath it.
+**Why:** Jeffrey could not distinguish the Calling studies from ordinary actions through doubled print marks and brass accents alone.
+**How to apply:** Compare each proposal against the same ordinary action without its signature. Distinguish alternatives through construction and timing, not colour alone; never infer a Calling contribution from the actor's identity or attach the signature to every action. Research comparable games and label original craft-inspired proposals separately from documented cultural symbols.
+**Mistake count:** 1
+
+### Support needs visible delivery and reception
+
+**Rule:** Let the world effect identify a known source, recipient and consequence before the player reads the action line.
+**Why:** Jeffrey could not identify support or Anchor Presence from the small token bounce and Observer text.
+**How to apply:** Apply the same visual-first standard across the full study, not only the examples named in feedback. For a supplied source relationship, show a brief directed delivery followed by the recipient's distinct response. Distinguish self-resistance from an ally's protective presence; keep hidden sources unclaimed and avoid permanent links, new gameplay effects or HUD redesign. Calling expression may use a distinct researched material and motion language without implying a new passive mechanic.
+**Mistake count:** 1
+
+### Reuse approved combat UI and name visible consequences
+
+**Rule:** Preserve the approved HUD composition in later studies. Use familiar action phrases that name the target, and identify a support recipient through its existing row and visible reaction.
+**Why:** Jeffrey found the trait study's rebuilt HUD inconsistent and its internal action labels unclear about who gave or received support.
+**How to apply:** Reuse the approved UI rather than approximating it. Replace labels such as “Melee resolved” with “Kills Wanderer”; acknowledge a confirmed recipient change without inventing a hidden trait source or marking an unchanged witness as unaffected. Change layout only when requested.
+**Mistake count:** 1
+
+### Guidance slowdown belongs in the world
+
+**Rule:** Signal temporary aiming slowdown through existing environmental motion, not a text label or status.
+**Why:** Jeffrey selected slowed aiming and explicitly requested an in-world cue.
+**How to apply:** Let the same ambient particles and peripheral foliage slow with the actors and recover when guidance closes. Keep them below actors/HP/targeting, with no cast burst, buff aura or invented cultural time symbol.
+**Mistake count:** 1
+
+### Guidance selection needs its own purpose and clear commitment
+
+**Rule:** Give every guidance option its own meaningful response/action example, with one short purpose sentence and the current targeting step.
+**Why:** Jeffrey requested all options in action, simpler explanations, and a fresh selection/confirmation study; a shared Regroup handler cannot stand in for different guidance purposes.
+**How to apply:** Begin manual aiming without a preselected subject, separate preview from confirmation, and verify that the actual action supports its reason. Compare Live, automatic slowdown and pause explicitly as studies; do not silently change the GDD's timing contract.
+**Mistake count:** 1
+
+### Remove conflicting layout rules when compacting HUD rows
+
+**Rule:** Check all action-specific selectors when changing a shared row grid; remove conflicting placement rules instead of relying on a weaker override.
+**Why:** The compact combat row still placed active attack/guard results in an implicit third grid row because older, more specific selectors won, leaving a blank line under the name.
+**How to apply:** Verify current and selected results for every action type use the intended second row, with no implicit spacer track.
+**Mistake count:** 1
+
+### Compare combat HUD alternatives in motion
+
+**Rule:** Make HUD comparisons visible in motion, with separate hands-on Play and authored Watch modes when interaction is being reviewed.
+**Why:** Jeffrey found A and B indistinguishable when their difference depended on accumulated action results that the initial view did not show.
+**How to apply:** Autoplay only the explicit Watch example and preserve its shared comparison clock. When Jeffrey asks to play at his own pace, default to manual guidance input, keep mode/speed changes in place, and never auto-confirm, loop or reset that Play session; retain prebattle and reduced-motion inspection separately.
+**Mistake count:** 1
+
+### Combat UI polish can change information ownership
+
+**Rule:** Use a full-viewport combat board with floating UI when requested, and give each persistent actor fact one display owner.
+**Why:** Jeffrey found the journey mockup too panel-heavy and saw repeated actor names and health across the board, initiative and party cards. He explicitly allowed these passes to improve the existing composition.
+**How to apply:** Use one merged turn-order/party list, keep the field beneath all HUD elements, and use local damage feedback instead of repeating persistent party HP. Treat current source architecture as evidence of available data, not a requirement to reproduce its layout; preserve game rules and label the composition as a proposal.
+**Mistake count:** 1
+
+### Keep combat speed and navigation directly visible
+
+**Rule:** Use a compact visible speed group and a direct Back button in the combat UI proposal.
+**Why:** Jeffrey rejected the speed dropdown and triple-dot navigation menu in the full-field mockup.
+**How to apply:** Reduce duplicated information and panel footprint without hiding these controls behind menus. Preserve the full-field board and unified actor list.
+**Mistake count:** 1
+
+### Account for current functionality before simplifying UI
+
+**Rule:** Trace each current sidebar field and interaction, then mark it retained, moved or omitted with a reason in the new mockup.
+**Why:** Jeffrey missed the per-actor action results after the combat UI was simplified and requested a floating sidebar.
+**How to apply:** Keep resolved actions separate from emotion; include cumulative round results, stop-short settlement timing, dead rows and camera selection. Reduce duplication without silently removing meaningful feedback.
+**Mistake count:** 1
+
+### Use one health location for all combat factions
+
+**Rule:** In the combat journey proposal, show HP above every eligible actor and remove HP from the sidebar.
+**Why:** Jeffrey found it inconsistent to show Echo health in the roster but enemy health on the board.
+**How to apply:** Use the same bar, value and signed-change treatment for Echoes, enemies, allies and spirits. Keep names, action results and emotion in the floating sidebar; invulnerable objects still omit HP.
+**Mistake count:** 1
+
+### Resolve needs a complete screen preview
+
+**Rule:** Objective mockups must hand off to a credible Resolve screen, with outcome, earnings, Echo changes, conditional vows and valid navigation; a small result notice is insufficient.
+**Why:** Jeffrey requested proper animated Resolve previews, grounded in the compact payout reference and current game, with an improvement rather than a copy.
+**How to apply:** Read the reference's decisions and current Resolve fields/actions first. Preserve compact earnings, visible Echoes/vows, optional explanations and a fixed footer; improve transition and reveal timing without duplicating rewards or inventing payout/navigation rules.
+**Mistake count:** 1
+
 ### 43 — A guard that reads process-wide state needs a proof that it can fail, in the mode you rely on
 
 **Rule:** Before you trust a green `movement_fallback` (or any guard that reads a process-wide ledger), induce one real violation and watch the guard fail. Do this in the run mode you rely on (serial, sharded, CI). Read what the guard clears or consumes before it reads.
