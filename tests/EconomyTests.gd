@@ -282,8 +282,8 @@ static func _test_spend_exact_balance() -> Dictionary:
 	return { "ok": true }
 
 
-# KNOWN DEFECT (V2-ECONOMY-004 Part B will change this): two separate calls are not atomic. When the
-# second currency is short, the first spend stays applied. The new pay-both method (D-132) must not do this.
+# Two separate spend calls are not atomic: when the second currency is short, the first spend stays applied.
+# This stays true. A price in both currencies goes through `pay_cost` (recipe_cost suite), which spends nothing.
 static func _test_two_spends_not_atomic() -> Dictionary:
 	var env := _spend_env(10, 2)
 	var first := _spend(env, "ase", 5)

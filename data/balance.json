@@ -3751,10 +3751,12 @@
 			"kinds_enabled": { "gear": true, "relic": true, "consumable": true, "material": true },
 			"_grades_comment": "Ordered list of grade ids, lowest first. Empty in shipping: the catalogue story fills it.",
 			"grades": [],
-			"_recycle_yield_comment": "Recycle yield in Ekwan, one key per grade (D-02, D-06). Empty in shipping. ITEM-004 and ECONOMY-004 Part B fill it. Recycling returns Ekwan only.",
+			"_recycle_yield_comment": "Recycle yield in Ekwan, one key per grade (D-02, D-06). Empty in shipping. ITEM-004 fills it. Recycling returns Ekwan only.",
 			"recycle_yield_ekwan": {},
-			"_definitions_comment": "Item definitions keyed by type_id. Empty in shipping: no real item exists yet. Shape of one future entry: { name: String, kind: gear|relic|consumable|material, grade: String, stack_limit: int (optional override), cost: { ekwan: int, ase: int } }. The cost shape is reserved for ECONOMY-004 Part B. Materials are never a price (D-06).",
-			"definitions": {}
+			"_definitions_comment": "Item definitions keyed by type_id. Empty in shipping: no real item exists yet. Shape of one future entry: { name: String, kind: gear|relic|consumable|material, grade: String, stack_limit: int (optional override) }. A definition holds no price: the price of making an item is a recipe record. Materials are never a price (D-06).",
+			"definitions": {},
+			"_recipes_comment": "Recipe price records (RecipeCostService). Shape: { <output type_id>: { <grade key or ungraded>: { make and or upgrade: { inputs: [ { type_id: String, count: int } ], cost: { ekwan: int, ase: int } } } } }. Empty in shipping: no real item exists yet. Placeholder recipes live only in tests/fixtures.",
+			"recipes": {}
 		}
 	}
 }

@@ -937,9 +937,8 @@ static func _t_no_placeholder() -> Dictionary:
 		if not (d is Dictionary):
 			m.append("fixture lacks %s" % id)
 			continue
-		var cost: Variant = (d as Dictionary).get("cost", null)
-		if not (cost is Dictionary) or int((cost as Dictionary).get("ekwan", -1)) != 0 or int((cost as Dictionary).get("ase", -1)) != 0:
-			m.append("%s cost is not { ekwan: 0, ase: 0 }" % id)
+		if (d as Dictionary).has("cost"):
+			m.append("%s has a cost: a definition holds no price" % id)
 	if defs.size() != 6:
 		m.append("fixture holds %d definitions, expected 6" % defs.size())
 	return _result(m)
@@ -985,25 +984,25 @@ static func _t_mark_count() -> Dictionary:
 	return _result(m)
 
 
-# CHARACTERIZATION: a definition `cost { ekwan, ase }` is reserved and nothing reads it (V2-ECONOMY-004 Part B).
-# A non-zero cost must not change check_entry, intake, the snapshot or any currency. The cfg is a copy, never
-# data/balance.json. Item rows in the packs keep ase 0 and ekwan 0: see item_packs/earnings_item_rows.
+# A definition holds no price (the price is a recipe record, `RecipeCostService`). A stray `cost` key on a
+# definition must not change check_entry, intake, the snapshot or any currency. The cfg is a copy, never
+# data/balance.json.
 static func _t_cost_unread() -> Dictionary:
 	var m: Array = []
-	var zero_cfg := _cfg(4, 3)
+	var plain_cfg := _cfg(4, 3)
 	var priced := _cfg(4, 3)
 	for type_id in (priced["definitions"] as Dictionary).keys():
 		((priced["definitions"] as Dictionary)[type_id] as Dictionary)["cost"] = { "ekwan": 99, "ase": 88 }
 	for type_id in ["ph_weapon_a", "ph_relic_a", "ph_consumable_a", "ph_material_a"]:
 		var entry := _e(type_id, 2 if _kind_of(type_id) in ["consumable", "material"] else 1)
-		if InventoryService.check_entry(priced, entry) != "" or InventoryService.check_entry(zero_cfg, entry) != "":
+		if InventoryService.check_entry(priced, entry) != "" or InventoryService.check_entry(plain_cfg, entry) != "":
 			m.append("check_entry(%s) differs with a cost" % type_id)
 	var save_a := { "inventory": _fresh()["inventory"], "economy": { "ase": 5, "ekwan": 6 } }
 	var save_b := { "inventory": _fresh()["inventory"], "economy": { "ase": 5, "ekwan": 6 } }
 	for type_id in ["ph_weapon_a", "ph_consumable_a", "ph_relic_a"]:
 		var qty := 2 if type_id == "ph_consumable_a" else 1
 		var res_a := InventoryService.intake(save_a, priced, _e(type_id, qty), InventoryService.MODE_DIRECT)
-		var res_b := InventoryService.intake(save_b, zero_cfg, _e(type_id, qty), InventoryService.MODE_DIRECT)
+		var res_b := InventoryService.intake(save_b, plain_cfg, _e(type_id, qty), InventoryService.MODE_DIRECT)
 		if _json(res_a) != _json(res_b):
 			m.append("intake(%s) result differs with a cost: %s vs %s" % [type_id, _json(res_a), _json(res_b)])
 		for k in res_a.keys():
@@ -1013,6 +1012,6 @@ static func _t_cost_unread() -> Dictionary:
 		m.append("the inventory block differs with a cost")
 	if int(save_a["economy"]["ase"]) != 5 or int(save_a["economy"]["ekwan"]) != 6:
 		m.append("intake changed a balance: %s" % _json(save_a["economy"]))
-	if _json(InventoryService.snapshot(save_a, priced)) != _json(InventoryService.snapshot(save_b, zero_cfg)):
+	if _json(InventoryService.snapshot(save_a, priced)) != _json(InventoryService.snapshot(save_b, plain_cfg)):
 		m.append("the snapshot differs with a cost")
 	return _result(m)

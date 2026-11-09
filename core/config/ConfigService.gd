@@ -403,6 +403,13 @@ static func get_inventory_cfg(config_service: ConfigService) -> Dictionary:
 	return inventory_v if inventory_v is Dictionary else {}
 
 
+## data.inventory.recipes — recipe price records, keyed by output type id, then grade key, then route
+## (`RecipeCostService`). Returns {} when the block is missing. Static: never constructs a service.
+static func get_recipes_cfg(config_service: ConfigService) -> Dictionary:
+	var recipes_v = get_inventory_cfg(config_service).get("recipes", {})
+	return recipes_v if recipes_v is Dictionary else {}
+
+
 ## `realm_order` of data/realms.json: the realms the player can pick, in order. The prologue is not in it.
 static func get_realm_order(config_service: ConfigService) -> Array:
 	if config_service == null:
