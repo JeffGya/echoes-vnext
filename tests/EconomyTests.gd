@@ -5,6 +5,10 @@ extends RefCounted
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("economy/add_spend", Callable(EconomyTests, "_test_add_spend"))
 	runner.register_test("economy/denied_spend_no_mutation", Callable(EconomyTests, "_test_denied_spend"))
+	runner.register_test("economy/spend_non_positive_amount_is_denied", Callable(EconomyTests, "_test_spend_non_positive"))
+	runner.register_test("economy/spend_above_balance_is_denied", Callable(EconomyTests, "_test_spend_above_balance"))
+	runner.register_test("economy/spend_exact_balance_leaves_zero", Callable(EconomyTests, "_test_spend_exact_balance"))
+	runner.register_test("economy/two_spend_calls_are_not_atomic", Callable(EconomyTests, "_test_two_spends_not_atomic"))
 	runner.register_test("economy/offline_taper_exceeds_8h_before_zero", Callable(EconomyTests, "_test_offline_taper_exceeds_8h"))
 	runner.register_test("economy/offline_flame_gate_zero", Callable(EconomyTests, "_test_offline_flame_gate_zero"))
 	runner.register_test("economy/offline_continuity_dominance", Callable(EconomyTests, "_test_offline_continuity_dominance"))
@@ -217,3 +221,80 @@ static func _test_awakening_trigger() -> Dictionary:
 		return { "ok": false, "error": "name confirm must grant no Ase; got %d" % int(econ_after.get("ase", -1)) }
 	return { "ok": true }
 
+
+# ---------------------------------------------------------------------------
+# V2-ECONOMY-004 Part B step 1: characterization of spend_ase / spend_ekwan.
+# ---------------------------------------------------------------------------
+
+static func _spend_env(ase: int, ekwan: int) -> Array:
+	var save := { "economy": { "ase": ase, "ekwan": ekwan } }
+	var logger := StructuredLogger.new()
+	logger.set_level("off")
+	return [save, logger, EconomyService.new(save)]
+
+
+static func _spend(env: Array, currency: String, amount: int) -> bool:
+	var econ: EconomyService = env[2]
+	if currency == "ase":
+		return econ.spend_ase(amount, "test.char", env[1], 0)
+	return econ.spend_ekwan(amount, "test.char", env[1], 0)
+
+
+static func _bal(env: Array, currency: String) -> int:
+	return int((env[0] as Dictionary)["economy"][currency])
+
+
+# CHARACTERIZATION: an amount of 0 or less returns false and changes no balance.
+static func _test_spend_non_positive() -> Dictionary:
+	for currency in ["ase", "ekwan"]:
+		for amount in [0, -1, -50]:
+			var env := _spend_env(10, 10)
+			if _spend(env, currency, amount):
+				return { "ok": false, "error": "spend_%s(%d) returned true" % [currency, amount] }
+			if _bal(env, "ase") != 10 or _bal(env, "ekwan") != 10:
+				return { "ok": false, "error": "spend_%s(%d) changed a balance" % [currency, amount] }
+	return { "ok": true }
+
+
+# CHARACTERIZATION: an amount above the balance returns false and changes no balance.
+static func _test_spend_above_balance() -> Dictionary:
+	for currency in ["ase", "ekwan"]:
+		var env := _spend_env(10, 10)
+		if _spend(env, currency, 11):
+			return { "ok": false, "error": "spend_%s(11) with balance 10 returned true" % currency }
+		if _bal(env, "ase") != 10 or _bal(env, "ekwan") != 10:
+			return { "ok": false, "error": "spend_%s(11) changed a balance" % currency }
+	return { "ok": true }
+
+
+# CHARACTERIZATION: an exact-balance spend returns true and leaves 0; the other currency is untouched.
+static func _test_spend_exact_balance() -> Dictionary:
+	for currency in ["ase", "ekwan"]:
+		var other := "ekwan" if currency == "ase" else "ase"
+		var env := _spend_env(10, 7)
+		var amount := _bal(env, currency)
+		if not _spend(env, currency, amount):
+			return { "ok": false, "error": "exact spend_%s(%d) returned false" % [currency, amount] }
+		if _bal(env, currency) != 0:
+			return { "ok": false, "error": "%s is %d after an exact spend, expected 0" % [currency, _bal(env, currency)] }
+		if _bal(env, other) != (7 if currency == "ase" else 10):
+			return { "ok": false, "error": "exact spend_%s changed %s" % [currency, other] }
+	return { "ok": true }
+
+
+# KNOWN DEFECT (V2-ECONOMY-004 Part B will change this): two separate calls are not atomic. When the
+# second currency is short, the first spend stays applied. The new pay-both method (D-132) must not do this.
+static func _test_two_spends_not_atomic() -> Dictionary:
+	var env := _spend_env(10, 2)
+	var first := _spend(env, "ase", 5)
+	var second := _spend(env, "ekwan", 5)
+	if not first or second:
+		return { "ok": false, "error": "expected ase spend true and ekwan spend false, got %s / %s" % [str(first), str(second)] }
+	if _bal(env, "ase") != 5 or _bal(env, "ekwan") != 2:
+		return { "ok": false, "error": "expected ase 5 (first spend kept) and ekwan 2, got %d / %d" % [_bal(env, "ase"), _bal(env, "ekwan")] }
+	var env2 := _spend_env(2, 10)
+	var first2 := _spend(env2, "ekwan", 5)
+	var second2 := _spend(env2, "ase", 5)
+	if not first2 or second2 or _bal(env2, "ekwan") != 5 or _bal(env2, "ase") != 2:
+		return { "ok": false, "error": "reverse order: ekwan %d, ase %d" % [_bal(env2, "ekwan"), _bal(env2, "ase")] }
+	return { "ok": true }
