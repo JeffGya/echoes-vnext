@@ -223,7 +223,7 @@ static func _test_awakening_trigger() -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# V2-ECONOMY-004 Part B step 1: characterization of spend_ase / spend_ekwan.
+# Characterization of spend_ase / spend_ekwan.
 # ---------------------------------------------------------------------------
 
 static func _spend_env(ase: int, ekwan: int) -> Array:
@@ -283,7 +283,7 @@ static func _test_spend_exact_balance() -> Dictionary:
 
 
 # Two separate spend calls are not atomic: when the second currency is short, the first spend stays applied.
-# This stays true. A price in both currencies goes through `pay_cost` (recipe_cost suite), which spends nothing.
+# This stays true. A price in both currencies goes through `pay_cost` (recipe_cost suite), which spends nothing when either side is short.
 static func _test_two_spends_not_atomic() -> Dictionary:
 	var env := _spend_env(10, 2)
 	var first := _spend(env, "ase", 5)

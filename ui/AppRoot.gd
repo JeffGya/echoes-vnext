@@ -282,7 +282,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
-	# recipe price check and payment (V2-ECONOMY-004 Part B / debug only)
+	# recipe price check and payment (debug only)
 	# -------------------------
 	if head == "recipe":
 		_run_recipe_command(parts)
@@ -1131,22 +1131,34 @@ func _run_inventory_command(parts: PackedStringArray) -> void:
 	_flush_logs_to_console()
 
 
-# V2-ECONOMY-004 Part B: checks or pays a placeholder recipe price (debug builds only).
-# Usage: recipe check|pay <type_id> <grade|ungraded> [make|upgrade]
+const _RECIPE_USAGE := "Usage: recipe check|pay <type_id> <grade|ungraded> [make|upgrade]"
+
+
+## Pure parse of the console words. Returns { ok, usage, payload }; a fifth word after the route is ignored.
+static func parse_recipe_command(parts: PackedStringArray) -> Dictionary:
+	var op := parts[1].to_lower() if parts.size() > 1 else ""
+	var route := parts[4].to_lower() if parts.size() > 4 else "make"
+	if (op != "check" and op != "pay") or parts.size() < 4 or (route != "make" and route != "upgrade"):
+		return { "ok": false, "usage": _RECIPE_USAGE, "payload": {} }
+	return { "ok": true, "usage": "", "payload": { "op": op, "type_id": parts[2], "grade": parts[3], "route": route } }
+
+
+# Checks or pays a placeholder recipe price (debug builds only).
 func _run_recipe_command(parts: PackedStringArray) -> void:
 	if not OS.is_debug_build():
 		_debug_print("recipe: this command works in debug builds only.")
 		_flush_logs_to_console()
 		return
-	var op := parts[1].to_lower() if parts.size() > 1 else ""
-	var route := parts[4].to_lower() if parts.size() > 4 else "make"
-	if (op != "check" and op != "pay") or parts.size() < 4 or (route != "make" and route != "upgrade"):
-		_debug_print("Usage: recipe check|pay <type_id> <grade|ungraded> [make|upgrade]")
+	var parsed := parse_recipe_command(parts)
+	if not parsed["ok"]:
+		_debug_print(str(parsed["usage"]))
 		_flush_logs_to_console()
 		return
+	var payload: Dictionary = parsed["payload"]
+	var op: String = payload["op"]
+	var route: String = payload["route"]
 	var start_idx := _last_log_index
-	var snap := runtime.dispatch({ "type": "debug.recipe.run",
-		"payload": { "op": op, "type_id": parts[2], "grade": parts[3], "route": route } })
+	var snap := runtime.dispatch({ "type": "debug.recipe.run", "payload": payload })
 	_render_snapshot(snap)
 	var logs := logger.get_logs()
 	for i in range(start_idx, logs.size()):

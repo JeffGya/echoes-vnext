@@ -40,6 +40,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("recipe_cost/console_missing_fixture_is_denied", Callable(RecipeCostTests, "_t_run_no_fixture"))
 	runner.register_test("recipe_cost/console_never_touches_balance_json", Callable(RecipeCostTests, "_t_run_no_config_write"))
 	runner.register_test("recipe_cost/console_command_is_gated_and_routed_once", Callable(RecipeCostTests, "_t_run_gate"))
+	runner.register_test("recipe_cost/console_parser_maps_words_to_the_payload", Callable(RecipeCostTests, "_t_parse"))
+	runner.register_test("recipe_cost/console_pay_shows_in_the_sanctum_snapshot", Callable(RecipeCostTests, "_t_run_snapshot"))
+	runner.register_test("recipe_cost/console_pay_of_a_free_recipe_spends_nothing_and_saves_once", Callable(RecipeCostTests, "_t_run_free"))
+	runner.register_test("recipe_cost/pay_cost_refuses_a_cost_that_is_not_a_dictionary", Callable(RecipeCostTests, "_t_pay_not_dict"))
 
 
 # ---------------------------------------------------------------------------
@@ -487,8 +491,9 @@ static func _t_run_pay() -> Dictionary:
 		m.append("pay: flushes %d, balance %s (expected 1, 43/75)" % [flushes, _run_bal(env)])
 	if str(d.get("reason_key", "")) != "ok" or d.get("paid", false) != true or int(d["after"]["ase"]) != 75 or int(d["after"]["ekwan"]) != 43:
 		m.append("pay log: %s" % str(d))
-	if str(_run_log(env, "economy.pay").get("reason", "")) != "craft.make.ph_weapon_a":
-		m.append("pay reason: %s" % str(_run_log(env, "economy.pay")))
+	var pay_line := _run_log(env, "economy.pay")
+	if str(pay_line.get("reason", "")) != "craft.make.ph_weapon_a" or pay_line.get("type_id", "") != "ph_weapon_a" or pay_line.get("route", "") != "make":
+		m.append("pay line: %s" % str(pay_line))
 	# The upgrade route and a gradeless recipe.
 	_run_flushes(env, _run_action("pay", "ph_weapon_a", "g2", "upgrade"))
 	if _run_bal(env) != "33/43" or str(_run_log(env, "economy.pay").get("reason", "")) != "craft.upgrade.ph_weapon_a":
@@ -571,24 +576,27 @@ static func _t_run_no_fixture() -> Dictionary:
 	return _result(m)
 
 
-## A pay leaves data/balance.json and the cfg of the runtime as they were: the overlay lives in a copy.
+## A pay leaves data/balance.json and the loaded balance as they were. The runtime here holds the shipping config.
 static func _t_run_no_config_write() -> Dictionary:
 	var m: Array = []
 	var sha_before := FileAccess.get_sha256("res://data/balance.json")
-	var env := _run_env("nowrite", 100, 50)
-	var rt: FlowRuntime = env["rt"]
-	var cfg_before := JSON.stringify(ConfigService.get_inventory_cfg(rt.config_service), "", true)
-	_run_flushes(env, _run_action("pay", "ph_weapon_a", "g1"))
-	if _run_bal(env) != "43/75":
-		m.append("setup: the pay did not run, balance %s" % _run_bal(env))
+	var logger := StructuredLogger.new()
+	var config := InventorySaveTests._config()
+	var path := TestSaveHarness.fresh_save_path("recipe_nowrite.json", "inventory_actions")
+	var rt := FlowRuntime.new(logger, config, path)
+	rt.boot()
+	rt.flow_ctx.save_data["economy"] = { "ase": 100, "ekwan": 50 }
+	var outcome := DebugController.new(rt.flow_ctx, config, logger).handle_recipe_run(_run_action("pay", "ph_weapon_a", "g1"), 9)
+	var econ: Dictionary = rt.flow_ctx.save_data["economy"]
+	if outcome.error_code != "" or int(econ["ase"]) != 75 or int(econ["ekwan"]) != 43:
+		m.append("setup: the pay did not run: %s, %s" % [outcome.error_code, str(econ)])
 	if FileAccess.get_sha256("res://data/balance.json") != sha_before:
 		m.append("data/balance.json changed")
-	if JSON.stringify(ConfigService.get_inventory_cfg(rt.config_service), "", true) != cfg_before:
-		m.append("the cfg of the runtime changed")
-	var shipping := ConfigService.get_recipes_cfg(InventorySaveTests._config())
-	if not shipping.is_empty():
-		m.append("the shipping recipes block is not empty: %s" % str(shipping))
-	InventoryActionTests._done(env)
+	if not ConfigService.get_recipes_cfg(config).is_empty():
+		m.append("the loaded recipes block is not empty: %s" % str(ConfigService.get_recipes_cfg(config)))
+	if InventorySaveTests._has_placeholder_id(JSON.stringify(config.get_balance())):
+		m.append("the loaded balance holds a ph_ id")
+	TestSaveHarness.remove_save_artifacts(path)
 	return _result(m)
 
 
@@ -611,4 +619,76 @@ static func _t_run_gate() -> Dictionary:
 	var rt_text := FileAccess.get_file_as_string("res://core/runtime/FlowRuntime.gd")
 	if rt_text.count("handle_recipe_run") != 1 or rt_text.count("\"%s\":" % _RUN) != 1:
 		m.append("FlowRuntime does not route the action exactly once")
+	return _result(m)
+
+
+static func _t_pay_not_dict() -> Dictionary:
+	var m: Array = []
+	for bad in [null, [1, 2], "7"]:
+		var env := _env(50, 50)
+		var key: String = (env[2] as EconomyService).pay_cost(bad, "test.pay", env[1], 0)
+		if key != "bad_cost" or _bal(env) != "50/50":
+			m.append("pay_cost with %s: key %s, balance %s" % [str(bad), key, _bal(env)])
+		var logs: Array = (env[1] as StructuredLogger).get_logs()
+		if logs.size() != 1 or logs[0]["type"] != "economy.pay.config_error" or logs[0]["sev"] != StructuredLogger.LEVEL_ERROR:
+			m.append("pay_cost with %s did not write one error line" % str(bad))
+	return _result(m)
+
+
+## The pure part of the console command: words in, usage or payload out.
+static func _t_parse() -> Dictionary:
+	var m: Array = []
+	var app: GDScript = load("res://ui/AppRoot.gd")
+	for words in [["recipe", "pay", "x"], ["recipe", "check"], ["recipe"], ["recipe", "sell", "x", "g1"], ["recipe", "pay", "x", "g1", "repair"]]:
+		var r: Dictionary = app.parse_recipe_command(PackedStringArray(words))
+		if r["ok"] != false or not str(r["usage"]).begins_with("Usage: recipe") or not (r["payload"] as Dictionary).is_empty():
+			m.append("%s should give usage, got %s" % [str(words), str(r)])
+	var make: Dictionary = app.parse_recipe_command(PackedStringArray(["recipe", "CHECK", "ph_weapon_a", "g1"]))
+	if make["ok"] != true or str(make["payload"]) != str({ "op": "check", "type_id": "ph_weapon_a", "grade": "g1", "route": "make" }):
+		m.append("default route: %s" % str(make))
+	var upgrade: Dictionary = app.parse_recipe_command(PackedStringArray(["recipe", "pay", "ph_weapon_a", "g2", "upgrade"]))
+	if upgrade["ok"] != true or str(upgrade["payload"]) != str({ "op": "pay", "type_id": "ph_weapon_a", "grade": "g2", "route": "upgrade" }):
+		m.append("upgrade route: %s" % str(upgrade))
+	var extra: Dictionary = app.parse_recipe_command(PackedStringArray(["recipe", "pay", "ph_weapon_a", "g2", "upgrade", "junk"]))
+	if str(extra) != str(upgrade):
+		m.append("a fifth word changed the result: %s" % str(extra))
+	return _result(m)
+
+
+## After a pay through dispatch, the Sanctum snapshot shows the new balance (the fields the shell shows).
+static func _t_run_snapshot() -> Dictionary:
+	var m: Array = []
+	var env := _run_env("snapshot", 100, 50)
+	if str(InventoryActionTests._snap(env).get("type", "")) != FlowStateIds.SANCTUM:
+		m.append("setup: not in the Sanctum")
+	_run_flushes(env, _run_action("pay", "ph_weapon_a", "g1"))
+	var data: Dictionary = InventoryActionTests._snap(env).get("data", {})
+	if int(data.get("ase_balance", -1)) != 75 or int(data.get("ekwan_balance", -1)) != 43:
+		m.append("snapshot shows ase %s, ekwan %s (expected 75, 43)" % [str(data.get("ase_balance")), str(data.get("ekwan_balance"))])
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+## A recipe that costs 0 Ase and 0 Ekwan (a temporary fixture through the seam) pays, spends nothing, saves once.
+static func _t_run_free() -> Dictionary:
+	var m: Array = []
+	var env := _run_env("free", 100, 50)
+	var rt: FlowRuntime = env["rt"]
+	var fixture := TestSaveHarness.dir("inventory_actions") + "recipe_free.json"
+	var f := FileAccess.open(fixture, FileAccess.WRITE)
+	if f == null:
+		return { "ok": false, "error": "cannot write the temporary fixture" }
+	f.store_string(JSON.stringify({ "recipes": { "ph_weapon_a": { "g1": { "make": { "inputs": [], "cost": { "ekwan": 0, "ase": 0 } } } } } }))
+	f.close()
+	var dbg := DebugController.new(rt.flow_ctx, rt.config_service, env["logger"])
+	dbg.recipe_fixture_path = fixture
+	var outcome := dbg.handle_recipe_run(_run_action("pay", "ph_weapon_a", "g1"), 9)
+	DirAccess.remove_absolute(fixture)
+	if outcome.error_code != "" or outcome.save_reasons.size() != 1:
+		m.append("outcome %s / %s (expected ok and one save reason)" % [outcome.error_code, str(outcome.save_reasons)])
+	if _run_bal(env) != "50/100":
+		m.append("a free pay changed the balance: %s" % _run_bal(env))
+	if str(_run_log(env, _RUN).get("reason_key", "")) != "ok" or _run_log(env, _RUN).get("paid", false) != true:
+		m.append("log: %s" % str(_run_log(env, _RUN)))
+	InventoryActionTests._done(env)
 	return _result(m)

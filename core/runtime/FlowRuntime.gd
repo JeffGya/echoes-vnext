@@ -618,7 +618,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 			"debug.inventory.produce":
 				_apply_action_outcome(_debug_controller().handle_inventory_produce(action, t), t)
 
-			# V2-ECONOMY-004 Part B: recipe price check and payment for the play test. Only the F1 debug console sends it.
+			# Recipe price check and payment for the play test.
 			"debug.recipe.run":
 				_apply_action_outcome(_debug_controller().handle_recipe_run(action, t), t)
 	

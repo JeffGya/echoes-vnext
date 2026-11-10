@@ -336,8 +336,9 @@ func spend_ekwan(amount: int, reason: String, logger: StructuredLogger, t: int) 
 # ---- Pay both ----
 ## Pays an Ase and an Ekwan price together, or pays nothing. `cost` = { ekwan, ase }, the `cost` of a recipe
 ## price record. Returns a `RecipeCostService` reason key: `ok`, `short_ase`, `short_ekwan`, `short_both` or
-## `bad_cost`. Both balances are checked before the first spend, so a short side never leaves the other spent.
-func pay_cost(cost: Dictionary, reason: String, logger: StructuredLogger, t: int) -> String:
+## `bad_cost` (also for a `cost` that is not a Dictionary). Both balances are checked before the first spend,
+## so a short side never leaves the other spent. `context` entries are added to the `economy.pay` line.
+func pay_cost(cost: Variant, reason: String, logger: StructuredLogger, t: int, context: Dictionary = {}) -> String:
 	var key := RecipeCostService.afford(cost, get_ase(), get_ekwan())
 	if key == RecipeCostService.BAD_COST:
 		if logger != null:
@@ -354,6 +355,7 @@ func pay_cost(cost: Dictionary, reason: String, logger: StructuredLogger, t: int
 		spend_ase(int(price["ase"]), reason, logger, t)
 	if int(price["ekwan"]) > 0:
 		spend_ekwan(int(price["ekwan"]), reason, logger, t)
+	data.merge(context, false)
 	_log_info(logger, t, "economy.pay", "Cost paid", data)
 	return key
 

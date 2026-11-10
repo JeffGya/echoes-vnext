@@ -648,12 +648,12 @@ func _produce_denied(t: int, reason_key: String, extra: Dictionary) -> FlowActio
 	return FlowActionOutcome.error_outcome(reason_key)
 
 
-## debug.recipe.run — play-test check and payment of a recipe price (V2-ECONOMY-004 Part B). Payload
+## debug.recipe.run — play-test check and payment of a recipe price. Only the F1 debug console sends it. Payload
 ## { op: "check"|"pay", type_id, grade, route: "make"|"upgrade" (default "make") }. The recipe cfg is a COPY
 ## built for this call only: shipping `data.inventory`, the fixture definitions, the fixture recipes and the
 ## grades g1 and g2. It never writes balance.json and keeps nothing. `check` changes nothing and requests no
 ## save. `pay` pays through EconomyService.pay_cost and requests one save only when the payment happened.
-## A missing fixture is denied with a log. Only the F1 debug console (ui/AppRoot.gd) sends this action.
+## A missing fixture is denied with a log.
 const _RECIPE_FIXTURE := "res://tests/fixtures/recipe_placeholders.json"
 const _RECIPE_GRADES: Array = ["g1", "g2"]
 ## Test seam: a test points this at a missing file to prove the denial. Play never sets it.
@@ -693,7 +693,8 @@ func handle_recipe_run(action: Dictionary, t: int) -> FlowActionOutcome:
 	var paid := false
 	if key == RecipeCostService.OK:
 		if op == "pay":
-			key = econ.pay_cost(priced["cost"], "craft.%s.%s" % [route, type_id], logger, t)
+			key = econ.pay_cost(priced["cost"], "craft.%s.%s" % [route, type_id], logger, t,
+				{ "type_id": type_id, "route": route })
 			paid = key == RecipeCostService.OK
 		else:
 			key = RecipeCostService.afford(priced["cost"], before["ase"], before["ekwan"])
