@@ -282,6 +282,13 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# recipe price check and payment (debug only)
+	# -------------------------
+	if head == "recipe":
+		_run_recipe_command(parts)
+		return
+
+	# -------------------------
 	# summon shortcut (SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "summon":
@@ -380,7 +387,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show | recipe check|pay <type_id> <grade|ungraded> [make|upgrade]")
 	
 	_flush_logs_to_console()
 	
@@ -649,6 +656,7 @@ func _run_tests(parts: Array) -> void:
 	InventoryActionTests.register(runner)  # V2-ITEM-001a step 5: inventory.discard.apply, debug.inventory.produce, data.inventory in the Sanctum snapshot
 	InventoryMoveTests.register(runner)  # V2-ITEM-001 step 7: slots, moves, merges and count discards (service level)
 	InventoryPathTests.register(runner)  # V2-ITEM-001 step 7: inventory.move.apply, the discard rules on a path, the saved one-discard mark
+	RecipeCostTests.register(runner)  # recipe price contract: RecipeCostService and EconomyService.pay_cost
 	RiskProbeTests.register(runner)  # V2-ECONOMY-004 phase 5: do player choices change pace outcome and Echo loss (measures, asserts no design number)
 	CombatBaselineTests.register(runner)  # V2-INFRA-003 Phase 6 entry gate: per-round emotion, transition sequence, combat flush reasons, tick-bound retreat, dormant encounter actions
 	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence
@@ -1120,6 +1128,53 @@ func _run_inventory_command(parts: PackedStringArray) -> void:
 	var snap := runtime.dispatch({ "type": "debug.inventory.produce", "payload": { "mode": mode } })
 	_render_snapshot(snap)
 	_debug_print("inventory produce (%s): see the log lines for what was added or refused." % mode)
+	_flush_logs_to_console()
+
+
+const _RECIPE_USAGE := "Usage: recipe check|pay <type_id> <grade|ungraded> [make|upgrade]"
+
+
+## Pure parse of the console words. Returns { ok, usage, payload }; a fifth word after the route is ignored.
+static func parse_recipe_command(parts: PackedStringArray) -> Dictionary:
+	var op := parts[1].to_lower() if parts.size() > 1 else ""
+	var route := parts[4].to_lower() if parts.size() > 4 else "make"
+	if (op != "check" and op != "pay") or parts.size() < 4 or (route != "make" and route != "upgrade"):
+		return { "ok": false, "usage": _RECIPE_USAGE, "payload": {} }
+	return { "ok": true, "usage": "", "payload": { "op": op, "type_id": parts[2], "grade": parts[3], "route": route } }
+
+
+# Checks or pays a placeholder recipe price (debug builds only).
+func _run_recipe_command(parts: PackedStringArray) -> void:
+	if not OS.is_debug_build():
+		_debug_print("recipe: this command works in debug builds only.")
+		_flush_logs_to_console()
+		return
+	var parsed := parse_recipe_command(parts)
+	if not parsed["ok"]:
+		_debug_print(str(parsed["usage"]))
+		_flush_logs_to_console()
+		return
+	var payload: Dictionary = parsed["payload"]
+	var op: String = payload["op"]
+	var route: String = payload["route"]
+	var start_idx := _last_log_index
+	var snap := runtime.dispatch({ "type": "debug.recipe.run", "payload": payload })
+	_render_snapshot(snap)
+	var logs := logger.get_logs()
+	for i in range(start_idx, logs.size()):
+		var e: Dictionary = logs[i]
+		var d: Dictionary = e.get("data", {}) if e.get("data", {}) is Dictionary else {}
+		if str(e.get("type", "")) == "debug.recipe.run.denied":
+			_debug_print("recipe %s denied: %s" % [op, str(d.get("reason_key", ""))])
+		elif str(e.get("type", "")) == "debug.recipe.run":
+			var cost: Dictionary = d.get("cost", {})
+			var line := "recipe %s %s %s %s: key=%s | price Ekwan %s, Ase %s | before Ekwan %d, Ase %d" % [
+				op, parts[2], parts[3], route, str(d.get("reason_key", "")),
+				str(cost.get("ekwan", "-")), str(cost.get("ase", "-")),
+				int(d["before"]["ekwan"]), int(d["before"]["ase"])]
+			if op == "pay":
+				line += " | after Ekwan %d, Ase %d | paid=%s" % [int(d["after"]["ekwan"]), int(d["after"]["ase"]), str(d.get("paid", false))]
+			_debug_print(line)
 	_flush_logs_to_console()
 
 

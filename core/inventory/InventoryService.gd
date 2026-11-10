@@ -170,7 +170,7 @@ static func snapshot(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> Di
 				var s: Dictionary = stacks[ref["index"]]
 				var type_id := str(s["type_id"])
 				var qty := _to_int(s["quantity"])
-				var limit := _stack_limit(cfg, _def_of(cfg, type_id))
+				var limit := _stack_limit(cfg, def_of(cfg, type_id))
 				(stacks_out if box == BOX_SANCTUM else pack_stacks_out).append({
 					"type_id": type_id, "kind": str(s["kind"]), "name": name_of(cfg, type_id),
 					"slot": int(ref["slot"]), "count": qty, "stack_limit": limit, "at_limit": qty >= limit })
@@ -231,7 +231,7 @@ static func validate(save: Dictionary, cfg: Dictionary) -> Array:
 				out.append("%s[%d]: %s" % [key, i, sp])
 				continue
 			var s: Dictionary = stacks[i]
-			if _to_int(s["quantity"]) > _stack_limit(cfg, _def_of(cfg, str(s["type_id"]))):
+			if _to_int(s["quantity"]) > _stack_limit(cfg, def_of(cfg, str(s["type_id"]))):
 				out.append("%s[%d]: quantity above the stack limit" % [key, i])
 	for box in BOXES:
 		out.append_array(_slot_problems(save, cfg, box))
@@ -450,7 +450,7 @@ static func check_entry(cfg: Dictionary, entry: Dictionary) -> String:
 		return "bad_entry"
 	var defs: Variant = cfg.get("definitions", null)
 	if defs is Dictionary and not (defs as Dictionary).is_empty():
-		var def := _def_of(cfg, type_v as String)
+		var def := def_of(cfg, type_v as String)
 		if def.is_empty():
 			return "unknown_type"
 		if not _is_str(def.get("kind", null), kind):
@@ -482,7 +482,7 @@ static func _intake_stack(save: Dictionary, cfg: Dictionary, entry: Dictionary, 
 		mode: String, reserved: int) -> Dictionary:
 	var pack_only := mode == MODE_PACK_ONLY
 	var qty := _to_int(entry.get("quantity", 0))
-	var limit := _stack_limit(cfg, _def_of(cfg, type_id))
+	var limit := _stack_limit(cfg, def_of(cfg, type_id))
 	var left := qty
 	var in_pack := 0
 	var added := 0
@@ -568,7 +568,7 @@ static func _intake_unique(save: Dictionary, cfg: Dictionary, entry: Dictionary,
 			seq += 1
 		pid = "it.%d" % seq
 	inv["next_seq"] = maxi(seq, _seq_of(pid) + 1)
-	var grade_v: Variant = entry.get("grade", _def_of(cfg, type_id).get("grade", ""))
+	var grade_v: Variant = entry.get("grade", def_of(cfg, type_id).get("grade", ""))
 	var piece := { "id": pid, "type_id": type_id, "kind": kind,
 		"grade": grade_v if grade_v is String else "", "held_by": "" }
 	_commit_layouts(save)
@@ -661,7 +661,7 @@ static func _move_entry(save: Dictionary, cfg: Dictionary, from_box: String, fro
 		var t_stack: Dictionary = _arr(save, target["key"])[target["index"]]
 		if t_stack["type_id"] != e["type_id"] or t_stack["kind"] != e["kind"]:
 			return out.call("refused", "type_mismatch")
-		var room := _stack_limit(cfg, _def_of(cfg, str(e["type_id"]))) - _to_int(t_stack["quantity"])
+		var room := _stack_limit(cfg, def_of(cfg, str(e["type_id"]))) - _to_int(t_stack["quantity"])
 		if room <= 0:
 			return out.call("refused", "stack_limit")
 		_commit_layouts(save)
@@ -806,7 +806,7 @@ static func _live_arr(save: Dictionary, key: String) -> Array:
 ## The definition name of a type, or "" when there is none. Never the type id. The rows of the snapshot, the
 ## at-risk rows and the result rows use this one function.
 static func name_of(cfg: Dictionary, type_id: String) -> String:
-	var n: Variant = _def_of(cfg, type_id).get("name", "")
+	var n: Variant = def_of(cfg, type_id).get("name", "")
 	return n if n is String else ""
 
 
@@ -867,7 +867,7 @@ static func _arr(save: Dictionary, key: String) -> Array:
 
 
 ## A copy of the definition of a type, or {} when none exists.
-static func _def_of(cfg: Dictionary, type_id: String) -> Dictionary:
+static func def_of(cfg: Dictionary, type_id: String) -> Dictionary:
 	var defs: Variant = cfg.get("definitions", null)
 	if defs is Dictionary and (defs as Dictionary).get(type_id, null) is Dictionary:
 		return ((defs as Dictionary)[type_id] as Dictionary).duplicate()

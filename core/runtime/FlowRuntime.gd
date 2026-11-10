@@ -617,6 +617,10 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# V2-ITEM-001a: placeholder item producer for the play test. Only the F1 debug console sends it.
 			"debug.inventory.produce":
 				_apply_action_outcome(_debug_controller().handle_inventory_produce(action, t), t)
+
+			# Recipe price check and payment for the play test.
+			"debug.recipe.run":
+				_apply_action_outcome(_debug_controller().handle_recipe_run(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":

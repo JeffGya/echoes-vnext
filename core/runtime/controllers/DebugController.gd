@@ -15,12 +15,13 @@
 #     FlowRuntime.dispatch() via flow_ctx.request_save().
 #   - No UI or scene-tree reference.
 #
-# Owns 12 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
+# Owns 13 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
 # debug.ally.spawn, debug.claimant.force_combat, debug.charge_pressure.set, debug.guidance.set,
 # debug.progression.force_rank_up (temporary instrumentation for the progress.rank_up bark
 # rewrite — see handle_force_rank_up below), debug.emotion.set, debug.stop_short.set and
-# debug.inventory.produce (V2-ITEM-001a play-test producer — see handle_inventory_produce below).
-# All but debug.guidance.set, debug.progression.force_rank_up and debug.inventory.produce were moved
+# debug.inventory.produce (V2-ITEM-001a play-test producer — see handle_inventory_produce below) and
+# debug.recipe.run (recipe price check and payment — see handle_recipe_run below).
+# All but debug.guidance.set, debug.progression.force_rank_up, debug.inventory.produce and debug.recipe.run were moved
 # verbatim (behaviour unchanged) from FlowRuntime.gd: _handle_debug_seed_show, _handle_debug_seed_set,
 # _handle_debug_echo_gen_test, _echo_fingerprint, _handle_debug_spawn_ally,
 # _handle_debug_force_claimant_combat, _handle_debug_force_charge_pressure.
@@ -644,4 +645,85 @@ func _produce_denied(t: int, reason_key: String, extra: Dictionary) -> FlowActio
 	var data := extra.duplicate()
 	data["reason_key"] = reason_key
 	logger.info(t, "debug.inventory.produce.denied", "Dev item producer denied", data)
+	return FlowActionOutcome.error_outcome(reason_key)
+
+
+## debug.recipe.run — play-test check and payment of a recipe price. Only the F1 debug console sends it. Payload
+## { op: "check"|"pay", type_id, grade, route: "make"|"upgrade" (default "make") }. The recipe cfg is a COPY
+## built for this call only: shipping `data.inventory`, the fixture definitions, the fixture recipes and the
+## grades g1 and g2. It never writes balance.json and keeps nothing. `check` changes nothing and requests no
+## save. `pay` pays through EconomyService.pay_cost and requests one save only when the payment happened.
+## A missing fixture is denied with a log.
+const _RECIPE_FIXTURE := "res://tests/fixtures/recipe_placeholders.json"
+const _RECIPE_GRADES: Array = ["g1", "g2"]
+## Test seam: a test points this at a missing file to prove the denial. Play never sets it.
+var recipe_fixture_path: String = _RECIPE_FIXTURE
+
+
+func handle_recipe_run(action: Dictionary, t: int) -> FlowActionOutcome:
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var op := str(payload.get("op", ""))
+	if op != "check" and op != "pay":
+		return _recipe_denied(t, "bad_op", { "op": op })
+	var type_id := str(payload.get("type_id", ""))
+	var grade := str(payload.get("grade", ""))
+	var route := str(payload.get("route", RecipeCostService.ROUTE_MAKE))
+
+	for path in [produce_fixture_path, recipe_fixture_path]:
+		if not FileAccess.file_exists(path):
+			return _recipe_denied(t, "fixture_missing", { "path": path })
+	var defs_v: Variant = _fixture_block(produce_fixture_path, "definitions")
+	var recipes_v: Variant = _fixture_block(recipe_fixture_path, "recipes")
+	if defs_v == null or recipes_v == null:
+		return _recipe_denied(t, "fixture_bad", {})
+
+	var cfg: Dictionary = ConfigService.get_inventory_cfg(config_service).duplicate(true)
+	var defs_now: Variant = cfg.get("definitions", {})
+	var defs: Dictionary = defs_now if defs_now is Dictionary else {}
+	defs.merge(defs_v as Dictionary, true)
+	cfg["definitions"] = defs
+	cfg["recipes"] = recipes_v
+	cfg["grades"] = _RECIPE_GRADES.duplicate()
+
+	var econ := EconomyService.new(flow_ctx.save_data)
+	var before := { "ase": econ.get_ase(), "ekwan": econ.get_ekwan() }
+	var priced := RecipeCostService.cost_of(cfg, type_id, grade, route)
+	var key: String = priced["reason_key"]
+	var paid := false
+	if key == RecipeCostService.OK:
+		if op == "pay":
+			key = econ.pay_cost(priced["cost"], "craft.%s.%s" % [route, type_id], logger, t,
+				{ "type_id": type_id, "route": route })
+			paid = key == RecipeCostService.OK
+		else:
+			key = RecipeCostService.afford(priced["cost"], before["ase"], before["ekwan"])
+
+	logger.info(t, "debug.recipe.run", "Dev recipe %s" % op, {
+		"op": op, "type_id": type_id, "grade": grade, "route": route, "reason_key": key,
+		"cost": priced["cost"], "paid": paid, "before": before,
+		"after": { "ase": econ.get_ase(), "ekwan": econ.get_ekwan() } })
+	if paid:
+		var outcome: FlowActionOutcome
+		if str(flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.SANCTUM:
+			outcome = FlowActionOutcome.reenter_outcome()
+		else:
+			outcome = FlowActionOutcome.handled_outcome()
+		return outcome.with_save_reason("debug.recipe.run")
+	if op == "pay":
+		return FlowActionOutcome.error_outcome(key)
+	return FlowActionOutcome.handled_outcome()
+
+
+## The block `key` of a JSON fixture when it is a Dictionary, else null.
+func _fixture_block(path: String, key: String) -> Variant:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	var block: Variant = (parsed as Dictionary).get(key, null) if parsed is Dictionary else null
+	return block if block is Dictionary else null
+
+
+func _recipe_denied(t: int, reason_key: String, extra: Dictionary) -> FlowActionOutcome:
+	var data := extra.duplicate()
+	data["reason_key"] = reason_key
+	logger.info(t, "debug.recipe.run.denied", "Dev recipe run denied", data)
 	return FlowActionOutcome.error_outcome(reason_key)

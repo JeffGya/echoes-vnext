@@ -1,0 +1,29 @@
+{
+	"_comment": "Placeholder recipes for tests only. The prices are test values and never ship: everything under res:// ships, so no placeholder id may appear in data/balance.json. The items are the definitions of inventory_placeholders.json; the grades are g1 and g2.",
+	"recipes": {
+		"ph_weapon_a": {
+			"g1": {
+				"make": { "inputs": [ { "type_id": "ph_material_a", "count": 2 } ], "cost": { "ekwan": 7, "ase": 25 } }
+			},
+			"g2": {
+				"make": { "inputs": [ { "type_id": "ph_material_a", "count": 4 } ], "cost": { "ekwan": 14, "ase": 45 } },
+				"upgrade": { "inputs": [ { "type_id": "ph_weapon_a", "count": 1 }, { "type_id": "ph_material_a", "count": 1 } ], "cost": { "ekwan": 10, "ase": 32 } }
+			}
+		},
+		"ph_charm_a": {
+			"g1": {
+				"make": { "inputs": [ { "type_id": "ph_material_a", "count": 1 } ], "cost": { "ekwan": 3, "ase": 45 } }
+			}
+		},
+		"ph_consumable_a": {
+			"ungraded": {
+				"make": { "inputs": [ { "type_id": "ph_material_a", "count": 1 } ], "cost": { "ekwan": 2, "ase": 10 } }
+			}
+		},
+		"ph_armor_a": {
+			"g1": {
+				"make": { "inputs": [ { "type_id": "ph_material_a", "count": 2 } ], "cost": { "ekwan": 8, "ase": 25 } }
+			}
+		}
+	}
+}
