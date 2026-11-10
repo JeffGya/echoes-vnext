@@ -953,13 +953,13 @@ A recipe in shipping `data/balance.json` with Ekwan 0 and Ase 0 fails a data tes
 The record has no Standing or Continuity gate. V2-ECONOMY-003 needs one and records it in its inputs table (written in the Part B handoff). Fields are additive, so adding it later is cheap. A note on the ECONOMY-003 Notion page needs Jeff's yes.
 
 ## D-140 — Design-contract defaults accepted by the orchestrator (Jeff may change; 2026-11-09)
-From `partb-design-contract.md`: the key `ungraded` marks recipes for types whose definition grade is `""`; the validator accepts whole-number floats (`10.0`) and rejects `10.5`; a recipe grade key must be on the ladder, not equal to the definition grade; an upgrade lists its base item as an ordinary input; `short_items` is reserved for ECONOMY-003. The game-feel agent is skipped because the contract changes nothing the player feels. Gears Tactics is dropped as a reference (no purchase price confirmed). Whether a fixed price scales with the realm like income does (`realm_scale_step`) goes to `mid-game-designer` and then to Jeff.
+From `partb-design-contract.md` (deleted; in git history at commit `a7ac6f24`): the key `ungraded` marks recipes for types whose definition grade is `""`; the validator accepts whole-number floats (`10.0`) and rejects `10.5`; a recipe grade key must be on the ladder, not equal to the definition grade; an upgrade lists its base item as an ordinary input; `short_items` is reserved for ECONOMY-003. The game-feel agent is skipped because the contract changes nothing the player feels. Gears Tactics is dropped as a reference (no purchase price confirmed). Whether a fixed price scales with the realm like income does (`realm_scale_step`) goes to `mid-game-designer` and then to Jeff.
 
 ## D-141 — A recipe price is flat across realms (Jeff, 2026-11-09)
-A fixed recipe price does not scale with the realm (option A of `partb-price-proposal.md` section 4). Grades carry the climb. The record gets no scale field. Items become cheaper in paths of income as realms advance. ECONOMY-003 may revisit this with a real crafting screen.
+A fixed recipe price does not scale with the realm (option A of `partb-price-proposal.md` (deleted; in git history at commit `a7ac6f24`) section 4). Grades carry the climb. The record gets no scale field. Items become cheaper in paths of income as realms advance. ECONOMY-003 may revisit this with a real crafting screen.
 
 ## D-142 — Placeholder prices: the mid values (Jeff, 2026-11-09)
-The test fixture `tests/fixtures/recipe_placeholders.json` uses the mid values of `partb-price-proposal.md` (Ekwan / Ase): weapon g1 make 7 / 25; weapon g2 make 14 / 45; weapon g2 upgrade 10 / 32; charm g1 make 3 / 45; consumable make 2 / 10; armor g1 make 8 / 25 (the weapon g1 row with about 20% more Ekwan). The low and high values serve edge tests. These values are fixture values; they never ship (D-131). The relic row is dropped (D-143).
+The test fixture `tests/fixtures/recipe_placeholders.json` uses the mid values of `partb-price-proposal.md` (deleted; in git history at commit `a7ac6f24`) (Ekwan / Ase): weapon g1 make 7 / 25; weapon g2 make 14 / 45; weapon g2 upgrade 10 / 32; charm g1 make 3 / 45; consumable make 2 / 10; armor g1 make 8 / 25 (the weapon g1 row with about 20% more Ekwan). The low and high values serve edge tests. These values are fixture values; they never ship (D-131). The relic row is dropped (D-143).
 
 ## D-143 — A relic cannot be made (Jeff, 2026-11-09)
 GDD 19.9: relics are "mostly found rather than mass-crafted"; GDD 19.6: relics appear "mainly in rarer catalyst-level work". The fixture has no relic recipe. The validator rejects a `make` or `upgrade` record whose output is a relic. A relic may still be an input (a catalyst). A later story may relax this rule with a design decision from Jeff. The check "upgrade needs a gear or relic input" in the contract stays.
@@ -989,3 +989,11 @@ When a player upgrades a piece of gear, the old piece leaves the inventory and a
 1. The live-config check in `recipe_cost/console_never_touches_balance_json` stays. It guards a future change to `ConfigService.get_balance()`. The SHA-256 check stays too.
 2. A pay with a 0 and 0 price is a payment. It spends nothing and requests exactly one save.
 3. The remaining Part B work is committed in three commits: Step 5 code fixes; the docs wrap; the records and the process rule (`decisions.md`, `ANSWERS.md` #90, `CLAUDE.md`, the two agent files).
+
+## D-149 — Housekeeping at the end of Part B (Jeff, 2026-11-10)
+1. The two design files `partb-design-contract.md` and `partb-price-proposal.md` are deleted. They stay in git history at commit `a7ac6f24`. The research URLs and the income and sink tables live only there now.
+2. Claude's scratch files outside the repo are deleted (`/tmp/echoes-partb-*`, the session run logs).
+3. The empty duplicate worktree `v2-economy-004-item-costs-8856d9` and its local branch are removed (D-130).
+4. The Claude plan file for Part B is deleted.
+5. The `fable` trial (D-136) does not change `CLAUDE.md`: the "never fable" rule stays. D-136 stays as the record.
+6. Jeff handles the save folder himself.
