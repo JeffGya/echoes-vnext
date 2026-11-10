@@ -903,3 +903,12 @@
 **Date:** 2026-11-08
 
 ---
+
+## #90 — Proposals go in the chat, in full (2026-11-09)
+
+**Q:** Where does an agent put a proposal (options, numbers, a design) that Jeff must decide on?
+**A:** In the chat, in full, before Jeff is asked to decide. Not only in a file. Jeff: "Please reduce random files and enter proposals also in chat rather than in files. It creates a disjointed way of working because files are not presented to me, I need to search for them, then I get asked about things that I have not read yet." Never ask Jeff to decide on content he has not read in the chat. Create a file only if Jeff asks or a project record needs it (`decisions.md`, handoff, `ANSWERS.md`), and show the content in the chat first. Subagent briefs say: put the full proposal in the reply; a file is optional. The main chat shows Jeff the full proposal, not a summary or a path. This holds for all projects and all agents.
+**Source:** Jeff, 2026-11-09 (V2-ECONOMY-004 Part B design round)
+**Date:** 2026-11-09
+
+---

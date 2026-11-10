@@ -895,3 +895,97 @@ Jeff's answers after the merge of PR 125:
 - **A Claimant fight that ended in a standoff is gone and cannot be redone.** Closed. The card already says so (`fight_returns` false). Recorded on V2-INFRA-005.
 - **Permadeath note added** to V2-INFRA-005 in Notion: follow-up 2, the id-based death record (PR 125 review thread), and the permanent Claimant fight.
 Defaults chosen by the orchestrator for the build (Jeff may change): a hand-sent `flow.complete_stage` that fails `stage_completable` is refused with a log and no state change (follow-up 25); the retreat success chance is computed in core from the same function that builds the snapshot, and the action field is no longer read (follow-up 33); `StructuredLogger` gets a real `error` level and the config-error cases use it (follow-up 38).
+
+## Part B (item costs) — Jeff's answers from the interview (2026-11-09)
+
+## D-122 — Part B stays in the ECONOMY-004 row (Jeff, 2026-11-09)
+Part B is the rest of the Notion row V2-ECONOMY-004 (Ready, Order 264). No new row. No Notion write without Jeff's yes.
+
+## D-123 — Part B builds the shape and placeholders (Jeff, 2026-11-09)
+Part B builds the price shape, the afford check and the sinks. It sets prices on a few marked placeholder test items. Real items come from V2-ITEM-002, which owns the item catalogue (Notion note, 2026-11-06). The grade ladder stays with V2-ITEM-005. The ITEM-001a handoff line "no row owns the catalogue" is out of date.
+
+## D-124 — Recipe record with a cost per grade (Jeff, 2026-11-09)
+The price of making an item is a recipe record in config: inputs (items) plus `cost { ekwan, ase }`, per output item and grade. This follows the GDD rule "item + Ekwan + Ase" (GDD 19.6). The reserved `cost` on an item definition (`data.inventory.definitions`) stays reserved. V2-ECONOMY-003 builds crafting on the record. Numbers live in `data/balance.json` (ANSWERS #83).
+
+## D-125 — An item is not a currency (Jeff, 2026-11-09)
+An item row in the packs keeps 0 Ase and 0 Ekwan. The inventory shows no Ase or Ekwan worth on an item. Items are made with Ekwan and Ase; they are never turned into them.
+
+## D-126 — Hold, move and destroy stay free; no yield (Jeff, 2026-11-09)
+Hold, move and destroy cost nothing. Destroy returns nothing. The key `recycle_yield_ekwan` stays empty for V2-ITEM-004.
+
+## D-127 — Price range: agent proposes, Jeff picks (Jeff, 2026-11-09)
+`mid-game-designer` proposes the placeholder price range from real data: the Phase 1 payouts, the summon prices (60 to 430 Ase) and Ekwan income (2 to 6 per objective), against D-04 (rewards must feel hard to earn). Jeff sets the numbers.
+
+## D-128 — Player text: agent drafts, Jeff edits (Jeff, 2026-11-09)
+An agent drafts the new lines (for example "cannot afford" lines), marks them AGENT-WRITTEN, and Jeff edits each one. The tone follows `phase7-copy-final.md` and `docs/stories/v2-item-001/copy-approval-jeff.md`, and the word rules of ANSWERS #86 and #89. Approved lines carry the APPROVED marker and a fixture test.
+
+## D-129 — Deferred follow-ups stay deferred; 20 moves (Jeff, 2026-11-09)
+Follow-up 13 (vow-break prices) stays on V2-VOW-003. Follow-up 48 stays on V2-STAGE-005 and V2-ITEM-002. Follow-up 20 (dwellings paid with Ekwan) moved to V2-SANCTUM-007 (Draft, Foundation, Order 263), a note written in Notion on 2026-11-09 with Jeff's choice. The older note on V2-SANCTUM-011 stays.
+
+## D-130 — The branch `claude/v2-economy-004-item-costs-8856d9` is ignored (2026-11-09)
+It sits on the same commit as this branch (`054885e0`) and holds no work.
+
+## D-131 — Placeholder recipes live in a test fixture only (Jeff, 2026-11-09)
+Placeholder recipes and prices live in a test fixture (`tests/fixtures/recipe_placeholders.json`). The shipping `data.inventory.recipes` block stays empty until V2-ITEM-002 gives real items. Reason: everything under `res://` ships, so no placeholder id may appear in `data/balance.json`.
+
+## D-132 — The "pay both" method is on EconomyService (Jeff, 2026-11-09)
+One new method on `EconomyService` checks both balances, then spends both through the existing `spend_*`, with one log line. If one currency is short, nothing is spent. Existing methods stay unchanged.
+
+## D-133 — Part B has no player-facing parts (Jeff, 2026-11-09)
+Jeff: "Only build what is relevant for this story. It is fine if there is no player facing UI." Price display, cannot-afford state and text, pay feedback and mockups move to V2-ECONOMY-003, which owns the crafting screen. D-128 (agent drafts text, Jeff edits) now applies there. If a later player-facing element appears in Part B, mockups from `ui-ux-designer`, `sr-game-artist` and `game-feel-developer` come before any build.
+
+## D-134 — Recycle stays with V2-ITEM-004 (2026-11-09)
+Jeff asked if a recycle button belongs in Part B or ECONOMY-003. Answer from the repo: neither. Recycle is V2-ITEM-004 (Draft, Order 247). The Storehouse destroy button exists and returns nothing (D-126).
+
+## D-135 — Design round includes research on similar games (Jeff, 2026-11-09)
+`sr-game-designer` researches XCOM, Gears Tactics and similar games for how they structure crafting and upgrade cost. Scope: the cost contract only. Notes on how those games show a price go to ECONOMY-003.
+
+## D-136 — One-time trial of `fable` for the backend build (Jeff, 2026-11-09)
+Jeff: use `fable` for the Step 3 `mechanics-developer` dispatch once, to try it, and do not repeat for other agents. This overrides the "never fable" rule in `CLAUDE.md` for that one dispatch. An independent `qa-verifier` checks the result as for any builder.
+
+## D-137 — Remove the reserved item `cost` field in Part B (Jeff, 2026-11-09)
+The recipe record holds the price (D-124), so the reserved `cost { ekwan, ase }` on an item definition is redundant. Jeff: remove it in Part B ("I prefer cleaner even if it edits another story shape"). Part B removes the field and its comment text in `data/balance.json` (`_definitions_comment`) and in `tests/fixtures/inventory_placeholders.json`, and fixes the tests that name it. ANSWERS #88 allows the removal with no bridge. Part B adds a note about the change to `docs/stories/v2-item-001/basis-for-001b-and-later.md`, the note for ITEM-001b (no Notion row exists for 001b; any Notion note needs Jeff's yes). This supersedes the "reserved field stays" line of D-124.
+
+## D-138 — A both-zero price fails the shipping test (Jeff, 2026-11-09)
+A recipe in shipping `data/balance.json` with Ekwan 0 and Ase 0 fails a data test. The test applies when real items and prices exist. The shipping `recipes` block is empty in Part B, so the test passes now. The test fixture may use zero.
+
+## D-139 — No gate field on a recipe in Part B (Jeff, 2026-11-09)
+The record has no Standing or Continuity gate. V2-ECONOMY-003 needs one and records it in its inputs table (written in the Part B handoff). Fields are additive, so adding it later is cheap. A note on the ECONOMY-003 Notion page needs Jeff's yes.
+
+## D-140 — Design-contract defaults accepted by the orchestrator (Jeff may change; 2026-11-09)
+From `partb-design-contract.md`: the key `ungraded` marks recipes for types whose definition grade is `""`; the validator accepts whole-number floats (`10.0`) and rejects `10.5`; a recipe grade key must be on the ladder, not equal to the definition grade; an upgrade lists its base item as an ordinary input; `short_items` is reserved for ECONOMY-003. The game-feel agent is skipped because the contract changes nothing the player feels. Gears Tactics is dropped as a reference (no purchase price confirmed). Whether a fixed price scales with the realm like income does (`realm_scale_step`) goes to `mid-game-designer` and then to Jeff.
+
+## D-141 — A recipe price is flat across realms (Jeff, 2026-11-09)
+A fixed recipe price does not scale with the realm (option A of `partb-price-proposal.md` section 4). Grades carry the climb. The record gets no scale field. Items become cheaper in paths of income as realms advance. ECONOMY-003 may revisit this with a real crafting screen.
+
+## D-142 — Placeholder prices: the mid values (Jeff, 2026-11-09)
+The test fixture `tests/fixtures/recipe_placeholders.json` uses the mid values of `partb-price-proposal.md` (Ekwan / Ase): weapon g1 make 7 / 25; weapon g2 make 14 / 45; weapon g2 upgrade 10 / 32; charm g1 make 3 / 45; consumable make 2 / 10; armor g1 make 8 / 25 (the weapon g1 row with about 20% more Ekwan). The low and high values serve edge tests. These values are fixture values; they never ship (D-131). The relic row is dropped (D-143).
+
+## D-143 — A relic cannot be made (Jeff, 2026-11-09)
+GDD 19.9: relics are "mostly found rather than mass-crafted"; GDD 19.6: relics appear "mainly in rarer catalyst-level work". The fixture has no relic recipe. The validator rejects a `make` or `upgrade` record whose output is a relic. A relic may still be an input (a catalyst). A later story may relax this rule with a design decision from Jeff. The check "upgrade needs a gear or relic input" in the contract stays.
+
+## D-144 — QA fixes for Part B step 3 (Jeff, 2026-11-09)
+After the independent QA of step 3 (`qa-verifier`), Jeff chose to fix all four groups:
+1. Docs and comments: F2 (`docs/integration-map.md:38` still describes a definition `cost`), F4 (stale `_recycle_yield_comment` in `data/balance.json`), F3 (the ITEM-001b note lists only one changed test file). `docs/stories/v2-item-001/handoff.md:89` stays as a closed-story record.
+2. Three missing tests: a float above 2^53 is refused; an upgrade with only a consumable input is refused; the `economy.pay` log line carries `reason_key`.
+3. Finding 7: `InventoryService._def_of` becomes a public `def_of`, with every caller updated.
+4. F1: a side that costs 0 is never short, even on a negative stored balance. F8 (changes D-140): the key `ungraded` is refused for an output type whose definition grade is not `""`. A refusal at lookup returns `unknown_recipe`, like a grade key that is not on the ladder.
+Not decided here and left as is: F6 (`get_recipes_cfg` stays as an unwired helper until ECONOMY-003) and F7 (ANSWERS #90 and the CLAUDE.md rule go in a separate docs commit).
+
+## D-145 — Step 5 QA fixes (Jeff, 2026-11-10)
+After the independent QA of the combined tree (opus `qa-verifier`, HEAD e7bbd3be), Jeff chose to fix three groups:
+1. F1 and F2: stale doc statements (`docs/integration-map.md`, `docs/MEMORY.md`, the ITEM-001b note) and story-id narrative in five production comments. The doc fixes are part of the docs wrap.
+2. F3, F4 and the missing test: make the config-copy test meaningful; test the console parser (word count, word order, the debug gate); test that the Sanctum snapshot shows the new balance after a pay (this also covers the both-zero save path).
+3. F6 and F7: `EconomyService.pay_cost` takes an optional `context` dictionary (`type_id`, `route`) and writes it as fields on the `economy.pay` line. D-132 now reads: one `economy.pay` line per payment, plus the lines the existing `spend_*` methods write (three lines in total for a two-currency payment). `pay_cost` takes a Variant for the cost, so a non-Dictionary returns `bad_cost`.
+Not changed, left as is: F5 (`ui/AppRoot.gd` size, it was over the aim before Part B).
+
+## D-146 — Notion note on ECONOMY-003; owners of follow-ups 65 to 68; follow-up 64 dropped (Jeff, 2026-11-10)
+Jeff said yes to the note on the V2-ECONOMY-003 Notion page (inputs from Part B: contract, gate field, flat price, relic rule, display notes). It was written on 2026-11-10 with no property or status change. Follow-ups 65 to 68 keep the owners chosen by the docs agent (ECONOMY-003, ITEM-005, ECONOMY-003, ITEM-002). Follow-up 64 (the size of `ui/AppRoot.gd`) is dropped: no owner and no story.
+
+## D-147 — An upgrade consumes the old piece and makes a new one (Jeff, 2026-11-10)
+When a player upgrades a piece of gear, the old piece leaves the inventory and a new piece of the higher grade arrives with a new id. An equipped piece must be unequipped first. The price record is unchanged: it already lists the base item as an ordinary input. ECONOMY-003 builds the consumption (D-139 handoff table). This answers the open question 3 of the Part B handoff.
+
+## D-148 — Test check kept; a free pay saves once; three commits (Jeff, 2026-11-10)
+1. The live-config check in `recipe_cost/console_never_touches_balance_json` stays. It guards a future change to `ConfigService.get_balance()`. The SHA-256 check stays too.
+2. A pay with a 0 and 0 price is a payment. It spends nothing and requests exactly one save.
+3. The remaining Part B work is committed in three commits: Step 5 code fixes; the docs wrap; the records and the process rule (`decisions.md`, `ANSWERS.md` #90, `CLAUDE.md`, the two agent files).

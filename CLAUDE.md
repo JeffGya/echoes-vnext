@@ -172,6 +172,19 @@ Never answer a relayed question on his behalf. Never drop one for looking minor.
 
 ---
 
+## Proposals go in the chat, in full (Jeff, 2026-11-09)
+
+- Show every proposal, option set, number table and design in the chat BEFORE you ask Jeff about it.
+  A summary or a file path is not enough. He decides only on what he has read.
+- Do not ask `AskUserQuestion` about content that sits only in a file.
+- Create no file unless Jeff asks or a project record needs it (`decisions.md`, handoff, `ANSWERS.md`).
+  Show the content in the chat first. Do not scatter new files.
+- Every subagent brief says: "Put the full proposal in your reply. A file is optional and secondary."
+  The main chat then shows Jeff the full proposal, not a summary.
+- Project-wide rule: `ANSWERS.md` #90.
+
+---
+
 ## Scope control
 
 Findings are not authorisation. If out-of-scope work looks necessary, useful or blocking, report it
