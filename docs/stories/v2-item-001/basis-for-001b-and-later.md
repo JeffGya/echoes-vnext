@@ -1495,7 +1495,7 @@ Not proposed (and why): a recovery path or a small return for a discard (D-02, D
 Part B removed the reserved `cost: { ekwan, ase }` field from the item definition shape (decision D-137 in `docs/stories/v2-economy-004/decisions.md`).
 
 - Reason: the price of making an item is a recipe record in `data.inventory.recipes` (D-124). A second price on the definition had no reader and could disagree with the recipe.
-- Changed: the `_definitions_comment` in `data/balance.json`, the fixture `tests/fixtures/inventory_placeholders.json`, and two tests in `tests/InventoryServiceTests.gd`. A comment-only change in `tests/EconomyTests.gd`. The two changed test files are `tests/InventoryServiceTests.gd` and `tests/EconomyTests.gd`.
+- Changed: the `_definitions_comment` in `data/balance.json`, the fixture `tests/fixtures/inventory_placeholders.json`, and the two tests in `tests/InventoryServiceTests.gd` that named `cost`.
 - Not changed: no save field and no code in `core/` or `ui/` read the field. No bridge is needed (ANSWERS #88).
 - Effect on this document: the lines above that name a `cost` on a definition ("Cost shape", "From config definitions") describe the old shape. Read the price from `RecipeCostService.cost_of`.
 - A relic has no recipe (D-143). A flat price for a route that is not crafting gets its own field when a story owns that route.

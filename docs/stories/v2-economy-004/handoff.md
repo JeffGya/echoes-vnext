@@ -156,3 +156,147 @@ Jeff plays these before the PR (D-96). Each item names its source.
 8. **Defeat loses all packs.** Check that losing every unsettled row on every defeat feels fair, and that the `packs_lost` line reads right. Source: D-115 item 1.
 9. **Standoff, then Sanctum.** From the second standoff the `To the Sanctum` button opens the return confirmation once; the escape check and the settle roll run there. Check that the flow is clear. Source: `phase7-s-build.md` action section.
 10. **Copy edits.** Jeff may edit any line of `phase7-copy-final.md`. Source: D-117.
+
+
+---
+
+## Part B (item costs) — handoff
+
+Part B is the item-cost half of the Notion row V2-ECONOMY-004 (D-122). It builds the price contract for crafting. It has no player-facing part (D-133). Nothing in play calls it yet. Decisions: D-122 to D-145 in `decisions.md`.
+
+### What was built
+
+| Piece | File | Decision |
+|---|---|---|
+| Recipe price records, empty in shipping | `data/balance.json` block `data.inventory.recipes` (with `_recipes_comment`) | D-124, D-131 |
+| Price lookup, block validation, afford check | `core/economy/RecipeCostService.gd` (`cost_of`, `validate`, `read_cost`, `afford`) | D-124, D-140, D-143 |
+| Pay an Ase and an Ekwan price together | `core/economy/EconomyService.gd` `pay_cost(cost, reason, logger, t, context = {})` | D-132, D-145 |
+| Config getter (no caller in play yet) | `core/config/ConfigService.gd` `get_recipes_cfg` | D-124, D-144 |
+| Public definition lookup (was `_def_of`) | `core/inventory/InventoryService.gd` `def_of` | D-144 |
+| Reserved item definition `cost` removed | `data/balance.json` (`_definitions_comment`), `tests/fixtures/inventory_placeholders.json`, `tests/InventoryServiceTests.gd` | D-137 |
+| Placeholder recipes, test fixture only | `tests/fixtures/recipe_placeholders.json` | D-131, D-142, D-143 |
+| Debug action `debug.recipe.run` | `core/runtime/controllers/DebugController.gd` `handle_recipe_run`; arm in `core/runtime/FlowRuntime.gd` | D-123, D-133 |
+| F1 console command `recipe` | `ui/AppRoot.gd` (`parse_recipe_command`, `_run_recipe_command`) | D-123 |
+| Tests | `tests/RecipeCostTests.gd` (suite `recipe_cost`), `tests/EconomyTests.gd` (spend characterization), `tests/FlowTransactionTests.gd` (guard count 83) | D-132, D-144, D-145 |
+
+No new save field. No RNG. The dispatch guard is 83 (`flow_transaction/dispatch_action_count_is_83`).
+
+### Final rules
+
+| Rule | Final form | Source |
+|---|---|---|
+| Record shape | `recipes[output type][grade key]["make" or "upgrade"] = { inputs: [ { type_id, count >= 1 } ], cost: { ekwan, ase } }` | D-124 |
+| Price | Flat across realms. No scale field. | D-141 |
+| Gate | None. No Standing or Continuity field. | D-139 |
+| Numbers | Whole numbers of 0 or more. `10.0` is accepted, `10.5` is refused. | D-140 |
+| Grade key | A grade on `data.inventory.grades`, or `ungraded`. | D-140 |
+| `ungraded` | Refused (`unknown_recipe`) for an output type whose definition grade is not `""`. The opposite is not checked. | D-144 |
+| Missing grade | `unknown_recipe`. Never free, never read from another grade. | D-124 |
+| Relic | A relic cannot be made or upgraded. A relic may be an input. | D-143 |
+| Upgrade | Needs a gear or relic input, listed as an ordinary input. | D-140, D-143 |
+| Inputs | Never a price. An item is not a currency. Pack rows keep 0 Ase and 0 Ekwan. | D-125 |
+| Hold, move, destroy | Free. Destroy returns nothing. | D-126 |
+| Pay | `pay_cost` checks both balances first, then spends both or nothing. A side that costs 0 is skipped and never short, even on a negative stored balance. | D-132, D-144 |
+| Pay log | A two-currency payment writes three lines: one from each `spend_*` and one `economy.pay`. `context` adds fields to the `economy.pay` line. | D-145 |
+| Not a Dictionary cost | `pay_cost` returns `bad_cost` and pays nothing. | D-145 |
+| Shipping data | `recipes` is empty. A both-zero recipe in shipping data fails `recipe_cost/shipping_recipes_are_valid`. A both-zero recipe is valid in core. | D-131, D-138 |
+| Reason keys | `ok`, `short_ase`, `short_ekwan`, `short_both`, `unknown_recipe`, `bad_cost`. `short_items` is reserved and not in code. | D-140 |
+
+### Commits
+
+| Commit | Step |
+|---|---|
+| `43038471` | Step 1: characterize `spend_ase`, `spend_ekwan` and the item `cost` |
+| `88a2a3ac` | Step 3: recipe price contract (backend) |
+| `e7bbd3be` | Step 4: debug console command for recipe prices |
+
+`e1450d3a` holds the Step 5 QA fixes (D-145). The docs wrap and the records (`decisions.md`, `ANSWERS.md` #90, `CLAUDE.md`, the two `partb-*` files) are committed after it, in two more commits (D-148). Nothing is pushed.
+
+### How to test (debug build, F1 console)
+
+| Step | Command | Expected |
+|---|---|---|
+| 1 | `ase add 100` then `ekwan add 50` | Balances 100 Ase, 50 Ekwan (add to the real balance; use a throwaway save) |
+| 2 | `recipe check ph_weapon_a g1` | `ok`; nothing changes (price 7 Ekwan, 25 Ase) |
+| 3 | `recipe pay ph_weapon_a g1` | `ok`; Ase 75, Ekwan 43 (if you started from 100 and 50) |
+| 4 | `recipe check ph_weapon_a g2 upgrade` | price 10 Ekwan, 32 Ase; `ok` or a `short_*` key, by balance |
+| 5 | `recipe check ph_consumable_a ungraded` | `ok` (2 Ekwan, 10 Ase) |
+| 6 | `recipe check ph_weapon_a ungraded` | `unknown_recipe` |
+| 7 | `recipe check ph_relic_a g2` | `unknown_recipe` (a relic cannot be made) |
+| 8 | `recipe` with a wrong word count or route | The usage line: `recipe check|pay <type_id> <grade|ungraded> [make|upgrade]` |
+
+The command is `recipe check|pay <type_id> <grade|ungraded> [make|upgrade]`. The route defaults to `make`. The command does not check that the Echo holds the input items; items are not consumed. The result key shows in the `debug.recipe.run` log line. A `pay` that is short changes no balance and requests no save. Jeff played the commands in the F1 console on 2026-11-10 (two sessions): `check` and `pay` for the weapon g1, charm g1 and consumable; `short_ase`, `short_ekwan` and `short_both` pays; an unknown recipe; the g1 upgrade; the relic; and a wrong word count. Each result matched. The step table above is the plan; his run used the balances he had at the time.
+
+Fixture prices (`tests/fixtures/recipe_placeholders.json`, D-142). They never ship.
+
+| Output | Grade key | Route | Ekwan | Ase |
+|---|---|---|---|---|
+| `ph_weapon_a` | `g1` | make | 7 | 25 |
+| `ph_weapon_a` | `g2` | make | 14 | 45 |
+| `ph_weapon_a` | `g2` | upgrade | 10 | 32 |
+| `ph_charm_a` | `g1` | make | 3 | 45 |
+| `ph_consumable_a` | `ungraded` | make | 2 | 10 |
+| `ph_armor_a` | `g1` | make | 8 | 25 |
+
+### Test counts
+
+| Run | Count | Source |
+|---|---|---|
+| Suite `recipe_cost` | 24 tests | counted from the `register_test` lines in `tests/RecipeCostTests.gd` |
+| Filtered `economy` | 13 | from the main-chat run (brief); not re-run here |
+| Filtered `inventory` | 149 | same |
+| Filtered `item_packs` | 30 | same |
+| Filtered `econ_char` | 105 | same |
+| Filtered `flow_transaction` | 9 | same |
+| Registered suites | 146 | `AGENTS.md` |
+
+The sharded full suite runs on CI (shard 13 holds `recipe_cost`).
+
+### What is NOT built
+
+| Item | Owner | Source |
+|---|---|---|
+| Crafting itself: held-item check, item consumption, the screen | V2-ECONOMY-003 | D-123, D-133 |
+| The item catalogue and real prices | V2-ITEM-002 | D-123 |
+| The grade ladder (`data.inventory.grades` is empty) | V2-ITEM-005 | D-123 |
+| Recycle and `recycle_yield_ekwan` | V2-ITEM-004 | D-126, D-134 |
+| Any player-facing part: price display, cannot-afford state and text, pay feedback | V2-ECONOMY-003 | D-133 |
+| Price scaling by realm | none; ECONOMY-003 may revisit | D-141 |
+| A gate on a recipe | V2-ECONOMY-003 | D-139 |
+
+### QA record
+
+| QA | Scope | Findings | Result |
+|---|---|---|---|
+| Step 3 (`qa-verifier`) | Commit `88a2a3ac` | F1 (a zero side was short on a negative balance), F2 (`integration-map.md` still described a definition `cost`), F3 (the ITEM-001b note named one test file), F4 (stale `_recycle_yield_comment`), F8 (`ungraded` accepted on a graded type), finding 7 (`_def_of` private), three missing tests | Jeff chose to fix all four groups (D-144). Fixed: docs and comments, the three tests, `def_of`, F1 and F8. Left as is: F6 (`get_recipes_cfg` unwired until ECONOMY-003) and F7 (ANSWERS #90 and the `CLAUDE.md` rule in a separate docs commit) |
+| Step 5 (opus `qa-verifier`) | Combined tree at `e7bbd3be` | F1 and F2 (stale doc statements; story-id narrative in five production comments), F3 and F4 and a missing test (config-copy test, console parser test, Sanctum snapshot after a pay), F6 and F7 (`pay_cost` log fields; non-Dictionary cost), F5 (`ui/AppRoot.gd` size) | Jeff chose to fix F1 to F4, F6, F7 and the missing tests (D-145). Left as is: F5 (the size of `ui/AppRoot.gd`); Jeff dropped follow-up 64 on 2026-11-10. The fixes are in commit `e1450d3a` |
+
+The finding numbers follow each QA report. They are not shared between the two reports.
+
+### Inputs for V2-ECONOMY-003 (crafting)
+
+| Input | Content | Source |
+|---|---|---|
+| Contract to read | `RecipeCostService.cost_of(inv_cfg, output_type, grade_key, route)` for the price and inputs. `RecipeCostService.afford(cost, ase, ekwan)` for the balance check. `EconomyService.pay_cost(cost, reason, logger, t, context)` to pay. Reason keys: `ok`, `short_ase`, `short_ekwan`, `short_both`, `unknown_recipe`, `bad_cost`. `ConfigService.get_recipes_cfg` reads the block. | `CONVENTIONS.md` "Recipe price records" |
+| Must add: held-item check | Part B never checks that the player holds the `inputs`. ECONOMY-003 checks them before it pays. | D-124 |
+| Must add: item consumption | Part B consumes no item. ECONOMY-003 removes the inputs and adds the output. The payment and the item change should happen in one dispatch, so a failure leaves both unchanged. | D-124, D-132 |
+| Must add: reason key `short_items` | Reserved in the key set. Not in code. ECONOMY-003 adds it to its own result. | D-140 |
+| Must add: the screen | Price display, cannot-afford state, pay feedback. Mockups from `ui-ux-designer`, `sr-game-artist` and `game-feel-developer` come before the build. | D-133 |
+| Must add: the text | The agent drafts the lines and marks them AGENT-WRITTEN; Jeff edits each one. Tone: `phase7-copy-final.md` and `docs/stories/v2-item-001/copy-approval-jeff.md`. Word rules: ANSWERS #86 and #89. An approved line carries the APPROVED marker and a fixture test. | D-128, D-133 |
+| Gate field | A recipe needs a Standing or Continuity gate. Part B has none. Fields are additive, so adding it is cheap. A note on the ECONOMY-003 Notion page needs Jeff's yes. | D-139 |
+| Flat price and its effect | A recipe price is flat across realms. Income grows with the realm, so an item becomes cheaper in paths of income as realms advance. Grades carry the climb. ECONOMY-003 may revisit this with a real crafting screen. A scale field would be one more field on the record. | D-141 |
+| Display notes (from other games) | 1. XCOM (2012) Engineering lists price, minimum staff and required components in stock on one row. 2. XCOM 2 shows each cost resource as its own icon and count. 3. Battle Brothers shows the Tool count on hover once the item is set for repair. 4. Show the input item next to the currency price, not inside it. 5. A recipe the player cannot afford stays visible; mark the short resource, not the whole row. | `partb-design-contract.md` section 1, "Notes for ECONOMY-003 (display)" |
+| Placeholder prices | The six fixture rows above (D-142). They are test values. They never ship: everything under `res://` ships, so no placeholder id may appear in `data/balance.json`. Real prices come with the real items (ITEM-002). | D-131, D-142 |
+| Relic rule | A relic cannot be made or upgraded; a relic may be an input. A later story may relax this with a design decision from Jeff. | D-143 |
+| Hold, move, destroy | Free. Destroy returns nothing. Recycle is ITEM-004. | D-126, D-134 |
+
+#### Open questions for Jeff (for ECONOMY-003)
+
+| # | Question | Why it is open | Source |
+|---|---|---|---|
+| 1 | Which Standing or Continuity gate does a recipe carry, and where does the record hold it? | Part B has no gate field. | D-139 |
+| 2 | Does a flat price stay, or does it scale with the realm? | Income scales; a flat price gets cheaper in play. | D-141 |
+| 3 | ANSWERED (Jeff, 2026-11-10, D-147): an upgrade consumes the old piece and makes a new one with a new id. An equipped piece must be unequipped first. | The price record lists the base item as an ordinary input. | D-147 |
+| 4 | Should a relic ever be craftable? | D-143 forbids it for now. | D-143 |
+| 5 | What do the real prices say, and does a both-zero price (a free make) ever ship? | The shipping data test fails a both-zero recipe. | D-138, D-127 |
+| 6 | ANSWERED (Jeff, 2026-11-10, D-146): the note was written on the ECONOMY-003 Notion page. | Done. | D-146 |
