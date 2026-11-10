@@ -33,6 +33,13 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("recipe_cost/negative_balance_zero_side_is_ok", Callable(RecipeCostTests, "_t_negative_zero_side"))
 	runner.register_test("recipe_cost/ungraded_key_needs_a_gradeless_type", Callable(RecipeCostTests, "_t_ungraded_key"))
 	runner.register_test("recipe_cost/item_rows_keep_no_currency", Callable(RecipeCostTests, "_t_item_rows"))
+	runner.register_test("recipe_cost/console_check_prices_and_changes_nothing", Callable(RecipeCostTests, "_t_run_check"))
+	runner.register_test("recipe_cost/console_pay_takes_the_price_and_saves_once", Callable(RecipeCostTests, "_t_run_pay"))
+	runner.register_test("recipe_cost/console_pay_short_changes_nothing", Callable(RecipeCostTests, "_t_run_pay_short"))
+	runner.register_test("recipe_cost/console_unknown_recipe_is_denied", Callable(RecipeCostTests, "_t_run_unknown"))
+	runner.register_test("recipe_cost/console_missing_fixture_is_denied", Callable(RecipeCostTests, "_t_run_no_fixture"))
+	runner.register_test("recipe_cost/console_never_touches_balance_json", Callable(RecipeCostTests, "_t_run_no_config_write"))
+	runner.register_test("recipe_cost/console_command_is_gated_and_routed_once", Callable(RecipeCostTests, "_t_run_gate"))
 
 
 # ---------------------------------------------------------------------------
@@ -400,4 +407,208 @@ static func _t_item_rows() -> Dictionary:
 	var rows := EarningsService.rows_of(stage)
 	if rows.size() != 1 or int(rows[0]["ase"]) != 0 or int(rows[0]["ekwan"]) != 0 or JSON.stringify(stage) != before:
 		m.append("the item row changed: %s" % JSON.stringify(stage))
+	return _result(m)
+
+
+# ---------------------------------------------------------------------------
+# debug.recipe.run (the F1 console commands `recipe check` and `recipe pay`)
+# ---------------------------------------------------------------------------
+
+const _RUN := "debug.recipe.run"
+
+
+## A booted Sanctum runtime with the balances set straight on the save.
+static func _run_env(tag: String, ase: int, ekwan: int) -> Dictionary:
+	var env := InventoryActionTests._env("recipe_" + tag, 3, 1)
+	var econ: Dictionary = InventoryActionTests._save(env)["economy"]
+	econ["ase"] = ase
+	econ["ekwan"] = ekwan
+	return env
+
+
+static func _run_bal(env: Dictionary) -> String:
+	var econ: Dictionary = InventoryActionTests._save(env)["economy"]
+	return "%d/%d" % [int(econ["ekwan"]), int(econ["ase"])]
+
+
+static func _run_action(op: String, type_id: String, grade: String, route: String = "make") -> Dictionary:
+	return { "type": _RUN, "payload": { "op": op, "type_id": type_id, "grade": grade, "route": route } }
+
+
+## The save flushes of one dispatch.
+static func _run_flushes(env: Dictionary, action: Dictionary) -> int:
+	return InventoryActionTests._dispatch(env, action)
+
+
+## The outcome of the handler, called on a controller built beside the runtime (it shares the save).
+static func _run_outcome(env: Dictionary, action: Dictionary) -> FlowActionOutcome:
+	var rt: FlowRuntime = env["rt"]
+	return DebugController.new(rt.flow_ctx, rt.config_service, env["logger"]).handle_recipe_run(action, 9)
+
+
+## The data of the last log line of this type, {} when none.
+static func _run_log(env: Dictionary, type: String) -> Dictionary:
+	var out: Dictionary = {}
+	for e in (env["logger"] as StructuredLogger).get_logs():
+		if str(e.get("type", "")) == type:
+			out = e.get("data", {})
+	return out
+
+
+static func _t_run_check() -> Dictionary:
+	var m: Array = []
+	var env := _run_env("check", 100, 50)
+	for p in _PRICES:
+		var flushes := _run_flushes(env, _run_action("check", p[0], p[1], p[2]))
+		var d := _run_log(env, _RUN)
+		if flushes != 0 or _run_bal(env) != "50/100":
+			m.append("%s %s: flushes %d, balance %s" % [p[0], p[1], flushes, _run_bal(env)])
+		if str(d.get("reason_key", "")) != "ok" or int(d["cost"]["ekwan"]) != p[3] or int(d["cost"]["ase"]) != p[4]:
+			m.append("%s %s %s: log %s" % [p[0], p[1], p[2], str(d)])
+		if int(d["before"]["ase"]) != 100 or int(d["before"]["ekwan"]) != 50:
+			m.append("%s: the log lacks the balances: %s" % [p[0], str(d)])
+	# A short check names the key and still changes nothing.
+	InventoryActionTests._save(env)["economy"]["ase"] = 10
+	_run_flushes(env, _run_action("check", "ph_weapon_a", "g1"))
+	if str(_run_log(env, _RUN).get("reason_key", "")) != "short_ase" or _run_bal(env) != "50/10":
+		m.append("short check: %s, balance %s" % [str(_run_log(env, _RUN)), _run_bal(env)])
+	if _run_outcome(env, _run_action("check", "ph_weapon_a", "g1")).error_code != "" or not _run_outcome(env, _run_action("check", "ph_weapon_a", "g1")).save_reasons.is_empty():
+		m.append("a check outcome carries an error or a save reason")
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+static func _t_run_pay() -> Dictionary:
+	var m: Array = []
+	var env := _run_env("pay", 100, 50)
+	var flushes := _run_flushes(env, _run_action("pay", "ph_weapon_a", "g1"))
+	var d := _run_log(env, _RUN)
+	if flushes != 1 or _run_bal(env) != "43/75":
+		m.append("pay: flushes %d, balance %s (expected 1, 43/75)" % [flushes, _run_bal(env)])
+	if str(d.get("reason_key", "")) != "ok" or d.get("paid", false) != true or int(d["after"]["ase"]) != 75 or int(d["after"]["ekwan"]) != 43:
+		m.append("pay log: %s" % str(d))
+	if str(_run_log(env, "economy.pay").get("reason", "")) != "craft.make.ph_weapon_a":
+		m.append("pay reason: %s" % str(_run_log(env, "economy.pay")))
+	# The upgrade route and a gradeless recipe.
+	_run_flushes(env, _run_action("pay", "ph_weapon_a", "g2", "upgrade"))
+	if _run_bal(env) != "33/43" or str(_run_log(env, "economy.pay").get("reason", "")) != "craft.upgrade.ph_weapon_a":
+		m.append("upgrade pay: balance %s, log %s" % [_run_bal(env), str(_run_log(env, "economy.pay"))])
+	_run_flushes(env, _run_action("pay", "ph_consumable_a", "ungraded"))
+	if _run_bal(env) != "31/33":
+		m.append("ungraded pay: balance %s" % _run_bal(env))
+	# Exact balance pays to zero.
+	InventoryActionTests._save(env)["economy"]["ase"] = 45
+	InventoryActionTests._save(env)["economy"]["ekwan"] = 3
+	if _run_flushes(env, _run_action("pay", "ph_charm_a", "g1")) != 1 or _run_bal(env) != "0/0":
+		m.append("exact pay: balance %s" % _run_bal(env))
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+static func _t_run_pay_short() -> Dictionary:
+	var m: Array = []
+	var cases: Array = [["ase short", 24, 50, "short_ase"], ["ekwan short", 100, 6, "short_ekwan"], ["both short", 24, 6, "short_both"]]
+	for c in cases:
+		var env := _run_env("short", c[1], c[2])
+		var action := _run_action("pay", "ph_weapon_a", "g1")
+		var flushes := _run_flushes(env, action)
+		var bal := "%d/%d" % [c[2], c[1]]
+		if flushes != 0 or _run_bal(env) != bal:
+			m.append("%s: flushes %d, balance %s (expected %s)" % [c[0], flushes, _run_bal(env), bal])
+		var d := _run_log(env, _RUN)
+		if str(d.get("reason_key", "")) != c[3] or d.get("paid", true) != false:
+			m.append("%s: log %s" % [c[0], str(d)])
+		var outcome := _run_outcome(env, action)
+		if outcome.error_code != c[3] or not outcome.save_reasons.is_empty():
+			m.append("%s: outcome %s / %s" % [c[0], outcome.error_code, str(outcome.save_reasons)])
+		InventoryActionTests._done(env)
+	return _result(m)
+
+
+static func _t_run_unknown() -> Dictionary:
+	var m: Array = []
+	var env := _run_env("unknown", 100, 50)
+	var cases: Array = [
+		["no such type", _run_action("pay", "nope", "g1")],
+		["grade not on the ladder", _run_action("pay", "ph_weapon_a", "g9")],
+		["no upgrade record", _run_action("pay", "ph_weapon_a", "g1", "upgrade")],
+		["a relic", _run_action("pay", "ph_relic_a", "g2")],
+		["ungraded on a graded type", _run_action("pay", "ph_weapon_a", "ungraded")],
+	]
+	for c in cases:
+		var flushes := _run_flushes(env, c[1])
+		if flushes != 0 or _run_bal(env) != "50/100":
+			m.append("%s: flushes %d, balance %s" % [c[0], flushes, _run_bal(env)])
+		var outcome := _run_outcome(env, c[1])
+		if outcome.error_code != "unknown_recipe" or not outcome.save_reasons.is_empty():
+			m.append("%s: outcome %s / %s" % [c[0], outcome.error_code, str(outcome.save_reasons)])
+		if str(_run_log(env, _RUN).get("reason_key", "")) != "unknown_recipe":
+			m.append("%s: log %s" % [c[0], str(_run_log(env, _RUN))])
+	# A bad op is denied before any price work.
+	if _run_outcome(env, _run_action("bogus", "ph_weapon_a", "g1")).error_code != "bad_op" or _run_bal(env) != "50/100":
+		m.append("a bad op was not denied")
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+static func _t_run_no_fixture() -> Dictionary:
+	var m: Array = []
+	var env := _run_env("nofixture", 100, 50)
+	var rt: FlowRuntime = env["rt"]
+	var before := JSON.stringify(InventoryActionTests._save(env), "", true)
+	for seam in ["recipe_fixture_path", "produce_fixture_path"]:
+		var dbg := DebugController.new(rt.flow_ctx, rt.config_service, env["logger"])
+		dbg.set(seam, "res://tests/fixtures/does_not_exist.json")
+		(env["logger"] as StructuredLogger).clear()
+		var outcome := dbg.handle_recipe_run(_run_action("pay", "ph_weapon_a", "g1"), 9)
+		if outcome.error_code != "fixture_missing" or not outcome.save_reasons.is_empty():
+			m.append("%s: outcome %s / %s" % [seam, outcome.error_code, str(outcome.save_reasons)])
+		if InventoryActionTests._log_count(env["logger"], "debug.recipe.run.denied") != 1:
+			m.append("%s: no denied log" % seam)
+	if JSON.stringify(InventoryActionTests._save(env), "", true) != before:
+		m.append("the save changed")
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+## A pay leaves data/balance.json and the cfg of the runtime as they were: the overlay lives in a copy.
+static func _t_run_no_config_write() -> Dictionary:
+	var m: Array = []
+	var sha_before := FileAccess.get_sha256("res://data/balance.json")
+	var env := _run_env("nowrite", 100, 50)
+	var rt: FlowRuntime = env["rt"]
+	var cfg_before := JSON.stringify(ConfigService.get_inventory_cfg(rt.config_service), "", true)
+	_run_flushes(env, _run_action("pay", "ph_weapon_a", "g1"))
+	if _run_bal(env) != "43/75":
+		m.append("setup: the pay did not run, balance %s" % _run_bal(env))
+	if FileAccess.get_sha256("res://data/balance.json") != sha_before:
+		m.append("data/balance.json changed")
+	if JSON.stringify(ConfigService.get_inventory_cfg(rt.config_service), "", true) != cfg_before:
+		m.append("the cfg of the runtime changed")
+	var shipping := ConfigService.get_recipes_cfg(InventorySaveTests._config())
+	if not shipping.is_empty():
+		m.append("the shipping recipes block is not empty: %s" % str(shipping))
+	InventoryActionTests._done(env)
+	return _result(m)
+
+
+## The console command checks the debug build before it dispatches; core/ has no build check; FlowRuntime
+## routes the action once, to the debug controller.
+static func _t_run_gate() -> Dictionary:
+	var m: Array = []
+	var src := FileAccess.get_file_as_string("res://ui/AppRoot.gd")
+	var start := src.find("func _run_recipe_command(")
+	if start < 0:
+		return { "ok": false, "error": "_run_recipe_command not found" }
+	var end := src.find("\nfunc ", start + 10)
+	var body := src.substr(start, end - start if end > 0 else src.length() - start)
+	var gate := body.find("OS.is_debug_build()")
+	var dispatch := body.find("runtime.dispatch")
+	if gate < 0 or dispatch < 0 or gate > dispatch:
+		m.append("the OS.is_debug_build() check must come before runtime.dispatch (gate %d, dispatch %d)" % [gate, dispatch])
+	if FileAccess.get_file_as_string("res://core/runtime/controllers/DebugController.gd").contains("is_debug_build"):
+		m.append("the core action must have no build gate")
+	var rt_text := FileAccess.get_file_as_string("res://core/runtime/FlowRuntime.gd")
+	if rt_text.count("handle_recipe_run") != 1 or rt_text.count("\"%s\":" % _RUN) != 1:
+		m.append("FlowRuntime does not route the action exactly once")
 	return _result(m)

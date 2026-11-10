@@ -282,6 +282,13 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# recipe price check and payment (V2-ECONOMY-004 Part B / debug only)
+	# -------------------------
+	if head == "recipe":
+		_run_recipe_command(parts)
+		return
+
+	# -------------------------
 	# summon shortcut (SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "summon":
@@ -380,7 +387,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show | recipe check|pay <type_id> <grade|ungraded> [make|upgrade]")
 	
 	_flush_logs_to_console()
 	
@@ -1121,6 +1128,41 @@ func _run_inventory_command(parts: PackedStringArray) -> void:
 	var snap := runtime.dispatch({ "type": "debug.inventory.produce", "payload": { "mode": mode } })
 	_render_snapshot(snap)
 	_debug_print("inventory produce (%s): see the log lines for what was added or refused." % mode)
+	_flush_logs_to_console()
+
+
+# V2-ECONOMY-004 Part B: checks or pays a placeholder recipe price (debug builds only).
+# Usage: recipe check|pay <type_id> <grade|ungraded> [make|upgrade]
+func _run_recipe_command(parts: PackedStringArray) -> void:
+	if not OS.is_debug_build():
+		_debug_print("recipe: this command works in debug builds only.")
+		_flush_logs_to_console()
+		return
+	var op := parts[1].to_lower() if parts.size() > 1 else ""
+	var route := parts[4].to_lower() if parts.size() > 4 else "make"
+	if (op != "check" and op != "pay") or parts.size() < 4 or (route != "make" and route != "upgrade"):
+		_debug_print("Usage: recipe check|pay <type_id> <grade|ungraded> [make|upgrade]")
+		_flush_logs_to_console()
+		return
+	var start_idx := _last_log_index
+	var snap := runtime.dispatch({ "type": "debug.recipe.run",
+		"payload": { "op": op, "type_id": parts[2], "grade": parts[3], "route": route } })
+	_render_snapshot(snap)
+	var logs := logger.get_logs()
+	for i in range(start_idx, logs.size()):
+		var e: Dictionary = logs[i]
+		var d: Dictionary = e.get("data", {}) if e.get("data", {}) is Dictionary else {}
+		if str(e.get("type", "")) == "debug.recipe.run.denied":
+			_debug_print("recipe %s denied: %s" % [op, str(d.get("reason_key", ""))])
+		elif str(e.get("type", "")) == "debug.recipe.run":
+			var cost: Dictionary = d.get("cost", {})
+			var line := "recipe %s %s %s %s: key=%s | price Ekwan %s, Ase %s | before Ekwan %d, Ase %d" % [
+				op, parts[2], parts[3], route, str(d.get("reason_key", "")),
+				str(cost.get("ekwan", "-")), str(cost.get("ase", "-")),
+				int(d["before"]["ekwan"]), int(d["before"]["ase"])]
+			if op == "pay":
+				line += " | after Ekwan %d, Ase %d | paid=%s" % [int(d["after"]["ekwan"]), int(d["after"]["ase"]), str(d.get("paid", false))]
+			_debug_print(line)
 	_flush_logs_to_console()
 
 
