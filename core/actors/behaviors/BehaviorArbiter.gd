@@ -1960,12 +1960,7 @@ func _state_ends(actor: Dictionary, composure: float) -> Array:
 			_afraid_exponent_reported = true
 			push_error("BehaviorArbiter: actor.afraid_curve_exponent is invalid; the status adds no points")
 		return [0.0, 0.0]
-	var lean: float = EmotionStatusLean.lean(EmotionStatusLean.status_of(actor), table)
-	var dampen: float = composure_dampen(_cfg)
-	return [
-		EmotionStatusLean.curved_afraid(lean, float(_cfg_get("afraid_curve_exponent")), composure, dampen),
-		EmotionStatusLean.bold(EmotionStatusLean.soften(lean, composure, dampen)),
-	]
+	return EmotionStatusLean.state_ends(actor, composure, table, float(_cfg_get("afraid_curve_exponent")), composure_dampen(_cfg))
 
 
 ## Maps directive semantic intent_weights keys → action bonus.

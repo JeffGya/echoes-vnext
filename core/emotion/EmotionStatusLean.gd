@@ -65,6 +65,18 @@ static func afraid_of(actor: Dictionary, table: Dictionary, composure: float, da
 	return afraid(soften(lean(status_of(actor), table), composure, dampen_scale))
 
 
+## [afraid, bold] of the actor's status, each softened once by composure. Afraid is curved by
+## `exponent`; bold stays linear. [0, 0] when `table` is empty. The caller validates `exponent`.
+static func state_ends(actor: Dictionary, composure: float, table: Dictionary, exponent: float, dampen_scale: float) -> Array:
+	if table.is_empty():
+		return [0.0, 0.0]
+	var lean_value: float = lean(status_of(actor), table)
+	return [
+		curved_afraid(lean_value, exponent, composure, dampen_scale),
+		bold(soften(lean_value, composure, dampen_scale)),
+	]
+
+
 ## True when the table has all ten statuses, each a finite number in [-1, 1], never falling
 ## along EmotionService.STATUS_LADDER, with the two calm statuses at exactly 0.
 static func is_valid(table: Variant) -> bool:
