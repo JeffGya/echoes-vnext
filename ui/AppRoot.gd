@@ -662,6 +662,7 @@ func _run_tests(parts: Array) -> void:
 	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence
 	BehaviorCharacterizationTests.register(runner)  # V2-COMBAT-003 Phase 1: characterization of movement-starvation, actor.idle-while-moved, enemy refusal, spatial-term zeroing, purify delegation, silent legacy fallback, health_ratio divergence
 	PendingResultTests.register(runner)  # V2-INFRA-003 Phase 8B: the durable run result — four outcomes, survives a quit (real reboot off disk), routing + one-shot consumption
+	PickupCharacterizationTests.register(runner)  # V2-ITEM-001b step C0: _state_ends, read_echo, the seam, a won fight, discard clear sites, pending-result consume
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)
