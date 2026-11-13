@@ -1137,7 +1137,7 @@
 				"9": "whole"
 			},
 			"calling_behavior": {
-				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. afraid_signature (PROPOSED DEFAULT): points added to an action at full afraid, scaled by the afraid end of the status lean. afraid_points_override (aduro, PROPOSED DEFAULT): replaces the afraid end of state_action_points for the actions it names, scaled the same way. idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo). absolute_fear_offset (V2-PROG-012 Phase 7, PROPOSED DEFAULT — awaiting playtest ratification): delta applied to the band baseline in refusal_thresholds_by_band (threshold = clamp(band_base + offset, 0, 100)), replacing the old flat absolute_fear_threshold override so band and calling both matter — see ActorStateMachine.gd's Absolute Fear Rule comment. Each offset is the calling's pre-Phase-7 flat value expressed as a delta from the grounded baseline of 80, so grounded-band thresholds are unchanged by this migration (aduro 75, sum_okwanfo 70, okofor 80, onyamesu 85, okomfo 85, kra_soro 80 → offsets -5, -10, 0, +5, +5, 0); nascent/forming/whole now diverge by calling for the first time. The legacy flat absolute_fear_threshold key is REMOVED outright (not kept as a fallback) — see AGENTS.md's additive-schema exception and ActorStateMachine.gd's Absolute Fear Rule comment.",
+				"_comment": "Per-calling combat personality. retreat_threshold: HP ratio below which retreat is considered (null = never retreat). press_advantage: melee bonus when target hp < press_hp_threshold. directive_mul: multiplier on directive bonuses for this calling. leadership_radius: tile radius for Whole-band leadership trait effects. afraid_signature (PROPOSED DEFAULT): points added to an action at full afraid, scaled by the afraid end of the status lean. afraid_pick_signature (V2-ITEM-001b D-12, PROPOSED DEFAULT): points added to a find of that kind in the pickup pick at full afraid, scaled by the afraid end; kinds are gear, relic, consumable, material; sum_okwanfo has none. afraid_points_override (aduro, PROPOSED DEFAULT): replaces the afraid end of state_action_points for the actions it names, scaled the same way. idle_fear_aura: fear reduction applied to nearby allies when actor.idle wins (okomfo). absolute_fear_offset (V2-PROG-012 Phase 7, PROPOSED DEFAULT — awaiting playtest ratification): delta applied to the band baseline in refusal_thresholds_by_band (threshold = clamp(band_base + offset, 0, 100)), replacing the old flat absolute_fear_threshold override so band and calling both matter — see ActorStateMachine.gd's Absolute Fear Rule comment. Each offset is the calling's pre-Phase-7 flat value expressed as a delta from the grounded baseline of 80, so grounded-band thresholds are unchanged by this migration (aduro 75, sum_okwanfo 70, okofor 80, onyamesu 85, okomfo 85, kra_soro 80 → offsets -5, -10, 0, +5, +5, 0); nascent/forming/whole now diverge by calling for the first time. The legacy flat absolute_fear_threshold key is REMOVED outright (not kept as a fallback) — see AGENTS.md's additive-schema exception and ActorStateMachine.gd's Absolute Fear Rule comment.",
 				"aduro": {
 					"retreat_threshold": 0.3,
 					"press_advantage": true,
@@ -1147,7 +1147,8 @@
 					"afraid_points_override": {
 						"melee_attack": 8.0,
 						"actor.guard": -5.0
-					}
+					},
+					"afraid_pick_signature": { "gear": 6.0, "consumable": -4.0 }
 				},
 				"sum_okwanfo": {
 					"retreat_threshold": 0.35,
@@ -1162,7 +1163,8 @@
 					"directive_mul": 1.0,
 					"leadership_radius": 4.0,
 					"absolute_fear_offset": 0,
-					"afraid_signature": { "protect_ally": 10.0 }
+					"afraid_signature": { "protect_ally": 10.0 },
+					"afraid_pick_signature": { "consumable": 8.0, "gear": 4.0 }
 				},
 				"onyamesu": {
 					"retreat_threshold": 0.45,
@@ -1170,7 +1172,8 @@
 					"directive_mul": 1.2,
 					"leadership_radius": 4.0,
 					"absolute_fear_offset": 5,
-					"afraid_signature": { "actor.move": -15.0 }
+					"afraid_signature": { "actor.move": -15.0 },
+					"afraid_pick_signature": { "relic": -8.0 }
 				},
 				"okomfo": {
 					"retreat_threshold": 0.4,
@@ -1179,7 +1182,8 @@
 					"leadership_radius": 5.0,
 					"idle_fear_aura": 3.0,
 					"absolute_fear_offset": 5,
-					"afraid_signature": { "actor.idle": 15.0 }
+					"afraid_signature": { "actor.idle": 15.0 },
+					"afraid_pick_signature": { "relic": 8.0 }
 				},
 				"kra_soro": {
 					"retreat_threshold": 0.35,
@@ -1187,7 +1191,8 @@
 					"directive_mul": 1.3,
 					"leadership_radius": 4.0,
 					"absolute_fear_offset": 0,
-					"afraid_signature": { "actor.move": 12.0, "actor.idle": -8.0 }
+					"afraid_signature": { "actor.move": 12.0, "actor.idle": -8.0 },
+					"afraid_pick_signature": { "consumable": 6.0, "material": 4.0 }
 				},
 				"uncalled": {
 					"retreat_threshold": 0.3,
@@ -3764,6 +3769,71 @@
 				"max_pct": 98,
 				"first_find_floor_pct": 60,
 				"first_find_floor_rank": "C"
+			},
+			"_pick_comment": "V2-ITEM-001b D-06, D-12, D-39: the pick rule of the pickup event. All values are PROPOSED DEFAULTS (D-09, D-63): tune after probe P2. Appeal = identity + sense + state. identity = calling_pick[calling][kind] + sum(vector score x vector_pick_muls) x (1 + Judgment x maturity_expression.identity_weight_scale.vector) + sum(trait x trait_pick_muls) x (1 + Judgment x identity_weight_scale.trait) + sum(stat x stat_pick_muls) + archetype_pick[archetype_birth][kind]. sense = worth x worth_weight x (sense_base + (1 - sense_base) x Judgment); worth = kind_weight[kind] + grade_step x grade index + quantity_gain x (min(quantity, quantity_cap) - 1). state = afraid x afraid_pick[kind] + bold x bold_pick[kind] + afraid x afraid_pick_signature[calling][kind] (maturity_expression.calling_behavior). afraid and bold are the curved, composure-softened ends from EmotionStatusLean.state_ends. A chooser with afraid at or above freeze_at takes nothing. Columns are gear, relic, consumable, material. Every row of the tables below sums to 0 over the four kinds, so no Calling, archetype or trait is greedy for all kinds. ConfigValidator.validate_pick checks the shape; the game does not run it at load.",
+			"pick": {
+				"_calling_pick_comment": "Points by Calling id (6 rows, not by family), gear, relic, consumable, material.",
+				"calling_pick": {
+					"okofor": { "gear": 6, "relic": -2, "consumable": 4, "material": -8 },
+					"onyamesu": { "gear": -4, "relic": 0, "consumable": 8, "material": -4 },
+					"aduro": { "gear": 8, "relic": -4, "consumable": -2, "material": -2 },
+					"sum_okwanfo": { "gear": -2, "relic": 6, "consumable": -2, "material": -2 },
+					"okomfo": { "gear": -6, "relic": 8, "consumable": 2, "material": -4 },
+					"kra_soro": { "gear": 2, "relic": -6, "consumable": 4, "material": 0 }
+				},
+				"_archetype_pick_comment": "Points by archetype_birth (9 rows).",
+				"archetype_pick": {
+					"valiant": { "gear": 6, "relic": -2, "consumable": -2, "material": -2 },
+					"proud": { "gear": 2, "relic": 6, "consumable": -4, "material": -4 },
+					"ambitious": { "gear": 4, "relic": 2, "consumable": -2, "material": -4 },
+					"canny": { "gear": -2, "relic": -4, "consumable": 2, "material": 4 },
+					"loyal": { "gear": 2, "relic": -2, "consumable": 4, "material": -4 },
+					"stoic": { "gear": 2, "relic": -4, "consumable": 0, "material": 2 },
+					"devout": { "gear": -2, "relic": 6, "consumable": 0, "material": -4 },
+					"empathic": { "gear": -4, "relic": 0, "consumable": 6, "material": -2 },
+					"reflective": { "gear": -4, "relic": 4, "consumable": -2, "material": 2 }
+				},
+				"_vector_pick_muls_comment": "Points per vector score point (10 vectors). Scaled by Judgment through identity_weight_scale.vector.",
+				"vector_pick_muls": {
+					"vanguard": { "gear": 0.09, "relic": -0.03, "consumable": 0, "material": -0.06 },
+					"protector": { "gear": 0.09, "relic": -0.03, "consumable": 0.03, "material": -0.09 },
+					"seeker": { "gear": -0.06, "relic": 0.09, "consumable": 0, "material": -0.03 },
+					"pillar": { "gear": 0.03, "relic": 0, "consumable": 0.06, "material": -0.09 },
+					"strategist": { "gear": 0, "relic": 0.06, "consumable": -0.06, "material": 0 },
+					"skeptic": { "gear": 0, "relic": -0.09, "consumable": 0.03, "material": 0.06 },
+					"devoted": { "gear": -0.03, "relic": 0.09, "consumable": 0, "material": -0.06 },
+					"opportunist": { "gear": 0.03, "relic": 0, "consumable": -0.09, "material": 0.06 },
+					"mediator": { "gear": -0.06, "relic": 0, "consumable": 0.06, "material": 0 },
+					"nurturer": { "gear": -0.09, "relic": -0.03, "consumable": 0.09, "material": 0.03 }
+				},
+				"_trait_pick_muls_comment": "Points per trait point. Scaled by Judgment through identity_weight_scale.trait.",
+				"trait_pick_muls": {
+					"courage": { "gear": 0.2, "relic": -0.2, "consumable": 0, "material": 0 },
+					"wisdom": { "gear": -0.1, "relic": 0.1, "consumable": -0.1, "material": 0.1 },
+					"faith": { "gear": -0.1, "relic": 0.1, "consumable": 0.1, "material": -0.1 }
+				},
+				"_stat_pick_muls_comment": "Points per stat point (six stats, no speed). Not scaled by Judgment.",
+				"stat_pick_muls": {
+					"max_hp": { "gear": 0.025, "relic": 0, "consumable": -0.025, "material": 0 },
+					"atk": { "gear": 0.07, "relic": -0.07, "consumable": 0, "material": 0 },
+					"def": { "gear": 0.15, "relic": 0, "consumable": 0, "material": -0.15 },
+					"agi": { "gear": -0.12, "relic": 0, "consumable": 0.12, "material": 0 },
+					"int": { "gear": -0.07, "relic": 0.07, "consumable": 0, "material": 0 },
+					"cha": { "gear": 0, "relic": 0, "consumable": 0.12, "material": -0.12 }
+				},
+				"_state_comment": "Points at full afraid or full bold (1.0), by kind. state_abs_limit is the largest allowed size of one state value or signature value.",
+				"afraid_pick": { "gear": 4, "relic": -8, "consumable": 16, "material": -12 },
+				"bold_pick": { "gear": 6, "relic": 10, "consumable": -8, "material": -8 },
+				"state_abs_limit": 30,
+				"_worth_comment": "Worth of a find: kind_weight + grade_step per grade index (an ungraded find is 0) + quantity_gain per extra unit, counting at most quantity_cap units. worth_weight scales worth into points. sense_base is the share of sense a chooser with Judgment 0 keeps.",
+				"kind_weight": { "gear": 3, "relic": 4, "consumable": 2, "material": 1 },
+				"grade_step": 1.5,
+				"quantity_gain": 0.5,
+				"quantity_cap": 3,
+				"worth_weight": 6,
+				"sense_base": 0.3,
+				"_freeze_at_comment": "A chooser whose curved, composure-softened afraid is at or above this takes nothing (D-39, D-12 assumption E). Allowed above 0 up to 1.",
+				"freeze_at": 0.5
 			},
 			"_kinds_enabled_comment": "Kinds that intake accepts (D-06). A kind set to false is refused with reason kind_disabled. A kind with no key is unknown_kind. Same pattern as data.summoning.grade_enabled.",
 			"kinds_enabled": { "gear": true, "relic": true, "consumable": true, "material": true },
