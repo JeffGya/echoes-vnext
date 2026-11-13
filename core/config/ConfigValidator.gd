@@ -72,3 +72,71 @@ static func validate_actors(root: Dictionary, logger: StructuredLogger = null, t
 
 static func validate_realms(root: Dictionary, logger: StructuredLogger = null, t: int = -1) -> bool:
 	return validate_root(root, 1, "realms", logger, t)
+
+# data.inventory finds keys (FindsRules). Returns one problem string per broken rule; [] = valid.
+# Each problem is also logged through _fail under context "balance.inventory".
+static func validate_finds(inv_cfg: Dictionary, logger: StructuredLogger = null, t: int = -1) -> Array:
+	var out: Array = []
+	var bands_v: Variant = inv_cfg.get("finds_cap_by_realm_scale", null)
+	var max_cap := 0
+	if not (bands_v is Array) or (bands_v as Array).is_empty():
+		out.append("finds_cap_by_realm_scale is missing or empty")
+	else:
+		var prev_scale := -INF
+		var prev_cap := 0
+		for band in bands_v:
+			if not (band is Dictionary) or not _is_num(band.get("scale")) or not _is_whole(band.get("cap")):
+				out.append("finds_cap_by_realm_scale: a band is not { scale: number, cap: whole number }")
+				continue
+			var scale := float(band["scale"])
+			var cap := int(band["cap"])
+			if scale <= prev_scale:
+				out.append("finds_cap_by_realm_scale: scales are not ascending at %s" % str(scale))
+			if cap < 1 or cap < prev_cap:
+				out.append("finds_cap_by_realm_scale: cap %d at scale %s is below 1 or below the band before" % [cap, str(scale)])
+			prev_scale = scale
+			prev_cap = cap
+			max_cap = maxi(max_cap, cap)
+	var chance_v: Variant = inv_cfg.get("finds_chance", null)
+	if not (chance_v is Dictionary):
+		out.append("finds_chance is missing or not a Dictionary")
+	else:
+		var chance: Dictionary = chance_v
+		var base_v: Variant = chance.get("base_by_slot_pct", null)
+		var base: Array = base_v if base_v is Array else []
+		if base.size() < maxi(max_cap, 1):
+			out.append("finds_chance.base_by_slot_pct has %d slots; the largest cap needs %d" % [base.size(), max_cap])
+		var prev_base := 101
+		for v in base:
+			if not _is_whole(v) or int(v) < 0 or int(v) > 100 or int(v) > prev_base:
+				out.append("finds_chance.base_by_slot_pct: %s is not a whole 0..100 at or below the slot before" % str(v))
+				break
+			prev_base = int(v)
+		var mods_v: Variant = chance.get("rank_modifier_pct", null)
+		var mods: Dictionary = mods_v if mods_v is Dictionary else {}
+		if mods.is_empty():
+			out.append("finds_chance.rank_modifier_pct is missing or empty")
+		for rank in mods.keys():
+			if not _is_whole(mods[rank]) or absi(int(mods[rank])) > 100:
+				out.append("finds_chance.rank_modifier_pct.%s is not a whole -100..100" % str(rank))
+		var max_v: Variant = chance.get("max_pct", null)
+		if not _is_whole(max_v) or int(max_v) < 1 or int(max_v) > 100:
+			out.append("finds_chance.max_pct is not a whole 1..100")
+		var floor_v: Variant = chance.get("first_find_floor_pct", null)
+		var floor_rank := str(chance.get("first_find_floor_rank", ""))
+		if not _is_whole(floor_v) or not mods.has(floor_rank) or not _is_whole(mods[floor_rank]) \
+				or base.is_empty() or not _is_whole(base[0]) or not _is_whole(max_v):
+			out.append("finds_chance: first_find_floor_pct or first_find_floor_rank is missing or unusable")
+		elif clampi(int(base[0]) + int(mods[floor_rank]), 0, int(max_v)) < int(floor_v):
+			out.append("finds_chance: first find at rank %s is %d%%, below the floor %d%%" % [
+				floor_rank, clampi(int(base[0]) + int(mods[floor_rank]), 0, int(max_v)), int(floor_v)])
+	for p in out:
+		_fail(logger, t, "balance.inventory", p)
+	return out
+
+static func _is_num(v: Variant) -> bool:
+	return typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT
+
+# JSON gives every number as a float: 60.0 is whole, 60.5 is not.
+static func _is_whole(v: Variant) -> bool:
+	return _is_num(v) and float(v) == float(int(v))

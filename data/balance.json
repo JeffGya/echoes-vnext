@@ -3747,6 +3747,22 @@
 			"warn_pack_free_at": 1,
 			"_mark_count_comment": "How many different marks the UI shows to tell twin pieces apart. A piece row carries mark_index = (number part of its id) modulo mark_count. Below 1 or missing reads as 6.",
 			"mark_count": 6,
+			"_finds_cap_comment": "V2-ITEM-001b D-46: cap on finds offered in one pickup event, by realm scale (RewardCalc.realm_scale). Ordered bands, ascending scale. The cap of a realm scale is the cap of the highest band whose scale is at or below it (FindsRules.cap_for_scale). 1.0 (realm.01, prologue) = 2 and 1.25 (realm.02) = 3 are approved. The bands from 1.75 up are placeholders for realms that do not exist yet.",
+			"finds_cap_by_realm_scale": [
+				{ "scale": 1.0, "cap": 2 },
+				{ "scale": 1.25, "cap": 3 },
+				{ "scale": 1.75, "cap": 4 },
+				{ "scale": 2.5, "cap": 5 },
+				{ "scale": 3.5, "cap": 6 }
+			],
+			"_finds_chance_comment": "V2-ITEM-001b D-48 to D-50: each find slot up to the cap rolls its own chance, p = clamp(base_by_slot_pct[slot] + rank_modifier_pct[rank], 0, max_pct), integer percent. Slots are independent; the count is the number of hits. A rank with no modifier key (F, a loss) has no roll. PROPOSED DEFAULTS: tune after the probe. first_find_floor_pct: ConfigValidator.validate_finds reports a config where slot 0 at first_find_floor_rank (the lowest win rank) is below it. The test suite finds_rules runs that check; the game does not run it at load.",
+			"finds_chance": {
+				"base_by_slot_pct": [85, 60, 40, 25, 15, 8],
+				"rank_modifier_pct": { "D": -10, "C": 0, "B": 5, "A": 10, "S": 15 },
+				"max_pct": 98,
+				"first_find_floor_pct": 60,
+				"first_find_floor_rank": "C"
+			},
 			"_kinds_enabled_comment": "Kinds that intake accepts (D-06). A kind set to false is refused with reason kind_disabled. A kind with no key is unknown_kind. Same pattern as data.summoning.grade_enabled.",
 			"kinds_enabled": { "gear": true, "relic": true, "consumable": true, "material": true },
 			"_grades_comment": "Ordered list of grade ids, lowest first. Empty in shipping: the catalogue story fills it.",
