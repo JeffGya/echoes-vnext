@@ -1,0 +1,1359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pickup event: animated mockup (Concept A and Concept C)</title>
+<style>
+:root{--bg:#F6F1E3;--ink:#2A2A3A;--muted:#5a5a6a;--card:#FFFDF2;--line:#cdbf94;--gold:#80630b;--field:#6e3128}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
+.top{display:flex;align-items:baseline;gap:14px;padding:6px 14px 4px;max-width:1920px;margin:0 auto}
+.top b{font-size:15px}
+.top span{font-size:13px;color:var(--muted)}
+.stage{display:flex;justify-content:center;padding:0 12px}
+.frame{aspect-ratio:16/9;background:#140c0a;border-radius:6px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.35);position:relative}
+.frame svg{display:block;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;pointer-events:none}
+.ini{font:750 16px system-ui,sans-serif;fill:#fff}
+.nm{font:650 16px system-ui,sans-serif;fill:#FFF8DC;paint-order:stroke;stroke:#6e3128;stroke-width:5px;stroke-linejoin:round}
+.bk{font:600 18px system-ui,sans-serif;fill:#2A2A3A}
+.ctl{font:600 22px system-ui,sans-serif;fill:#FFF8DC;paint-order:stroke;stroke:#2A0F0B;stroke-width:4px}
+.res{font:600 26px system-ui,sans-serif;fill:#FFF8DC}
+[data-hit]:focus-visible,#skipG:focus-visible,#contG:focus-visible{outline:none}
+[data-hit]:focus-visible{stroke:#FFF8DC;stroke-width:3;stroke-dasharray:6 4}
+#skipG:focus-visible rect,#contG:focus-visible rect{stroke:#FFF8DC;stroke-width:2;stroke-dasharray:6 4}
+.strip{max-width:1920px;margin:6px auto 0;padding:6px 14px 8px;border-top:1px solid var(--line);background:#efe8d2}
+.row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:3px 0}
+button,select{font:inherit;font-size:13px;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:6px;min-height:30px;padding:3px 9px;cursor:pointer}
+button:hover,select:hover{border-color:var(--gold)}
+button[aria-pressed=true]{border:2px solid var(--gold);font-weight:700;padding:2px 8px}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #80630b;outline-offset:2px}
+label.f{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:1px}
+label.f select{font-size:13px}
+.grp{display:flex;gap:4px;align-items:center}
+#scrub{width:min(36vw,420px)}
+.clock{font-variant-numeric:tabular-nums;min-width:58px;font-weight:700}
+.chk{display:flex;gap:5px;align-items:center;font-size:13px}
+.read{display:flex;flex-wrap:wrap;gap:4px 22px;font-size:13px;margin-top:4px}
+.read div{min-width:160px}
+.read .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block}
+.read .v{font-weight:650}
+.hint{color:#8a2b00;font-size:12px;min-height:16px}
+details{max-width:1100px;margin:10px auto 24px;padding:0 14px}
+summary{cursor:pointer;font-weight:700}
+details h3{margin:14px 0 4px;font-size:15px}
+details p,details li{max-width:95ch}
+.sr{position:absolute;left:-9999px}
+</style>
+</head>
+<body>
+<div class="top" id="top"><b>Pickup event, animated mockup</b><span>Mockup for review. Nothing here is built.</span><span id="sizeNote"></span></div>
+<main class="stage">
+<div class="frame" id="frame">
+<svg id="svg" viewBox="0 0 1280 720" role="img" aria-label="Pickup event mockup frame">
+<g id="root" transform="scale(1)">
+<g id="i1" visibility="hidden"></g>
+<g id="i0"></g>
+<g id="safe" opacity="0" pointer-events="none"><rect x="64" y="36" width="1152" height="648" fill="none" stroke="#7CFC00" stroke-width="1.5" stroke-dasharray="8 6"/></g>
+<g id="skipG" role="button" tabindex="-1" aria-label="Skip" opacity="0"><rect x="1128" y="664" width="128" height="52" fill="transparent"/><text class="ctl" x="1236" y="690" text-anchor="end">Skip</text><rect x="1196" y="696" width="40" height="2" fill="#FFF8DC"/></g>
+<g id="contG" role="button" tabindex="-1" aria-label="Continue" opacity="0"><rect x="1100" y="664" width="156" height="52" fill="transparent"/><text class="ctl" x="1236" y="690" text-anchor="end">Continue</text><rect x="1128" y="696" width="108" height="2" fill="#FFF8DC"/></g>
+<g id="resolveG" opacity="0" pointer-events="none"><rect width="1280" height="720" fill="#140c0a"/><text class="res" x="640" y="368" text-anchor="middle">Resolve opens here</text></g>
+</g>
+</svg>
+</div>
+</main>
+<section class="strip" id="strip" aria-label="Review strip. Not part of the game.">
+<div class="row">
+<div class="grp"><button id="bPlay" aria-pressed="true">Play</button><button id="bPause" aria-pressed="false">Pause</button><button id="bRestart">Restart</button></div>
+<input id="scrub" type="range" min="0" max="14" step="0.01" value="0" aria-label="Scrub the clock">
+<span class="clock" id="clock">0.00 s</span>
+<div class="grp" role="group" aria-label="Speed"><button id="sp05" aria-pressed="false">0.5x</button><button id="sp1" aria-pressed="true">1x</button><button id="sp2" aria-pressed="false">2x</button></div>
+<div class="grp" role="group" aria-label="Mode"><button id="mWatch" aria-pressed="false">Watch</button><button id="mPlay" aria-pressed="true">Play mode</button></div>
+<span class="hint" id="hint"></span>
+</div>
+<div class="row">
+<label class="f">Concept<select id="selConcept"><option value="A">A: Walk the field</option><option value="C">C: The circle</option></select></label>
+<label class="f">Board<select id="selSize"><option value="1280">1280 x 720</option><option value="1920">1920 x 1080</option></select></label>
+<label class="f">Reason<select id="selReason"><option value="likes">Likes the kind</option><option value="worth">Saw its worth</option><option value="safe">Played safe</option><option value="bold">Went bold</option><option value="froze">Froze</option><option value="fit">Everything fit</option></select></label>
+<label class="f">Standing<select id="selS"><option>1</option><option>5</option><option>9</option></select></label>
+<label class="f">Field (A)<select id="selField"><option value="clustered">Clustered</option><option value="scattered">Scattered</option></select></label>
+<label class="f">Echoes in ring (C)<select id="selRing"><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+<label class="f">Finds<select id="selFinds"><option>2</option><option>3</option><option>4</option></select></label>
+<label class="f">Swap<select id="selSwap"><option value="offered">Offered</option><option value="spent">Spent (closed)</option><option value="none">None</option></select></label>
+<label class="f">Form<select id="selForm"><option value="full">Full (events 1 to 4)</option><option value="short">Short (5 to 12)</option><option value="brief">Brief (13 and later)</option></select></label>
+<label class="f">Reduced motion<select id="selReduced"><option value="off">Off</option><option value="on">On</option></select></label>
+<label class="f">Swap reaction<select id="selTemper"><option value="proud">Proud</option><option value="hard">Hard-edged</option><option value="scared">Frightened</option></select></label>
+</div>
+<div class="row">
+<button id="bSix">Show the six reasons side by side</button>
+<button id="bRefuse">Refused drop demo</button>
+<button id="bReload">Reload (end state, no motion)</button>
+<label class="chk"><input type="checkbox" id="chkGuides"> Show frame guides</label>
+<label class="chk"><input type="checkbox" id="chkGray"> Grayscale</label>
+<span class="hint" id="seqNote" style="color:#2A2A3A"></span>
+</div>
+<div class="read" aria-live="off">
+<div style="min-width:210px"><span class="k">Beat</span><span class="v" id="beat">-</span></div>
+<div style="min-width:240px"><span class="k">Marks on screen (budget 4)</span><span class="v"><span id="marks">0 / 4</span> <span id="marksList" style="font-weight:400"></span></span></div>
+<div style="min-width:200px"><span class="k">Run</span><span class="v" id="run">-</span></div>
+<div style="flex:1;min-width:300px"><span class="k">State</span><span class="v" id="state" style="font-weight:400">-</span></div>
+<div style="flex-basis:100%"><span class="k">Sound cue (review aid, no audio)</span><span class="v" id="cue" style="font-weight:400">-</span></div>
+</div>
+</section>
+<details>
+<summary>Design notes: what each concept proposes, what to judge, risks</summary>
+<p>All text, names and barks in this file are written by the agents as a proposal. Jeff decides the wording.</p>
+<h3>Concept A: Walk the field (combat board, end of combat)</h3>
+<p>The loot lies where the enemies fell. One Echo steps out of the line and walks to the finds. It picks up some and leaves some. The fight board is the place for the loot.</p>
+<h3>Concept C: The circle (path view, after an encounter)</h3>
+<p>The party token opens into its Echoes. They stand in a ring around the finds. One Echo picks. A second Echo (the bystander) steps toward a find that was left and says one line. The bystander shows a second Echo's taste in every event.</p>
+<h3>What to judge in motion</h3>
+<ul>
+<li>Is the chooser clear at a glance? Does the Echo that steps out read as "the one who decides"?</li>
+<li>Can you tell the six reasons apart with the sound off? The closest pair is Froze and Saw its worth. The second closest pair is Likes the kind and Went bold. Use the "six reasons" button, then the 0.5x speed.</li>
+<li>Does the left find read as "visible but not mine"? Compare Swap offered (85 percent, pulse, mark) with Swap spent (60 percent, quiet).</li>
+<li>Does the swap feel like a trade? Try a drag, a two-tap trade, and the refused drop. The swap never confirms by itself.</li>
+<li>Is Skip enough? Is Continue a chore? Look at the Short and Brief forms (events 5 to 12 and 13 and later).</li>
+<li>A: does a clustered field and a scattered field both read? C: do 2 and 5 Echoes both read? Does the bystander line pull attention from the pick?</li>
+<li>Does it feel like a game, or like a web page? Turn on Grayscale and check that the finds still read.</li>
+</ul>
+<h3>Risks</h3>
+<ul>
+<li>The Echo is a disc with a letter. It has no eyes or hands. Froze and Saw its worth read only in time (a stop, a shake, a glint). In a still frame they look alike.</li>
+<li>The finds are flat plates. If the slab edge, the tilt and the shadow are cut, they turn into cards on a field.</li>
+<li>Marks are small at 1280 x 720. Pips are about 7 px. Check with the 1920 x 1080 board.</li>
+<li>Token blue on the floor is 1.09:1 and the token outline is 2.28:1. Both fail 3:1. The white letter carries identity. This comes from the combat mockup.</li>
+<li>The left plate (#CDB791) is 3.17:1 on the floor. It reads, but it is quiet. #E0CDAE (3.97:1) is the fallback.</li>
+<li>Two carried finds sit 48 units apart. Targets of 48 units touch. The rule asks for 8 units between targets. Turn on "Show frame guides" to see it.</li>
+<li>C needs new drawing logic: the party token opens into single Echo tokens. The ring is a new layout the player did not see in combat.</li>
+<li>C crowding: the finds in the middle are close together. Check them at the smallest window.</li>
+<li>Motion limits: this page cannot show the real frame budget of the game. Test animation cost in Godot at the minimum window.</li>
+</ul>
+<h3>What this page does not claim</h3>
+<ul>
+<li>Which Echo is the chooser, the reason, the picks and the bystander come from invented data here. The game must supply them.</li>
+<li>The thresholds for the full, short and brief forms (events 1 to 4, 5 to 12, 13 and later) are proposals.</li>
+<li>No audio plays. The sound cue line is only a review aid.</li>
+<li>"Resolve opens here" is a stand-in. It is not a design.</li>
+</ul>
+
+</details>
+<script>
+var PE=(function(){
+'use strict';
+/* ---------- maths ---------- */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,u)=>a+(b-a)*u;
+function bez(x1,y1,x2,y2){
+  const X=t=>3*x1*t*(1-t)*(1-t)+3*x2*t*t*(1-t)+t*t*t;
+  const Y=t=>3*y1*t*(1-t)*(1-t)+3*y2*t*t*(1-t)+t*t*t;
+  return x=>{ if(x<=0)return 0; if(x>=1)return 1; let lo=0,hi=1,t=x;
+    for(let i=0;i<20;i++){ if(X(t)<x)lo=t; else hi=t; t=(lo+hi)/2; } return Y(t); };
+}
+const E={lin:u=>u,smooth:u=>u*u*(3-2*u),out:bez(.2,.8,.2,1),in:bez(.5,0,.9,.4),back:bez(.34,1.56,.64,1),
+  acc:u=>Math.pow(u,1.5)};
+const pr=(t,a,b)=>b>a?clamp((t-a)/(b-a),0,1):(t>=a?1:0);
+const ph=(t,a,b,e)=>(e||E.smooth)(pr(t,a,b));
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1]], add=(a,b)=>[a[0]+b[0],a[1]+b[1]], mul=(a,k)=>[a[0]*k,a[1]*k];
+const len=a=>Math.hypot(a[0],a[1]);
+const unit=a=>{const l=len(a)||1;return [a[0]/l,a[1]/l];};
+const mix=(a,b,u)=>[lerp(a[0],b[0],u),lerp(a[1],b[1],u)];
+function K(t,keys){ // keys: [[t,v,ease?]]
+  if(t<=keys[0][0])return keys[0][1];
+  for(let i=1;i<keys.length;i++){ if(t<keys[i][0]){ const a=keys[i-1],b=keys[i]; return lerp(a[1],b[1],(b[2]||E.smooth)(pr(t,a[0],b[0]))); } }
+  return keys[keys.length-1][1];
+}
+function cr(pts,u){ // uniform Catmull-Rom, u in 0..pts.length-1
+  const n=pts.length-1; u=clamp(u,0,n); const i=Math.min(Math.floor(u),n-1), f=u-i;
+  const p0=pts[Math.max(i-1,0)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(i+2,n)];
+  const c=k=>0.5*((2*p1[k])+(-p0[k]+p2[k])*f+(2*p0[k]-5*p1[k]+4*p2[k]-p3[k])*f*f+(-p0[k]+3*p1[k]-3*p2[k]+p3[k])*f*f*f);
+  return [c(0),c(1)];
+}
+
+/* ---------- data (all text AGENT-WRITTEN proposals) ---------- */
+const FINDS=[
+  {kind:'supply',grade:1,nt:null,rank:2,name:'pouch'},
+  {kind:'material',grade:1,nt:null,rank:3,name:'cloth'},
+  {kind:'relic',grade:3,nt:null,rank:0,name:'relic'},
+  {kind:'gear',grade:2,nt:1,rank:1,name:'gear'}];
+const REASONS={
+  likes:{label:'Likes the kind',pref:[0,1,2,3],wA:[.70,.60],wC:[.60,.50],lift:.25,line:'Oh, I like this one.',
+    sound:'Two-note rising wood-block chirp at the touch.',sig:'Fast smooth start, no pause, a hop at the find.'},
+  worth:{label:'Saw its worth',pref:[2,3,1,0],wA:[[.45,.45],.60],wC:[[.35,.30],.50],lift:.40,pause:.45,line:"Hold on. That one's good.",
+    sound:'One clean chime at the glint, a soft pluck at the lift.',sig:'It stops short, stays still, the find glints.'},
+  safe:{label:'Played safe',pref:[0,1,3,2],wA:[.95,.70],wC:[.65,.55],lift:.20,scan:.25,bowA:14,bowC:8,line:"I'll take the plain one.",
+    sound:'Low cloth pat.',sig:'It scans first, curves around, steps back.'},
+  bold:{label:'Went bold',pref:[3,2,1,0],wA:[.50,.40],wC:[.40,.35],lift:.15,overA:8,overC:5,line:'The big one. Mine.',
+    sound:'Short rising whoosh, then a firm thump at the stomp.',sig:'Hard start, overshoot, camera follows.'},
+  froze:{label:'Froze',pref:[0,1,2,3],wA:[[.35,.70],.85],wC:[[.35,.60],.70],lift:.50,pause:1.1,line:'I... okay. This one.',
+    sound:'Soft low hum with a 9 Hz flutter, a small exhale at the lift.',sig:'It stops mid-route and shakes.'},
+  fit:{label:'Everything fit',pref:[0,1,2,3],wA:[.45,.45],wC:[.40,.40],lift:.20,line:'All of it. Easy.',
+    sound:'Three even soft taps, one per find.',sig:'One smooth curve, no stop, no left finds.'}
+};
+const REASON_KEYS=['likes','worth','safe','bold','froze','fit'];
+const STAND={1:{pre:.6,hitch:.12,pace:.80,delay:.2},5:{pre:.35,hitch:.06,pace:.95,delay:.1},9:{pre:.1,hitch:0,pace:1,delay:0}};
+const FORM={
+  full:{walk:1,pause:1,pre:1,touch:1,chrome:1,cam:true,drop:'stagger',pulse:true,stepDur:.45},
+  short:{walk:.7,pause:.6,pre:.5,touch:0,chrome:.6,cam:false,drop:'together',pulse:false,stepDur:.45},
+  brief:{walk:.5,pause:.4,pre:.5,touch:0,chrome:.6,cam:false,drop:'none',pulse:false,stepDur:.30}};
+const INTRO={A:{full:1.20,short:.55,brief:.45},C:{full:1.35,short:.85,brief:.65}};
+const SWAPLINE={proud:'Mine was fine. But sure.',hard:'Your call.',scared:'Are you sure? Okay.'};
+const BYLINE={relic:'I wanted that one.',gear:'Leaving the gear?',supply:'Leaving the pouch?',material:'Not the cloth?'};
+const A_HOME={K:[384,362],Y:[448,394],A:[512,426],E:[576,458]};
+const A_FIELDS={clustered:[[663,348],[719,314],[773,240],[833,314]],scattered:[[430,330],[880,420],[760,230],[610,560]]};
+const A_REF=[90,60];
+const RING_ANG={2:[180,0],3:[200,270,340],4:[150,225,315,30],5:[140,200,270,340,40]};
+const RING_CH={2:0,3:0,4:1,5:1}, RING_BY={2:1,3:2,4:3,5:4};
+const C_CENTRE=[640,400];
+
+/* typed text: time each character appears; a pause after every "..." */
+function typedInfo(text){
+  const ct=[];let acc=0;
+  for(let i=0;i<text.length;i++){ ct.push(acc); acc+=1/24; if(i>=2&&text.slice(i-2,i+1)==='...')acc+=.3; }
+  return {ct,dur:acc};
+}
+const typedCount=(info,e)=>{let c=0;for(let i=0;i<info.ct.length;i++){if(info.ct[i]<=e+1e-9)c++;else break;}return c;};
+
+/* ---------- plan: every time and position of one pickup run ---------- */
+function makePlan(P){
+  const isC=P.concept==='C', red=!!P.reduced, fit=P.reason==='fit';
+  const R=REASONS[P.reason], Fm=FORM[P.form], St=STAND[P.S];
+  const n=P.nFinds, defs=FINDS.slice(0,n);
+  const nPick=fit?n:{2:1,3:2,4:2}[n];
+  const picks=fit?defs.map((_,i)=>i):R.pref.filter(i=>i<n).slice(0,nPick);
+  const left=defs.map((_,i)=>i).filter(i=>picks.indexOf(i)<0);
+  const swapOffered=P.swap==='offered'&&left.length>0;
+  const m=picks.length;
+  const PL={P,isC,red,fit,R,Fm,St,n,defs,picks,left,swapOffered,m};
+  const T=PL.T={}; PL.beats=[];
+  const beat=(t0,t1,name,sound)=>PL.beats.push({t0,t1:Math.max(t1,t0+.05),name,sound:sound||'none'});
+
+  /* geometry */
+  let home;
+  if(!isC){
+    home=A_HOME.A; PL.G=A_FIELDS[P.field].slice(0,n);
+    PL.tokens=Object.keys(A_HOME).map(k=>({id:k,pos:A_HOME[k],name:k==='A'?'Ama':null,chooser:k==='A'}));
+    PL.stepPt=add(home,mul(unit(sub(PL.G[picks[0]],home)),44));
+    PL.camC=[640,360]; PL.letter='A'; PL.name='Ama';
+  }else{
+    const N=P.ring, ang=RING_ANG[N], ci=RING_CH[N], bi=RING_BY[N];
+    const slots=ang.map((a,i)=>({a,pos:[C_CENTRE[0]+170*Math.cos(a*Math.PI/180)+(i%2?6:-6)*.7,C_CENTRE[1]+80*Math.sin(a*Math.PI/180)+(i%3?-3:4)]}));
+    const spare=['E','A','Z'];let si=0;
+    PL.tokens=slots.map((s,i)=>({id:i===ci?'K':i===bi?'Y':spare[si++],pos:s.pos,a:s.a,name:i===ci?'Kweku':null,chooser:i===ci,by:i===bi}));
+    PL.tokens.forEach(tk=>{tk.order=((tk.a+90)%360+360)%360;});
+    home=slots[ci].pos; PL.chIdx=ci;
+    PL.stepPt=add(C_CENTRE,mul(sub(home,C_CENTRE),.6));
+    const order=defs.map((d,i)=>i).sort((a,b)=>defs[a].rank-defs[b].rank);
+    PL.G=[]; order.forEach((idx,j)=>{const x=640+(j-(n-1)/2)*60; PL.G[idx]=[x,396+14*Math.pow((x-650)/90,2)];});
+    PL.camC=C_CENTRE; PL.letter='K'; PL.name='Kweku';
+    PL.byTok=left.length&&N>=2?PL.tokens.find(t=>t.by):null;
+  }
+  PL.home=home;
+  const G=PL.G;
+
+  /* timeline constants */
+  const stepStart=(fit&&!isC&&P.form==='full')?1.00:INTRO[P.concept][P.form];
+  const stepDur=Fm.stepDur;
+  const stepEnd=stepStart+stepDur;
+  T.stepStart=stepStart;T.stepEnd=stepEnd;
+  T.enemy=[0,.4]; T.hud=[.30,.30+.4*Fm.chrome];
+  T.dimOthers=[stepStart-.25,stepStart+.05];
+  T.tag=stepStart+.25;
+  // drop
+  if(isC){ T.drop0=Fm.drop==='stagger'?.75:Fm.drop==='together'?.45:0; T.dropH=24; T.dropGap=.09; }
+  else { T.drop0=Fm.drop==='stagger'?.40:Fm.drop==='together'?.40:0; T.dropH=18; T.dropGap=.08; }
+  T.dropEach=Fm.drop==='stagger'?.28:.2;
+  if(red){ T.enemy=[0,.15]; T.hud=[0,.15]; T.drop0=.15; }
+  // camera
+  T.cam=Fm.cam&&!red?(isC?{t0:0,t1:.8,z:.12}:{t0:.70,t1:fit?1.15:1.30,z:fit?.05:.06}):null;
+  // ring opening (C)
+  T.open0=.40; T.partyFade=[.55,.75];
+
+  /* reduced-motion times */
+  if(red){ T.stepStart=.30; T.stepEnd=.45; T.tag=.45; T.dimOthers=[.30,.45]; if(isC){T.drop0=.15;} }
+
+  /* pick walks */
+  const pace=.95/St.pace; // relative to the reference Standing
+  const preS=fit?.15:St.pre*Fm.pre;
+  const scan=(!fit&&R.scan)?Math.max(R.scan,R.scan*Fm.pause):0;
+  const pauseOf=(r)=>{const base=r.pause||0;return base?Math.max(.25,base*Fm.pause):0;};
+  const wRef=isC?R.wC:R.wA;
+  const off=isC?34:36;
+  const stops=[],dirs=[],segs=[],lifts=[];
+  let fromPt=PL.stepPt;
+  const sumTouchLift=[];
+  // touch and lift lengths
+  const touchD=k=>(red||!Fm.touch)?0:(k===0?.10:.08);
+  const liftD=fit?.20:R.lift;
+  PL.liftD=liftD;
+  // stop points and route factors
+  const wd=[];
+  for(let k=0;k<m;k++){
+    const g=G[picks[k]]; const from=k?stops[k-1]:PL.stepPt;
+    let d=unit(sub(g,from)), st=sub(g,mul(d,off));
+    if(isC){ st=[g[0],g[1]-66]; d=unit(sub(st,from)); }
+    stops.push(st); dirs.push(d);
+    const dist=len(sub(st,from));
+    let f=1; if(!isC&&P.field==='scattered')f=clamp(dist/A_REF[k?1:0],.6,1.8);
+    const base=fit?wRef[0]*1:(k===0?wRef[0]:wRef[1]);
+    const mv=x=>x*pace*Fm.walk*f;
+    wd.push(Array.isArray(base)?{parts:base.map(mv),f}:{parts:[mv(base)],f});
+  }
+  if(!isC&&!red){ // moving-time cap: walk, touch and lift only
+    let mvSum=0;wd.forEach(w=>w.parts.forEach(p=>mvSum+=p));
+    let fixed=0;for(let k=0;k<m;k++)fixed+=touchD(k)+liftD;
+    const cap=3.4-fixed; if(mvSum>cap&&cap>0){const s=cap/mvSum;wd.forEach(w=>{w.parts=w.parts.map(p=>p*s);});PL.capped=true;}
+  }
+  PL.cap=!!PL.capped;
+
+  const LK=[[0,0]]; const lk=(t,v)=>LK.push([Math.max(t,LK[LK.length-1][0]),v]);
+  const trem=[]; // {t0,t1,amp,rise,hold,dec}
+  let W; // time the first walk starts
+  let tcur;
+
+  if(red){
+    // reduced motion: no walk. Pick times by reason pause plus a 0.4 s gap.
+    const tag1=.60, tp0=tag1+(fit?.15:preS);
+    T.redPicks=[];
+    const pauseGap=fit?0:(R.pause?Math.max(.25,R.pause):(R.scan||0));
+    for(let k=0;k<m;k++){const tk=tp0+(k?T.redPicks[k-1]-tp0:0);T.redPicks.push(k?T.redPicks[k-1]+.4+pauseGap:tp0);}
+    for(let k=0;k<m;k++){lifts.push({i:picks[k],k,E:T.redPicks[k],T1:T.redPicks[k],L0:T.redPicks[k],L1:T.redPicks[k]+.15,dirK:dirs[k]});}
+    PL.cposRed=true;
+    T.jump=.375;
+    segs.length=0;
+  } else if(fit){
+    W=stepEnd+.15;
+    const per=wRef[0]*pace*Fm.walk*(wd[0]?wd[0].f:1)/(pace*Fm.walk*(wd[0]?wd[0].f:1)||1);
+    const perF=(isC?.40:.45)*pace*Fm.walk;
+    const pts=[PL.stepPt].concat(stops);
+    const tEnd=W+perF*m;
+    segs.push({t0:W,t1:tEnd,kind:'curve',pos:u=>cr(pts,u*m),a:PL.stepPt,b:stops[m-1],f:E.lin,move:true});
+    for(let k=0;k<m;k++){const L0=W+perF*k+.30*Math.max(perF/.45,.3),L1=L0+liftD;lifts.push({i:picks[k],k,E:L0,T1:L0,L0,L1,dirK:dirs[k]});}
+    T.sweepEnd=tEnd;
+    lk(stepEnd,0);lk(stepEnd+.05,3);lk(W+.1,3);lk(W+.25,0);
+  } else {
+    const W0=stepEnd+preS; // end of the Standing pause
+    // lean by Standing
+    if(P.S===1){lk(stepEnd,0);lk(stepEnd+.12,-4);lk(Math.min(stepEnd+.42,W0-.05),-4);lk(Math.max(Math.min(stepEnd+.57,W0),stepEnd+.43),3);}
+    else if(P.S===5){lk(Math.max(W0-.20,stepEnd),0);lk(W0-.05,3);}
+    else {lk(stepEnd,0);lk(stepEnd+.05,5);}
+    W=W0+scan;
+    if(scan){lk(W0,3);lk(W0+.1,-4);lk(W-.05,-4);lk(W+.1,0);} else lk(W,P.S===9?5:3);
+    tcur=W;
+    for(let k=0;k<m;k++){
+      const from=k?stops[k-1]:PL.stepPt, st=stops[k], d=dirs[k], w=wd[k].parts;
+      const bowAmt=R.bowA!==undefined?(isC?R.bowC:R.bowA):0;
+      let nrm=[-d[1],d[0]]; const toHome=sub(home,mix(from,st,.5)); if(nrm[0]*toHome[0]+nrm[1]*toHome[1]<0)nrm=[-nrm[0],-nrm[1]];
+      const hitch=(k===0&&(P.reason==='worth'||P.reason==='froze'))?0:St.hitch;
+      const sg={kind:'walk',k,hitch,move:true};
+      if(k===0&&P.reason==='worth'){
+        const dw=sub(st,mul(d,44*(isC?.5:1)));
+        const dwell=pauseOf(R);
+        segs.push({t0:tcur,t1:tcur+w[0],a:from,b:dw,f:E.out,kind:'walk',k,move:true}); tcur+=w[0];
+        T.dwell=[tcur,tcur+dwell]; lk(tcur,0);lk(tcur+.15,5);lk(tcur+dwell,5);lk(tcur+dwell+.15,0);
+        tcur+=dwell;
+        segs.push({t0:tcur,t1:tcur+w[1],a:dw,b:st,f:E.smooth,kind:'walk',k,move:true}); tcur+=w[1];
+        T.worthFind=picks[0];
+      } else if(k===0&&P.reason==='froze'){
+        const mid=mix(from,st,.4), td=pauseOf(R);
+        segs.push({t0:tcur,t1:tcur+w[0],a:from,b:mid,f:E.out,kind:'walk',k,move:true}); tcur+=w[0];
+        trem.push({t0:tcur,t1:tcur+td,amp:1,rise:.12*td/1.1,hold:.7*td/1.1,dec:.25*td/1.1});
+        T.tremble=[tcur,tcur+td]; tcur+=td;
+        segs.push({t0:tcur,t1:tcur+w[1],a:mid,b:st,f:E.smooth,kind:'walk',k,move:true}); tcur+=w[1];
+      } else if(P.reason==='bold'){
+        const over=isC?R.overC:R.overA, dd=w[0], settle=Math.min(.12,dd*.4);
+        const ov=add(st,mul(d,over));
+        segs.push({t0:tcur,t1:tcur+dd-settle,a:from,b:ov,f:u=>1-Math.pow(1-u,1.6),kind:'walk',k,move:true,bold:true}); tcur+=dd-settle;
+        segs.push({t0:tcur,t1:tcur+settle,a:ov,b:st,f:E.out,kind:'settle',k}); tcur+=settle;
+      } else {
+        const f=P.reason==='safe'?E.lin:E.acc;
+        const t1=tcur+w[0]+(hitch?hitch-.06:0);
+        segs.push({t0:tcur,t1,a:from,b:st,f,bow:P.reason==='safe'?bowAmt:0,nrm,hitch,kind:'walk',k,move:true,hitchPlateau:hitch>0});
+        tcur=t1;
+      }
+      // k>0 froze: residual tremble at start of the walk
+      if(k===1&&P.reason==='froze'){ trem.push({t0:segs[segs.length-1].t0,t1:segs[segs.length-1].t0+.3,amp:.8/1.5,rise:0,hold:0,dec:.3}); }
+      const E_=tcur, tD=touchD(k), L0=E_+tD, L1=L0+liftD;
+      lifts.push({i:picks[k],k,E:E_,T1:E_+tD,L0,L1,dirK:d,ovl:P.reason==='bold'?.20:(isC?.10:.15)});
+      tcur=k<m-1?Math.max(L1-lifts[k].ovl,E_+tD):L1;
+    }
+  }
+  PL.segs=segs; PL.lifts=lifts; PL.stops=stops; PL.dirs=dirs; PL.trem=trem; PL.LK=LK;
+  const lastL1=lifts[m-1].L1;
+  T.lastL1=lastL1;
+
+  /* what follows the last lift */
+  const dimStart=red?lastL1:lastL1-.18, dimDur=red?.15:.30;
+  T.dim=[dimStart,dimStart+dimDur];
+  const delayRel=red?0:(St.delay-.1);
+  // bark
+  let barkText,barkWho='chooser';
+  const chLine=R.line;
+  if(isC&&PL.byTok&&!fit&&left.length){ barkWho='by'; barkText=BYLINE[defs[left[0]].kind]; } else barkText=chLine;
+  const tinfo=typedInfo(barkText);
+  PL.bark={text:barkText,who:barkWho,info:tinfo};
+  PL.swapLine=SWAPLINE[P.temper||'proud'];
+  PL.swapInfo=typedInfo(PL.swapLine);
+  let hold;
+  if(!isC||barkWho==='chooser'){
+    const b0=red?lastL1+.05:(fit?T.sweepEnd-.15:lastL1+.02+delayRel);
+    T.bark0=b0;
+    T.barkDur=red?.15:tinfo.dur;
+    T.markT=red?[b0,b0+.15]:(Fm.pulse?[b0+.25,b0+.50]:[b0+.25,b0+.40]);
+    T.pulse0=Fm.pulse&&!red?b0+.15:null;
+    hold=red?b0+.30:b0+.75;
+    T.barkEnd=b0+tinfo.dur;
+    T.contLive=Math.max(hold+.25,red?hold+.25:T.barkEnd);
+  } else {
+    // C: the bystander speaks; the chooser stays silent
+    T.wake0=red?lastL1:lastL1+.12; T.wakeDur=.15;
+    T.by0=T.wake0+.15; T.byDur=.25;
+    const b0=red?lastL1+.05:T.by0+.10+delayRel;
+    T.bark0=b0;
+    const dur=red?.15:Math.max(.75,tinfo.dur);
+    T.barkDur=dur; T.barkEnd=b0+dur;
+    T.back0=T.barkEnd; T.backDur=.40;
+    T.markT=red?[b0,b0+.15]:(Fm.pulse?[T.barkEnd+.25,T.barkEnd+.50]:[T.barkEnd+.25,T.barkEnd+.40]);
+    T.pulse0=Fm.pulse&&!red?T.barkEnd+.15:null;
+    hold=red?b0+.30:(swapOffered&&Fm.pulse?T.barkEnd+.65:T.barkEnd+.40);
+    T.contLive=Math.max(hold+.25,red?hold+.25:b0+tinfo.dur);
+  }
+  T.hold=hold; PL.hold=hold; PL.contLive=T.contLive;
+  PL.closeDur=red?.15:(P.form==='full'?(isC?.90:.65):.40);
+
+  /* markers */
+  const dirToLeft=left.length?unit(sub(G[left[0]],stops[m-1])):[1,0];
+  PL.dirToLeft=dirToLeft;
+
+  /* beats (review aid) */
+  beat(0,.4,'Last enemy falls','Low soft thud, short exhale.');
+  beat(.3,.7,'HUD floats away');
+  if(!red){
+    if(isC){ beat(0,.8,'Camera pushes in'); beat(.4,1.1,'The party token opens into its Echoes','Soft cloth unfold, then one tap per Echo.'); }
+    if(Fm.drop!=='none') beat(T.drop0,T.drop0+.45,'Finds drop','One wood tick per find. Pitch rises with grade.');
+    if(Fm.cam&&!isC) beat(.7,1.3,'Camera frames the finds');
+  }
+  beat(T.dimOthers[0],T.dimOthers[1],'Others dim');
+  beat(T.stepStart,T.stepEnd,'Chooser steps '+(isC?'in':'out'),'One footstep. No drum roll.');
+  beat(T.tag,T.tag+.2,'Name tag');
+  if(!red&&!fit) beat(T.stepEnd,W,'Pre-step pause'+(scan?' and scan':''));
+  lifts.forEach((l,k)=>{
+    if(!red){
+      const wst=k===0?(fit?W:W):(lifts[k-1].L1-(l.ovl||.15));
+      beat(fit?l.L0-.30:wst,l.E,'Walk to find '+(k+1),'Soft steps.');
+    }
+    if(l.T1>l.E)beat(l.E,l.T1,'Touch '+(k+1),'Small pluck.');
+    beat(l.L0,l.L1,'Lift find '+(k+1),REASONS[P.reason].sound);
+  });
+  if(T.dwell)beat(T.dwell[0],T.dwell[1],'Dwell and glint',R.sound);
+  if(T.tremble)beat(T.tremble[0],T.tremble[1],'Tremble',R.sound);
+  if(left.length)beat(T.dim[0],T.dim[1],'Left finds dim','Soft settle.');
+  if(isC&&barkWho==='by'&&!red){
+    beat(T.wake0,T.by0,'Bystander wakes');beat(T.by0,T.by0+.25,'Bystander steps toward the find','One small step.');
+    beat(T.back0,T.back0+.4,'Bystander steps back');
+  }
+  beat(T.bark0,T.bark0+T.barkDur,'Bark (24 characters per second)',R.sound);
+  if(swapOffered){
+    if(T.pulse0!=null)beat(T.pulse0,T.pulse0+.5,'Swap offer pulse','One soft tick per left find.');
+    beat(T.markT[0],T.markT[1],'Swap mark appears','One airy 250 ms whirl.');
+  }
+  beat(hold,hold+.2,'HOLD: Continue fades in');
+  PL.beats.sort((a,b)=>a.t0-b.t0);
+
+  /* ---- chooser path ---- */
+  function segPos(s,t){
+    const tt=t-s.t0,d=s.t1-s.t0;let u;
+    if(s.hitch){const w=d-s.hitch; u=tt<w/2?tt/w:tt<w/2+s.hitch?.5:(tt-s.hitch)/w;} else u=tt/d;
+    u=clamp(u,0,1);
+    if(s.kind==='curve')return s.pos(u);
+    const p=s.f(u);let x=lerp(s.a[0],s.b[0],p),y=lerp(s.a[1],s.b[1],p);
+    if(s.bow){const w=4*p*(1-p)*s.bow;x+=s.nrm[0]*w;y+=s.nrm[1]*w;}
+    return [x,y];
+  }
+  PL.segPos=segPos;
+  PL.cpos=function(t){
+    if(red) return t<T.jump?home:PL.stepPt;
+    let p=home;
+    if(t>=stepStart){ const u=E.back(pr(t,stepStart,stepEnd)); p=mix(home,PL.stepPt,u); }
+    for(const s of segs){ if(t<s.t0)break; if(t>=s.t1){p=s.b||p; if(s.kind==='curve')p=s.b;} else {p=segPos(s,t);break;} }
+    if(R.scan){ // safe: step back 10 u after each lift
+      lifts.forEach((l,k)=>{const tau=t-l.L0;if(tau>0){const a=10*E.smooth(clamp(tau/.15,0,1))*(k<m-1?(1-E.smooth(clamp((tau-.15)/.45,0,1))):1);p=[p[0]-l.dirK[0]*a,p[1]-l.dirK[1]*a];}});
+    }
+    return p;
+  };
+  PL.moveAt=function(t){ // true while a walking segment is active
+    for(const s of segs){ if(t>=s.t0&&t<s.t1&&s.move)return s; } return null;
+  };
+  PL.tremAt=function(t){
+    let a=0;
+    trem.forEach(z=>{ if(t>=z.t0&&t<z.t1){ const tau=t-z.t0;
+      const env=z.rise>0&&tau<z.rise?tau/z.rise:tau<z.rise+z.hold?1:1-E.out(clamp((tau-z.rise-z.hold)/Math.max(z.dec,.001),0,1));
+      a=Math.max(a,z.amp*env);} });
+    return a;
+  };
+  PL.lean=t=>K(t,LK);
+  PL.sweepStart=W;
+  PL.W=W;
+  return PL;
+}
+
+/* ---------- frame state: a pure function of time and events ---------- */
+function frame(PL,tb,tr,ev,o){
+  o=o||{}; ev=ev||{};
+  const {P,isC,red,fit,R,Fm,T,G,m,picks,left,defs,St,swapOffered}=PL;
+  const still=!!o.still, end=!!o.end;
+  const idle=still?T.hold:tb;
+  const S={tokens:[],finds:[],enemies:[],cam:{s:1,x:PL.camC[0],y:PL.camC[1]},hud:{o:0,dy:0},vig:0,scrim:0,party:{o:0,s:1},
+    mark:{o:0,s:1,rot:0,x:0,y:0},barks:[],skipO:0,contO:0};
+  const E_=T.enemy;
+  const cp=PL.cpos(tb), chB={};
+  // chooser body
+  const mv=red?null:PL.moveAt(tb);
+  const tremA=red?0:PL.tremAt(tb);
+  const sgn=(left.length&&!fit)?Math.sign(G[left[0]][0]-cp[0])||1:Math.sign((G[picks[Math.min(m-1,picks.length-1)]][0])-cp[0])||1;
+  // target find for lean sign
+  let tgtIdx=picks[0];for(let k=0;k<m;k++){if(tb<PL.lifts[k].L1){tgtIdx=picks[k];break;}tgtIdx=picks[k];}
+  const lsgn=Math.sign(G[tgtIdx][0]-cp[0])||1;
+  let rot=red?0:PL.lean(tb)*lsgn, sx=1,sy=1,bx=0,by=0;
+  PL.lifts.forEach(l=>{ if(l.T1>l.E){const v=pr(tb,l.E,l.T1);if(v>0&&v<1){const s=Math.sin(Math.PI*v);sx*=1+.08*s;sy*=1-.08*s;by-=4*s;}} });
+  if(mv&&mv.hitchPlateau){const w=(mv.t1-mv.t0)-mv.hitch;const tt=tb-mv.t0;if(tt>=w/2&&tt<w/2+mv.hitch){const sq=.03*(mv.hitch/.12);sx*=1+sq;sy*=1-sq;}}
+  const ghosts=[0,0];
+  if(mv&&mv.bold){const d=PL.dirs[mv.k];rot=8*Math.sign(d[0]||1);sx*=1.1;sy*=.94;ghosts[0]=.28;ghosts[1]=.14;}
+  if(tremA>0){bx+=1.5*tremA*Math.sin(2*Math.PI*9*tb);by+=.6*tremA*Math.sin(2*Math.PI*9*tb+1.3);}
+  const swayOn=!red&&tb>=T.lastL1;
+  if(swayOn&&!isC){bx+=Math.sin(2*Math.PI*.5*(idle-T.lastL1))*1;}
+  if(swayOn&&isC){bx+=Math.sin(2*Math.PI*.4*(idle-T.lastL1))*1;}
+  // swap landing squash
+  if(ev.swap){const u=tr-ev.swap.at;if(u>=.6&&u<.68){const s=Math.sin(Math.PI*(u-.6)/.08);sx*=1+.06*s;sy*=1-.06*s;}}
+  let chO=1;
+  if(red){const v=pr(tb,T.stepStart,T.stepEnd);chO=v<=0||v>=1?1:Math.abs(1-2*v);}
+  let tagO=ph(tb,T.tag,T.tag+.18,E.out);const tagDy=4*(1-tagO);
+  if(red)tagO=pr(tb,T.tag,T.tag+.15);
+  const dimOthers=ph(tb,T.dimOthers[0],T.dimOthers[1],E.out);
+  const shDark=K(tb,[[T.stepStart,.78],[T.stepEnd,1]]);
+
+  /* ----- camera ----- */
+  if(T.cam){
+    const c=T.cam, k=ph(tb,c.t0,c.t1);
+    let z=c.z*k;
+    if(P.reason==='worth'&&T.dwell)z+=.02*pr(tb,T.dwell[0],T.dwell[1]);
+    if(P.reason==='froze'&&T.tremble)z+=.03*pr(tb,T.tremble[0],T.tremble[1])-.0;
+    S.cam.s=1+z;
+    if(!isC){
+      const cen=[(G.reduce((a,g)=>a+g[0],0)/G.length+PL.home[0])/2,(G.reduce((a,g)=>a+g[1],0)/G.length+PL.home[1])/2];
+      let pv=sub(cen,[640,360]);const l=len(pv);if(l>24)pv=mul(pv,24/l);
+      const fol=(P.reason==='bold'?.8:.2)*k;
+      const dsp=sub(cp,PL.stepPt);
+      S.cam.x=640+pv[0]*k+dsp[0]*fol*(tb>PL.stepEnd?1:0); S.cam.y=360+pv[1]*k+dsp[1]*fol*(tb>PL.stepEnd?1:0);
+    }
+  }
+  /* ----- chrome, vignette, enemies ----- */
+  const hk=ph(tb,T.hud[0],T.hud[1],E.in);
+  S.hud.o=1-hk; S.hud.dy=20*hk;
+  S.vig=isC?ph(tb,0,.4,E.out):ph(tb,.4,.9);
+  const ek=ph(tb,E_[0],E_[1],E.in);
+  for(let i=0;i<defs.length;i++)S.enemies.push({o:1-ek,s:1-.3*ek,dy:6*ek});
+  if(isC){S.hud.o=1-hk;}
+  /* ----- party token (C) ----- */
+  if(isC){
+    const a=ph(tb,.30,.40,E.in);
+    const fade=red?1-pr(tb,.15,.30):(P.form==='brief'?1-pr(tb,.40,.65):1-ph(tb,T.partyFade[0],T.partyFade[1]));
+    S.party={o:fade,s:1-.1*a,x:C_CENTRE[0],y:C_CENTRE[1]+6};
+  }
+  /* ----- tokens ----- */
+  const bystander=isC&&PL.byTok;
+  PL.tokens.forEach((tk,idx)=>{
+    const t={id:tk.id,x:tk.pos[0],y:tk.pos[1],bx:0,by:0,rot:0,sx:1,sy:1,o:1,sh:.78,g:[0,0],name:tk.name,tagO:0,tagDy:0,z:tk.pos[1],chooser:!!tk.chooser,scale:1};
+    if(tk.chooser){
+      t.x=cp[0];t.y=cp[1];t.bx=bx;t.by=by;t.rot=rot;t.sx=sx;t.sy=sy;t.o=chO;t.sh=shDark;t.g=ghosts;t.tagO=tagO;t.tagDy=tagDy;t.z=500+cp[1];
+      if(isC){ // arrives from the party token
+        const open=ringOpen(PL,tb,tk);t.o*=open.o;t.scale=open.s;t.x=lerp(open.cx,t.x,open.p);t.y=lerp(open.cy,t.y,open.p);
+        if(tb<T.stepStart){t.x=lerp(open.cx,tk.pos[0],open.p);t.y=lerp(open.cy,tk.pos[1],open.p);}
+      }
+    } else if(!isC){
+      t.o=lerp(1,.65,dimOthers);
+    } else {
+      const open=ringOpen(PL,tb,tk);
+      t.x=lerp(open.cx,tk.pos[0],open.p);t.y=lerp(open.cy,tk.pos[1],open.p);t.scale=open.s;
+      const dim=ph(tb,1.10,1.40,E.out);const dimR=red?pr(tb,.30,.45):dim;
+      t.o=open.o*lerp(1,.65,dimR);
+      if(!red)t.bx=Math.sin(2*Math.PI*.4*Math.max(0,idle-1.4)+idx)*1*pr(tb,1.4,1.6);
+      if(tk.by&&bystander&&PL.bark.who==='by'){
+        const wk=red?pr(tb,T.wake0,T.wake0+.15):pr(tb,T.wake0,T.wake0+T.wakeDur);
+        const tbB=end?Math.min(tb,T.back0-1e-6):tb;
+        let oo=lerp(.65,1,wk);
+        let step=0,lean=0;
+        if(!red){
+          const back=-4*Math.sin(Math.PI*pr(tbB,T.wake0,T.wake0+T.wakeDur));
+          const st=ph(tbB,T.by0,T.by0+T.byDur,E.out), bk=ph(tbB,T.back0,T.back0+T.backDur);
+          step=st*(1-bk); lean=back+10*step*(Math.sign(G[left[0]][0]-t.x)||1);
+          const oo2=ph(tbB,T.back0+.25,T.back0+.45)*.35; oo=oo-oo2*(wk>0?1:0);
+          const d=unit(sub(G[left[0]],[t.x,t.y]));
+          t.x+=d[0]*11*step;t.y+=d[1]*11*step;
+          t.rot=lean;
+        }
+        t.o=open.o*(red?lerp(.65,1,wk):oo);
+        if(end&&!red){ /* stays in place with the bubble */ }
+        t.z=t.y+(step>0?1:0);
+      }
+    }
+    S.tokens.push(t);
+  });
+  /* ----- finds ----- */
+  const slotOf=(k,t)=>{const c=PL.cpos(t-.06);return [c[0]+(k-(m-1)/2)*56,c[1]-54];};
+  const dimTgt=swapOffered?.85:.60;
+  const dimK=ph(tb,T.dim[0],T.dim[1],E.out);
+  for(let i=0;i<defs.length;i++){
+    const f={i,x:G[i][0],y:G[i][1],o:1,lf:0,df:0,tilt:0,sc:1,glint:-1,shO:1,shS:1,z:G[i][1],drop:0,hl:0,pick:-1,sink:0};
+    // drop
+    let d0=T.drop0+(Fm.drop==='stagger'?T.dropGap*i:0);
+    if(red){f.o=pr(tb,.15,.30);}
+    else if(Fm.drop==='none'){f.o=pr(tb,0,.12);}
+    else{
+      f.o=pr(tb,d0,d0+.12);
+      const fall=E.out(pr(tb,d0,d0+T.dropEach));
+      f.y-=T.dropH*(1-fall);
+      if(Fm.drop==='stagger')f.y-=3*Math.sin(Math.PI*pr(tb,d0+T.dropEach,d0+T.dropEach+.08));
+      f.shS=lerp(.85,1,fall);
+    }
+    const k=picks.indexOf(i);
+    if(k>=0){
+      const l=PL.lifts[k];f.pick=k;
+      // find reaction on arrival
+      if(!red){
+        if(P.reason==='likes'){
+          const sd=Math.sign(cp[0]-G[i][0])||1;
+          const tiltIn=10*ph(tb,l.E-.35,l.E);
+          const v=pr(tb,l.E,l.E+.10);
+          f.tilt=sd*tiltIn*(1-E.smooth(v));
+          f.x+=sd*6*Math.sin(Math.PI*v)*(tb>=l.E?1:0);
+          f.y-=0;
+        }
+        if(P.reason==='worth'&&k===0&&T.dwell){
+          const sd=Math.sign(cp[0]-G[i][0])||1;
+          f.tilt=sd*10*(ph(tb,T.dwell[0]-.4,T.dwell[0])*(1-pr(tb,T.dwell[0],T.dwell[1])));
+          const gl=pr(tb,T.dwell[0]+.05,T.dwell[0]+.40);
+          f.glint=gl>0&&gl<1?gl:-1;
+        }
+      }
+      // lift
+      const eb=red?pr(tb,l.L0,l.L1):(P.reason==='bold'?bez(.34,1.12,.64,1)(pr(tb,l.L0,l.L1)):E.back(pr(tb,l.L0,l.L1)));
+      const raw=pr(tb,l.L0,l.L1);
+      const slot=slotOf(k,tb);
+      if(red){
+        // cross-fade in place: the find leaves the ground and appears above the chooser
+        const v=raw; f.o*= v<=0?1:v>=1?1:Math.abs(1-2*v);
+        if(v>=.5){f.x=slot[0];f.y=slot[1];f.lf=1;}
+      } else {
+        if(tb>=l.L0){f.x=lerp(f.x,slot[0],eb);f.y=lerp(f.y,slot[1],eb);f.lf=clamp(raw,0,1);}
+      }
+      if(f.lf>0)f.z=2000+k;
+    }
+    // left finds
+    if(left.indexOf(i)>=0){
+      f.df=dimK; f.o*=lerp(1,dimTgt,dimK);
+      f.sink=5*dimK; f.tilt+=-10*dimK;
+      if(!red&&swapOffered&&T.pulse0!=null){
+        const j=left.indexOf(i); f.sc=1+.07*Math.sin(Math.PI*pr(tb,T.pulse0+.08*j,T.pulse0+.08*j+.5));
+      }
+    }
+    S.finds.push(f);
+  }
+  /* ----- swap mark ----- */
+  if(swapOffered&&left.length){
+    const lc=left.reduce((a,i)=>[a[0]+G[i][0]/left.length,a[1]+G[i][1]/left.length],[0,0]);
+    const near=isC?lc:left.map(i=>G[i]).sort((a,b)=>len(sub(a,cp))-len(sub(b,cp)))[0];
+    const fin=PL.cpos(T.hold);
+    const mp=isC?[near[0],near[1]+36]:mix(fin,near,.5);
+    const mo=pr(tb,T.markT[0],T.markT[1]);
+    S.mark={o:E.out(mo),s:lerp(.8,1,E.out(mo)),rot:red?0:360*.25*Math.max(0,idle-T.markT[0]),x:mp[0],y:mp[1]};
+  }
+  /* ----- barks ----- */
+  const B=PL.bark;
+  {
+    const age=tb-T.bark0, info=B.info;
+    let txt='',bo=0;
+    if(red){txt=age>=0?B.text:'';bo=pr(tb,T.bark0,T.bark0+.15);}
+    else{txt=age>=0?B.text.slice(0,typedCount(info,age)):'';bo=age>=0?pr(age,0,.08):0;}
+    S.barks.push({id:0,text:txt,full:B.text,o:bo,who:B.who});
+  }
+  S.dim=dimK;
+  /* ----- skip and continue ----- */
+  S.skipO=Math.max(0,pr(tr,.2,.35))*(1-pr(tb,T.hold,T.hold+.1));
+  S.contO=pr(tb,T.hold,T.hold+.2);
+  /* ----- swap overrides (play mode) ----- */
+  if(ev.swap)applySwap(PL,S,ev,tb,tr,slotOf);
+  S.cp=cp; S.hold=T.hold;
+  return S;
+}
+
+function ringOpen(PL,tb,tk){
+  const P=PL.P,T=PL.T,c=C_CENTRE; const pc=[c[0],c[1]+6];
+  if(PL.red){const v=pr(tb,.15,.30);return {o:v,s:1,p:1,cx:pc[0],cy:pc[1]};}
+  if(P.form==='brief'){const v=pr(tb,.40,.65);return {o:v,s:1,p:1,cx:pc[0],cy:pc[1]};}
+  const ring=PL.tokens.slice().sort((a,b)=>a.order-b.order); const j=ring.indexOf(tk);
+  const t0=.40+.06*j, v=pr(tb,t0,t0+.5);
+  return {o:pr(tb,t0,t0+.12),s:lerp(.6,1,E.out(v)),p:E.out(v),cx:pc[0],cy:pc[1]};
+}
+
+/* the 0.6 s trade and its landing beat (a function of real time since the confirm) */
+function applySwap(PL,S,ev,tb,tr,slotOf){
+  const sw=ev.swap,u=tr-sw.at; if(u<0)return;
+  const {T,G,left,picks}=PL;
+  const fl=S.finds[sw.li], fc=S.finds[sw.ci];
+  const G0=G[sw.li];
+  const slotK=PL.picks.indexOf(sw.ci);
+  const slot=slotOf(slotK,tb);
+  const arc=PL.red?0:28;
+  if(PL.red){
+    const v=pr(u,0,.15);
+    const o=v<.5?1-2*v:2*v-1;
+    const done=v>=.5;
+    fl.x=done?slot[0]:G0[0];fl.y=done?slot[1]:G0[1];fl.lf=done?1:0;fl.df=done?0:1;fl.o=o*(done?1:fl.o);fl.tilt=done?0:fl.tilt;fl.sc=1;fl.sink=done?0:5;
+    fc.gx=G0[0];fc.gy=G0[1];fl.gx=G0[0];fl.gy=G0[1];
+    fc.x=done?G0[0]:slot[0];fc.y=done?G0[1]:slot[1];fc.lf=done?0:1;fc.df=done?1:0;fc.o=o*(done?.6:1);fc.tilt=done?-10:0;fc.sink=done?5:0;
+  } else {
+    const p=E.smooth(pr(u,0,.6));
+    const x0=G0[0],y0=G0[1];
+    // left find goes up over the Echo, carried find goes down to the ground slot
+    fl.x=lerp(x0,slot[0],p);fl.y=lerp(y0,slot[1],p)-arc*Math.sin(Math.PI*p);
+    fc.x=lerp(slot[0],x0,p);fc.y=lerp(slot[1],y0,p)+arc*Math.sin(Math.PI*p);
+    fl.lf=p;fl.df=1-E.out(pr(u,0,.3));fl.tilt=-10*fl.df;fl.sink=5*fl.df;fl.o=lerp(fl.o,1,E.out(pr(u,0,.3)));fl.sc=1+.08*pr(u,0,.1)*(1-pr(u,.5,.6));
+    fc.gx=x0;fc.gy=y0;fl.gx=x0;fl.gy=y0;
+    fc.lf=1-p;fc.df=E.out(pr(u,.6,.8));fc.tilt=-10*fc.df;fc.sink=5*fc.df;fc.o=lerp(1,.60,fc.df);fc.sc=1;
+    // landing beat
+    const lv=pr(u,.6,.8);
+    if(u>=.6){fl.y+=2*Math.sin(Math.PI*lv);fl.lf=1;fl.x=slot[0];fl.y=slot[1]+2*Math.sin(Math.PI*lv);fc.x=x0;fc.y=y0;fc.lf=0;}
+  }
+  fl.z=3000;fc.z=2999;
+  // the rest of the left finds drop from 85% to 60%
+  const gl=ph(u,.6,.85);
+  S.finds.forEach(f=>{ if(f.i!==sw.li&&f.i!==sw.ci&&left.indexOf(f.i)>=0){ f.o=lerp(.85,.60,gl)*1; f.sc=1; } });
+  // mark: faster during the trade, then leaves for good
+  S.mark.o*=1-ph(u,.6,.85,E.in);
+  S.mark.s*=1-.2*ph(u,.6,.85,E.in);
+  S.mark.rot+=360*.75*Math.min(u,.4);
+  // bark: the pick line fades, then the reaction line replaces it
+  const old=S.barks[0];
+  old.o*=1-pr(u,.57,.72);
+  const age=u-.72;
+  S.barks.push({id:1,text:age>=0?PL.swapLine.slice(0,PL.red?PL.swapLine.length:typedCount(PL.swapInfo,age)):'',full:PL.swapLine,o:age>=0?1:0,who:'chooser'});
+}
+
+/* the whole base frame including events that depend on real time */
+function frameAt(PL,t,ev,o){
+  o=o||{};
+  let tb=t,end=false,ghost=null,mainA=1;
+  const T=PL.T;
+  if(ev.skip!=null&&t>=ev.skip){
+    end=true;tb=T.hold+(t-ev.skip);const k=(t-ev.skip)/.15;
+    if(k<1){ghost=frame(PL,ev.skip,ev.skip,ev,{});mainA=clamp(k,0,1);}
+  }
+  const S=frame(PL,tb,t,ev,{still:o.still,end});
+  S.mainA=mainA;S.ghost=ghost;
+  if(end){S.skipO=0;S.contO=pr(t,ev.skip,ev.skip+.2);}
+  if(o.reload){S.skipO=0;S.contO=pr(t,0,.2);}
+  S.contShow=o.reload?0:(end?ev.skip:T.hold);
+  S.tb=tb;S.end=end;
+  if(ev.cont!=null&&t>=ev.cont){
+    const tc=ev.cont;
+    const tbc=(ev.skip!=null&&tc>=ev.skip)?T.hold+(tc-ev.skip):tc;
+    const B=frame(PL,o.reload?T.hold:tbc,tc,ev,{still:true,end:ev.skip!=null||o.reload});
+    closeFx(PL,B,t-tc);
+    B.mainA=1;B.ghost=null;B.contShow=S.contShow;B.tb=tbc;B.closing=true;B.c=t-tc;
+    return B;
+  }
+  return S;
+}
+
+/* the close: Continue was pressed */
+function closeFx(PL,S,c){
+  const {P,isC,T,m,Fm,red}=PL;
+  const D=PL.closeDur, k=PL.red?1:D/(isC?.90:.65);
+  const q=(a,b,e)=>ph(c,a*k,b*k,e);
+  S.skipO=0;
+  const cur=S.cp, home=PL.home;
+  if(!isC){
+    const back=q(.05,.55);
+    S.tokens.forEach(t=>{ if(t.chooser){const nx=lerp(cur[0],home[0],back),ny=lerp(cur[1],home[1],back);t.dx=nx-t.x;t.dy=ny-t.y;t.x=nx;t.y=ny;t.z=500+ny;t.tagO*=1-q(0,.2);} else t.o=lerp(t.o,1,q(.2,.5,E.out)); });
+    S.finds.forEach(f=>{ if(f.lf>0){const ch=S.tokens.find(t=>t.chooser);f.x+=ch.dx;f.y+=ch.dy;} else { const s=q(0,.35,E.in); f.sink=lerp(f.sink,12,s); f.o*=1-s; } });
+    S.cam.s=lerp(S.cam.s,1,q(.10,.55)); S.cam.x=lerp(S.cam.x,640,q(.10,.55)); S.cam.y=lerp(S.cam.y,360,q(.10,.55));
+    S.vig*=1-q(.1,.6);
+  } else {
+    const conv=(idx,n)=>ph(c,(.10+.04*(n-1-idx))*k,(.70)*k-(0.04*idx)*0,E.in);
+    const n=S.tokens.length;
+    S.tokens.forEach((t,idx)=>{ const v=ph(c,(.10+.04*(n-1-idx))*k,.70*k,E.in); const tx=lerp(t.x,C_CENTRE[0],v),ty=lerp(t.y,C_CENTRE[1]+6,v);
+      if(t.chooser){t.dx=tx-t.x;t.dy=ty-t.y;} t.x=tx;t.y=ty;t.scale=lerp(t.scale||1,.6,v);t.o*=1-ph(c,.55*k,.75*k);t.tagO*=1-q(0,.2); });
+    const chd=S.tokens.find(t=>t.chooser);
+    S.finds.forEach(f=>{ if(f.lf>0){f.x+=chd.dx||0;f.y+=chd.dy||0;const s=q(.50,.70);f.o*=1-s;f.sc*=1-.4*s;} else {const s=q(0,.35,E.in);f.sink=lerp(f.sink,12,s);f.o*=1-s;} });
+    const cm=q(.20,.80);S.cam.s=lerp(S.cam.s,1,cm);
+    S.vig*=1-q(.3,.8);
+    const pa=q(.55,.80);S.party={o:pa,s:lerp(.9,1,pa),x:C_CENTRE[0],y:C_CENTRE[1]+6};
+    S.hud.o=q(.60,.90);S.hud.dy=20*(1-q(.60,.90));
+  }
+  S.barks.forEach(b=>{b.o*=1-q(0,.2);});
+  S.mark.o*=1-q(0,.25);
+  S.contO=1-ph(c,0,.1);
+  S.resolve=ph(c,D-.20,D);
+}
+
+/* count the marks on screen: grade pips, kind shape, twin notch, swap mark */
+function countMarks(PL,S){
+  const vis=S.finds.filter(f=>f.o*(S.resolve?1-S.resolve:1)>.3);
+  const out=[];
+  if(vis.length){out.push('grade pips');out.push('kind shape');}
+  if(vis.some(f=>PL.defs[f.i].nt!=null))out.push('twin notch');
+  if(S.mark.o>.3)out.push('swap mark');
+  return out;
+}
+
+/* current beat for the review caption */
+function beatAt(PL,tb,ev,t){
+  if(ev.cont!=null&&t>=ev.cont)return {name:'Close: the board lets go (Continue pressed)',sound:'none'};
+  if(ev.swap&&t-ev.swap.at<.8){const u=t-ev.swap.at;return u<.6?{name:'Trade (0.6 s arcs)',sound:'Airy whirl speeds up.'}:{name:'Landing beat. The swap mark leaves.',sound:'Two thuds, 60 ms apart.'};}
+  if(ev.skip!=null&&t>=ev.skip&&t<ev.skip+.15)return {name:'Skip: jump to the end state (0.15 s cross-fade)',sound:'none'};
+  let cur=null;for(const b of PL.beats){if(b.t0<=tb)cur=b;}
+  if(cur&&tb<PL.T.hold+.2){ const act=PL.beats.filter(b=>b.t0<=tb&&tb<b.t1);if(act.length)cur=act[act.length-1]; }
+  if(tb>=PL.T.hold+.2)return {name:'Waiting. Nothing else moves.',sound:'none'};
+  return cur||{name:'Start',sound:'none'};
+}
+
+const API={makePlan,frame,frameAt,countMarks,beatAt,REASONS,REASON_KEYS,STAND,FORM,FINDS,E,K,clamp,lerp,pr,ph,bez,typedInfo,typedCount,A_HOME,C_CENTRE,SWAPLINE,BYLINE,sub,add,mul,len,unit,mix};
+return API;
+})();
+if(typeof module!=='undefined')module.exports=PE;
+
+/* ---------- scene markup (one builder per concept, reused by both board sizes) ---------- */
+var PE_SCENE=(function(){
+'use strict';
+const C={INK2:'#2A2A3A',CREAM:'#FFF8DC',PLATE:'#F5E6D3',BRONZE:'#785C2B',INK:'#3D2817',FLOOR:'#89543f',BACK:'#6e3128',TOK:'#2f66b8',DIM:'#CDB791',ENEMY:'#c0282c'};
+const f=n=>String(Math.round(n*100)/100);
+const iso=(c,r,ox,oy)=>[ox+(c-r)*64,oy+(c+r)*32];
+const dia=(x,y)=>`${f(x-64)},${f(y)} ${f(x)},${f(y-32)} ${f(x+64)},${f(y)} ${f(x)},${f(y+32)}`;
+
+function groundA(){
+  let s=`<rect width="1280" height="720" fill="${C.BACK}"/>`;
+  for(let c=0;c<7;c++)for(let r=0;r<7;r++){const [x,y]=iso(c,r,640,170);s+=`<polygon points="${dia(x,y)}" fill="${C.FLOOR}" stroke="#e8b080" stroke-opacity=".17" stroke-width="1.5"/>`;}
+  return s;
+}
+function groundC(){
+  let s=`<rect width="1280" height="720" fill="${C.BACK}"/>`;
+  for(let c=0;c<9;c++)for(let r=0;r<9;r++){
+    const [x,y]=iso(c,r,640,144);
+    s+=`<polygon points="${dia(x,y)}" fill="${C.FLOOR}" stroke="#e8b080" stroke-opacity=".17" stroke-width="1.5"/>`;
+    if(Math.abs(c-4)+Math.abs(r-4)>5)s+=`<polygon points="${dia(x,y)}" fill="#000" fill-opacity=".5"/>`;
+  }
+  [[1,3],[2,3],[2,4],[3,4]].forEach(([c,r])=>{const [x,y]=iso(c,r,640,144);s+=`<ellipse cx="${x-8}" cy="${y}" rx="6" ry="3" fill="${C.CREAM}" fill-opacity=".3"/><ellipse cx="${x+8}" cy="${y+4}" rx="6" ry="3" fill="${C.CREAM}" fill-opacity=".3"/>`;});
+  let p=iso(6,2,640,144);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="20" fill="#408CD9" fill-opacity=".9"/>`;
+  p=iso(2,6,640,144);s+=`<circle cx="${p[0]}" cy="${p[1]}" r="20" fill="#59596E" fill-opacity=".9"/>`;
+  s+='<circle cx="640" cy="400" r="22" fill="#595959" fill-opacity=".55"/>';
+  return s;
+}
+function shapeSvg(kind,cx,cy){
+  const B=C.BRONZE;
+  if(kind==='gear')return `<rect x="${cx-9.5}" y="${cy-11}" width="15" height="22" rx="3" fill="${B}"/>`;
+  if(kind==='relic'){const r=11,px=cx-2,pts=[[r,0],[r/2,.866*r],[-r/2,.866*r],[-r,0],[-r/2,-.866*r],[r/2,-.866*r]];return `<polygon points="${pts.map(([a,b])=>f(px+a)+','+f(cy+b)).join(' ')}" fill="${B}"/>`;}
+  if(kind==='supply')return `<polygon points="${cx-2},${cy-11} ${cx+9},${cy+9} ${cx-13},${cy+9}" fill="${B}"/>`;
+  return `<rect x="${cx-13}" y="${cy-8}" width="22" height="6" rx="1" fill="${B}"/><rect x="${cx-13}" y="${cy+2}" width="22" height="6" rx="1" fill="${B}"/>`;
+}
+function notchSvg(i,cx,cy){
+  const h=`fill="${C.INK}"`;
+  if(i===1)return `<polygon points="${cx-4},${cy-4} ${cx+4},${cy-4} ${cx+4},${cy+4}" ${h}/>`;
+  return `<rect x="${cx-4}" y="${cy-4}" width="8" height="8" ${h}/>`;
+}
+function findHtml(d,uid,i){
+  const cy=-24;
+  let pips='';for(let k=0;k<d.grade;k++){const px=-15+k*8,py=cy+15;pips+=`<polygon points="${px},${py-3.5} ${px+3.5},${py} ${px},${py+3.5} ${px-3.5},${py}" fill="${C.INK}"/>`;}
+  const nt=d.nt!=null?notchSvg(d.nt,14,cy-14):'';
+  const nm={supply:'pouch',material:'cloth',relic:'relic',gear:'gear'}[d.kind];
+  return `<g data-k="fn${i}">
+<ellipse data-k="fl${i}" cx="0" cy="4" rx="13" ry="3.5" fill="#000" fill-opacity=".24" opacity="0"/>
+<g data-k="fp${i}">
+<rect data-k="fe${i}" x="-22" y="${cy-22+5}" width="44" height="44" rx="8" fill="${C.INK}"/>
+<rect x="-22" y="${cy-22}" width="44" height="44" rx="8" fill="${C.DIM}" stroke="${C.BRONZE}" stroke-width="2.5"/>
+<rect data-k="fr${i}" x="-22" y="${cy-22}" width="44" height="44" rx="8" fill="${C.PLATE}" stroke="${C.BRONZE}" stroke-width="2.5"/>
+${shapeSvg(d.kind,0,cy-3)}${pips}${nt}
+<clipPath id="cp_${uid}_${i}"><rect x="-22" y="${cy-22}" width="44" height="44" rx="8"/></clipPath>
+<g clip-path="url(#cp_${uid}_${i})"><polygon data-k="fg${i}" points="-6,${cy-24} 8,${cy-24} 2,${cy+24} -12,${cy+24}" fill="#fff" opacity="0"/></g>
+<rect data-k="fh${i}" x="-22" y="${cy-22}" width="44" height="44" rx="8" fill="#fff" opacity="0"/>
+</g>
+<rect data-hit="${i}" x="-26" y="${cy-26}" width="52" height="52" fill="transparent" tabindex="-1" role="button" aria-label="${nm}"/>
+</g>`;
+}
+function tokenHtml(tk,isC){
+  const letter=tk.id.length===1&&tk.id!=='?'?tk.id:'';
+  return `<g data-k="tk_${tk.id}">
+<ellipse data-k="ts_${tk.id}" cx="0" cy="0" rx="25" ry="7" fill="#000" fill-opacity=".36"/>
+<circle data-k="tg1_${tk.id}" cx="0" cy="-20" r="20" fill="${C.TOK}" opacity="0"/>
+<circle data-k="tg2_${tk.id}" cx="0" cy="-20" r="20" fill="${C.TOK}" opacity="0"/>
+<g data-k="tb_${tk.id}"><circle r="20" fill="${C.TOK}" stroke="${C.INK2}" stroke-width="3"/><text x="0" y="6" text-anchor="middle" class="ini">${letter}</text></g>
+${tk.name?`<text data-k="tn_${tk.id}" x="${isC?-27:0}" y="${isC?5:27}" text-anchor="${isC?'end':'middle'}" class="nm" opacity="0">${tk.name}</text>`:''}
+</g>`;
+}
+function arrowhead(x,y,ang){
+  const sz=9,p=[[sz,0],[-sz*.6,sz*.7],[-sz*.6,-sz*.7]],c=Math.cos(ang),s=Math.sin(ang);
+  return `<polygon points="${p.map(([a,b])=>f(x+a*c-b*s)+','+f(y+a*s+b*c)).join(' ')}" fill="${C.CREAM}" stroke="${C.INK2}" stroke-width="2" stroke-linejoin="round"/>`;
+}
+function markHtml(){
+  const top='M-26,-3 Q0,-19 21,-7',bot='M26,3 Q0,19 -21,7';
+  let g='';
+  [[C.INK2,7.5],[C.CREAM,3.5]].forEach(([col,w])=>{g+=`<path d="${top}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/><path d="${bot}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="round"/>`;});
+  g+=arrowhead(21,-7,Math.atan2(-7+19,21))+arrowhead(-21,7,Math.atan2(7-19,-21));
+  return `<g data-k="mk" opacity="0"><g data-k="mkr">${g}</g></g>`;
+}
+function hudA(){
+  const st=`fill="${C.INK2}" stroke="${C.CREAM}" stroke-opacity=".5"`;
+  let top=`<g data-k="hudt"><rect x="18" y="12" width="1244" height="56" rx="5" ${st}/><rect x="34" y="30" width="170" height="20" rx="4" fill="${C.CREAM}" fill-opacity=".25"/>`;
+  for(let i=0;i<5;i++)top+=`<rect x="${900+i*70}" y="30" width="56" height="20" rx="10" fill="${C.CREAM}" fill-opacity=".25"/>`;
+  top+='</g>';
+  let bot='<g data-k="hudb">';
+  for(let i=0;i<4;i++){const x=24+i*265;bot+=`<rect x="${x}" y="632" width="249" height="70" rx="5" ${st}/><circle cx="${x+34}" cy="667" r="20" fill="${C.TOK}"/><rect x="${x+66}" y="648" width="120" height="12" rx="4" fill="${C.CREAM}" fill-opacity=".3"/><rect x="${x+66}" y="672" width="160" height="10" rx="4" fill="${C.CREAM}" fill-opacity=".2"/>`;}
+  bot+='</g>';
+  return `<g data-k="hud">${top}${bot}</g>`;
+}
+function hudC(){
+  const st=`fill="${C.INK2}" stroke="${C.CREAM}" stroke-opacity=".5"`;
+  let s=`<g data-k="hud"><g data-k="hudt"><rect x="18" y="12" width="700" height="44" rx="5" ${st}/>`;
+  for(let i=0;i<7;i++)s+=`<circle cx="${44+i*34}" cy="34" r="8" fill="${C.CREAM}" fill-opacity="${i<3?.7:.25}"/>`;
+  s+=`<rect x="740" y="12" width="110" height="44" rx="5" ${st}/><rect x="1130" y="12" width="132" height="44" rx="5" ${st}/><rect x="1152" y="26" width="88" height="16" rx="4" fill="${C.CREAM}" fill-opacity=".3"/></g><g data-k="hudb"></g></g>`;
+  return s;
+}
+function defsHtml(PL,uid){
+  const isC=PL.isC;
+  const vg=isC?['.5','.56','.55']:['.45','.5','.6'];
+  return `<defs><radialGradient id="vg_${uid}" cx="${vg[0]}" cy="${vg[1]}" r="${vg[2]}"><stop offset=".42" stop-color="#1b0b08" stop-opacity="0"/><stop offset="1" stop-color="#1b0b08" stop-opacity=".72"/></radialGradient>
+<radialGradient id="sc_${uid}" gradientUnits="userSpaceOnUse" cx="640" cy="400" r="220"><stop offset=".727" stop-color="${C.INK2}" stop-opacity="0"/><stop offset="1" stop-color="${C.INK2}" stop-opacity=".28"/></radialGradient></defs>`;
+}
+function instHtml(PL,uid){
+  const isC=PL.isC;
+  let o=defsHtml(PL,uid);
+  o+='<g data-k="cam">';
+  o+=isC?groundC():groundA();
+  o+=markHtml();
+  o+='<g data-k="shs">'+PL.defs.map((d,i)=>`<ellipse data-k="fs${i}" cx="0" cy="0" rx="19" ry="5.5" fill="#000" fill-opacity=".38" opacity="0"/>`).join('')+'</g>';
+  if(!isC)o+='<g data-k="en">'+PL.defs.map((d,i)=>`<g data-k="en${i}"><ellipse cx="0" cy="0" rx="25" ry="7" fill="#000" fill-opacity=".28"/><circle cx="0" cy="-20" r="20" fill="${C.ENEMY}" stroke="${C.INK2}" stroke-width="3"/></g>`).join('')+'</g>';
+  else o+=`<g data-k="pt"><ellipse cx="0" cy="0" rx="25" ry="7" fill="#000" fill-opacity=".28"/><circle cx="0" cy="-20" r="20" fill="${C.TOK}" stroke="${C.INK2}" stroke-width="3"/><text x="0" y="-14" text-anchor="middle" class="ini">K</text></g>`;
+  o+='<g data-k="obj">'+PL.tokens.map(tk=>tokenHtml(tk,isC)).join('')+PL.defs.map((d,i)=>findHtml(d,uid,i)).join('')+'</g>';
+  o+='<g data-k="bk0" opacity="0"></g><g data-k="bk1" opacity="0"></g>';
+  o+='<g data-k="gd" opacity="0">'+PL.defs.map((d,i)=>`<rect data-k="gd${i}" x="-24" y="-48" width="48" height="48" fill="none" stroke="#7CFC00" stroke-width="1.5" stroke-dasharray="4 3"/>`).join('')+'</g>';
+  o+='</g>';
+  o+=`<rect data-k="vig" width="1280" height="720" fill="url(#vg_${uid})" pointer-events="none" opacity="0"/>`;
+  if(isC)o+=`<rect data-k="scr" width="1280" height="720" fill="url(#sc_${uid})" pointer-events="none" opacity="0"/>`;
+  o+=isC?hudC():hudA();
+  return o;
+}
+function collect(host){
+  const r={};host.querySelectorAll('[data-k]').forEach(e=>{r[e.getAttribute('data-k')]=e;});
+  r.hits=Array.from(host.querySelectorAll('[data-hit]'));
+  r.objKeys=[];return r;
+}
+const tf=(x,y,sx,sy,rot)=>`translate(${f(x)},${f(y)})`+(rot?` rotate(${f(rot)})`:'')+((sx!==1||sy!==1)?` scale(${f(sx)},${f(sy)})`:'');
+function bubbleW(text){return Math.max(150,Math.round(text.length*9.6+38));}
+function setBubble(el,b,PL,key,anchor){
+  // geometry is fixed per line, so the text can type without the bubble growing
+  if(el._key!==key){
+    const w=bubbleW(b.full),h=44;let x=anchor.x,y=anchor.y,tail='';
+    if(anchor.side==='right'){
+      const l=Math.min(anchor.x,1262-w);x=l+w/2;
+      tail=`<polygon points="${f(l+1)},${f(y-8)} ${f(l+1)},${f(y+8)} ${f(l-13)},${f(y)}" fill="${C.CREAM}" stroke="${C.INK2}" stroke-width="2"/><rect x="${f(l)}" y="${f(y-7)}" width="4" height="14" fill="${C.CREAM}"/>`;
+    }else{
+      x=Math.min(Math.max(x,w/2+20),1260-w/2);
+      const tx=Math.min(Math.max(anchor.tx,x-w/2+20),x+w/2-20);
+      tail=`<polygon points="${f(tx-8)},${f(y+21)} ${f(tx+8)},${f(y+21)} ${f(tx)},${f(y+34)}" fill="${C.CREAM}" stroke="${C.INK2}" stroke-width="2"/><rect x="${f(tx-7)}" y="${f(y+19)}" width="14" height="4" fill="${C.CREAM}"/>`;
+    }
+    el.innerHTML=`<rect x="${f(x-w/2)}" y="${f(y-22)}" width="${w}" height="${h}" rx="12" fill="${C.CREAM}" stroke="${C.INK2}" stroke-width="2"/>${tail}<text class="bk" x="${f(x-w/2+18)}" y="${f(y+6)}"></text>`;
+    el._t=el.querySelector('text');el._key=key;el._txt=null;
+  }
+  if(el._txt!==b.text){el._t.textContent=b.text;el._txt=b.text;}
+}
+function bubbleAnchor(PL,who){
+  const T=PL.T;
+  if(who==='by'){
+    const tk=PL.byTok;const d=PL.G[PL.left[0]];
+    const u=PE.unit(PE.sub(d,tk.pos));
+    const px=tk.pos[0]+u[0]*11,py=tk.pos[1]+u[1]*11;
+    return {x:px+34,y:py-20,side:'right'};
+  }
+  const fin=PL.cpos(T.hold);
+  const sg=Math.sign(PL.dirToLeft[0])||0;
+  return {x:fin[0]-sg*50,y:Math.max(60,fin[1]-166),tx:fin[0],side:'up'};
+}
+const ZKEY=[];
+function apply(R,PL,S,opt){
+  opt=opt||{};
+  const cx=PL.camC[0],cy=PL.camC[1];
+  R.cam.setAttribute('transform',`translate(${cx},${cy}) scale(${f(S.cam.s)}) translate(${f(-S.cam.x)},${f(-S.cam.y)})`);
+  const hk=S.hud;
+  const hudt=R.hudt,hudb=R.hudb;
+  R.hud.setAttribute('opacity',f(Math.max(0,hk.o)));
+  hudt.setAttribute('transform',`translate(0,${f(-hk.dy)})`);hudb.setAttribute('transform',`translate(0,${f(hk.dy)})`);
+  R.vig.setAttribute('opacity',f(PL.isC?S.vig*.6:S.vig));
+  if(R.scr)R.scr.setAttribute('opacity',f(S.vig));
+  if(PL.isC){R.pt.setAttribute('transform',`translate(${f(S.party.x)},${f(S.party.y)}) scale(${f(S.party.s)})`);R.pt.setAttribute('opacity',f(Math.max(0,S.party.o)));}
+  else S.enemies.forEach((e,i)=>{const g=PL.G[i];R['en'+i].setAttribute('transform',`translate(${f(g[0])},${f(g[1]+e.dy)}) scale(${f(e.s)})`);R['en'+i].setAttribute('opacity',f(Math.max(0,e.o)));});
+  // mark
+  const mk=S.mark;
+  R.mk.setAttribute('opacity',f(Math.max(0,Math.min(1,mk.o))));
+  R.mk.setAttribute('transform',`translate(${f(mk.x)},${f(mk.y)}) scale(${f(mk.s*1.3)},${f(mk.s*.8)})`);
+  R.mkr.setAttribute('transform',`rotate(${f(mk.rot)})`);
+  // tokens
+  const zs=[];
+  S.tokens.forEach(t=>{
+    const g=R['tk_'+t.id];
+    g.setAttribute('transform',`translate(${f(t.x)},${f(t.y)})`+(t.scale&&t.scale!==1?` scale(${f(t.scale)})`:''));
+    g.setAttribute('opacity',f(Math.max(0,Math.min(1,t.o))));
+    R['ts_'+t.id].setAttribute('opacity',f(t.sh));
+    R['tb_'+t.id].setAttribute('transform',`translate(${f(t.bx)},${f(t.by-20)})`+(t.rot?` rotate(${f(t.rot)})`:'')+` scale(${f(t.sx)},${f(t.sy)})`);
+    const sg=Math.sign(t.rot)||1;
+    R['tg1_'+t.id].setAttribute('transform',`translate(${f(-34*sg)},2)`);R['tg2_'+t.id].setAttribute('transform',`translate(${f(-62*sg)},6)`);
+    R['tg1_'+t.id].setAttribute('opacity',f(t.g[0]));R['tg2_'+t.id].setAttribute('opacity',f(t.g[1]));
+    const tn=R['tn_'+t.id];if(tn){tn.setAttribute('opacity',f(Math.max(0,t.tagO)));tn.setAttribute('transform',`translate(0,${f(t.tagDy)})`);}
+    zs.push([t.z,g]);
+  });
+  // finds
+  S.finds.forEach(fd=>{
+    const i=fd.i,g=R['fn'+i];
+    g.setAttribute('transform',`translate(${f(fd.x)},${f(fd.y)})`+(fd.sc!==1?` scale(${f(fd.sc)})`:''));
+    g.setAttribute('opacity',f(Math.max(0,Math.min(1,fd.o))));
+    R['fl'+i].setAttribute('opacity',f(fd.lf));
+    R['fp'+i].setAttribute('transform',`translate(0,${f(fd.sink)})`+(fd.tilt?` rotate(${f(fd.tilt)} 0 -24)`:''));
+    R['fe'+i].setAttribute('transform',`translate(0,${f(-3*fd.df)})`);
+    R['fr'+i].setAttribute('opacity',f(1-fd.df));
+    const gl=fd.glint;
+    R['fg'+i].setAttribute('opacity',gl>=0?f(.6*Math.sin(Math.PI*gl)):'0');
+    R['fg'+i].setAttribute('transform',`translate(${f(-34+68*Math.max(gl,0))},0)`);
+    R['fh'+i].setAttribute('opacity',f(fd.hl||0));
+    const gx=fd.gx!==undefined?fd.gx:PL.G[i][0],gy=fd.gy!==undefined?fd.gy:PL.G[i][1];
+    const sh=R['fs'+i];
+    sh.setAttribute('transform',`translate(${f(gx)},${f(gy)}) scale(${f((fd.shS||1)*(1+.1*fd.df)*(1+.15*(fd.pk||0)))},${f((fd.shS||1)*(1-.09*fd.df))})`);
+    sh.setAttribute('opacity',f(Math.max(0,Math.min(1,fd.o*(1-fd.lf)*(.84+.16*fd.df)))));
+    zs.push([fd.z,g]);
+    // guide (48x48 target outline)
+    const gd=R['gd'+i];gd.setAttribute('transform',`translate(${f(fd.x)},${f(fd.y)})`);gd.setAttribute('opacity',fd.o>.3?'1':'0');
+  });
+  R.gd.setAttribute('opacity',opt.guides?'1':'0');
+  // z-order of tokens and finds
+  zs.sort((a,b)=>a[0]-b[0]);
+  const key=zs.map(z=>z[1].getAttribute('data-k')).join(',');
+  if(R._zkey!==key){zs.forEach(z=>R.obj.appendChild(z[1]));R._zkey=key;}
+  // barks
+  S.barks.forEach((b,idx)=>{
+    const el=R['bk'+idx];
+    const who=b.who;
+    const anchor=bubbleAnchor(PL,who);
+    setBubble(el,b,PL,b.full+'|'+who,anchor);
+    el.setAttribute('opacity',f(Math.max(0,Math.min(1,b.o))));
+  });
+  if(S.barks.length<2)R.bk1.setAttribute('opacity','0');
+}
+return {instHtml,collect,apply,C};
+})();
+
+/* ---------- page controller: clock, strip, pointer input ---------- */
+(function(){
+'use strict';
+if(typeof document==='undefined')return;
+const $=id=>document.getElementById(id);
+const {clamp,lerp,pr,E}=PE;
+const D={concept:'A',size:1280,reason:'likes',S:5,field:'clustered',ring:4,nFinds:3,swap:'offered',form:'full',
+  reduced:window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches,temper:'proud',mode:'play',speed:1,guides:false,gray:false};
+let frames=0,PL=null,t=0,playing=true,EV={},reload=false,seq=null,R0=null,R1=null,ghostBuilt=false,lastS=null,LV=null,last=0,paused0=false;
+const svg=$('svg'),root=$('root'),h0=$('i0'),h1=$('i1');
+
+function resetLV(){return {h:[0,0,0,0],p:[0,0,0,0],v:[0,0,0,0],hover:-1,sel:-1,selAt:-99,drag:null,dp:null,over:-1,spin:0,dt:.016,pressC:-99,pressS:-99};}
+LV=resetLV();
+const P=()=>({concept:D.concept,reason:D.reason,S:+D.S,field:D.field,ring:+D.ring,nFinds:+D.nFinds,swap:D.swap,form:D.form,reduced:D.reduced,temper:D.temper});
+
+function setSize(){
+  const W=D.size,H=D.size*9/16;svg.setAttribute('viewBox',`0 0 ${W} ${H}`);root.setAttribute('transform',`scale(${W/1280})`);
+  $('sizeNote').textContent=W+' x '+H+' logical units';
+  fit();
+}
+function rebuild(keep){
+  PL=PE.makePlan(P());
+  h0.innerHTML=PE_SCENE.instHtml(PL,'m');R0=PE_SCENE.collect(h0);
+  h1.innerHTML='';R1=null;ghostBuilt=false;
+  EV={};reload=false;LV=resetLV();
+  if(!keep){t=0;}
+  syncUi();
+}
+function ensureGhost(){
+  if(ghostBuilt)return;
+  h1.innerHTML=PE_SCENE.instHtml(PL,'g');R1=PE_SCENE.collect(h1);ghostBuilt=true;
+}
+function truncate(tt){
+  ['skip','swap','cont','refused'].forEach(k=>{if(EV[k]&&(EV[k].at!==undefined?EV[k].at:EV[k])>tt+1e-9)delete EV[k];});
+  if(EV.nudges)EV.nudges=EV.nudges.filter(n=>n.at<=tt);
+}
+const evAt=k=>EV[k]==null?null:(typeof EV[k]==='number'?EV[k]:EV[k].at);
+
+/* ---------- play / pause / seek ---------- */
+function play(){ if(t>=PL.hold+12||(EV.cont!=null&&t>EV.cont+PL.closeDur+1)){restart();} playing=true;syncUi(); }
+function pause(){playing=false;syncUi();}
+function restart(){rebuild();playing=true;syncUi();}
+function setT(v){t=Math.max(0,v);}
+
+/* ---------- events from the frame ---------- */
+function swapLive(){
+  return D.mode==='play'&&PL.swapOffered&&!EV.swap&&EV.cont==null&&lastS&&lastS.tb>=PL.hold&&lastS.mainA>=1&&!(EV.refused&&t<EV.refused.at+.25);
+}
+function doSkip(){
+  if(D.mode!=='play'||EV.skip!=null||EV.cont!=null||!lastS||lastS.skipO<.5||t<.2)return;
+  if(t-LV.pressS<.25)return;LV.pressS=t;
+  truncate(t);EV.skip=t;
+}
+function doContinue(){
+  if(D.mode!=='play'||EV.cont!=null||!lastS||lastS.contO<.1)return;
+  LV.pressC=t;
+  if(t<lastS.contShow+.25)return;
+  truncate(t);EV.cont=t;playing=true;
+}
+function confirmSwap(li,ci){
+  truncate(t);EV.swap={at:t,li,ci};LV.sel=-1;LV.drag=null;LV.over=-1;playing=true;
+}
+function tapFind(i){
+  const left=PL.left.includes(i),carried=PL.picks.includes(i);
+  if(swapLive()){
+    if(left){LV.sel=(LV.sel===i)?-1:i;LV.selAt=performance.now()/1000;return;}
+    if(carried&&LV.sel>=0){confirmSwap(LV.sel,i);return;}
+  } else if(left&&D.mode==='play'){
+    (EV.nudges=EV.nudges||[]).push({at:t,idx:i});if(EV.nudges.length>6)EV.nudges.shift();
+  }
+}
+function worldPt(e){
+  const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const m=R0.cam.getScreenCTM();if(!m)return [0,0];
+  const q=p.matrixTransform(m.inverse());return [q.x,q.y];
+}
+function hitIdx(e){const h=e.target.closest&&e.target.closest('[data-hit]');return h?+h.getAttribute('data-hit'):-1;}
+svg.addEventListener('pointerdown',e=>{
+  if(D.mode!=='play')return;
+  const i=hitIdx(e);
+  if(i<0)return;
+  if(swapLive()&&PL.left.includes(i)){
+    LV.drag={i,id:e.pointerId,sx:e.clientX,sy:e.clientY,moved:false};LV.dp=worldPt(e);
+    try{svg.setPointerCapture(e.pointerId);}catch(_){}
+    e.preventDefault();
+  } else {tapFind(i);}
+});
+svg.addEventListener('pointermove',e=>{
+  if(LV.drag){
+    if(Math.hypot(e.clientX-LV.drag.sx,e.clientY-LV.drag.sy)>6)LV.drag.moved=true;
+    LV.dp=worldPt(e);
+    LV.over=-1;
+    if(lastS&&LV.drag.moved){let best=34;PL.picks.forEach(ci=>{const f=lastS.finds[ci];const d=Math.hypot(LV.dp[0]-f.x,LV.dp[1]-(f.y-24));if(d<best){best=d;LV.over=ci;}});}
+  } else {const i=hitIdx(e);LV.hover=i>=0&&swapLive()&&PL.left.includes(i)?i:-1;}
+});
+function endDrag(e,cancel){
+  if(!LV.drag)return;const dr=LV.drag;LV.drag=null;
+  try{svg.releasePointerCapture(dr.id);}catch(_){}
+  if(cancel){LV.over=-1;return;}
+  if(!dr.moved){LV.over=-1;tapFind(dr.i);return;}
+  if(LV.over>=0){confirmSwap(dr.i,LV.over);return;}
+  truncate(t);EV.refused={at:t,idx:dr.i,from:[LV.dp[0],LV.dp[1]+24],lead:0};LV.over=-1;
+}
+svg.addEventListener('pointerup',e=>endDrag(e,false));
+svg.addEventListener('pointercancel',e=>endDrag(e,true));
+svg.addEventListener('pointerleave',()=>{if(!LV.drag)LV.hover=-1;});
+svg.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){LV.sel=-1;return;}
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  const tg=e.target;
+  if(tg.id==='skipG'||tg.id==='contG')return;
+  const i=tg.getAttribute&&tg.getAttribute('data-hit');
+  if(i!==null&&i!==undefined&&D.mode==='play'){e.preventDefault();tapFind(+i);}
+});
+function bindBtn(id,fn){
+  const el=$(id);
+  el.addEventListener('pointerdown',e=>{e.preventDefault();fn();});
+  el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fn();}});
+}
+bindBtn('skipG',doSkip);bindBtn('contG',doContinue);
+
+function demoRefuse(){
+  if(!PL.left.length||!PL.swapOffered){$('hint').textContent='The refused-drop demo needs a swap that is offered and at least one left find.';return;}
+  $('hint').textContent='';
+  if(!lastS||lastS.tb<PL.hold){EV={};t=PL.hold+.3;reload=false;}
+  const i=PL.left[0];const g=PL.G[i];
+  const away=[g[0]+(g[0]>640?-1:1)*70,g[1]-12];
+  truncate(t);EV.refused={at:t+.45,idx:i,from:[away[0],away[1]],lead:.45};playing=true;syncUi();
+}
+function doReload(){
+  rebuild();reload=true;EV.skip=-1;t=0;playing=true;syncUi();
+}
+
+/* ---------- live overlay (hover, drag, refused drop, closed nudge) ---------- */
+function liveOverlay(S){
+  const dt=LV.dt,k=Math.min(1,dt/.08);
+  const live=swapLive();
+  const now=performance.now()/1000;
+  PL.left.forEach((i,j)=>{
+    const f=S.finds[i];
+    const ht=(live&&(LV.hover===i||(LV.drag&&LV.drag.i===i)||LV.sel===i))?1:0;
+    const pt=(live&&((LV.drag&&LV.drag.i===i)||LV.sel===i))?1:0;
+    LV.h[i]+=(ht-LV.h[i])*k;LV.p[i]+=(pt-LV.p[i])*Math.min(1,dt/.1);
+    const h=LV.h[i],p=LV.p[i];
+    if(h>.001||p>.001){
+      f.o=lerp(f.o,1,h);f.y-=3*h+8*p;f.sc*=1+.08*p;f.tilt*=1-p;f.df*=1-p;f.pk=p;
+    }
+  });
+  PL.picks.forEach(ci=>{
+    const f=S.finds[ci];
+    const vt=(live&&LV.over===ci)?1:0;LV.v[ci]+=(vt-LV.v[ci])*k;
+    const v=LV.v[ci];if(v>.001){f.tilt+=-8*v;f.hl=.15*v;f.sc*=1+.06*v;}
+    if(live&&LV.sel>=0){const a=clamp((now-LV.selAt)/.25,0,1);f.y-=3*Math.sin(Math.PI*a);}
+  });
+  if(live&&LV.drag&&LV.drag.moved&&LV.dp){const f=S.finds[LV.drag.i];f.x=LV.dp[0];f.y=LV.dp[1]+24;f.lf=1;f.z=4000;f.df=0;f.tilt=0;f.o=1;f.gx=PL.G[LV.drag.i][0];f.gy=PL.G[LV.drag.i][1];}
+  LV.spin+= (live&&LV.drag&&LV.drag.moved&&!D.reduced)?dt*.5:0;
+  S.mark.rot+=360*LV.spin;
+  // refused drop: the find glides back to its slot
+  const rf=EV.refused;
+  if(rf&&rf.idx<S.finds.length){
+    const f=S.finds[rf.idx],g=PL.G[rf.idx];
+    f.gx=g[0];f.gy=g[1];
+    if(rf.lead>0&&t>=rf.at-rf.lead&&t<rf.at){const u=E.smooth(pr(t,rf.at-rf.lead,rf.at));f.x=lerp(g[0],rf.from[0],u);f.y=lerp(g[1],rf.from[1],u);f.lf=u;f.df=0;f.tilt=0;f.o=lerp(f.o,1,u);f.z=4000;}
+    else if(t>=rf.at){
+      const u=pr(t,rf.at,rf.at+.25),q=E.out(u);
+      const d=PE.unit(PE.sub(g,rf.from));
+      f.x=lerp(rf.from[0],g[0],q)+d[0]*2*Math.sin(Math.PI*clamp((u-.5)*2,0,1));
+      f.y=lerp(rf.from[1],g[1],q)+d[1]*2*Math.sin(Math.PI*clamp((u-.5)*2,0,1));
+      f.lf=1-q;f.df=Math.max(f.df,0);f.z=u<1?4000:f.z;
+      if(u<1){f.o=lerp(1,f.o,q);f.tilt=lerp(0,f.tilt,q);}
+    }
+  }
+  // closed press: a 2 u nudge in 90 ms
+  (EV.nudges||[]).forEach(n=>{const u=pr(t,n.at,n.at+.09);if(u>0&&u<1&&n.idx<S.finds.length)S.finds[n.idx].x+=2*Math.sin(Math.PI*u);});
+}
+
+/* ---------- render ---------- */
+function render(){
+  const S=PE.frameAt(PL,t,EV,{still:reload,reload});
+  lastS=S;
+  liveOverlay(S);
+  PE_SCENE.apply(R0,PL,S,{guides:D.guides});
+  if(S.ghost){ensureGhost();PE_SCENE.apply(R1,PL,S.ghost,{});h1.setAttribute('visibility','visible');h0.setAttribute('opacity',S.mainA.toFixed(3));}
+  else{h1.setAttribute('visibility','hidden');h0.setAttribute('opacity','1');}
+  // controls
+  const live=D.mode==='play';
+  const sk=$('skipG'),ct=$('contG');
+  sk.setAttribute('opacity',S.skipO.toFixed(3));sk.style.pointerEvents=(live&&S.skipO>.5&&EV.cont==null)?'auto':'none';
+  ct.setAttribute('opacity',Math.max(0,S.contO).toFixed(3));ct.style.pointerEvents=(live&&S.contO>.1&&EV.cont==null)?'auto':'none';
+  sk.setAttribute('tabindex',S.skipO>.5?'0':'-1');ct.setAttribute('tabindex',S.contO>.5?'0':'-1');
+  const pS=pr(t-LV.pressS,0,.08),pC=pr(t-LV.pressC,0,.08);
+  sk.setAttribute('transform',t-LV.pressS<.08&&t>=LV.pressS?'translate(1236,690) scale(.95) translate(-1236,-690)':'');
+  ct.setAttribute('transform',t-LV.pressC<.08&&t>=LV.pressC?'translate(1236,690) scale(.95) translate(-1236,-690)':'');
+  const rs=S.resolve||0;$('resolveG').setAttribute('opacity',rs.toFixed(3));
+  $('safe').setAttribute('opacity',D.guides?'1':'0');
+  // hover cursor
+  svg.style.cursor=(LV.drag&&LV.drag.moved)?'grabbing':(swapLive()&&LV.hover>=0)?'grab':'default';
+  // closed-state and live tab stops
+  R0.hits.forEach(h=>{const i=+h.getAttribute('data-hit');h.setAttribute('tabindex',(D.mode==='play'&&((swapLive()&&(PL.left.includes(i)||(LV.sel>=0&&PL.picks.includes(i))))||(!PL.swapOffered||EV.swap)&&PL.left.includes(i)))?'0':'-1');});
+  readouts(S);
+}
+function readouts(S){
+  const bt=PE.beatAt(PL,S.tb,EV,t);
+  $('beat').textContent=bt.name;
+  let cue=bt.sound;
+  if((EV.nudges||[]).some(n=>t>=n.at&&t-n.at<.4))cue='Muted tick (the swap is closed).';
+  if(EV.refused&&t>=EV.refused.at&&t<EV.refused.at+.4)cue='Soft tick only. The offer stays open.';
+  $('cue').textContent=cue;
+  const mk=PE.countMarks(PL,S);
+  $('marks').textContent=mk.length+' / 4';
+  $('marksList').textContent=mk.length?mk.join(', '):'none';
+  $('clock').textContent=t.toFixed(2)+' s';
+  const sc=$('scrub');const mx=Math.max(PL.hold+8,(EV.cont!=null?EV.cont+PL.closeDur+1:0));
+  if(+sc.max!==Math.round(mx*100)/100)sc.max=(Math.round(mx*100)/100).toString();
+  if(document.activeElement!==sc)sc.value=Math.min(t,mx).toFixed(2);
+  const live=PL.contLive.toFixed(2);
+  let run=`Continue is live at ${live} s`;
+  if(EV.skip!=null&&!reload)run+=` (Skip pressed at ${EV.skip.toFixed(2)} s)`;
+  $('run').textContent=run;
+  if(seq)$('seqNote').textContent='Reason '+(seq.i+1)+' of 6: '+PE.REASONS[D.reason].label+' ('+PE.REASONS[D.reason].sig+')';
+  else $('seqNote').textContent='';
+  $('state').textContent=D.mode==='watch'?'Watch: plays by itself, waits at the swap.':(swapLive()?'Swap is live: drag or tap a left find, then a carried find.':(PL.swapOffered?(EV.swap?'Swap spent in this event.':'Swap opens at the HOLD. Skip is live.'):'Swap closed: a press on a left find gives a nudge.'));
+}
+
+/* ---------- the loop ---------- */
+function tick(ts){
+  const dt=Math.min(.1,(ts-last)/1000||0);last=ts;LV.dt=dt||.016;
+  if(playing&&!paused0)t+=dt*D.speed;
+  if(seq&&t>PL.contLive+1.4){
+    seq.i++;
+    if(seq.i>=6){seq=null;playing=false;}
+    else{D.reason=PE.REASON_KEYS[seq.i];const rs=$('selReason');rs.value=D.reason;rebuild();playing=true;}
+  }
+  render();
+  if(((++frames)%20)===0)fit();
+  requestAnimationFrame(tick);
+}
+
+/* ---------- strip ---------- */
+const SEL={selConcept:'concept',selSize:'size',selReason:'reason',selS:'S',selField:'field',selRing:'ring',selFinds:'nFinds',selSwap:'swap',selForm:'form',selReduced:'reduced',selTemper:'temper'};
+function syncUi(){
+  Object.keys(SEL).forEach(id=>{const k=SEL[id];const v=k==='reduced'?(D.reduced?'on':'off'):String(D[k]);if($(id).value!==v)$(id).value=v;});
+  $('selField').disabled=D.concept!=='A';$('selRing').disabled=D.concept!=='C';
+  ['sp05','sp1','sp2'].forEach(id=>$(id).setAttribute('aria-pressed',String(+$(id).dataset.v===D.speed)));
+  $('mWatch').setAttribute('aria-pressed',String(D.mode==='watch'));$('mPlay').setAttribute('aria-pressed',String(D.mode==='play'));
+  $('bPlay').setAttribute('aria-pressed',String(playing));$('bPause').setAttribute('aria-pressed',String(!playing));
+  $('chkGuides').checked=D.guides;$('chkGray').checked=D.gray;
+  $('frame').style.filter=D.gray?'grayscale(1)':'none';
+  setSize();
+}
+Object.keys(SEL).forEach(id=>{
+  $(id).addEventListener('change',()=>{
+    const k=SEL[id];let v=$(id).value;
+    if(k==='reduced')v=(v==='on');else if(k==='size')v=+v;
+    D[k]=v;seq=null;
+    if(k==='size'){setSize();return;}
+    rebuild();playing=true;syncUi();
+  });
+});
+$('bPlay').addEventListener('click',play);$('bPause').addEventListener('click',pause);$('bRestart').addEventListener('click',restart);
+$('scrub').addEventListener('input',()=>{playing=false;setT(+$('scrub').value);syncUi();});
+[['sp05',.5],['sp1',1],['sp2',2]].forEach(([id,v])=>{$(id).dataset.v=v;$(id).addEventListener('click',()=>{D.speed=v;syncUi();});});
+$('mWatch').addEventListener('click',()=>{D.mode='watch';LV.sel=-1;syncUi();});
+$('mPlay').addEventListener('click',()=>{D.mode='play';syncUi();});
+$('bSix').addEventListener('click',()=>{seq={i:0};D.mode='watch';D.reason='likes';D.form='full';rebuild();playing=true;syncUi();});
+$('bRefuse').addEventListener('click',()=>{D.mode='play';seq=null;syncUi();demoRefuse();});
+$('bReload').addEventListener('click',()=>{seq=null;doReload();});
+$('chkGuides').addEventListener('change',()=>{D.guides=$('chkGuides').checked;});
+$('chkGray').addEventListener('change',()=>{D.gray=$('chkGray').checked;$('frame').style.filter=D.gray?'grayscale(1)':'none';});
+window.addEventListener('keydown',e=>{
+  if(e.target&&(e.target.tagName==='SELECT'||e.target.tagName==='INPUT'))return;
+  if(e.key==='p'||e.key==='P'){playing?pause():play();}
+});
+
+function fit(){
+  const fr=$('frame'),strip=$('strip'),top=$('top');
+  const vw=window.innerWidth,vh=window.innerHeight;
+  const avail=vh-top.offsetHeight-strip.offsetHeight-22;
+  const w=Math.max(480,Math.min(vw-24,avail*16/9));
+  fr.style.width=w+'px';
+}
+window.addEventListener('resize',fit);
+
+/* ---------- start ---------- */
+(function(){
+  const h=(location.hash||'').replace(/^#/,'');
+  const q={};h.split('&').forEach(p=>{const a=p.split('=');if(a[0])q[a[0]]=a[1];});
+  const num=k=>q[k]!==undefined?+q[k]:null;
+  if(q.concept)D.concept=q.concept;if(q.reason)D.reason=q.reason;if(num('S'))D.S=num('S');if(q.field)D.field=q.field;
+  if(num('ring'))D.ring=num('ring');if(num('finds'))D.nFinds=num('finds');if(q.swap)D.swap=q.swap;if(q.form)D.form=q.form;
+  if(q.reduced!==undefined)D.reduced=q.reduced==='1';if(num('size'))D.size=num('size');if(q.mode)D.mode=q.mode;
+  if(q.guides)D.guides=q.guides==='1';if(q.gray)D.gray=q.gray==='1';if(q.temper)D.temper=q.temper;
+  rebuild();
+  if(q.skip)EV.skip=+q.skip;
+  if(q.swapAt&&PL.left.length)EV.swap={at:+q.swapAt,li:PL.left[0],ci:PL.picks[0]};
+  if(q.contAt)EV.cont=+q.contAt;
+  if(q.reload==='1'){doReload();}
+  if(q.t!==undefined)t=+q.t;
+  if(q.pause==='1')playing=false;
+  syncUi();render();
+  requestAnimationFrame(ts=>{last=ts;requestAnimationFrame(tick);});
+})();
+})();
+
+</script>
+</body>
+</html>

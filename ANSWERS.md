@@ -912,3 +912,21 @@
 **Date:** 2026-11-09
 
 ---
+
+## #91 — Echo decisions follow one readable pattern (2026-11-10)
+
+**Q:** How must a new system that makes a decision for an Echo (for example, choosing items at pickup) be designed?
+**A:** It combines several Echo elements, never one. The elements are Standing, emotion, vectors, Calling, stats and the fight state. It follows the same pattern as the existing Echo decisions in combat, movement and behavior, and it reuses their readings. The player must be able to read the pattern across many choices and learn who each Echo is. Seeded chance may break ties or add small variance, but must not make a choice look random. A design that breaks this needs Jeff's approval first. Jeff: "I want these systems to mostly work similarly so the choices make sense and can be read as patterns by the player. This way they can learn about the echoes."
+**Source:** Jeff, 2026-11-10 (V2-ITEM-001b design round)
+**Date:** 2026-11-10
+
+---
+
+## #92 — Design starts with research on comparable games (2026-11-10)
+
+**Q:** What must a design round for an element, system or UI contain before the options are shown?
+**A:** A research step on how comparable games handle the same moment. Jeff names XCOM, Gears Tactics, Tomodachi Life and Tomodachi Friends as the spiritual and conceptual references of the game. Each design brief names this step. The research gives sources with an evidence level, extracted patterns, pitfalls, and what each pattern means for Echoes. The options follow from the patterns. The research is shown in the chat (ANSWERS #90). It guides the design and does not replace the GDD. The GDD stays the only design authority. Jeff: "I would like to include this kind of research always. It would center and guide the design of elements, systems and UI more."
+**Source:** Jeff, 2026-11-10 (V2-ITEM-001b design round)
+**Date:** 2026-11-10
+
+---
