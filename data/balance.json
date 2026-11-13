@@ -32,6 +32,7 @@
 				"escape_bonus": 20,
 				"intel_retention": true,
 				"intel_retention_bonus": 1.5,
+				"confirm_leave_items": true,
 				"contact_effects": {
 					"bid_suppression": ["aduro", "sum_okwanfo"],
 					"bid_boost": ["onyamesu", "okomfo"]
@@ -68,6 +69,7 @@
 				"escape_bonus": 0,
 				"intel_retention": false,
 				"intel_retention_bonus": 1.0,
+				"confirm_leave_items": false,
 				"contact_effects": {
 					"conversation_resonance_bonus": 0.1,
 					"guide_reveal_bonus": 1

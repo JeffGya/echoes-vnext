@@ -664,6 +664,7 @@ func _run_tests(parts: Array) -> void:
 	PendingResultTests.register(runner)  # V2-INFRA-003 Phase 8B: the durable run result — four outcomes, survives a quit (real reboot off disk), routing + one-shot consumption
 	PickupCharacterizationTests.register(runner)  # V2-ITEM-001b step C0: _state_ends, read_echo, the seam, a won fight, discard clear sites, pending-result consume
 	FindsRulesTests.register(runner)  # V2-ITEM-001b step C1: finds cap, slot chance, count roll, validator
+	DirectiveLeaveFlagTests.register(runner)  # V2-ITEM-001b step C3: confirm_leave_items reader
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)
