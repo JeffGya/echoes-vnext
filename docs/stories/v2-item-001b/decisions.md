@@ -69,6 +69,8 @@ Written in STE. Project-wide rule: `ANSWERS.md` #91 (Echo decisions follow one r
 
 - **D-64 Uncalled chooser and freeze reach confirmed (C4 QA).** (a) An uncalled Echo (about 90% of births, until Standing 3) has no Calling term and no afraid signature: it picks by archetype, vectors, traits, stats, worth and state. No `uncalled` row is added. (b) `freeze_at` stays 0.5 on the curved, composure-softened afraid value. At composure 0, hollow, fraying and strained freeze; pressed (0.487) does not. At full composure only hollow and fraying freeze. The P3 probe measures the real rate; tuning after P3 is a later decision. (Jeff, 2026-11-13: "Keep: no Calling term" and "Keep as approved")
 
+- **D-65 Unwired parts without a story code (Jeff, 2026-11-14).** Where an unwired part has no Notion story code yet, its code marker names the story by title in the form `# UNWIRED (target: NEW "<title>"): <what>`. The `pickup_unwired` test (C12) accepts a real story code or a quoted `NEW` title, and C12 prints the list of `NEW` titles so Jeff can create the Notion rows. Each placeholder is replaced by the real code once the row exists. Applies to register rows 3, 4, 11, 12, 13 and 14 of `follow-ups.md`. Also decided the same day: the pointer laps (`pointer_laps_min` 1, `pointer_laps_max` 2) and the severe band (`severe_from_status` "burdened") live in `data.inventory.pickup` (ANSWERS #83). (Jeff: "Named NEW placeholder" and "yes move them to balance.json")
+
 ## Open
 - Who calls `record_found_items` for real drops (ITEM-002).
 - Whether Standing 6 and 9 Callings resolve to a Calling family.
