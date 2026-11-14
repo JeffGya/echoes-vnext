@@ -34,6 +34,7 @@ const STAGE_MAP := "flow.stage_map"
 const STAGE := "flow.stage"
 const ENCOUNTER := "flow.encounter"
 const STAGE_EXPLORE := "flow.stage_explore"  # V2-STAGE-001: procedural exploration map
+const PICKUP := "flow.pickup"  # snapshot type only (D-58): published while the machine is in ENCOUNTER; no state class
 
 # Sanctum sub-screens
 const VOW_MANAGE := "flow.vow_manage"  # VOW-001: vow doctrine screen
