@@ -10,7 +10,7 @@ extends RefCounted
 ## fallen_names, frozen, reason, case, reaction, rank, realm_scale, finds[{ find_id, type_id, name, kind,
 ## grade, quantity, cell }], order, taken, left, tried, free, swap }. `order`, `taken`, `left` hold find ids.
 ## `free` = free pack slots before the seam call, saved in the record (the swap gate needs it).
-## `swap` = {} until a swap commits.
+## `swap` = {} until a swap commits, then { find_id, dropped_id, dropped_type_id, dropped, t }.
 
 const STAGE_KEY := "pickup"
 const SWAP_KEY := "swap_used"
@@ -74,7 +74,7 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 	var kept_order := _only(order, offered)
 	if kept_finds.is_empty():
 		return {}
-	var ev := PickupCase.resolve(kept_finds, kept_order, room, frozen, chooser["actor"] as Dictionary)
+	var ev := PickupCase.resolve(kept_finds, kept_order, room, frozen, chooser["actor"] as Dictionary, inv_cfg)
 	if str(ev["taken"]) != str(got["taken"]) and flow_ctx.logger != null:
 		flow_ctx.logger.error(t, "inventory.pickup.taken_mismatch", "The seam took other finds than the case", {
 			"situation_id": situation_id, "case": ev["taken"], "seam": got["taken"] })
@@ -127,6 +127,7 @@ static func commit_swap(flow_ctx: FlowContext, find_id: String, pack_id: String,
 
 	var sit := str(record["situation_id"])
 	var dropped_type := ""
+	var dropped := _dropped_view(flow_ctx, stage, pack_id)
 	# UNWIRED (target: V2-ITEM-004): recycle route for the dropped item
 	var row := EarningsService.row_of(stage, pack_id)
 	if not row.is_empty():
@@ -153,13 +154,43 @@ static func commit_swap(flow_ctx: FlowContext, find_id: String, pack_id: String,
 	(record["left"] as Array).erase(find_id)
 	record["left"] = finds.map(func(f: Dictionary) -> String: return str(f["find_id"])).filter(
 		func(id: String) -> bool: return (record["left"] as Array).has(id))
-	record["swap"] = { "find_id": find_id, "dropped_id": pack_id, "dropped_type_id": dropped_type, "t": t }
+	record["swap"] = { "find_id": find_id, "dropped_id": pack_id, "dropped_type_id": dropped_type,
+		"dropped": dropped, "t": t }
 	stage[SWAP_KEY] = true
 	flow_ctx.request_save("inventory.pickup.swap")
 	if flow_ctx.logger != null:
 		flow_ctx.logger.info(t, "inventory.pickup.swap", "Pickup swap committed", {
 			"stage_id": flow_ctx.stage_id, "situation_id": sit, "find_id": find_id, "dropped_type_id": dropped_type })
 	return res
+
+
+## What a swap drops, read before the removal: { id, type_id, name, kind, grade, quantity }; {} when `pack_id` is
+## in neither the held pieces nor the open item rows. The UI shows it after the swap.
+static func _dropped_view(flow_ctx: FlowContext, stage: Dictionary, pack_id: String) -> Dictionary:
+	var kind := ""
+	var grade := ""
+	var type_id := ""
+	var quantity := 1
+	var found := false
+	for h: Dictionary in InventoryService.held_pieces(flow_ctx.save_data):
+		if str(h["id"]) == pack_id:
+			type_id = str(h["type_id"])
+			kind = str(h["kind"])
+			grade = str(h.get("grade", ""))
+			quantity = int(h.get("quantity", 1))
+			found = true
+	var items: Array = EarningsService.row_of(stage, pack_id).get("items", [])
+	if not found and not items.is_empty() and items[0] is Dictionary:
+		var e: Dictionary = items[0]
+		type_id = str(e.get("type_id", ""))
+		kind = str(e.get("kind", ""))
+		grade = str(e.get("grade", ""))
+		quantity = int(e.get("quantity", 1))
+		found = true
+	if not found:
+		return {}
+	return { "id": pack_id, "type_id": type_id, "name": InventoryService.name_of(
+		ConfigService.get_inventory_cfg(flow_ctx.config_service), type_id), "kind": kind, "grade": grade, "quantity": quantity }
 
 
 ## The chooser as `PickupPick` reads it: the `EchoActor.from_echo` view, with Judgment and composure derived the

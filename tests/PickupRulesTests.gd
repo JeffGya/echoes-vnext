@@ -49,6 +49,10 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_rules/chooser_no_standing_echo", Callable(PickupRulesTests, "_t_no_standing"))
 	runner.register_test("pickup_rules/pointer_rules", Callable(PickupRulesTests, "_t_pointer"))
 	runner.register_test("pickup_rules/pointer_golden", Callable(PickupRulesTests, "_t_pointer_golden"))
+	runner.register_test("pickup_rules/pointer_laps_follow_config", Callable(PickupRulesTests, "_t_laps_config"))
+	runner.register_test("pickup_rules/severe_band_follows_config", Callable(PickupRulesTests, "_t_severe_config"))
+	runner.register_test("pickup_rules/pointer_laps_clamp_odd_config", Callable(PickupRulesTests, "_t_laps_clamp"))
+	runner.register_test("pickup_rules/pickup_config_validator", Callable(PickupRulesTests, "_t_pickup_validator"))
 	runner.register_test("pickup_rules/pack_room_counts_carried_and_open_rows", Callable(PickupRulesTests, "_t_pack_room"))
 	runner.register_test("pickup_rules/cases_c1_to_c5", Callable(PickupRulesTests, "_t_cases"))
 	runner.register_test("pickup_rules/frozen_takes_nothing", Callable(PickupRulesTests, "_t_frozen"))
@@ -278,23 +282,23 @@ static func _t_pointer() -> Dictionary:
 			var starts := {}
 			for k in range(40):
 				var sit := "sit_%d" % k
-				var p := PickupChooser.pointer(42, "stage_01", 0, sit, n, idx)
-				if p != PickupChooser.pointer(42, "stage_01", 0, sit, n, idx):
+				var p := PickupChooser.pointer(_cfg(), 42, "stage_01", 0, sit, n, idx)
+				if p != PickupChooser.pointer(_cfg(), 42, "stage_01", 0, sit, n, idx):
 					m.append("n %d idx %d %s: not the same twice" % [n, idx, sit])
 				var start := int(p["start"])
 				var laps := int(p["laps"])
 				if int(p["n"]) != n or start < 0 or start >= n or (n >= 2 and start == idx) or (n == 1 and start != 0):
 					m.append("n %d idx %d %s: bad plan %s" % [n, idx, sit, str(p)])
-				if laps < PickupChooser.LAPS_MIN or laps > PickupChooser.LAPS_MAX:
+				if laps < 1 or laps > 2:
 					m.append("n %d idx %d %s: laps %d out of range" % [n, idx, sit, laps])
 				starts[start] = true
 				laps_seen[laps] = true
 			if n >= 3 and starts.size() < 2:
 				m.append("n %d idx %d: the start never varies %s" % [n, idx, str(starts.keys())])
-	if laps_seen.size() != PickupChooser.LAPS_MAX - PickupChooser.LAPS_MIN + 1:
+	if laps_seen.size() != 2 - 1 + 1:
 		m.append("laps seen %s" % str(laps_seen.keys()))
 	for bad in [[0, 0], [3, 3], [3, -1]]:
-		var p := PickupChooser.pointer(42, "stage_01", 0, "sit_a", int(bad[0]), int(bad[1]))
+		var p := PickupChooser.pointer(_cfg(), 42, "stage_01", 0, "sit_a", int(bad[0]), int(bad[1]))
 		if int(p["start"]) != -1 or int(p["laps"]) != 0:
 			m.append("n %d idx %d: %s, expected no plan" % [int(bad[0]), int(bad[1]), str(p)])
 	return _result(m)
@@ -303,9 +307,98 @@ static func _t_pointer() -> Dictionary:
 static func _t_pointer_golden() -> Dictionary:
 	var m: Array = []
 	for g in _POINTER_GOLDEN:
-		var p := PickupChooser.pointer(int(g[0]), str(g[1]), int(g[2]), str(g[3]), int(g[4]), int(g[5]))
+		var p := PickupChooser.pointer(_cfg(), int(g[0]), str(g[1]), int(g[2]), str(g[3]), int(g[4]), int(g[5]))
 		if int(p["start"]) != int(g[6]) or int(p["laps"]) != int(g[7]):
 			m.append("%s: %s" % [str(g), str(p)])
+	return _result(m)
+
+
+static func _pickup_cfg(laps_min: int, laps_max: int, severe_from: String = "burdened") -> Dictionary:
+	return { "pickup": { "pointer_laps_min": laps_min, "pointer_laps_max": laps_max, "severe_from_status": severe_from } }
+
+
+static func _t_laps_config() -> Dictionary:
+	var m: Array = []
+	var shipping := ConfigService.get_inventory_cfg(InventorySaveTests._config())
+	for g in _POINTER_GOLDEN:
+		var p := PickupChooser.pointer(shipping, int(g[0]), str(g[1]), int(g[2]), str(g[3]), int(g[4]), int(g[5]))
+		if int(p["laps"]) != int(g[7]):
+			m.append("shipping config: %s gives laps %d" % [str(g), int(p["laps"])])
+	var seen := {}
+	for k in range(60):
+		var p := PickupChooser.pointer(_pickup_cfg(3, 5), 42, "stage_01", 0, "sit_%d" % k, 4, 1)
+		var laps := int(p["laps"])
+		if laps < 3 or laps > 5:
+			m.append("laps 3..5: got %d" % laps)
+		seen[laps] = true
+	if seen.size() != 3:
+		m.append("laps 3..5: saw %s" % str(seen.keys()))
+	for k in range(20):
+		if int(PickupChooser.pointer(_pickup_cfg(4, 4), 42, "stage_01", 0, "sit_%d" % k, 4, 1)["laps"]) != 4:
+			m.append("laps 4..4 is not always 4")
+			break
+	return _result(m)
+
+
+## Odd config values: min 0 reads as 1; max below min reads as min (no modulo by zero); min above 1 holds.
+static func _t_laps_clamp() -> Dictionary:
+	var m: Array = []
+	for c in [[0, 0, 1], [0, 2, -1], [-3, -3, 1], [3, 1, 3], [2, 0, 2]]:
+		for k in range(12):
+			var laps := int(PickupChooser.pointer(_pickup_cfg(c[0], c[1]), 42, "stage_01", 0, "sit_%d" % k, 4, 1)["laps"])
+			var lo := maxi(1, int(c[0]))
+			var hi := maxi(lo, int(c[1]))
+			if laps < lo or laps > hi or (int(c[2]) > 0 and laps != int(c[2])):
+				m.append("min %d max %d: laps %d outside %d..%d" % [c[0], c[1], laps, lo, hi])
+				break
+	return _result(m)
+
+
+static func _t_severe_config() -> Dictionary:
+	var m: Array = []
+	var two := [_find("f1", "salve"), _find("f2", "charm")]
+	var full := PickupCase.pack_room(_save(["blade", "shield", "ring", "crown"]), _cfg())
+	var burdened := _actor(50, 45)
+	var pressed := _actor(50, 55)
+	var hesitant := _actor(30, 0)
+	var cases := [
+		["burdened, from burdened", burdened, "burdened", "none"],
+		["burdened, from pressed", burdened, "pressed", "minus"],
+		["pressed, from pressed", pressed, "pressed", "none"],
+		["hesitant, from hesitant", hesitant, "hesitant", "none"],
+		["pressed, unknown id", pressed, "no_such_status", "minus"],
+	]
+	for c in cases:
+		var cfg := _pickup_cfg(1, 2, c[2])
+		if PickupCase.resolve(two, two, full, false, c[1], cfg)["reaction"] != c[3]:
+			m.append("%s: reaction is not %s" % [c[0], c[3]])
+	if PickupCase.is_severe(burdened, {}) != true or PickupCase.is_severe(hesitant, {}) != false:
+		m.append("a missing pickup block does not read as burdened")
+	return _result(m)
+
+
+static func _t_pickup_validator() -> Dictionary:
+	var m: Array = []
+	var shipping := ConfigService.get_inventory_cfg(InventorySaveTests._config())
+	var problems := ConfigValidator.validate_pickup(shipping)
+	if not problems.is_empty():
+		m.append("the shipping config fails: %s" % str(problems))
+	if not ConfigValidator.validate_pickup(_pickup_cfg(2, 2)).is_empty():
+		m.append("min equal to max is refused")
+	var bad := [
+		["no block", {}],
+		["block not a Dictionary", { "pickup": 3 }],
+		["min 0", _pickup_cfg(0, 2)],
+		["min fraction", { "pickup": { "pointer_laps_min": 1.5, "pointer_laps_max": 2, "severe_from_status": "burdened" } }],
+		["max below min", _pickup_cfg(3, 2)],
+		["max fraction", { "pickup": { "pointer_laps_min": 1, "pointer_laps_max": 2.5, "severe_from_status": "burdened" } }],
+		["max missing", { "pickup": { "pointer_laps_min": 1, "severe_from_status": "burdened" } }],
+		["unknown status", _pickup_cfg(1, 2, "tired")],
+		["status missing", { "pickup": { "pointer_laps_min": 1, "pointer_laps_max": 2 } }],
+	]
+	for b in bad:
+		if ConfigValidator.validate_pickup(b[1]).is_empty():
+			m.append("%s: not refused" % b[0])
 	return _result(m)
 
 
@@ -336,34 +429,34 @@ static func _t_cases() -> Dictionary:
 	var two := [_find("f1", "salve"), _find("f2", "charm")]
 	var calm := _calm()
 
-	var got := PickupCase.resolve(three, _ordered(three, ["f3", "f1", "f2"]), PickupCase.pack_room(_save([]), _cfg()), false, calm)
+	var got := PickupCase.resolve(three, _ordered(three, ["f3", "f1", "f2"]), PickupCase.pack_room(_save([]), _cfg()), false, calm, _cfg())
 	_check_case(m, "C1 empty, all fit", got, "C1", ["f3", "f1", "f2"], "", [], "plus", 4)
 
-	got = PickupCase.resolve(four, _ordered(four, ["f4", "f2", "f1", "f3"]), PickupCase.pack_room(_save([]), _cfg(2)), false, calm)
+	got = PickupCase.resolve(four, _ordered(four, ["f4", "f2", "f1", "f3"]), PickupCase.pack_room(_save([]), _cfg(2)), false, calm, _cfg())
 	_check_case(m, "C2 empty, some fit", got, "C2", ["f4", "f2"], "f1", ["f1", "f3"], "none", 2)
 
-	got = PickupCase.resolve(two, _ordered(two, ["f2", "f1"]), PickupCase.pack_room(_save(["blade"]), _cfg()), false, calm)
+	got = PickupCase.resolve(two, _ordered(two, ["f2", "f1"]), PickupCase.pack_room(_save(["blade"]), _cfg()), false, calm, _cfg())
 	_check_case(m, "C3 partly full, all fit", got, "C3", ["f2", "f1"], "", [], "plus", 3)
 
 	# Partly full by one carried piece and one open row of an earlier situation: S = 1.
 	got = PickupCase.resolve(three, _ordered(three, ["f3", "f1", "f2"]),
-		PickupCase.pack_room(_save(["blade", "shield"], ["herb"]), _cfg()), false, calm)
+		PickupCase.pack_room(_save(["blade", "shield"], ["herb"]), _cfg()), false, calm, _cfg())
 	_check_case(m, "C4 partly full, some fit", got, "C4", ["f3"], "f1", ["f1", "f2"], "none", 1)
 
 	got = PickupCase.resolve(two, _ordered(two, ["f2", "f1"]),
-		PickupCase.pack_room(_save(["blade", "shield", "ring", "crown"]), _cfg()), false, calm)
+		PickupCase.pack_room(_save(["blade", "shield", "ring", "crown"]), _cfg()), false, calm, _cfg())
 	_check_case(m, "C5 full, none fit", got, "C5", [], "f2", ["f1", "f2"], "minus", 0)
 
 	# Full by three carried pieces from an earlier path and one open row: still C5.
 	got = PickupCase.resolve(two, _ordered(two, ["f1", "f2"]),
-		PickupCase.pack_room(_save(["blade", "shield", "ring"], ["herb"]), _cfg()), false, calm)
+		PickupCase.pack_room(_save(["blade", "shield", "ring"], ["herb"]), _cfg()), false, calm, _cfg())
 	_check_case(m, "C5 full with a carried entry", got, "C5", [], "f1", ["f1", "f2"], "minus", 0)
 
 	# Exact fit into a partly full pack is "all fit".
-	got = PickupCase.resolve(two, _ordered(two, ["f1", "f2"]), PickupCase.pack_room(_save(["blade", "shield"]), _cfg()), false, calm)
+	got = PickupCase.resolve(two, _ordered(two, ["f1", "f2"]), PickupCase.pack_room(_save(["blade", "shield"]), _cfg()), false, calm, _cfg())
 	_check_case(m, "C3 exact fit", got, "C3", ["f1", "f2"], "", [], "plus", 2)
 
-	got = PickupCase.resolve([], [], PickupCase.pack_room(_save([]), _cfg()), false, calm)
+	got = PickupCase.resolve([], [], PickupCase.pack_room(_save([]), _cfg()), false, calm, _cfg())
 	_check_case(m, "no finds", got, "", [], "", [], "none", 4)
 	return _result(m)
 
@@ -374,7 +467,7 @@ static func _t_frozen() -> Dictionary:
 	var two := [_find("f1", "salve"), _find("f2", "charm")]
 	for c in [[_save([]), 4], [_save(["blade", "shield", "ring", "crown"]), 0], [_save(["blade"]), 3]]:
 		for order in [[], _ordered(two, ["f2", "f1"])]:
-			var got := PickupCase.resolve(two, order, PickupCase.pack_room(c[0], _cfg()), true, _actor(50, 0))
+			var got := PickupCase.resolve(two, order, PickupCase.pack_room(c[0], _cfg()), true, _actor(50, 0), _cfg())
 			_check_case(m, "frozen, free %d, order size %d" % [int(c[1]), (order as Array).size()], got,
 				"frozen", [], "", ["f1", "f2"], "none", int(c[1]))
 	return _result(m)
@@ -398,13 +491,13 @@ static func _t_severe() -> Dictionary:
 	for a in actors:
 		if EmotionStatusLean.status_of(a[1]) != a[2]:
 			m.append("%s: status %s, the fixture expects %s" % [a[0], EmotionStatusLean.status_of(a[1]), a[2]])
-		var got := PickupCase.resolve(two, two, full, false, a[1])
+		var got := PickupCase.resolve(two, two, full, false, a[1], _cfg())
 		if got["reaction"] != a[3]:
 			m.append("%s, full pack: reaction %s, expected %s" % [a[0], got["reaction"], a[3]])
 	var burdened := _actor(50, 45)
-	if PickupCase.resolve(two, two, PickupCase.pack_room(_save([]), _cfg()), false, burdened)["reaction"] != "plus":
+	if PickupCase.resolve(two, two, PickupCase.pack_room(_save([]), _cfg()), false, burdened, _cfg())["reaction"] != "plus":
 		m.append("a burdened chooser lost the plus when everything fits")
-	if PickupCase.resolve(three, three, PickupCase.pack_room(_save(["blade", "shield"]), _cfg()), false, burdened)["reaction"] != "none":
+	if PickupCase.resolve(three, three, PickupCase.pack_room(_save(["blade", "shield"]), _cfg()), false, burdened, _cfg())["reaction"] != "none":
 		m.append("a burdened chooser with some fit is not none")
 	return _result(m)
 
@@ -417,7 +510,7 @@ static func _t_severe() -> Dictionary:
 static func _full_setup() -> Dictionary:
 	var save := _save(["charm", "shield", "blade", "ring"])
 	var finds := [_find("f1", "salve"), _find("f2", "charm")]
-	var event := PickupCase.resolve(finds, finds, PickupCase.pack_room(save, _cfg()), false, _calm())
+	var event := PickupCase.resolve(finds, finds, PickupCase.pack_room(save, _cfg()), false, _calm(), _cfg())
 	return { "save": save, "finds": finds, "event": event, "pack": PickupSwapRules.pack_entries(save, _stage(save)) }
 
 
@@ -428,25 +521,25 @@ static func _t_swap_refusals() -> Dictionary:
 		m.append("full pack with finds left: %s" % str(PickupSwapRules.offer(s["event"], s["finds"], s["pack"], false)))
 	var cases: Array = []
 	cases.append(["used", s["event"], s["finds"], s["pack"], true, "used"])
-	var frozen := PickupCase.resolve(s["finds"], [], PickupCase.pack_room(s["save"], _cfg()), true, _calm())
+	var frozen := PickupCase.resolve(s["finds"], [], PickupCase.pack_room(s["save"], _cfg()), true, _calm(), _cfg())
 	cases.append(["frozen", frozen, s["finds"], s["pack"], false, "frozen"])
 	cases.append(["frozen and used", frozen, s["finds"], s["pack"], true, "frozen"])
 	# Room left after the picks: C1 and C3.
 	var empty := _save([])
-	var c1 := PickupCase.resolve(s["finds"], s["finds"], PickupCase.pack_room(empty, _cfg()), false, _calm())
+	var c1 := PickupCase.resolve(s["finds"], s["finds"], PickupCase.pack_room(empty, _cfg()), false, _calm(), _cfg())
 	cases.append(["has_room C1", c1, s["finds"], PickupSwapRules.pack_entries(empty, _stage(empty)), false, "has_room"])
 	cases.append(["used before has_room", c1, s["finds"], [], true, "used"])
 	var one := _save(["blade"])
-	var c3 := PickupCase.resolve(s["finds"], s["finds"], PickupCase.pack_room(one, _cfg()), false, _calm())
+	var c3 := PickupCase.resolve(s["finds"], s["finds"], PickupCase.pack_room(one, _cfg()), false, _calm(), _cfg())
 	cases.append(["has_room C3", c3, s["finds"], PickupSwapRules.pack_entries(one, _stage(one)), false, "has_room"])
 	# Exact fit: the pack is full after the picks and nothing is left.
 	var half := _save(["blade", "shield"])
-	var fit := PickupCase.resolve(s["finds"], s["finds"], PickupCase.pack_room(half, _cfg()), false, _calm())
+	var fit := PickupCase.resolve(s["finds"], s["finds"], PickupCase.pack_room(half, _cfg()), false, _calm(), _cfg())
 	cases.append(["nothing_left", fit, s["finds"], PickupSwapRules.pack_entries(half, _stage(half)), false, "nothing_left"])
 	# Every pair is a twin.
 	var twins := _save(["charm", "charm", "charm", "charm"])
 	var charm := [_find("f1", "charm")]
-	var all_twin := PickupCase.resolve(charm, charm, PickupCase.pack_room(twins, _cfg()), false, _calm())
+	var all_twin := PickupCase.resolve(charm, charm, PickupCase.pack_room(twins, _cfg()), false, _calm(), _cfg())
 	cases.append(["same", all_twin, charm, PickupSwapRules.pack_entries(twins, _stage(twins)), false, "same"])
 	for c in cases:
 		var got := PickupSwapRules.offer(c[1], c[2], c[3], c[4])
@@ -490,7 +583,7 @@ static func _t_swap_pairs() -> Dictionary:
 	# C4: a gathered row of this event fills the pack; it is a target, and a twin of it is not.
 	var save := _save(["blade", "shield"], ["herb"])
 	var finds := [_find("f1", "salve"), _find("f2", "herb"), _find("f3", "root")]
-	var event := PickupCase.resolve(finds, _ordered(finds, ["f3", "f1", "f2"]), PickupCase.pack_room(save, _cfg()), false, _calm())
+	var event := PickupCase.resolve(finds, _ordered(finds, ["f3", "f1", "f2"]), PickupCase.pack_room(save, _cfg()), false, _calm(), _cfg())
 	EarningsService.record_item(_stage(save), "sit_now", "f3", finds[2])
 	var pack := PickupSwapRules.pack_entries(save, _stage(save))
 	if PickupSwapRules.offer(event, finds, pack, false)["reason_key"] != "":
@@ -512,7 +605,7 @@ static func _t_empty_order() -> Dictionary:
 	var m: Array = []
 	var save := _save(["charm", "shield", "blade", "ring"])
 	var two := [_find("f1", "salve"), _find("f2", "root")]
-	var got := PickupCase.resolve(two, [], PickupCase.pack_room(save, _cfg()), false, _calm())
+	var got := PickupCase.resolve(two, [], PickupCase.pack_room(save, _cfg()), false, _calm(), _cfg())
 	_check_case(m, "empty order, full pack", got, "frozen", [], "", ["f1", "f2"], "none", 0)
 	var offer := PickupSwapRules.offer(got, two, PickupSwapRules.pack_entries(save, _stage(save)), false)
 	if offer != { "ok": false, "reason_key": "frozen" }:
@@ -525,9 +618,9 @@ static func _t_empty_order() -> Dictionary:
 static func _t_order_subset() -> Dictionary:
 	var m: Array = []
 	var three := [_find("f1", "salve"), _find("f2", "charm"), _find("f3", "root")]
-	var got := PickupCase.resolve(three, _ordered(three, ["f3"]), PickupCase.pack_room(_save([]), _cfg(2)), false, _calm())
+	var got := PickupCase.resolve(three, _ordered(three, ["f3"]), PickupCase.pack_room(_save([]), _cfg(2)), false, _calm(), _cfg())
 	_check_case(m, "subset order, room 2", got, "C2", ["f3"], "", ["f1", "f2"], "none", 2)
-	got = PickupCase.resolve(three, _ordered(three, ["f2", "f1"]), PickupCase.pack_room(_save([]), _cfg(1)), false, _calm())
+	got = PickupCase.resolve(three, _ordered(three, ["f2", "f1"]), PickupCase.pack_room(_save([]), _cfg(1)), false, _calm(), _cfg())
 	_check_case(m, "subset order, room 1", got, "C2", ["f2"], "f1", ["f1", "f3"], "none", 1)
 	return _result(m)
 
@@ -537,7 +630,7 @@ static func _t_tried_order() -> Dictionary:
 	var m: Array = []
 	var four := [_find("f1", "salve"), _find("f2", "charm"), _find("f3", "root"), _find("f4", "ring")]
 	var got := PickupCase.resolve(four, _ordered(four, ["f4", "f2", "f3", "f1"]),
-		PickupCase.pack_room(_save([]), _cfg(2)), false, _calm())
+		PickupCase.pack_room(_save([]), _cfg(2)), false, _calm(), _cfg())
 	_check_case(m, "C2 pick order", got, "C2", ["f4", "f2"], "f3", ["f1", "f3"], "none", 2)
 	return _result(m)
 
@@ -562,7 +655,7 @@ static func _t_pack_entries() -> Dictionary:
 	if ids != ["it.1", "it.2", "it.3", "stack:salve:3", "item:sit_old:g1"]:
 		m.append("pack entries %s" % str(ids))
 	var finds := [_find("f1", "salve"), _find("f2", "root")]
-	var event := PickupCase.resolve(finds, finds, room, false, _calm())
+	var event := PickupCase.resolve(finds, finds, room, false, _calm(), _cfg())
 	if str(event["case"]) != "C5":
 		m.append("fixture is not a full pack: %s" % str(event))
 	var twin := PickupSwapRules.pair(event, finds, pack, false, "f1", "stack:salve:3")
@@ -585,7 +678,7 @@ static func _t_no_target() -> Dictionary:
 		m.append("no pack item listed: %s" % str(got))
 	var untyped := [{ "id": "it.1", "type_id": "" }, { "id": "it.2", "type_id": "charm" }]
 	var charm := [_find("f1", "charm")]
-	var event := PickupCase.resolve(charm, charm, PickupCase.pack_room(_save(["charm", "charm", "charm", "charm"]), _cfg()), false, _calm())
+	var event := PickupCase.resolve(charm, charm, PickupCase.pack_room(_save(["charm", "charm", "charm", "charm"]), _cfg()), false, _calm(), _cfg())
 	got = PickupSwapRules.offer(event, charm, untyped, false)
 	if got != { "ok": false, "reason_key": "no_target" }:
 		m.append("a twin and an untyped pack item: %s" % str(got))

@@ -8,8 +8,6 @@ const CASE_FROZEN := "frozen"
 const REACTION_PLUS := "plus"
 const REACTION_NONE := "none"
 const REACTION_MINUS := "minus"
-## D-34 "burdened or worse": this status and every status before it on `EmotionService.STATUS_LADDER`.
-const SEVERE_FROM := "burdened"
 
 
 ## Pack room as the found-items seam counts it: held entries plus the open item rows of the whole save.
@@ -18,18 +16,23 @@ static func pack_room(save: Dictionary, inv_cfg: Dictionary) -> Dictionary:
 	return InventoryService.pack_load(save, inv_cfg, EarningsService.open_item_rows_in_save(save))
 
 
-static func is_severe(actor: Dictionary) -> bool:
+## D-34 severe band: `inv_cfg.pickup.severe_from_status` and every status before it on
+## `EmotionService.STATUS_LADDER`. A missing key reads as "burdened" because test configs lack the block; an unknown id makes no status severe.
+static func is_severe(actor: Dictionary, inv_cfg: Dictionary) -> bool:
+	var cfg: Variant = inv_cfg.get("pickup", {})
+	var from := str((cfg as Dictionary).get("severe_from_status", "burdened")) if cfg is Dictionary else "burdened"
 	var at: int = EmotionService.STATUS_LADDER.find(EmotionStatusLean.status_of(actor))
-	return at >= 0 and at <= EmotionService.STATUS_LADDER.find(SEVERE_FROM)
+	return at >= 0 and at <= EmotionService.STATUS_LADDER.find(from)
 
 
 ## `finds`: every find of the event, in find order. `order`: `PickupPick.order` for the chooser (ignored
-## when `frozen`). `room`: `pack_room`. `actor`: the chooser's actor view (for the severe band).
+## when `frozen`). `room`: `pack_room`. `actor`: the chooser's actor view (for the severe band). `inv_cfg`: data.inventory.
 ## Returns { case, taken, tried, left, reaction, free }: `taken` in pick order, `left` in find order and
 ## holding `tried` (the held-up item, "" when none), `free` = S before the event.
 ## A frozen chooser (or an empty `order` with finds): case "frozen", nothing taken, no tried item, every find left, reaction "none".
 ## No finds: case "", reaction "none" (the event never opens then).
-static func resolve(finds: Array, order: Array, room: Dictionary, frozen: bool, actor: Dictionary) -> Dictionary:
+static func resolve(finds: Array, order: Array, room: Dictionary, frozen: bool, actor: Dictionary,
+		inv_cfg: Dictionary) -> Dictionary:
 	var free := maxi(0, int(room.get("free", 0)))
 	var all_ids := _ids(finds)
 	if all_ids.is_empty() and not frozen:
@@ -45,7 +48,7 @@ static func resolve(finds: Array, order: Array, room: Dictionary, frozen: bool, 
 	if left.is_empty():
 		return _out("C1" if empty_pack else "C3", taken, "", left, REACTION_PLUS, free)
 	if free == 0:
-		return _out("C5", taken, tried, left, REACTION_NONE if is_severe(actor) else REACTION_MINUS, free)
+		return _out("C5", taken, tried, left, REACTION_NONE if is_severe(actor, inv_cfg) else REACTION_MINUS, free)
 	return _out("C2" if empty_pack else "C4", taken, tried, left, REACTION_NONE, free)
 
 

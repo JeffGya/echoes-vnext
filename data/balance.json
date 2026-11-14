@@ -3754,6 +3754,12 @@
 			"warn_pack_free_at": 1,
 			"_mark_count_comment": "How many different marks the UI shows to tell twin pieces apart. A piece row carries mark_index = (number part of its id) modulo mark_count. Below 1 or missing reads as 6.",
 			"mark_count": 6,
+			"_pickup_comment": "V2-ITEM-001b (ANSWERS #83): pointer_laps_min and pointer_laps_max are the whole laps the pickup pointer runs before the slow-down (presentation only; a lap count is drawn from min to max). severe_from_status is the D-34 severe band: this status and every status before it on EmotionService.STATUS_LADDER (worst to best). A chooser in the band gets no minus when the pack is full. A missing key reads as 1, 2 and burdened.",
+			"pickup": {
+				"pointer_laps_min": 1,
+				"pointer_laps_max": 2,
+				"severe_from_status": "burdened"
+			},
 			"_finds_cap_comment": "V2-ITEM-001b D-46: cap on finds offered in one pickup event, by realm scale (RewardCalc.realm_scale). Ordered bands, ascending scale. The cap of a realm scale is the cap of the highest band whose scale is at or below it (FindsRules.cap_for_scale). 1.0 (realm.01, prologue) = 2 and 1.25 (realm.02) = 3 are approved. The bands from 1.75 up are placeholders for realms that do not exist yet.",
 			"finds_cap_by_realm_scale": [
 				{ "scale": 1.0, "cap": 2 },

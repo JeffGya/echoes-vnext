@@ -25,6 +25,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_pick/calling_read_confirmed_else_origin", Callable(PickupPickTests, "_t_calling_read"))
 	runner.register_test("pickup_pick/tie_epsilon_and_string_order", Callable(PickupPickTests, "_t_tie_eps"))
 	runner.register_test("pickup_pick/judgment_is_clamped", Callable(PickupPickTests, "_t_judgment_clamp"))
+	runner.register_test("pickup_pick/unknown_or_empty_kind_scores_zero_identity_and_state", Callable(PickupPickTests, "_t_unknown_kind"))
 	runner.register_test("pickup_pick/reason_tie_order", Callable(PickupPickTests, "_t_reason_tie"))
 
 
@@ -295,6 +296,31 @@ static func _t_order() -> Dictionary:
 			m.append("tie order for input %s: %s" % [str(ids.call(input)), str(got)])
 	if not PickupPick.order(ch, [], ctx).is_empty():
 		m.append("no finds gave a non-empty order")
+	return _result(m)
+
+
+## A find with kind "" or "bogus" (no row in any table): every identity and state cell is 0, sense is 0 worth,
+## the total is finite, and `order` ranks it by its total (0): below a positive find, above a negative one.
+static func _t_unknown_kind() -> Dictionary:
+	var m: Array = []
+	var a := _actor()
+	for lean in [0.0, 0.8]:
+		var ctx := _ctx(a, lean)
+		var ch := _chooser(a, 0.2)
+		for kind in ["", "bogus"]:
+			var f := { "find_id": "u", "kind": kind, "grade": "", "quantity": 1 }
+			var ap := PickupPick.appeal(ch, f, ctx)
+			var parts: Dictionary = ap["parts"]
+			for k in ["calling", "archetype", "vector", "trait", "stat", "afraid", "bold", "signature"]:
+				if float(parts[k]) != 0.0:
+					m.append("kind '%s' lean %s: part %s is %s, expected 0" % [kind, lean, k, parts[k]])
+			for k in ["identity", "sense", "state", "total", "worth"]:
+				var v := float(ap[k])
+				if is_nan(v) or is_inf(v) or (k != "state" and v != 0.0):
+					m.append("kind '%s' lean %s: %s is %s" % [kind, lean, k, v])
+			var got: Array = PickupPick.order(ch, [_mat(), f, _gear()], _ctx(a, 0.0)).map(func(x: Dictionary) -> String: return str(x["find_id"]))
+			if got != ["f1", "u", "f3"]:
+				m.append("kind '%s': order %s, expected [f1, u, f3]" % [kind, str(got)])
 	return _result(m)
 
 

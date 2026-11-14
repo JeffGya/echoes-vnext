@@ -191,6 +191,27 @@ static func validate_pick(pick: Dictionary, calling_behavior: Dictionary = {}, l
 		_fail(logger, t, "balance.inventory.pick", p)
 	return out
 
+# data.inventory.pickup (pointer laps, severe band). One problem string per broken rule; [] = valid.
+# Test-only caller, like validate_finds; the game does not run it at load.
+static func validate_pickup(inv_cfg: Dictionary, logger: StructuredLogger = null, t: int = -1) -> Array:
+	var out: Array = []
+	var pk_v: Variant = inv_cfg.get("pickup", null)
+	if not (pk_v is Dictionary):
+		out.append("pickup is missing or not a Dictionary")
+	else:
+		var pk: Dictionary = pk_v
+		var lo: Variant = pk.get("pointer_laps_min", null)
+		var hi: Variant = pk.get("pointer_laps_max", null)
+		if not _is_whole(lo) or int(lo) < 1:
+			out.append("pickup.pointer_laps_min is not a whole number of 1 or more")
+		if not _is_whole(hi) or (_is_whole(lo) and int(hi) < int(lo)):
+			out.append("pickup.pointer_laps_max is not a whole number at or above pointer_laps_min")
+		if not EmotionService.STATUS_LADDER.has(str(pk.get("severe_from_status", ""))):
+			out.append("pickup.severe_from_status is not a status on EmotionService.STATUS_LADDER")
+	for p in out:
+		_fail(logger, t, "balance.inventory.pickup", p)
+	return out
+
 # `row` must be a Dictionary of finite numbers with only the four kinds. It must name all four unless `subset`
 # (a signature may name any subset). `zero_sum`: the values sum to 0. `limit`: no value is larger in size.
 static func _check_kind_row(out: Array, where: String, row: Variant, zero_sum: bool, limit: float, subset: bool = false) -> void:

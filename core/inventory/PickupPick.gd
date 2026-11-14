@@ -63,19 +63,19 @@ static func appeal(chooser: Dictionary, find: Dictionary, ctx: Dictionary) -> Di
 	var vector_sum := 0.0
 	var scores := _d(actor.get("vector_scores"))
 	for v: String in _d(pick.get("vector_pick_muls")):
-		vector_sum += float(scores.get(v, 0)) * _cell(pick, "vector_pick_muls", v, kind)
+		vector_sum += float(scores.get(v, 0)) * _cell2(pick, "vector_pick_muls", v, kind)
 	var trait_sum := 0.0
 	var traits := _d(actor.get("traits"))
 	for t: String in _d(pick.get("trait_pick_muls")):
-		trait_sum += float(traits.get(t, 0)) * _cell(pick, "trait_pick_muls", t, kind)
+		trait_sum += float(traits.get(t, 0)) * _cell2(pick, "trait_pick_muls", t, kind)
 	var stat_sum := 0.0
 	var stats := _d(actor.get("stats"))
 	for s: String in _d(pick.get("stat_pick_muls")):
-		stat_sum += float(stats.get(s, 0)) * _cell(pick, "stat_pick_muls", s, kind)
+		stat_sum += float(stats.get(s, 0)) * _cell2(pick, "stat_pick_muls", s, kind)
 
 	var parts := {
-		"calling": _cell(pick, "calling_pick", calling, kind),
-		"archetype": _cell(pick, "archetype_pick", str(actor.get("archetype_birth", "")), kind),
+		"calling": _cell2(pick, "calling_pick", calling, kind),
+		"archetype": _cell2(pick, "archetype_pick", str(actor.get("archetype_birth", "")), kind),
 		"vector": vector_sum * (1.0 + j * float(id_scale.get("vector", 0.0))),
 		"trait": trait_sum * (1.0 + j * float(id_scale.get("trait", 0.0))),
 		"stat": stat_sum,
@@ -89,8 +89,8 @@ static func appeal(chooser: Dictionary, find: Dictionary, ctx: Dictionary) -> Di
 
 	var ends := state_ends(chooser, ctx)
 	var signature := _d(_d(_d(ctx.get("calling_behavior")).get(calling)).get("afraid_pick_signature"))
-	parts["afraid"] = float(ends[0]) * _cell(pick, "afraid_pick", kind)
-	parts["bold"] = float(ends[1]) * _cell(pick, "bold_pick", kind)
+	parts["afraid"] = float(ends[0]) * _cell1(pick, "afraid_pick", kind)
+	parts["bold"] = float(ends[1]) * _cell1(pick, "bold_pick", kind)
 	parts["signature"] = float(ends[0]) * float(signature.get(kind, 0.0))
 	var state: float = float(parts["afraid"]) + float(parts["bold"]) + float(parts["signature"])
 
@@ -140,11 +140,20 @@ static func _calling_of(actor: Dictionary) -> String:
 	return confirmed if not confirmed.is_empty() and confirmed != "uncalled" else str(actor.get("calling_origin", "uncalled"))
 
 
-## One cell of a table: pick[table][row][kind], 0.0 when the table, row or kind is missing.
-static func _cell(pick: Dictionary, table: String, row_or_kind: String, kind: String = "") -> float:
-	if kind.is_empty():
-		return float(_d(pick.get(table)).get(row_or_kind, 0.0))
-	return float(_d(_d(pick.get(table)).get(row_or_kind)).get(kind, 0.0))
+## One cell of a kind-keyed table (afraid_pick, bold_pick): pick[table][kind]. 0.0 when the table is missing
+## or the kind is empty, unknown or not in KINDS. Never returns a Dictionary.
+static func _cell1(pick: Dictionary, table: String, kind: String) -> float:
+	if not KINDS.has(kind):
+		return 0.0
+	return float(_d(pick.get(table)).get(kind, 0.0))
+
+
+## One cell of a row-then-kind table (calling, archetype, vector, trait, stat): pick[table][row][kind]. 0.0
+## when the table or row is missing or the kind is empty, unknown or not in KINDS.
+static func _cell2(pick: Dictionary, table: String, row: String, kind: String) -> float:
+	if not KINDS.has(kind):
+		return 0.0
+	return float(_d(_d(pick.get(table)).get(row)).get(kind, 0.0))
 
 
 static func _d(v: Variant) -> Dictionary:
