@@ -666,6 +666,7 @@ func _run_tests(parts: Array) -> void:
 	FindsRulesTests.register(runner)  # V2-ITEM-001b step C1: finds cap, slot chance, count roll, validator
 	PickupPickTests.register(runner)  # V2-ITEM-001b step C4: pick rule appeal, freeze, order, validate_pick
 	DirectiveLeaveFlagTests.register(runner)  # V2-ITEM-001b step C3: confirm_leave_items reader
+	PickupRulesTests.register(runner)  # V2-ITEM-001b step C5: chooser draw, pointer plan, capacity cases, reaction class, swap legality
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)
