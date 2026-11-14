@@ -194,7 +194,7 @@ static func _t_seam_no_cap() -> Dictionary:
 	for i in 7:
 		finds.append(ItemPacksTests._find("f%d" % i, "ph_weapon_a"))
 	var got := ActiveStageService.record_found_items(ctx, "s0", finds, 4)
-	# KNOWN DEFECT (V2-ITEM-001b step C6 will change this): no finds cap. All seven are taken, and the result has no `over_cap`.
+	# Test configs have no `finds_cap_by_realm_scale` key, which the seam reads as no cap (C6). The cap is tested in pickup_state.
 	if (got["taken"] as Array).size() != 7:
 		m.append("taken %d of 7 with room for 8" % (got["taken"] as Array).size())
 	var keys: Array = got.keys()

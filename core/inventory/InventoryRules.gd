@@ -10,8 +10,8 @@ extends RefCounted
 ##   `flow.stage_explore` (the path view): MODE_PATH.   Any other type: MODE_NONE.
 ## MODE_PATH: no move; one discard per path, on a pack entry only.
 ## The one-discard mark is `stage.discard_used` (absent = not used), on the active Realm's current stage
-## (`current_stage_index`, read from saved state). The path ends clear it: a successful leave, a defeat and the
-## path-end settlement.
+## (`current_stage_index`, read from saved state). The path ends clear it (`clear_path_marks`): a successful leave,
+## a defeat and the path-end settlement.
 
 const MODE_NONE := ""
 const MODE_SANCTUM := "sanctum"
@@ -73,9 +73,12 @@ static func mark_discard_used(ctx: FlowContext) -> bool:
 	return true
 
 
-## Ends the one-discard window of a path. No-op when the mark is absent.
-static func clear_discard_used(stage: Dictionary) -> void:
+## Ends a path's marks: the one discard, the one swap and the pickup record. Called once at each path end
+## (path-end settle, successful early leave, defeat). No-op when the marks are absent.
+static func clear_path_marks(stage: Dictionary) -> void:
 	stage.erase(STAGE_KEY)
+	stage.erase(PickupEventService.SWAP_KEY)
+	stage.erase(PickupEventService.STAGE_KEY)
 
 
 ## `data.inventory` for the Sanctum, party prep and the path view: `InventoryService.snapshot` with `reserved`

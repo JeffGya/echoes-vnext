@@ -140,7 +140,7 @@ func settle(stage_cleared: bool, t: int) -> Dictionary:
 		flow_ctx.request_save("progression.xp")
 
 	# --- stamp --------------------------------------------------------------
-	InventoryRules.clear_discard_used(stage_ref)
+	InventoryRules.clear_path_marks(stage_ref)
 	stage_ref["settlement_receipt"] = {
 		"version":   RECEIPT_VERSION,
 		"result_id": "%s.stage.%d" % [flow_ctx.realm_id, stage_index],

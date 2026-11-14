@@ -414,7 +414,7 @@ I checked the constants named above in the code. I did not check each UI rule ag
 
 ## 10. Keep, lose and settle — BUILT
 
-**Story:** V2-ITEM-001a; V2-ECONOMY-004 Part B for recipes. **Code:** `core/economy/StageSettlementService.gd` (leave draws, `_keeps`), `core/realms/ActiveStageService.gd` (`lose_unsettled_packs`), `core/inventory/InventoryRules.gd` (`mark_discard_used`, `clear_discard_used`), `core/economy/RecipeCostService.gd`, `core/economy/EconomyService.gd` (`pay_cost`).
+**Story:** V2-ITEM-001a; V2-ECONOMY-004 Part B for recipes. **Code:** `core/economy/StageSettlementService.gd` (leave draws, `_keeps`), `core/realms/ActiveStageService.gd` (`lose_unsettled_packs`), `core/inventory/InventoryRules.gd` (`mark_discard_used`, `clear_path_marks`), `core/economy/RecipeCostService.gd`, `core/economy/EconomyService.gd` (`pay_cost`).
 
 ### 10.1 Early leave, defeat, path end
 
