@@ -669,6 +669,7 @@ func _run_tests(parts: Array) -> void:
 	PickupRulesTests.register(runner)  # V2-ITEM-001b step C5: chooser draw, pointer plan, capacity cases, reaction class, swap legality
 	PickupStateTests.register(runner)  # V2-ITEM-001b step C6: seam cap and take flag, event record and stamp, swap, clear_path_marks
 	PickupSnapshotTests.register(runner)  # V2-ITEM-001b step C7: flow.pickup snapshot shape, actions per phase, tone, swap keys, purity
+	PickupActionTests.register(runner)  # V2-ITEM-001b step C8: the seven pickup.* actions, refusals, one swap, session never saved
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)

@@ -148,6 +148,8 @@ var pending_scout_return_settle_outcome: String = ""  # "none"|"some"|"all"|"not
 var pending_scout_return_items: Dictionary = {}    # { kept, lost } item report of the leave (StageSettlementService.card_items); {} when no item was settled
 var pending_inventory_refusal: Dictionary = {}  # one-shot: { action: "move"|"discard", reason: String } of a refused inventory action; the rebuilt snapshot shows it as data.inventory.refused, then dispatch() clears it. Never persisted
 var pending_return_confirm: bool = false      # one-shot: the standoff card asked for the Sanctum return confirmation; the next stage_explore snapshot shows it, then dispatch() clears it. Never persisted
+var pickup_session: Dictionary = {}  # volatile pickup event state { phase, swap_origin, swap_target, selected } (PickupController). Never persisted; a reload resumes at idle
+var pickup_armed: Array = []  # debug finds for the next won fight (PickupFinds). Never persisted
 
 # V2-INFRA-003: single choke point for requesting a save. Sets save_request and, when a
 # reason is given, accumulates it into save_request_reason (pipe-joined) so multiple
