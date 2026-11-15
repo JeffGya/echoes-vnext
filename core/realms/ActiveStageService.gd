@@ -450,15 +450,17 @@ static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: 
 ## (realm scale of the active Realm) is refused with `over_cap` and logged. So a repeat in any order writes
 ## nothing. No cap key (test configs) means no cap.
 ## `take` false: nothing is written and every fresh valid find is `left` (a frozen chooser, D-39).
+## `cap_override` (debug only, `PickupEventService` debug options): replaces the realm cap; NO_OVERRIDE keeps it.
 ## Requests the save when it writes a row.
 static func record_found_items(flow_ctx_arg: FlowContext, situation_id: String, finds: Array, t: int,
-		take: bool = true) -> Dictionary:
+		take: bool = true, cap_override: int = FindsRules.NO_OVERRIDE) -> Dictionary:
 	var out := { "taken": [], "left": [], "refused": [] }
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty() or situation_id.is_empty():
 		return out
 	var cfg := ConfigService.get_inventory_cfg(flow_ctx_arg.config_service)
-	var cap := FindsRules.cap_for_scale(cfg, float(get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service)["realm_scale"]))
+	var cap := cap_override if cap_override != FindsRules.NO_OVERRIDE else FindsRules.cap_for_scale(cfg,
+		float(get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service)["realm_scale"]))
 	var checks: Array = []
 	var rowed := {}
 	for f_v in finds:

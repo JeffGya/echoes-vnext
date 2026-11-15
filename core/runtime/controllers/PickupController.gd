@@ -156,6 +156,8 @@ func handle_swap_cancel(action: Dictionary, t: int) -> FlowActionOutcome:
 
 ## Only idle ends the event. The final items, and on a stage-clearing card the stage payout and `items` blocks,
 ## are read AFTER any swap, so the card shows what the party carries.
+## A debug "event now" record (`debug_event`) has no fight behind it: a plain win card with the final items is built
+## and the machine moves to RESOLVE, so the card's own Continue (`flow.go_state`) is not a no-op on the path view.
 ## With no held card (no fight behind the event and no pending result) it publishes nothing.
 func handle_continue(action: Dictionary, t: int) -> FlowActionOutcome:
 	var gate := _gate()
@@ -166,6 +168,8 @@ func handle_continue(action: Dictionary, t: int) -> FlowActionOutcome:
 	var record := PickupEventService.record_of(FlowStageExploreState._get_current_stage(flow_ctx))
 	var pickup_result := PickupSnapshotBuilder.result_of(record)
 	finish(t)
+	if bool(record.get("debug_event", false)):
+		return _event_now_card(record, pickup_result, t)
 	PendingResultService.attach_pickup_result(flow_ctx, int(record.get("win_t", -1)), pickup_result)
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	var resolve: Dictionary = {}
@@ -179,6 +183,21 @@ func handle_continue(action: Dictionary, t: int) -> FlowActionOutcome:
 	if resolve.is_empty():
 		return FlowActionOutcome.handled_outcome()
 	return FlowActionOutcome.snapshot_outcome(resolve)
+
+
+## The Continue of this card runs the real stage-entry steps (vow stage entry, explore session reset), as after a
+## won fight. That is the cost of going back through RESOLVE; it is not a bug of the debug scene.
+func _event_now_card(record: Dictionary, pickup_result: Dictionary, t: int) -> FlowActionOutcome:
+	var actions := { "cta.continue": { "type": "flow.go_state", "to": str(record.get("return_to", FlowStateIds.STAGE_EXPLORE)),
+		"label": "Back to the path", "slot": "cta.continue" } }
+	var card := ResolveSnapshotBuilder.build(t, actions)
+	ResolveSnapshotBuilder.add_victory_flag(card["data"], true)
+	ResolveSnapshotBuilder.add_grade_rank(card["data"], str(record.get("rank", "")))
+	ResolveSnapshotBuilder.add_pickup_result(card["data"], pickup_result)
+	var outcome := FlowActionOutcome.snapshot_outcome(card)
+	outcome.transition_to = FlowStateIds.RESOLVE
+	outcome.transition_reason = "debug.pickup.event_now"
+	return outcome
 
 
 ## Ends the event: writes the durable end mark (`phase` "done"), requests a save, clears the session and returns

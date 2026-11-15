@@ -278,8 +278,9 @@ static func _t_zero_finds() -> Dictionary:
 	var stage := _stage(fc)
 	if stage.has(PickupEventService.STAGE_KEY) or stage.has(PickupEventService.SWAP_KEY) or _types(fc).has(_OPEN):
 		m.append("an event opened with a count of 0")
-	if not fc.pickup_armed.is_empty() or not fc.pickup_session.is_empty():
-		m.append("armed %s, session %s" % [str(fc.pickup_armed), str(fc.pickup_session)])
+	# C10 rule: armed finds are spent only when an event opens; this win opened none, so they stay armed.
+	if fc.pickup_armed.size() != 2 or not fc.pickup_session.is_empty() or not _types(fc).has("inventory.pickup.armed_kept"):
+		m.append("armed %s, session %s: a win that opens nothing keeps the armed finds and logs armed_kept" % [str(fc.pickup_armed), str(fc.pickup_session)])
 	var pending := _pending(fc)
 	if pending.is_empty() or pending.has("terrain") or pending.has("placement_seed") or pending.has("bounds"):
 		m.append("pending keys %s" % str(pending.keys()))

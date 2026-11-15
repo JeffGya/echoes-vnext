@@ -289,6 +289,13 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	# -------------------------
+	# pickup debug scenes (V2-ITEM-001b C10 / debug only)
+	# -------------------------
+	if head == "pickup":
+		_run_pickup_command(parts)
+		return
+
+	# -------------------------
 	# summon shortcut (SANCTUM-002 / debug only)
 	# -------------------------
 	if head == "summon":
@@ -387,7 +394,7 @@ func _on_debug_command(command: String) -> void:
 		return
 
 	_debug_print("Unknown command: " + cmd)
-	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show | recipe check|pay <type_id> <grade|ungraded> [make|upgrade]")
+	_debug_print("Try: tests | ase show | ase add 10 [reason] | ase spend 5 [reason] | ekwan show | ekwan add 1 | ekwan spend 1 | emotion [echo_id] | emotion set <echo_id> <fear|fear_base|morale> <0-100> | stopshort [on|off] | hero_info <echo_id> | combat_objective <combat|purify_shrine|recover|protect|endure|pursue|guide_spirit|show> (guide_spirit also takes [protect|escort] [join|nojoin]) | vow unlock <vow_id> | institution unlock <hearth|training_grounds|all> | spawn_ally | force_claimant_combat | force_charge_pressure [on|off] | force_recruit <success|fail|clear> | guide <hold|advance|protect|withdraw|engage|show|clear> [subject_id] | rankup [echo_id] | realm select <realm.01|realm.02> | realm show | recipe check|pay <type_id> <grade|ungraded> [make|upgrade] | inventory produce [direct|gather|event|arm] | pickup scene check|apply <event_now|arm> [yes]")
 	
 	_flush_logs_to_console()
 	
@@ -671,6 +678,7 @@ func _run_tests(parts: Array) -> void:
 	PickupSnapshotTests.register(runner)  # V2-ITEM-001b step C7: flow.pickup snapshot shape, actions per phase, tone, swap keys, purity
 	PickupActionTests.register(runner)  # V2-ITEM-001b step C8: the seven pickup.* actions, refusals, one swap, session never saved
 	PickupFlowTests.register(runner)  # V2-ITEM-001b step C9: the event in a real won fight, hold rule, end mark, Resolve, reload
+	PickupDebugTests.register(runner)  # V2-ITEM-001b step C10: debug producer modes event and arm, scene check and apply
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)
@@ -1126,17 +1134,114 @@ func _run_inventory_command(parts: PackedStringArray) -> void:
 		_flush_logs_to_console()
 		return
 	if parts.size() < 2 or parts[1].to_lower() != "produce":
-		_debug_print("Usage: inventory produce [direct|gather]")
+		_debug_print(_PICKUP_USAGE)
 		_flush_logs_to_console()
 		return
 	var mode := parts[2].to_lower() if parts.size() > 2 else "direct"
-	if mode != "direct" and mode != "gather":
-		_debug_print("inventory produce: mode must be direct or gather.")
+	if not ["direct", "gather", "event", "arm"].has(mode):
+		_debug_print("inventory produce: mode must be direct, gather, event or arm.")
 		_flush_logs_to_console()
 		return
-	var snap := runtime.dispatch({ "type": "debug.inventory.produce", "payload": { "mode": mode } })
+	var payload := { "mode": mode }
+	if mode == "event" or mode == "arm":
+		var parsed := parse_pickup_options(parts, 3, false)
+		if not parsed["ok"]:
+			_debug_print(str(parsed["usage"]))
+			_flush_logs_to_console()
+			return
+		payload.merge(parsed["payload"])
+	var start_idx := _last_log_index
+	var snap := runtime.dispatch({ "type": "debug.inventory.produce", "payload": payload })
 	_render_snapshot(snap)
-	_debug_print("inventory produce (%s): see the log lines for what was added or refused." % mode)
+	var denied := _log_of("debug.inventory.produce.denied", start_idx)
+	if not denied.is_empty():
+		var d: Dictionary = denied["data"]
+		_debug_print("inventory produce (%s) denied: %s %s" % [mode, str(d.get("reason_key", "")), str(d.get("text", ""))])
+	else:
+		_debug_print("inventory produce (%s): see the log lines for what was added or refused." % mode)
+	_flush_logs_to_console()
+
+
+const _PICKUP_USAGE := "Usage: inventory produce [direct|gather] | inventory produce event|arm [ids=a,b] [grades=g1,g2] [count=N] [rank=C] [standing=N] [chooser=<id>] [fallen=<id>] [cap=N] [held=a,b] [swapused]"
+const _PICKUP_SCENE_USAGE := "Usage: pickup scene check <event_now|arm> [options] | pickup scene apply <event_now|arm> yes [options] (options as in inventory produce event; scenes also take frozen and fullpack)"
+
+
+## Pure parse of the `key=value` words of a pickup scene or producer command, from index `from`.
+## Returns { ok, usage, payload }. Flags: swapused; frozen and fullpack only when `scene_flags` (pickup scene commands).
+static func parse_pickup_options(parts: PackedStringArray, from: int, scene_flags: bool = true) -> Dictionary:
+	var payload := {}
+	var lists := { "ids": "ids", "grades": "grades", "held": "held" }
+	var numbers := { "count": "count", "cap": "cap", "standing": "chooser_standing" }
+	var texts := { "rank": "rank", "chooser": "chooser_id", "fallen": "fallen" }
+	var flags := { "swapused": "swap_used", "frozen": "frozen", "fullpack": "full_pack" }
+	for i in range(from, parts.size()):
+		var word := parts[i]
+		if flags.has(word.to_lower()):
+			if not scene_flags and word.to_lower() != "swapused":
+				return { "ok": false, "usage": _PICKUP_USAGE, "payload": {} }
+			payload[flags[word.to_lower()]] = true
+			continue
+		var kv := word.split("=", true, 1)
+		var key := kv[0].to_lower()
+		if kv.size() != 2 or kv[1].is_empty():
+			return { "ok": false, "usage": _PICKUP_USAGE, "payload": {} }
+		if lists.has(key):
+			payload[lists[key]] = Array(kv[1].split(",", false))
+		elif numbers.has(key) and kv[1].is_valid_int():
+			payload[numbers[key]] = kv[1].to_int()
+		elif texts.has(key):
+			payload[texts[key]] = kv[1].to_upper() if key == "rank" else kv[1]
+		else:
+			return { "ok": false, "usage": _PICKUP_USAGE, "payload": {} }
+	return { "ok": true, "usage": "", "payload": payload }
+
+
+## The newest log entry of `type` at or after `from`, or {}.
+func _log_of(type: String, from: int) -> Dictionary:
+	var logs := logger.get_logs()
+	for i in range(logs.size() - 1, from - 1, -1):
+		if str((logs[i] as Dictionary).get("type", "")) == type:
+			return logs[i]
+	return {}
+
+
+# Checks or applies a pickup debug scene (debug builds only). `apply` changes the save only with the word `yes`.
+func _run_pickup_command(parts: PackedStringArray) -> void:
+	if not OS.is_debug_build():
+		_debug_print("pickup: this command works in debug builds only.")
+		_flush_logs_to_console()
+		return
+	var verb := parts[2].to_lower() if parts.size() > 2 else ""
+	if parts.size() < 4 or parts[1].to_lower() != "scene" or (verb != "check" and verb != "apply"):
+		_debug_print(_PICKUP_SCENE_USAGE)
+		_flush_logs_to_console()
+		return
+	var confirm := verb == "apply" and parts.size() > 4 and parts[4].to_lower() == "yes"
+	var parsed := parse_pickup_options(parts, 5 if confirm else 4)
+	if not parsed["ok"]:
+		_debug_print(_PICKUP_SCENE_USAGE)
+		_flush_logs_to_console()
+		return
+	var start_idx := _last_log_index
+	var payload := { "scene": parts[3].to_lower(), "options": parsed["payload"] }
+	if verb == "apply":
+		payload["confirm"] = confirm
+	var snap := runtime.dispatch({ "type": "debug.pickup.scene." + verb, "payload": payload })
+	_render_snapshot(snap)
+	var entry := _log_of("debug.pickup.scene." + verb, start_idx)
+	if entry.is_empty():
+		_debug_print("pickup scene %s: refused (%s)." % [verb, str((_log_of("debug.pickup.scene.denied", start_idx).get("data", {}) as Dictionary).get("reason_key", "see the log"))])
+	else:
+		var d: Dictionary = entry["data"]
+		_debug_print("pickup scene %s %s: %s" % [verb, str(d.get("scene", "")), "ready" if bool(d.get("ok", false)) else "NOT ready"])
+		for line in d.get("errors", []):
+			_debug_print("  ERROR: " + str(line))
+		for row in d.get("setup", []):
+			_debug_print("  - " + str((row as Dictionary).get("text", "")))
+			for c in (row as Dictionary).get("commands", []):
+				_debug_print("      command: " + str(c))
+		if verb == "apply" and not confirm and bool(d.get("ok", false)):
+			_debug_print("  Nothing changed. Add the word yes to apply: pickup scene apply %s yes" % str(d.get("scene", "")))
 	_flush_logs_to_console()
 
 
