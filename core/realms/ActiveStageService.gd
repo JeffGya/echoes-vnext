@@ -427,7 +427,7 @@ static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: 
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty():
 		return false
-	var sit_id := _last_situation_id(stage)
+	var sit_id := last_situation_id(stage)
 	var wrote := EarningsService.record_fight(stage, sit_id, claimant,
 		ConfigService.get_rewards_cfg(flow_ctx_arg.config_service), flow_ctx_arg.logger, t)
 	if wrote and flow_ctx_arg.logger != null:
@@ -445,39 +445,63 @@ static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: 
 ## `EarningsService.open_item_rows_in_save`). No RNG.
 ## Returns { taken, left, refused }: `taken`, `left` = lists of `find_id`; `refused` = [{ find_id, reason_key }].
 ## A `find_id` that appears a second time in one call is refused with `duplicate_find` (the first copy stands).
+## Finds cap (D-51): one call per event. Valid finds that already have a row use the cap first, wherever they
+## stand in the list; a fresh find that would bring rows plus accepted fresh finds past `FindsRules.cap_for_scale`
+## (realm scale of the active Realm) is refused with `over_cap` and logged. So a repeat in any order writes
+## nothing. No cap key (test configs) means no cap.
+## `take` false: nothing is written and every fresh valid find is `left` (a frozen chooser, D-39).
 ## Requests the save when it writes a row.
-static func record_found_items(flow_ctx_arg: FlowContext, situation_id: String, finds: Array, t: int) -> Dictionary:
+static func record_found_items(flow_ctx_arg: FlowContext, situation_id: String, finds: Array, t: int,
+		take: bool = true) -> Dictionary:
 	var out := { "taken": [], "left": [], "refused": [] }
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty() or situation_id.is_empty():
 		return out
 	var cfg := ConfigService.get_inventory_cfg(flow_ctx_arg.config_service)
-	var fresh: Array = []
-	var by_id := {}
+	var cap := FindsRules.cap_for_scale(cfg, float(get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service)["realm_scale"]))
+	var checks: Array = []
+	var rowed := {}
 	for f_v in finds:
 		var fid: String = str((f_v as Dictionary).get("find_id", "")) \
 			if f_v is Dictionary and (f_v as Dictionary).get("find_id", null) is String else ""
 		var bad := InventoryService.check_entry(cfg, f_v) if f_v is Dictionary else "bad_entry"
 		if fid.is_empty():
 			bad = "bad_entry"
+		checks.append([f_v, fid, bad])
+		if bad == "" and EarningsService.has_row(stage, EarningsService.item_id(situation_id, fid)):
+			rowed[fid] = true
+	var accepted := rowed.size()
+	var over := 0
+	var fresh: Array = []
+	var by_id := {}
+	for c in checks:
+		var fid: String = c[1]
+		var bad: String = c[2]
 		if bad == "" and by_id.has(fid):
 			bad = "duplicate_find"
+		if bad == "" and not rowed.has(fid) and cap != FindsRules.NO_CAP and accepted >= cap:
+			bad = "over_cap"
+			over += 1
 		if bad != "":
 			(out["refused"] as Array).append({ "find_id": fid, "reason_key": bad })
-		elif not EarningsService.has_row(stage, EarningsService.item_id(situation_id, fid)):
-			by_id[fid] = f_v
+		elif not rowed.has(fid):
+			accepted += 1
+			by_id[fid] = c[0]
 			fresh.append({ "find_id": fid })
 	if fresh.is_empty() and (out["refused"] as Array).is_empty():
 		return out
 	var free := InventoryService.pack_free(flow_ctx_arg.save_data, cfg,
 		EarningsService.open_item_rows_in_save(flow_ctx_arg.save_data))
-	var pick := InventoryService.take_in_order(fresh, free)
+	var pick := InventoryService.take_in_order(fresh, free if take else 0)
 	for fid_v in pick["taken"]:
 		if EarningsService.record_item(stage, situation_id, str(fid_v), by_id[fid_v]):
 			(out["taken"] as Array).append(fid_v)
 	out["left"] = pick["left"]
 	if not (out["taken"] as Array).is_empty():
 		flow_ctx_arg.request_save("economy.earnings.items")
+	if flow_ctx_arg.logger != null and over > 0:
+		flow_ctx_arg.logger.warn(t, "economy.earnings.over_cap", "Finds past the cap refused", {
+			"stage_id": flow_ctx_arg.stage_id, "situation_id": situation_id, "cap": cap, "refused": over })
 	if flow_ctx_arg.logger != null:
 		flow_ctx_arg.logger.info(t, "economy.earnings.items", "Found items added to the packs", {
 			"stage_id": flow_ctx_arg.stage_id, "situation_id": situation_id,
@@ -494,10 +518,11 @@ static func fight_row(flow_ctx_arg: FlowContext, claimant: bool) -> Dictionary:
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty():
 		return {}
-	return EarningsService.row_of(stage, EarningsService.fight_id(_last_situation_id(stage), claimant))
+	return EarningsService.row_of(stage, EarningsService.fight_id(last_situation_id(stage), claimant))
 
 
-static func _last_situation_id(stage: Dictionary) -> String:
+## The situation the party engaged last (`explore_map.last_situation_id`), or "". Read only.
+static func last_situation_id(stage: Dictionary) -> String:
 	var emap_v: Variant = stage.get("explore_map", {})
 	return str((emap_v as Dictionary).get("last_situation_id", "")) if emap_v is Dictionary else ""
 
@@ -538,7 +563,7 @@ static func lose_unsettled_packs(flow_ctx_arg: FlowContext, t: int) -> int:
 						InventoryService.name_of(inv_cfg, str((e_v as Dictionary).get("type_id", "")))))
 					lost_items += 1
 	var lost := EarningsService.mark_lost(stage)
-	InventoryRules.clear_discard_used(stage)
+	InventoryRules.clear_path_marks(stage)
 	var held: Array = InventoryService.held_pieces(flow_ctx_arg.save_data)
 	var removed := InventoryService.remove_held(flow_ctx_arg.save_data, held.map(func(p): return p["id"]))
 	for p_v in removed:

@@ -44,9 +44,9 @@ const ENTRY_SCHEMA: Dictionary = {
 	"step_budget": "number", "reveal_radius": "number", "passive_reveal": "bool",
 	"passive_reveal_radius": "number", "target_preference": "dict", "precise_intel_bias": "number",
 	"exposure_tolerance": "number", "escape_bonus": "number", "intel_retention": "bool",
-	"intel_retention_bonus": "number", "contact_effects": "dict",
+	"intel_retention_bonus": "number", "contact_effects": "dict", "confirm_leave_items": "bool",
 }
-const OPTIONAL_KEYS: Array = ["contact_effects"]
+const OPTIONAL_KEYS: Array = ["contact_effects", "confirm_leave_items"]
 
 ## contact_effects key -> value kind. A new effect kind needs a reader in code, so it is listed here.
 const CONTACT_EFFECT_KEYS: Dictionary = {
@@ -73,7 +73,8 @@ const _REGISTRY: Dictionary = {
 			"prefer_disengage":    0.20,
 			"resource_efficiency": 0.10
 		},
-		"unlock_condition": "always"
+		"unlock_condition": "always",
+		"confirm_leave_items": true
 	},
 	"directive.seek_signs": {
 		"id":          "directive.seek_signs",
@@ -93,7 +94,8 @@ const _REGISTRY: Dictionary = {
 			"exposure_acceptance":   0.20,
 			"survival_bias":         0.10
 		},
-		"unlock_condition": "always"
+		"unlock_condition": "always",
+		"confirm_leave_items": false
 	}
 	# ---- Expansion directives (deferred — do not build from these) ----
 	# directive.protect, directive.push, directive.preserve, directive.focus
@@ -208,6 +210,17 @@ static func resolve(save: Dictionary, directives_cfg: Dictionary) -> Dictionary:
 # The config registry, or the built-in fallback when the config has none.
 static func registry_of(directives_cfg: Dictionary) -> Dictionary:
 	return directives_cfg if not directives_cfg.is_empty() else _REGISTRY
+
+
+# True when the Directive asks "Leave these behind?" before the party leaves finds. A missing key,
+# an unknown id or a non-bool value reads false (the schema guard rejects a non-bool in config).
+# UNWIRED (target: V2-DIRECTIVE-003): new Directives set confirm_leave_items in config
+static func confirms_leave_items(directives_cfg: Dictionary, directive_id: String) -> bool:
+	var entry_v: Variant = registry_of(directives_cfg).get(directive_id)
+	if not (entry_v is Dictionary):
+		return false
+	var flag: Variant = (entry_v as Dictionary).get("confirm_leave_items", false)
+	return flag is bool and flag
 
 
 # Ids of Directives with unlock_condition "always", in registry order.

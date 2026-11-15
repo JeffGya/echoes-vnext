@@ -572,6 +572,28 @@ func dispatch(action: Dictionary) -> Dictionary:
 
 			"inventory.move.apply":
 				_apply_action_outcome(_inventory_controller().handle_move(action, t), t)
+
+			# V2-ITEM-001b: the pickup event, routed to PickupController.
+			"pickup.skip":
+				_apply_action_outcome(_pickup_controller().handle_skip(action, t), t)
+
+			"pickup.select":
+				_apply_action_outcome(_pickup_controller().handle_select(action, t), t)
+
+			"pickup.swap.start":
+				_apply_action_outcome(_pickup_controller().handle_swap_start(action, t), t)
+
+			"pickup.swap.pick":
+				_apply_action_outcome(_pickup_controller().handle_swap_pick(action, t), t)
+
+			"pickup.swap.confirm":
+				_apply_action_outcome(_pickup_controller().handle_swap_confirm(action, t), t)
+
+			"pickup.swap.cancel":
+				_apply_action_outcome(_pickup_controller().handle_swap_cancel(action, t), t)
+
+			"pickup.continue":
+				_apply_action_outcome(_pickup_controller().handle_continue(action, t), t)
 	
 			# ---- Vows (VOW-001) ----
 			# V2-INFRA-003 Phase 4 Slice 2: VowController owns these 3 actions. Controllers
@@ -974,6 +996,11 @@ func _debug_controller() -> DebugController:
 ## V2-ITEM-001a: builds a fresh InventoryController (inventory.discard.apply, inventory.move.apply). Same per-call rationale.
 func _inventory_controller() -> InventoryController:
 	return InventoryController.new(flow_ctx, config_service, logger)
+
+
+## V2-ITEM-001b: builds a fresh PickupController (the seven pickup.* actions). Same per-call rationale.
+func _pickup_controller() -> PickupController:
+	return PickupController.new(flow_ctx, config_service, logger)
 
 
 ## V2-INFRA-003 Phase 4 Slice 6b: builds a fresh ProgressionController scoped to the current

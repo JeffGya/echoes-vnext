@@ -662,6 +662,14 @@ func _run_tests(parts: Array) -> void:
 	CombatMaturityBaselineTests.register(runner)  # V2-COMBAT-003 Phase 3: Whole-band baseline scenario — first fixture with a Standing 4+ Echo, whole-vs-nascent expression-output divergence
 	BehaviorCharacterizationTests.register(runner)  # V2-COMBAT-003 Phase 1: characterization of movement-starvation, actor.idle-while-moved, enemy refusal, spatial-term zeroing, purify delegation, silent legacy fallback, health_ratio divergence
 	PendingResultTests.register(runner)  # V2-INFRA-003 Phase 8B: the durable run result — four outcomes, survives a quit (real reboot off disk), routing + one-shot consumption
+	PickupCharacterizationTests.register(runner)  # V2-ITEM-001b step C0: _state_ends, read_echo, the seam, a won fight, discard clear sites, pending-result consume
+	FindsRulesTests.register(runner)  # V2-ITEM-001b step C1: finds cap, slot chance, count roll, validator
+	PickupPickTests.register(runner)  # V2-ITEM-001b step C4: pick rule appeal, freeze, order, validate_pick
+	DirectiveLeaveFlagTests.register(runner)  # V2-ITEM-001b step C3: confirm_leave_items reader
+	PickupRulesTests.register(runner)  # V2-ITEM-001b step C5: chooser draw, pointer plan, capacity cases, reaction class, swap legality
+	PickupStateTests.register(runner)  # V2-ITEM-001b step C6: seam cap and take flag, event record and stamp, swap, clear_path_marks
+	PickupSnapshotTests.register(runner)  # V2-ITEM-001b step C7: flow.pickup snapshot shape, actions per phase, tone, swap keys, purity
+	PickupActionTests.register(runner)  # V2-ITEM-001b step C8: the seven pickup.* actions, refusals, one swap, session never saved
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)

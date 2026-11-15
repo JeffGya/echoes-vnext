@@ -1,0 +1,1739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pickup event: playable mockup (Concept A, revised)</title>
+<style>
+:root{--bg:#F6F1E3;--ink:#2A2A3A;--muted:#5a5a6a;--card:#FFFDF2;--line:#cdbf94;--gold:#80630b;
+ --c-plate:#F5E6D3;--c-bed:#DCCEB5;--c-bed-heavy:#D9C5A0;--c-bronze:#785C2B;--c-ink:#3D2817;--c-gold:#D4AF37;
+ --f-ui:Georgia,"Times New Roman",serif;--f-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif}
+.top{max-width:1920px;margin:0 auto;padding:6px 14px 4px;display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.top b{font-size:15px}.top span{font-size:13px;color:var(--muted)}
+.hostwrap{display:flex;justify-content:center;padding:0 12px}
+#host{position:relative;overflow:hidden;background:#140c0a;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+
+/* ---------- the game frame: 1280 x 720 logical units, scaled as a whole ---------- */
+#stage{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;overflow:hidden;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none;touch-action:manipulation;
+  --tile:64px;--bed-size:72px;--art:40px;--pip:6px;--notch:12px;--leaf:14px;--bw:2px;--r-bed:12px;--r-plate:10px;--inset:3px;--t:12px}
+#stage.gray{filter:grayscale(1)}
+#stage svg.layer{position:absolute;left:0;top:0;width:1280px;height:720px;display:block}
+#board{z-index:1}
+#top{z-index:3;pointer-events:none}
+#top .it{pointer-events:none}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;pointer-events:none}
+.ini{font:750 16px system-ui,sans-serif;fill:#fff}
+.nm{font:650 16px system-ui,sans-serif;fill:#FFF8DC;paint-order:stroke;stroke:#6e3128;stroke-width:5px;stroke-linejoin:round}
+.chip{font:600 12px system-ui,sans-serif;fill:#FFF8DC}
+.bk{font:600 18px system-ui,sans-serif;fill:#2A2A3A}
+.cnt{font:700 11px var(--f-mono);fill:#3D2817}
+.lostT{font:700 13px var(--f-mono);fill:#FFF8DC;paint-order:stroke;stroke:#2A0F0B;stroke-width:4px;stroke-linejoin:round}
+.it .hit{cursor:pointer;fill:transparent}
+.it .hit:focus{outline:none}
+.it .hit:focus-visible{stroke:#FFF8DC;stroke-width:3;stroke-dasharray:6 4}
+.it.sel .pl1,.it.sel .pl0{stroke:#FFF8DC;stroke-width:3.5}
+
+/* item tiles (copied in kind from the approved 001a prototype: bed, plate, kind shape, pips, notch, leaf, count) */
+.item-tile{position:relative;display:inline-block;flex:none;width:var(--bed-size);height:var(--bed-size);border-radius:var(--r-bed);
+  background:var(--c-bed);box-shadow:inset 0 0 0 1px rgba(120,92,43,.45);vertical-align:top;--c-fg:var(--c-ink)}
+.item-tile.carried{background:var(--c-bed-heavy)}
+.item-tile .plate{position:absolute;display:block;left:calc((var(--bed-size) - var(--tile))/2);top:calc((var(--bed-size) - var(--tile))/2);
+  width:var(--tile);height:var(--tile);border-radius:var(--r-plate);background:var(--c-plate);border:var(--bw) solid var(--c-bronze)}
+.item-tile.carried .plate{top:calc((var(--bed-size) - var(--tile))/2 + 2px)}
+.item-tile .art{position:absolute;left:50%;top:50%;width:var(--art);height:var(--art);transform:translate(-50%,-50%);display:block}
+.item-tile .art::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,rgba(120,92,43,.25) 0 1px,transparent 1px 6px)}
+.item-tile .shape{position:absolute;left:50%;top:50%;display:block;background:var(--c-bronze);transform:translate(-50%,-50%)}
+.kind-gear .shape{width:40%;height:80%;border-radius:calc(var(--art)*.08)}
+.kind-relic .shape{width:72%;height:80%;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+.kind-consumable .shape{width:80%;height:70%;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.kind-material .shape{width:70%;height:46%;background:linear-gradient(var(--c-bronze) 0 40%,transparent 40% 60%,var(--c-bronze) 60% 100%)}
+.item-tile.unique .count-capsule{display:none}
+.item-tile.stack .plate{left:calc((var(--bed-size) - var(--tile))/2 - 2px);top:calc((var(--bed-size) - var(--tile))/2 - 2px);box-shadow:4px 4px 0 -2px var(--c-plate),4px 4px 0 0 var(--c-bronze)}
+.item-tile.stack.carried .plate{top:calc((var(--bed-size) - var(--tile))/2)}
+.pips{display:inline-flex;gap:3px;align-items:center;vertical-align:middle}
+.pips>i{display:block;width:var(--pip);height:var(--pip);background:var(--c-fg);clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.plate>.pips{position:absolute;left:calc(var(--inset) + 1px);bottom:calc(var(--inset) + 1px)}
+.item-tile.stack .pips,.item-tile.stack .notch{display:none}
+.notch{display:inline-block;position:relative;width:var(--notch);height:var(--notch);background:var(--c-fg);vertical-align:middle}
+.plate>.notch{position:absolute;right:var(--inset);top:var(--inset)}
+.notch.n1{clip-path:polygon(0 0,100% 0,100% 100%)}
+.notch.n2{background:none}
+.notch.n2::before{content:"";position:absolute;left:25%;top:0;width:50%;height:100%;background:var(--c-fg);border-radius:0 100% 100% 0/0 50% 50% 0}
+.notch.n3{background:linear-gradient(90deg,var(--c-fg) 0 33.3%,transparent 33.3% 66.6%,var(--c-fg) 66.6%)}
+.notch.n4{clip-path:polygon(33% 0,67% 0,67% 33%,100% 33%,100% 67%,67% 67%,67% 100%,33% 100%,33% 67%,0 67%,0 33%,33% 33%)}
+.notch.n5{clip-path:polygon(0 100%,0 50%,50% 50%,50% 0,100% 0,100% 100%)}
+.leafm{display:inline-block;width:var(--leaf);height:var(--leaf);vertical-align:middle;color:var(--c-ink)}
+.leafm svg{display:block;width:100%;height:100%}
+.plate>.leafm{position:absolute;left:var(--inset);top:var(--inset)}
+.count-capsule{display:inline-flex;align-items:center;justify-content:center;min-width:calc(var(--t)*2.1);height:calc(var(--t)*1.4);padding:0 calc(var(--t)*.4);
+  font:var(--t)/1 var(--f-mono);color:var(--c-ink);background:var(--c-plate);border:1.5px solid var(--c-ink);border-radius:999px;white-space:nowrap}
+.plate>.count-capsule{position:absolute;right:var(--inset);bottom:var(--inset)}
+.sm{--tile:44px;--bed-size:50px;--art:28px;--pip:4px;--notch:8px;--leaf:10px;--inset:2px;--t:9px;--r-bed:9px;--r-plate:7px;--bw:1.5px}
+
+/* pack panel (tones from the 001a prototype: plain, near full, full) */
+#pack{position:absolute;z-index:2;left:470px;top:544px;width:340px;height:164px;padding:10px 14px 0;border:3px solid #241910;border-radius:22px 22px 8px 8px;color:#F5E6D3;
+  background:repeating-linear-gradient(45deg,rgba(245,230,211,.07) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(245,230,211,.05) 0 2px,transparent 2px 9px),#4B3826;
+  will-change:transform,opacity}
+#pack.near{background:repeating-linear-gradient(45deg,rgba(245,230,211,.07) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(245,230,211,.05) 0 2px,transparent 2px 9px),#432F1F}
+#pack.full{background:repeating-linear-gradient(45deg,rgba(245,230,211,.06) 0 2px,transparent 2px 9px),repeating-linear-gradient(-45deg,rgba(245,230,211,.04) 0 2px,transparent 2px 9px),#3B2B1C}
+#pack .phead{height:48px;display:flex;justify-content:space-between;align-items:center;font:700 13px var(--f-mono);margin-bottom:2px}
+#pack .ptl{display:flex;flex-direction:column;gap:2px}
+#pack #pword{font-weight:400;font-size:12px;min-height:14px}
+#pack .allow{display:flex;gap:8px}
+.tok{position:relative;display:inline-flex;align-items:center;gap:6px;min-width:64px;height:44px;padding:0 10px;border:2px solid #F5E6D3;border-radius:12px;font:700 17px var(--f-mono);color:#F5E6D3;cursor:default}
+.tok svg{width:30px;height:22px;flex:none}
+.tok.spent{border-style:dashed;opacity:.5}
+.tok:focus-visible{outline:3px solid #FFF8DC;outline-offset:2px}
+.tok .tip{display:none;position:absolute;right:0;bottom:calc(100% + 8px);white-space:nowrap;background:#FFF8DC;color:#2A2A3A;border:2px solid #2A2A3A;border-radius:10px;padding:6px 10px;font:600 14px system-ui,sans-serif;z-index:6}
+.tok:hover .tip,.tok:focus-visible .tip{display:block}
+.tok.pulse{animation:tokp .7s ease-out 1}
+@keyframes tokp{0%{transform:scale(1)}40%{transform:scale(1.1);box-shadow:0 0 0 3px rgba(255,248,220,.35)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.tok.pulse{animation:none}}
+#pack .pslots{display:flex;gap:8px}
+.slot{position:relative;width:72px;height:72px;padding:0;border:0;background:none;border-radius:12px;display:block;cursor:pointer;color:inherit}
+.slot.empty{border:2px dashed rgba(245,230,211,.38);cursor:default}
+.slot .ring{position:absolute;inset:-3px;border-radius:15px;border:2px solid #FFF8DC;opacity:0;pointer-events:none}
+.slot:focus-visible{outline:3px solid #FFF8DC;outline-offset:3px}
+.slot.dim{opacity:.38}
+.slot.legal{outline:3px solid #FFF8DC;outline-offset:3px}
+.slot.ghost .item-tile{opacity:.72;outline:2px dashed #FFF8DC;outline-offset:-2px}
+#pack .pstrap{position:relative;height:16px;margin-top:6px}
+#pack .strap{position:absolute;left:0;right:0;top:50%;display:none;height:0}
+#pack.near .strap{display:block;border-top:2px dashed rgba(245,230,211,.75)}
+#pack.full .strap{display:block;border-top:4px solid #F5E6D3}
+
+/* controls in the frame: text controls, no cards */
+#ui{position:absolute;inset:0;z-index:4;pointer-events:none}
+#ui>*{pointer-events:auto}
+.ctl{position:absolute;min-width:96px;min-height:48px;padding:0 14px;border:0;background:none;cursor:pointer;
+  font:600 22px system-ui,sans-serif;color:#FFF8DC;text-shadow:0 0 4px #2A0F0B,0 0 4px #2A0F0B,0 1px 0 #2A0F0B;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:6px}
+.ctl:focus-visible,.pill button:focus-visible,#dtl button:focus-visible{outline:3px solid #FFF8DC;box-shadow:0 0 0 6px #2A2A3A;outline-offset:2px}
+.ctl[aria-disabled=true]{cursor:default}
+#skip,#cont{right:24px;bottom:14px}
+#back{left:24px;top:16px}
+#line{position:absolute;left:50%;top:18px;transform:translateX(-50%);max-width:560px;padding:10px 20px;border-radius:14px;background:#FFF8DC;border:2px solid #2A2A3A;color:#2A2A3A;font:600 18px/1.25 system-ui,sans-serif;text-align:center;pointer-events:none;opacity:0;white-space:nowrap}
+.pill{position:absolute;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:14px;background:#FFF8DC;border:2px solid #2A2A3A;color:#2A2A3A}
+.pill span{font:600 18px system-ui,sans-serif}
+.pill button,#dtl button.btn{min-height:48px;min-width:96px;padding:0 16px;border-radius:10px;border:2px solid #2A2A3A;background:#FFF8DC;color:#2A2A3A;font:700 16px system-ui,sans-serif;cursor:pointer}
+.pill button.primary,#dtl button.primary{background:#D4AF37}
+#leave{left:830px;top:588px}
+#swapbar{left:826px;top:650px;padding:6px 8px;gap:8px}
+
+/* details panel: floats next to the item */
+#dtl{position:absolute;z-index:5;width:292px;padding:12px 14px;background:var(--c-plate);color:var(--c-ink);border:2px solid var(--c-bronze);border-radius:16px;box-shadow:0 10px 28px rgba(0,0,0,.5);--c-fg:var(--c-ink)}
+#dtl[hidden]{display:none}
+#dtl .dh{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+#dtl .nmx{font:700 17px/1.2 var(--f-ui);padding-top:4px}
+#dtl .xbtn{min-height:48px;min-width:64px;border:0;background:none;color:var(--c-ink);font:700 14px var(--f-mono);text-decoration:underline;text-underline-offset:4px;cursor:pointer;margin:-8px -8px 0 0}
+#dtl .top2{display:flex;gap:12px;align-items:flex-start;margin-top:2px}
+#dtl .bigt{width:calc(72px*1.2);height:calc(72px*1.2);flex:none}
+#dtl .bigt .item-tile{transform:scale(1.2);transform-origin:0 0}
+#dtl .lines{display:flex;flex-direction:column;gap:4px;font:13px/1.25 var(--f-mono);min-width:0}
+#dtl .kv{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#dtl .pips>i{width:10px;height:10px}
+#dtl .desc{margin:8px 0 6px;font:italic 14px/1.35 var(--f-ui)}
+#dtl .where{display:inline-flex;align-items:center;padding:3px 10px;font:700 13px/1.2 var(--f-mono);margin-bottom:8px}
+#dtl .where.ground{border:3px double #785C2B;border-radius:3px;background:#EADFC4}
+#dtl .where.carried{border:2px solid #785C2B;border-radius:8px;background:#E8D6B8}
+#dtl .where.pack{border:2px dashed #F5E6D3;border-radius:999px;background:#4B3826;color:#F5E6D3}
+#dtl .dbtns{display:flex;gap:10px}
+#dtl button.btn{flex:1;font-family:var(--f-ui)}
+#dtl button.btn[aria-disabled=true]{background:transparent;border:1px solid var(--c-bronze);color:#5a4630;cursor:not-allowed}
+#dtl .rs{font:13px/1.3 var(--f-mono);margin-top:6px;min-height:0}
+
+#resolve{position:absolute;inset:0;z-index:7;background:#140c0a;color:#FFF8DC;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;opacity:0;transition:opacity .2s}
+#resolve.on{opacity:1}
+#resolve.now{transition:none}
+#resolve[hidden]{display:none}
+#resolve .rl{font:600 26px system-ui,sans-serif}
+#resolve .rrow{display:flex;gap:8px}
+#flash{position:absolute;inset:0;z-index:6;background:#140c0a;opacity:0;pointer-events:none}
+#guides{position:absolute;inset:0;z-index:8;pointer-events:none;display:none}
+#stage.guides #guides{display:block}
+#guides div{position:absolute;left:64px;top:36px;width:1152px;height:648px;border:1.5px dashed #7CFC00}
+#stage.guides .ctl,#stage.guides .slot,#stage.guides #dtl button,#stage.guides .pill button{outline:1.5px dashed #7CFC00;outline-offset:0}
+
+/* ---------- review strip: outside the game ---------- */
+.strip{max-width:1920px;margin:8px auto 0;padding:8px 14px 10px;border-top:1px solid var(--line);background:#efe8d2}
+.row{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:4px 0}
+.strip button,.strip select{font:inherit;font-size:13px;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:6px;min-height:34px;padding:3px 10px;cursor:pointer}
+.strip button:hover,.strip select:hover{border-color:var(--gold)}
+.strip button[aria-pressed=true]{border:2px solid var(--gold);font-weight:700;padding:2px 9px}
+.strip button:focus-visible,.strip select:focus-visible,.strip input:focus-visible,summary:focus-visible{outline:3px solid #80630b;outline-offset:2px}
+.grp{display:flex;gap:4px;align-items:center}
+.lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.chk{display:flex;gap:5px;align-items:center;font-size:13px}
+.scn{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:4px 8px;margin:4px 0}
+.scn button{text-align:left;display:block;line-height:1.25;min-height:46px}
+.scn button b{display:block}.scn button span{font-size:12px;color:var(--muted)}
+.read{display:flex;flex-wrap:wrap;gap:4px 24px;font-size:13px;margin-top:6px}
+.read div{min-width:170px}
+.read .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block}
+.read .v{font-weight:650}
+.expect{font-size:13px;margin:4px 0;color:#2A2A3A}
+details.notes{max-width:1100px;margin:10px auto 28px;padding:0 14px}
+details.notes summary{cursor:pointer;font-weight:700}
+details.notes h3{margin:14px 0 4px;font-size:15px}
+details.notes p,details.notes li{max-width:95ch}
+#selftest{position:fixed;right:8px;bottom:8px;max-width:520px;background:#fff;border:2px solid #2A2A3A;padding:6px 10px;font:12px/1.3 var(--f-mono);white-space:pre-wrap;z-index:99}
+@media (prefers-reduced-motion:reduce){#resolve{transition:none}}
+</style>
+</head>
+<body>
+<div class="top"><b>Pickup event, playable</b><span>Mockup for review. Nothing here is built.</span><span id="sizeNote"></span></div>
+<main class="hostwrap">
+<div id="host">
+<div id="stage">
+<svg id="board" class="layer" viewBox="0 0 1280 720" role="img" aria-label="Combat board after the fight"></svg>
+<div id="pack" aria-label="Travel pack">
+ <div class="phead"><div class="ptl"><span>Travel pack</span><span id="pword"></span></div>
+  <div class="allow">
+   <span class="tok" id="tokSwap" tabindex="0" role="img" aria-label="1 swap left on this path."><svg viewBox="-30 -22 60 44" aria-hidden="true" id="swIcon"></svg><b>1</b><span class="tip">1 swap left on this path.</span></span>
+   <span class="tok" id="tokDes" tabindex="0" role="img" aria-label="1 destroy action left on this path."><svg viewBox="-16 -12 32 24" aria-hidden="true"><rect x="-12" y="-9" width="24" height="18" rx="3" fill="none" stroke="#F5E6D3" stroke-width="2.5"/><path d="M-9,8 L9,-8" stroke="#F5E6D3" stroke-width="3" stroke-linecap="round"/></svg><b>1</b><span class="tip">1 destroy action left on this path.</span></span>
+  </div></div>
+ <div class="pslots" id="pslots"></div>
+ <div class="pstrap"><span class="strap"></span></div>
+</div>
+<svg id="top" class="layer" viewBox="0 0 1280 720" aria-hidden="true"><g id="topObj"></g><g id="bubble" opacity="0"></g></svg>
+<div id="ui">
+ <button class="ctl" id="back" data-act="back" hidden>Back</button>
+ <div id="line" role="status" aria-live="polite"></div>
+ <button class="ctl" id="skip" data-act="skip" data-tgt>Skip</button>
+ <button class="ctl" id="cont" data-act="cont" data-tgt aria-disabled="true">Continue</button>
+ <div class="pill" id="leave" hidden role="alertdialog" aria-label="Leave these behind?"><span>Leave these behind?</span><button data-act="leave">Leave</button><button data-act="stay" id="stayBtn" class="primary">Stay</button></div>
+ <div class="pill" id="swapbar" hidden><button data-act="confirm" class="primary" id="confirmBtn">Swap them</button><button data-act="cancel" id="keepBtn">Keep as it is</button></div>
+</div>
+<div id="dtl" hidden role="dialog" aria-label="Item details" tabindex="-1"></div>
+<div id="flash"></div>
+<div id="resolve" hidden><div class="rl">Resolve opens here.</div><div class="rrow" id="rrow"></div></div>
+<div id="guides"><div></div></div>
+</div>
+</div>
+</main>
+
+<section class="strip" id="strip" aria-label="Review strip. Not part of the game.">
+<div class="lab">Scenario (10)</div>
+<div class="scn" id="scn"></div>
+<div class="expect" id="expect"></div>
+<div class="row">
+ <div class="grp"><button id="bReplay">Replay</button><button id="bAgain">Play again</button><button id="bPlay" aria-pressed="true">Pause</button><button id="bSkip">Skip to idle</button></div>
+ <div class="grp" role="group" aria-label="Speed"><span class="lab">Speed</span><button data-sp="0.5" aria-pressed="false">0.5x</button><button data-sp="1" aria-pressed="true">1x</button><button data-sp="2" aria-pressed="false">2x</button></div>
+ <div class="grp" role="group" aria-label="Directive"><span class="lab">Directive</span><button data-dir="scout" aria-pressed="true">Scout Carefully</button><button data-dir="seek" aria-pressed="false">Seek Signs</button></div>
+ <div class="grp"><span class="lab">Chooser</span><select id="selCh" aria-label="Chooser for the replay"></select><button id="bCh">Replay with this chooser</button></div>
+</div>
+<div class="row">
+ <label class="chk"><input type="checkbox" id="chkRm"> Reduced motion</label>
+ <div class="grp" role="group" aria-label="Frame size"><span class="lab">Frame</span><button data-size="1280" aria-pressed="true">1280 x 720</button><button data-size="1920" aria-pressed="false">1920 x 1080</button></div>
+ <label class="chk"><input type="checkbox" id="chkGuides"> Frame guides</label>
+ <label class="chk"><input type="checkbox" id="chkGray"> Grayscale</label>
+ <label class="chk"><input type="checkbox" id="chkRule" checked> Severe-band rule on (D-34)</label>
+ <label class="chk"><input type="checkbox" id="chkDis" checked> Show a disabled Swap button</label>
+ <label class="chk"><input type="checkbox" id="chkDes" checked> Destroy left (shown only, D-44)</label>
+ <div class="grp"><span class="lab">Realm</span><select id="selRealm" aria-label="Realm"><option value="1">1 (cap 3 finds)</option><option value="2">2 (cap 4 finds)</option><option value="3">3 (cap 5 finds)</option></select><span class="expect">Cap values are a proposal. mid-game-designer sets the real numbers.</span></div>
+ <span class="expect" id="capNote"></span>
+ <span class="grp"><button id="bReset">Reset the path</button><b id="pathSwap">swap on this path: unspent</b></span>
+</div>
+<div class="read" aria-live="off">
+ <div style="min-width:240px"><span class="k">Beat</span><span class="v" id="rBeat">-</span></div>
+ <div><span class="k">Clock</span><span class="v" id="rClock">-</span></div>
+ <div style="min-width:200px"><span class="k">Pack</span><span class="v" id="rPack">-</span></div>
+ <div style="min-width:240px"><span class="k">Swap</span><span class="v" id="rSwap">-</span></div>
+ <div style="min-width:300px"><span class="k">Allowances on this path</span><span class="v" id="rAllow">-</span></div>
+ <div style="min-width:240px"><span class="k">Capacity case</span><span class="v" id="rCase">-</span></div>
+ <div style="min-width:240px"><span class="k">Emotion class and reason</span><span class="v" id="rEmo">-</span></div>
+ <div style="min-width:260px"><span class="k">Marks on screen (budget 4)</span><span class="v" id="rMarks">-</span></div>
+</div>
+</section>
+
+<details class="notes">
+<summary>Notes: what each part proposes and what to judge</summary>
+<p>All names, barks and lines in this file are written by the agents as a proposal. Jeff decides the wording.</p>
+<h3>What you can do</h3>
+<ul>
+<li>Watch the intro, or press Skip, or tap anywhere in the frame. Skip never changes the result.</li>
+<li>Click, tap or press Enter on any item: above the head, on the ground or in the pack. Details float next to it and the intro waits while they are open. Esc, Close or a click outside closes them.</li>
+<li>When the pack is full and an item is left, details show Swap. Press it, click the item to trade with, read the preview, then press Swap them or Keep as it is.</li>
+<li>Press Continue. With Scout Carefully you get one question if the swap is still on offer. With Seek Signs you do not.</li>
+<li>Items start as sealed bundles. They flip when the Echo touches them. Items that are left flip when the Echo finishes. A sealed item cannot be selected.</li>
+<li>The pack icons (swap and destroy) show what is left on this path. Hover or focus shows the full line. The destroy is shown only.</li>
+<li>The swap is one per path. It stays spent across Play again. Reset the path makes it new. Changing the scenario also starts a new path.</li>
+</ul>
+<h3>What to judge</h3>
+<ul>
+<li>Does the pointer read as a light that passes the Echoes and slows to rest, without looking like a spinner or a mark?</li>
+<li>Is the chosen Echo clear (steps forward, name tag, others dim and step back) without any ring?</li>
+<li>Does the pack panel arriving with the chooser tell you what is at stake? Is the full tone enough without numbers?</li>
+<li>Is the emotion beat (pose and one bark) readable without a meter? Compare scenario 1 (plus), 3 (minus) and 10 (no extra minus).</li>
+<li>Do floating details help or get in the way? Do they ever cover something you need?</li>
+<li>Is the swap state clear? One marker on the legal targets, everything else dim. Does the preview say what is lost?</li>
+<li>Is the intro too long in repeat play? Scenarios 5, 6 and 9 are the slowest on purpose. Use 2x and Skip to judge.</li>
+</ul>
+<h3>What this page does not claim</h3>
+<ul>
+<li>Chooser, picks, reason and cases come from fixture data and small pure functions. The game must supply the real values (decision D-06).</li>
+<li>Timings come from the feel report. Where the new event differs I chose values in the same language. They are proposals.</li>
+<li>The pack icons carry the swap allowance. There is no marker on the floor. The details description lines are placeholders. No audio plays.</li>
+<li>"Resolve opens here." is a stand-in. It is not a design.</li>
+<li>Marks are counted by kind on revealed items: grade pips, kind shape, twin notch. The pack icons are UI, not marks. The leaf on pack tiles and the count capsule on stacks come from the approved pack tiles and are outside this count.</li>
+</ul>
+</details>
+<pre id="selftest" hidden></pre>
+<script>
+var PE=(function(){
+'use strict';
+/* ---------- maths ---------- */
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,u)=>a+(b-a)*u;
+function bez(x1,y1,x2,y2){
+  const X=t=>3*x1*t*(1-t)*(1-t)+3*x2*t*t*(1-t)+t*t*t;
+  const Y=t=>3*y1*t*(1-t)*(1-t)+3*y2*t*t*(1-t)+t*t*t;
+  return x=>{ if(x<=0)return 0; if(x>=1)return 1; let lo=0,hi=1,t=x;
+    for(let i=0;i<20;i++){ if(X(t)<x)lo=t; else hi=t; t=(lo+hi)/2; } return Y(t); };
+}
+const EZ={lin:u=>u,smooth:u=>u*u*(3-2*u),out:bez(.2,.8,.2,1),in:bez(.5,0,.9,.4),back:bez(.34,1.56,.64,1)};
+const pr=(t,a,b)=>b>a?clamp((t-a)/(b-a),0,1):(t>=a?1:0);
+const ph=(t,a,b,e)=>(e||EZ.smooth)(pr(t,a,b));
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1]], add=(a,b)=>[a[0]+b[0],a[1]+b[1]], mul=(a,k)=>[a[0]*k,a[1]*k];
+const len=a=>Math.hypot(a[0],a[1]);
+const unit=a=>{const l=len(a)||1;return [a[0]/l,a[1]/l];};
+const mix=(a,b,u)=>[lerp(a[0],b[0],u),lerp(a[1],b[1],u)];
+function kf(t,keys){ // keys: [[t,v,ease?]]
+  if(t<=keys[0][0])return keys[0][1];
+  for(let i=1;i<keys.length;i++){ if(t<keys[i][0]){ const a=keys[i-1],b=keys[i]; return lerp(a[1],b[1],(a[2]||EZ.smooth)(pr(t,a[0],b[0]))); } }
+  return keys[keys.length-1][1];
+}
+
+/* ---------- data (all names, lines and barks are AGENT-WRITTEN proposals) ---------- */
+const PACK_SLOTS=4;
+const KIND_NAMES={gear:'Gear',relic:'Relic',consumable:'Supply',material:'Material'};
+const LIM={consumable:20,material:40};
+const TYPES={
+  spear:{name:'Worn Ash Spear',kind:'gear',grade:1,qty:1,desc:'Ash wood, worn smooth where hands held it.'},
+  shield:{name:'Cord-Wrapped Shield',kind:'gear',grade:2,qty:1,desc:'Wrapped in cord. It has stopped a few blows.'},
+  bead:{name:'Cracked Oath Bead',kind:'relic',grade:3,qty:1,desc:'Someone swore on this once. Then it cracked.'},
+  charm:{name:'Dusk Charm',kind:'relic',grade:2,qty:1,desc:'Warm to hold. It smells of wood smoke.'},
+  root:{name:'Bitter Root Bundle',kind:'consumable',grade:1,qty:2,desc:'Bitter to chew. It takes the edge off pain.'},
+  salve:{name:'River Salve',kind:'consumable',grade:2,qty:1,desc:'Cool in the jar. It closes small cuts.'},
+  clay:{name:'Red Clay Lump',kind:'material',grade:1,qty:1,desc:'Red clay from a river bank.'},
+  scrap:{name:'Smoke Iron Scrap',kind:'material',grade:2,qty:3,desc:'Black iron. It still smells of smoke.'}};
+const TYPE_ORDER=Object.keys(TYPES);
+const notchOf=type=>TYPE_ORDER.indexOf(type)%6;
+
+const ECHOES={
+  kweku:{id:'kweku',name:'Kweku',letter:'K',standing:1,status:'grounded',manner:'safe',temper:'scared',likes:'gear'},
+  esi:{id:'esi',name:'Esi',letter:'E',standing:3,status:'strained',manner:'bold',temper:'hard',likes:'relic'},
+  abena:{id:'abena',name:'Abena',letter:'A',standing:6,status:'whole',manner:'likes',temper:'proud',likes:'relic'},
+  yaw:{id:'yaw',name:'Yaw',letter:'Y',standing:9,status:'whole',manner:'worth',temper:'proud',likes:'gear'},
+  efua:{id:'efua',name:'Efua',letter:'F',standing:5,status:'burdened',manner:'safe',temper:'scared',likes:'material'}};
+const SEVERE_STATUS=['burdened'];
+
+const TXT={
+  full:['My pack is full.',"No room in the pack. I can't take more."],
+  allow:{swap:['1 swap left on this path.','No swap left.'],destroy:['1 destroy action left on this path.','No destroy action left.']},
+  fits:['Room for all of it. Good.',"That's everything. Easy."],
+  some:['Took what I could carry.','I wish I had more room.'],
+  froze:'Just grab it. Grab it and go.',
+  s1:"Is this one okay? I'll take this one.", s9:'This one. Leave the rest.',
+  afraid:'I want to leave here.',
+  swapDone:'Swapped. The other one stays behind.',
+  react:{proud:['Mine was fine. But sure.','I picked that for a reason.'],hard:['Your call.','Fine. Give it here.'],scared:['Are you sure? Okay.','Is that one safe?']},
+  refuse:{used:'The swap is used.',room:'The pack has room.',none:'Nothing is left to swap.',same:'These two are the same.'},
+  leave:'Leave these behind?', pick:'Pick one to trade.', resolve:'Resolve opens here.'};
+
+const FCELLS={
+  2:[[2,1],[4,2]],
+  3:[[2,2],[4,2],[3,4]],
+  4:[[2,1],[4,2],[3,4],[2,3]],
+  5:[[2,1],[4,2],[3,4],[1,2],[3,0]]};
+
+/* Scenario fixtures. picks, try item, case and emotion are NOT stored: resolveEvent computes them. */
+const SCENARIOS=[
+ {id:1,realm:1,name:'Clean start',desc:'Empty pack, three finds. Everything fits.',
+  party:['kweku','esi','abena','yaw'],fallen:[],chooser:'abena',reason:'fit',pack:[],finds:['root','salve','spear'],cells:FCELLS[3]},
+ {id:2,realm:2,name:'Some fit',desc:'Two free slots, four finds. Yaw takes two, two stay.',
+  party:['kweku','esi','abena','yaw'],fallen:['esi'],chooser:'yaw',reason:'worth',pack:[{type:'shield',origin:'held'},{type:'charm',origin:'held'}],finds:['bead','spear','salve','clay'],cells:FCELLS[4]},
+ {id:3,realm:1,name:'Full pack, the swap',desc:'No free slot. Kweku lifts a find and sets it down. Play the swap.',
+  party:['kweku','esi','abena','yaw'],fallen:[],chooser:'kweku',reason:'worth',pack:[{type:'shield',origin:'held'},{type:'bead',origin:'held'},{type:'scrap',origin:'gathered'},{type:'clay',origin:'gathered'}],finds:['charm','spear'],cells:FCELLS[2]},
+ {id:4,realm:1,name:'Four held pieces',desc:'Pack of held pieces only, one find. Any pack piece may be swapped.',
+  party:['kweku','esi','abena','yaw'],fallen:['kweku'],chooser:'abena',reason:'likes',pack:[{type:'shield',origin:'held'},{type:'bead',origin:'held'},{type:'charm',origin:'held'},{type:'salve',origin:'held'}],finds:['spear'],cells:[[3,1]]},
+ {id:5,realm:3,name:'Frozen chooser',desc:'Esi freezes and takes nothing. All five items are shown, then lost. No swap.',
+  party:['kweku','esi','abena','yaw'],fallen:[],chooser:'esi',frozen:'esi',reason:'froze',pack:[],finds:['clay','scrap','spear','charm','bead'],cells:FCELLS[5]},
+ {id:6,realm:2,name:'Standing 1 against 9',desc:'Same field, two free slots. Kweku and Yaw pick differently. Use the chooser control.',
+  party:['kweku','esi','abena','yaw'],fallen:[],chooser:'kweku',reason:'safe',pack:[{type:'charm',origin:'held'},{type:'salve',origin:'gathered'}],finds:['bead','shield','spear','root'],cells:FCELLS[4]},
+ {id:7,realm:1,name:'No kill, a spirit',desc:'A spirit is guided to the shrine. Enemies withdraw. Items lie at the shrine.',
+  party:['kweku','esi','abena','yaw'],fallen:[],chooser:'abena',reason:'fit',pack:[],finds:['charm','salve'],cells:[[4,1],[3,1]],noKill:true},
+ {id:8,realm:3,name:'More finds than cells',desc:'Realm 3: five finds on three cells, one free slot. Piles fan out when the Echo arrives.',
+  party:['kweku','esi','abena','yaw'],fallen:['esi'],chooser:'yaw',reason:'worth',pack:[{type:'scrap',origin:'gathered'},{type:'clay',origin:'gathered'},{type:'shield',origin:'held'}],finds:['spear','bead','charm','root','salve'],cells:[[2,1],[4,3],[1,3]]},
+ {id:9,realm:2,name:'Twin items',desc:'Two Salves in the pack and one on the ground. Try to swap identical items.',
+  party:['kweku','esi','abena','yaw'],fallen:[],chooser:'kweku',reason:'worth',pack:[{type:'shield',origin:'held'},{type:'salve',origin:'gathered'}],finds:['salve','root','charm','salve'],cells:FCELLS[4]},
+ {id:10,realm:1,name:'Afraid, not frozen',desc:'Full pack, one find. Efua is burdened. Switch the severe-band rule on and off.',
+  party:['kweku','esi','abena','yaw','efua'],fallen:[],chooser:'efua',reason:'safe',pack:[{type:'shield',origin:'held'},{type:'bead',origin:'held'},{type:'scrap',origin:'gathered'},{type:'clay',origin:'gathered'}],finds:['spear'],cells:[[3,1]]}
+];
+
+/* ---------- rules (pure) ---------- */
+function packTone(used){ return used>=PACK_SLOTS?'full':(used===PACK_SLOTS-1?'near':'plain'); }
+/* F finds, `used` filled slots. Returns 'none' | C1..C5. */
+function capacityCase(used,F){
+  if(F<=0)return 'none';
+  const S=PACK_SLOTS-used;
+  if(S<=0)return 'C5';
+  if(used===0)return F<=S?'C1':'C2';
+  return F<=S?'C3':'C4';
+}
+/* Placeholder cap on finds per event, by realm. mid-game-designer sets the real numbers (D-40). */
+const REALM_CAP={1:3,2:4,3:5};
+function trimScenario(sc,realm){
+  const cap=REALM_CAP[realm]||REALM_CAP[1], n=sc.finds.length, keep=Math.min(n,cap);
+  if(keep===n)return {sc,trimmed:0,cap};
+  return {sc:Object.assign({},sc,{finds:sc.finds.slice(0,keep),cells:sc.noKill?sc.cells.slice(0,keep):sc.cells.slice(0,Math.min(sc.cells.length,keep))}),trimmed:n-keep,cap};
+}
+const CASE_TEXT={froze:'Froze: no pick',C1:'Empty pack, all fit',C2:'Empty pack, some fit',C3:'Partly full, all fit',C4:'Partly full, some fit',C5:'Full pack, none fit',none:'No finds, no event'};
+const isSevere=(echo,frozen)=>!!frozen||SEVERE_STATUS.indexOf(echo.status)>=0;
+function emotionClass(cs,severe){
+  if(cs==='C1'||cs==='C3')return 'plus';
+  if(cs==='C5')return severe?'none':'minus';
+  return 'neutral';
+}
+function sortByReason(reason,finds,echo){
+  const idx=f=>+f.uid.slice(1);
+  const g=f=>TYPES[f.type].grade;
+  const a=finds.slice();
+  const cmp={
+    fit:(x,y)=>idx(x)-idx(y), froze:(x,y)=>idx(x)-idx(y),
+    worth:(x,y)=>g(y)-g(x)||idx(x)-idx(y),
+    safe:(x,y)=>g(x)-g(y)||idx(x)-idx(y),
+    bold:(x,y)=>{const bx=TYPES[x.type].kind==='gear'||TYPES[x.type].kind==='relic'?0:1,by=TYPES[y.type].kind==='gear'||TYPES[y.type].kind==='relic'?0:1;return bx-by||g(y)-g(x)||idx(y)-idx(x);},
+    likes:(x,y)=>{const lx=TYPES[x.type].kind===echo.likes?0:1,ly=TYPES[y.type].kind===echo.likes?0:1;return lx-ly||g(y)-g(x)||idx(x)-idx(y);}
+  }[reason]||((x,y)=>idx(x)-idx(y));
+  return a.sort(cmp);
+}
+function barkFor(cs,echo,reason,emo,severe,order){
+  if(reason==='froze')return TXT.froze;
+  const v=order%2;
+  if(cs==='C5'){ return (severe&&emo==='none')?TXT.afraid:TXT.full[v]; }
+  if(cs==='C1'||cs==='C3')return TXT.fits[v];
+  if(echo.standing<=2)return TXT.s1;
+  if(echo.standing>=9)return TXT.s9;
+  return TXT.some[v];
+}
+/* The decided result of one event. Presentation never changes it. */
+function resolveEvent(sc,chooserId,o){
+  o=o||{};
+  const ruleOn=o.ruleOn!==false;
+  const ech=ECHOES[chooserId];
+  const finds=sc.finds.map((type,i)=>({uid:'f'+i,type:type,origin:'find'}));
+  const pack0=sc.pack.map((p,i)=>({uid:'p'+i,type:p.type,origin:p.origin}));
+  const used=pack0.length, free=PACK_SLOTS-used, F=finds.length;
+  const frozen=sc.frozen===chooserId;
+  const cs=frozen?'froze':capacityCase(used,F);
+  let reason=chooserId===sc.chooser?sc.reason:ech.manner;
+  if(frozen)reason='froze';
+  else if(cs==='C1'||cs==='C3')reason='fit';
+  const order=sortByReason(reason,finds,ech);
+  const picks=frozen?[]:order.slice(0,Math.min(free,F)).map(f=>f.uid);
+  const tryUid=(cs==='C2'||cs==='C4'||cs==='C5')?order[picks.length].uid:null;
+  const slots=[];for(let i=0;i<PACK_SLOTS;i++)slots.push(i<used?pack0[i].uid:null);
+  const slotOf={};
+  picks.forEach(u=>{const s=slots.indexOf(null);slots[s]=u;slotOf[u]=s;});
+  const severe=isSevere(ech,frozen);
+  const emo=frozen?'none':emotionClass(cs,severe&&ruleOn);
+  const stand=sc.party.filter(id=>sc.fallen.indexOf(id)<0);
+  const bark=barkFor(cs,ech,reason,emo,severe&&ruleOn,stand.indexOf(chooserId));
+  const left=finds.map(f=>f.uid).filter(u=>picks.indexOf(u)<0);
+  return {noSwap:frozen,finds,pack0,used,free,F,cs,reason,frozen,severe,emo,picks,tryUid,slots,slotOf,left,bark,chooser:chooserId};
+}
+
+/* ---------- path and event state (pure reducer; the page calls it) ---------- */
+function initState(sc,E,opt){
+  opt=opt||{};
+  const by={};E.finds.forEach(f=>by[f.uid]=f);E.pack0.forEach(p=>by[p.uid]=p);
+  const pack=E.slots.map(u=>u?Object.assign({},by[u],u[0]==='f'?{origin:'gathered'}:{}):null);
+  const field=E.left.map(u=>Object.assign({},by[u]));
+  return {phase:opt.phase||'intro',pack,field,swapSpent:!!opt.swapSpent,directive:opt.directive||'scout',
+    noSwap:!!E.noSwap,heldUid:E.tryUid||null,details:null,swapSrc:null,swapTgt:null,line:null,lineSeq:0,bark:null,traded:null,leaveAsked:false};
+}
+const packUsed=G=>G.pack.filter(Boolean).length;
+const packFull=G=>packUsed(G)>=PACK_SLOTS;
+function findItem(G,uid){
+  const p=G.pack.findIndex(x=>x&&x.uid===uid); if(p>=0)return {side:'pack',i:p,item:G.pack[p]};
+  const f=G.field.findIndex(x=>x.uid===uid); if(f>=0)return {side:'field',i:f,item:G.field[f]};
+  return null;
+}
+/* Legal partners of an item: opposite side, not the same kind of item (twin). */
+function partners(G,uid){
+  const loc=findItem(G,uid); if(!loc)return [];
+  const other=loc.side==='pack'?G.field:G.pack.filter(Boolean);
+  return other.filter(o=>o.type!==loc.item.type).map(o=>o.uid);
+}
+function twinPartners(G,uid){
+  const loc=findItem(G,uid); if(!loc)return [];
+  const other=loc.side==='pack'?G.field:G.pack.filter(Boolean);
+  return other.filter(o=>o.type===loc.item.type).map(o=>o.uid);
+}
+function hasLegalPair(G){ return G.field.some(f=>partners(G,f.uid).length>0); }
+function swapOnOffer(G){ return !G.noSwap&&!G.swapSpent&&packFull(G)&&G.field.length>0&&hasLegalPair(G); }
+/* Why a swap is not possible for this item. null means legal. First matching reason wins. */
+function swapRefusal(G,uid){
+  if(G.noSwap)return 'none';
+  if(G.swapSpent)return 'used';
+  if(!packFull(G))return 'room';
+  if(G.field.length===0)return 'none';
+  if(partners(G,uid).length===0)return 'same';
+  return null;
+}
+function swapStateWord(G){
+  if(G.noSwap)return 'not offered: the chooser froze';
+  if(G.swapSpent)return 'spent';
+  if(swapOnOffer(G))return 'on offer';
+  if(!packFull(G))return 'not offered: the pack has room';
+  if(G.field.length===0)return 'not offered: nothing is left';
+  return 'not offered: no legal pair';
+}
+/* Scout Carefully asks once when the swap is still on offer. Seek Signs never asks. */
+function leavePromptNeeded(G){ return G.directive==='scout'&&swapOnOffer(G); }
+const lineSet=(G,key)=>{G.line=TXT.refuse[key]||key;G.lineSeq++;};
+
+function reduce(G,a){
+  const S=G; // mutates and returns G
+  switch(a.t){
+  case 'toIdle': if(S.phase==='intro')S.phase='idle'; break;
+  case 'open':
+    if(S.phase==='swapPick'){ return reduce(S,{t:'pickTarget',uid:a.uid}); }
+    if(S.phase==='swapPreview'||S.phase==='closing'||S.phase==='resolve'||S.phase==='leave')break;
+    if(findItem(S,a.uid)||a.carried)S.details=a.uid; break;
+  case 'close':
+    if(S.phase==='swapPick'||S.phase==='swapPreview'){S.phase='idle';S.swapSrc=null;S.swapTgt=null;}
+    else S.details=null;
+    break;
+  case 'swapStart': {
+    if(S.phase!=='idle'||!S.details||S.noSwap)break;
+    const why=swapRefusal(S,S.details);
+    if(why){lineSet(S,why);break;}
+    S.phase='swapPick';S.swapSrc=S.details;S.details=null;S.line=TXT.pick;S.lineSeq++;S.linePersist=true;break; }
+  case 'pickTarget': {
+    if(S.phase!=='swapPick')break;
+    if(partners(S,S.swapSrc).indexOf(a.uid)>=0){ S.phase='swapPreview';S.swapTgt=a.uid;S.line=null;S.linePersist=false; }
+    else if(twinPartners(S,S.swapSrc).indexOf(a.uid)>=0){ S.linePersist=false;lineSet(S,'same'); }
+    break; }
+  case 'cancel':
+    if(S.phase==='swapPick'||S.phase==='swapPreview'){S.phase='idle';S.swapSrc=null;S.swapTgt=null;S.line=null;S.linePersist=false;}
+    break;
+  case 'confirm': {
+    if(S.phase!=='swapPreview')break;
+    const A=findItem(S,S.swapSrc),B=findItem(S,S.swapTgt);
+    const fld=A.side==='field'?A:B, pck=A.side==='pack'?A:B;
+    const inc=fld.item, out=pck.item;
+    S.pack[pck.i]=Object.assign({},inc,{origin:'gathered'});
+    S.field[fld.i]=Object.assign({},out);
+    S.traded={inUid:inc.uid,outUid:out.uid,slot:pck.i,fieldI:fld.i,fromHeld:S.heldUid===inc.uid};
+    if(S.heldUid===inc.uid)S.heldUid=null;
+    if(S.fpos)S.fpos[out.uid]=S.fpos[inc.uid];
+    S.swapSpent=true;S.phase='idle';S.swapSrc=null;S.swapTgt=null;S.details=null;
+    S.line=TXT.swapDone;S.linePersist=false;S.lineSeq++;S.reactSeq=(S.reactSeq||0)+1;
+    break; }
+  case 'continue':
+    if(S.phase!=='idle')break;
+    S.details=null;
+    if(leavePromptNeeded(S)){S.phase='leave';S.leaveAsked=true;}
+    else S.phase='closing';
+    break;
+  case 'leave': if(S.phase==='leave')S.phase='closing'; break;
+  case 'stay': if(S.phase==='leave')S.phase='idle'; break;
+  case 'closed': if(S.phase==='closing')S.phase='resolve'; break;
+  case 'directive': S.directive=a.v; break;
+  }
+  return S;
+}
+
+/* ---------- geometry ---------- */
+const iso=(c,r)=>[640+(c-r)*64,170+(c+r)*32];
+const BATTLE=[[448,330],[384,362],[448,394],[384,426],[448,458]];
+const FALLEN_SPOTS=[[330,430],[300,398]];
+const rowSpot=(k,n)=>[640+(k-(n-1)/2)*96,486];
+const PACKBOX={x:470,y:544,w:340,h:164};
+const slotCenter=i=>[520+80*i,640];
+const HEAD=54;
+const SPIRIT_FROM=iso(5,4), SHRINE=iso(4,1);
+const ENEMY_OUT=[[1010,170],[1040,230]];
+
+/* ---------- pointer (presentation only; the result is decided before it starts) ---------- */
+function pointerPlan(n,start,decided,laps,T0){
+  const ta=.4, Dd=2.5;
+  let U=(((decided-start)%n)+n)%n+n*laps;
+  while(U<6)U+=n;
+  let T=T0, V=0, tc=0, td=0;
+  for(let k=0;k<60;k++){ V=(U+2*Dd)/(T-ta/2); td=3*Dd/V; tc=T-ta-td; if(tc>=.25)break; T+=.05; }
+  return {n,start,decided,U,Dd,V,ta,tc,td,T,laps};
+}
+function pointerS(pp,t){
+  const {ta,tc,td,V,U,Dd}=pp;
+  if(t<=0)return 0;
+  if(t<ta)return V*t*t/(2*ta);
+  if(t<ta+tc)return V*ta/2+V*(t-ta);
+  if(t<ta+tc+td){const tau=(t-ta-tc)/td;return (U-Dd)+Dd*(1-Math.pow(1-tau,3));}
+  return U;
+}
+function pointerSpeed(pp,t){
+  const {ta,tc,td,V,Dd}=pp;
+  if(t<=0||t>=ta+tc+td)return 0;
+  if(t<ta)return V*t/ta;
+  if(t<ta+tc)return V;
+  const tau=(t-ta-tc)/td; return 3*Dd/td*Math.pow(1-tau,2);
+}
+function pointerIdx(pp,t){ return (pp.start+pointerS(pp,t))%pp.n; }
+/* Position and opacity on the row. The light slides off the right end and enters from the left. */
+function pointerXY(pp,t,rows){
+  const n=pp.n, idx=pointerIdx(pp,t), i=Math.floor(idx+1e-9), f=idx-i;
+  if(i>=n)return {x:rows[0][0],y:rows[0][1],o:1};
+  if(i<n-1)return {x:lerp(rows[i][0],rows[i+1][0],f),y:rows[i][1],o:1};
+  const gap=n>1?rows[1][0]-rows[0][0]:96;
+  if(f<.5)return {x:rows[n-1][0]+f*gap,y:rows[n-1][1],o:1-2*f};
+  return {x:rows[0][0]-gap*.5+(f-.5)*gap,y:rows[0][1],o:2*f-1};
+}
+
+/* Start Echo, lap count and length differ per scenario and chooser. The decided Echo is always the last rest. */
+function pointerFor(scId,n,cIdx){
+  let start=(cIdx+1+((scId-1)%Math.max(1,n-1)))%n; if(start===cIdx)start=(start+1)%n;
+  return pointerPlan(n,start,cIdx,1+((scId+cIdx)%2),2.0+.2*((scId*2+cIdx)%5));
+}
+
+/* ---------- Standing tempo (feel report section 5, linear between anchors) ---------- */
+function tempo(S){
+  const k=S<=5?(S-1)/4:1+(S-5)/4;
+  const at=(a,b,c)=>k<=1?lerp(a,b,k):lerp(b,c,k-1);
+  return {pre:Math.round(at(.6,.35,.1)*100)/100,hitch:Math.round(at(.12,.06,0)*100)/100,pace:at(.8,.95,1),delay:Math.round(at(.2,.1,0)*100)/100,lean:S<=2?-4:(S>=8?5:3)};
+}
+/* Reason table (feel report section 4): walk seconds for pick 1 and later picks, touch, lift, hold before the pack. */
+const RS={
+  likes:{w:[.70,.60],touch:.10,lift:.25,liftE:'back',hold:.20},
+  worth:{w:[.60,.60],touch:.10,lift:.40,liftE:'smooth',hold:.20},
+  safe:{w:[.95,.70],touch:.10,lift:.20,liftE:'smooth',hold:.20},
+  bold:{w:[.50,.40],touch:.10,lift:.15,liftE:'back',hold:.20},
+  froze:{w:[.70,.85],touch:.10,lift:.50,liftE:'smooth',hold:.20},
+  fit:{w:[.45,.45],touch:0,lift:.20,liftE:'smooth',hold:.12}};
+const WALK_CAP=3.4, FLY=.34, TYPE_CPS=24;
+
+function Track(p0,t0){this.segs=[];this.p0=p0;this.p=p0;this.t0=t0;this.t=t0;}
+Track.prototype.go=function(dur,to,ease,bow){
+  this.segs.push({t0:this.t,t1:this.t+dur,a:this.p,b:to,e:ease||EZ.smooth,bow:bow||0});
+  this.t+=dur;this.p=to;return this;};
+Track.prototype.wait=function(d){this.t+=d;return this;};
+Track.prototype.at=function(t){
+  if(t<=this.t0)return this.p0;
+  for(let i=0;i<this.segs.length;i++){
+    const s=this.segs[i];
+    if(t<s.t1){
+      if(t<s.t0)return s.a;
+      const u=(t-s.t0)/(s.t1-s.t0), e=s.e(u), p=mix(s.a,s.b,e);
+      if(s.bow){const d=unit(sub(s.b,s.a));p[0]+=-d[1]*s.bow*Math.sin(Math.PI*e);p[1]+=d[0]*s.bow*Math.sin(Math.PI*e);}
+      return p;
+    }
+  }
+  return this.p;
+};
+
+/* ---------- the plan: every time of the intro, fixed before it runs ---------- */
+function buildPlan(sc,chooserId,o){
+  o=o||{};
+  const rm=!!o.reduced;
+  const E=resolveEvent(sc,chooserId,o);
+  const stand=sc.party.filter(id=>sc.fallen.indexOf(id)<0);
+  const n=stand.length, cIdx=stand.indexOf(chooserId);
+  const ech=ECHOES[chooserId], tp=tempo(ech.standing), R=RS[E.reason];
+  const P={sc,E,stand,n,cIdx,ech,tp,rm,noKill:!!sc.noKill};
+  P.rows=stand.map((id,k)=>rowSpot(k,n));
+  P.battle=stand.map((id,k)=>BATTLE[k]);
+  P.fallenSpots={};sc.fallen.forEach((id,k)=>P.fallenSpots[id]=FALLEN_SPOTS[k%2]);
+
+  const cellPos=sc.cells.map(c=>iso(c[0],c[1])), K=cellPos.length;
+  P.cells=cellPos;
+  P.item={};
+  const members=cellPos.map(()=>[]);
+  E.finds.forEach((f,i)=>members[i%K].push(f.uid));
+  members.forEach((m,j)=>m.forEach((uid,idx)=>{
+    const c=cellPos[j], mc=m.length;
+    const fan=mc>1?[(idx-(mc-1)/2)*58,(idx%2)*7]:[0,0];
+    const stk=mc>1?[idx*5-(mc-1)*2.5,-idx*3]:[0,0];
+    P.item[uid]={pile:j,size:mc,stack:add(c,stk),rest:add(c,fan)};
+  }));
+
+  /* world beats */
+  const tItems=P.noKill?1.15:.35, tRow0=tItems, tRowEnd=tRow0+.9, tP0=tRow0+.7;
+  Object.assign(P,{tItems,tRow0,tRowEnd,tP0});
+  P.enemyCount=P.noKill?2:K;
+  P.pp=pointerFor(sc.id,n,cIdx);
+  const Tp=rm?.5:P.pp.T, tPend=tP0+Tp;
+  const tS0=tPend+.2, tS1=tS0+(rm?.15:.45);
+  Object.assign(P,{Tp,tPend,tS0,tS1});
+  const outPos=add(P.rows[cIdx],[0,-44]);
+  P.outPos=outPos;
+
+  /* the chooser's walk */
+  const trk=new Track(P.rows[cIdx],tS0);
+  trk.go(tS1-tS0,outPos,EZ.back);
+  const pre=tp.pre+(E.reason==='safe'?.25:0);
+  trk.wait(pre);
+  const tW0=trk.t; P.tW0=tW0;
+  const stops=E.picks.map(u=>({uid:u,isTry:false}));
+  if(E.tryUid)stops.push({uid:E.tryUid,isTry:true});
+  let cur=outPos;
+  stops.forEach((s,k)=>{
+    const ip=P.item[s.uid].rest, u=unit(sub(cur,ip));
+    s.k=k;s.stand=add(ip,mul(u,34));s.dist=len(sub(s.stand,cur));
+    const ref=k>0?60:90, base=R.w[k>0?1:0]*clamp(s.dist/ref,.6,1.35);
+    s.w=(E.reason==='fit'?R.w[0]:E.reason==='froze'?(k===0?.35+Math.max(.4,s.dist*.6/77):Math.max(.4,s.dist/70)):base/tp.pace)+((E.reason==='froze'||E.reason==='fit')?0:tp.hitch);
+    cur=s.stand;
+  });
+  let sumW=0;stops.forEach(s=>{sumW+=s.w;});
+  const wScale=sumW>WALK_CAP?WALK_CAP/sumW:1;
+  const rec=P.rec={};
+  const hops=[], trem=[], leanKeys=[[tS1,0]], glints=[];
+  const walkTo=(s,from,dest,dur,ease,bow)=>{
+    if(rm){trk.go(.15,dest,EZ.lin);return;}
+    if(tp.hitch>0&&E.reason!=='froze'&&E.reason!=='fit'&&dur>.3){
+      trk.go(dur/2,mix(from,dest,.5),EZ.lin,bow?bow:0);trk.wait(tp.hitch);
+      hops.push({t:trk.t-tp.hitch,dur:tp.hitch,amp:0,sq:.03});
+      trk.go(dur/2,dest,EZ.lin,0);
+    }else trk.go(dur,dest,ease,bow);
+  };
+  stops.forEach((s,k)=>{
+    const ip=P.item[s.uid].rest, from=trk.p, sg=Math.sign(ip[0]-from[0])||1, w=s.w*wScale;
+    const r={uid:s.uid,isTry:s.isTry,walk0:trk.t};
+    if(k===0){ leanKeys.push([trk.t,sg*tp.lean,EZ.smooth]); }
+    const ptA=trk.t;
+    switch(E.reason){
+    case 'worth':
+      if(k===0&&!rm){
+        const sp=add(s.stand,mul(unit(sub(from,s.stand)),44));
+        trk.go(.45*wScale,sp,EZ.out);
+        r.dwell0=trk.t; leanKeys.push([trk.t,sg*5,EZ.smooth]);
+        glints.push({uid:s.uid,t:trk.t+.05,dur:.35});
+        trk.wait(.45);
+        trk.go(.45*wScale,s.stand,EZ.smooth);
+      }else walkTo(s,from,s.stand,w,EZ.smooth,0);
+      break;
+    case 'safe': {
+      const d=unit(sub(s.stand,from)), bow=14*((-d[1])<=0?1:-1);
+      walkTo(s,from,s.stand,w,EZ.lin,rm?0:bow);
+      break; }
+    case 'bold': {
+      if(rm){trk.go(.15,s.stand,EZ.lin);break;}
+      const d=unit(sub(s.stand,from)), ov=add(s.stand,mul(d,8));
+      trk.go(w*.9,ov,EZ.out); trk.go(.12,s.stand,EZ.smooth); break; }
+    case 'froze': {
+      if(rm){trk.go(.15,s.stand,EZ.lin);break;}
+      if(k===0){
+        const p40=mix(from,s.stand,.4);
+        trk.go(.35,p40,EZ.out);
+        trem.push({t0:trk.t,t1:trk.t+1.1,amp:1,hz:9,ramp:.12,decay:.25});
+        trk.wait(1.1);
+        trk.go(Math.max(.3,w-.35),s.stand,EZ.lin);
+      }else{
+        trem.push({t0:trk.t,t1:trk.t+.3,amp:.53,hz:9,ramp:.01,decay:.3});
+        trk.go(w,s.stand,EZ.lin);
+      }
+      break; }
+    default: // likes, fit
+      if(rm)trk.go(.15,s.stand,EZ.lin);else trk.go(w,s.stand,E.reason==='fit'?EZ.lin:EZ.smooth,0);
+    }
+    r.arrive=trk.t;
+    if(k===0)leanKeys.push([trk.t,0,EZ.smooth]);
+    const touch=rm?0:R.touch;
+    if(touch>0){hops.push({t:trk.t,dur:touch,amp:E.reason==='worth'?0:4,sq:.08});trk.wait(touch);}
+    const lift=rm?.15:(s.isTry?R.lift+.1:(E.reason==='froze'&&k>0?.3:R.lift));
+    r.lift0=trk.t; r.lift1=trk.t+lift; r.liftE=R.liftE;
+    if(!s.isTry){
+      r.fly0=r.lift1+(rm?0:R.hold); r.fly1=r.fly0+(rm?.15:FLY); r.slot=E.slotOf[s.uid];
+    }else r.held=true;
+    trk.wait(Math.max(0,lift-(rm?0:.1)));
+    if(!s.isTry&&E.reason==='safe'&&!rm){ trk.go(.25,add(trk.p,mul(unit(sub(outPos,trk.p)),10)),EZ.smooth); }
+    rec[s.uid]=r;
+  });
+  if(E.frozen){ /* a frozen chooser selects nothing: it moves 40% of the way, stops and trembles */
+    const ip=P.item[E.finds[0].uid].rest, st=add(ip,mul(unit(sub(outPos,ip)),34));
+    if(rm)trk.wait(.4);
+    else{ trk.go(.35,mix(outPos,st,.4),EZ.out); trem.push({t0:trk.t,t1:trk.t+1.1,amp:1,hz:9,ramp:.12,decay:.25}); trk.wait(1.35); }
+  }
+  P.trk=trk; P.hops=hops; P.trem=trem; P.leanKeys=leanKeys; P.glints=glints;
+  let tA=trk.t;
+  stops.forEach(s=>{const r=rec[s.uid];tA=Math.max(tA,r.fly1||0);});
+  P.tA=tA;
+  P.packPulseAt=E.tryUid?rec[E.tryUid].lift1:null;
+
+  /* fan-out of piles */
+  const fanOf={};
+  stops.forEach(s=>{const j=P.item[s.uid].pile;if(!(j in fanOf))fanOf[j]=rec[s.uid].walk0+.15;});
+  E.finds.forEach((f,i)=>{
+    const it=P.item[f.uid], r=rec[f.uid]||(rec[f.uid]={uid:f.uid});
+    r.appear=tItems+.08*i;
+    r.reveal=r.arrive!==undefined?r.arrive:tA; r.revD=rm?.15:.25;
+    const f0=(it.pile in fanOf)?fanOf[it.pile]:tA-.45;
+    r.fan0=it.size>1?f0:0; r.fan1=it.size>1?f0+.35:0;
+  });
+  const tB=(E.tryUid?rec[E.tryUid].lift1+.05:(E.frozen?tA:tA-.15))+tp.delay; P.tB=tB;
+  const typed=rm?0:E.bark.length/TYPE_CPS;
+  P.tBend=tB+typed; P.tIdle=Math.max(P.tBend+.3,tA+.45);
+  P.tD0=tA; P.dimO=.6;
+  const gTmp=initState(sc,E,{swapSpent:!!o.swapSpent});
+  P.offeredEnd=swapOnOffer(gTmp);
+  P.swapSpentAtStart=!!o.swapSpent;
+
+  P.beats=[{t:0,name:P.noKill?'The spirit reaches the shrine, enemies withdraw':'The last enemy falls'},{t:tItems,name:'Items appear on the field'},{t:tRow0,name:'The row forms'},{t:tP0,name:'The pointer runs'},{t:tS0,name:'The chooser steps out, the pack comes up'},{t:tW0,name:E.picks.length?'The Echo walks to its picks':'The Echo tries a find'},{t:tB,name:'The emotion beat'},{t:P.tIdle,name:'Idle'}];
+  return P;
+}
+function beatAt(P,t){ let b=P.beats[0].name; P.beats.forEach(x=>{if(t>=x.t)b=x.name;}); return b; }
+
+/* where an item is, in words for the details panel, at intro time t */
+function whereAt(P,uid,t){
+  if(!P.item[uid])return 'pack';
+  const r=P.rec[uid];
+  if(r.lift0===undefined)return 'ground';
+  if(r.isTry)return t>=r.lift0?'carried':'ground';
+  if(t<r.lift0)return 'ground';
+  if(t<r.fly1)return 'carried';
+  return 'pack';
+}
+
+/* body effects of the chooser at time t */
+function bodyAt(P,t){
+  let bx=0,by=0,sx=1,sy=1;
+  P.hops.forEach(h=>{const u=(t-h.t)/h.dur; if(u>0&&u<1){const s=Math.sin(Math.PI*u);by-=h.amp*s;sx+=h.sq*s;sy-=h.sq*s;}});
+  let rot=kf(t,P.leanKeys), glow=0, shade=0;
+  P.trem.forEach(m=>{
+    if(t>=m.t0&&t<=m.t1+m.decay){
+      let env=Math.min(1,(t-m.t0)/m.ramp); if(t>m.t1)env=1-(t-m.t1)/m.decay;
+      const w=Math.sin(2*Math.PI*m.hz*(t-m.t0));
+      bx+=1.5*m.amp*w*env;by+=.6*m.amp*w*env;
+    }
+  });
+  const p=ph(t,P.tB-.05,P.tB+.3), emo=P.E.emo;
+  if(P.rm){ glow=emo==='plus'?.28*p:0; shade=emo==='minus'?.2*p:0; }
+  else if(emo==='plus'){ by-=3*Math.sin(Math.PI*pr(t,P.tB-.05,P.tB+.3)); glow=.3*p; }
+  else if(emo==='minus'){ sx*=1+.05*p; sy*=1-.07*p; rot=lerp(rot,-5,p); shade=.25*p; }
+  else if(emo==='none'){ rot=lerp(rot,-4,p); }
+  else if(t>P.tB){ by+=1*Math.sin((t-P.tB)*3.1); }
+  return {bx,by,sx,sy,rot,glow,shade};
+}
+
+/* ---------- views: the scene at one moment, as plain data ---------- */
+function rowPos(P,k,t){ const a=P.tRow0+.045*k; return mix(P.battle[k],P.rows[k],ph(t,a,a+.72)); }
+function chooserPos(P,t){ return t<P.tS0?rowPos(P,P.cIdx,t):P.trk.at(t); }
+
+function echoViews(P,t){
+  const out=[], tagAll=ph(t,P.tRowEnd-.3,P.tRowEnd-.05);
+  P.stand.forEach((id,k)=>{
+    const e=ECHOES[id], chosen=k===P.cIdx;
+    let pos=rowPos(P,k,t), o=1, tagO=tagAll, body={bx:0,by:0,sx:1,sy:1,rot:0,glow:0,shade:0}, sh=1;
+    if(chosen){
+      pos=chooserPos(P,t); body=bodyAt(P,t); sh=1+.3*ph(t,P.tS0,P.tS1);
+    }else{
+      const s=ph(t,P.tS0,P.tS0+.3);
+      pos=[pos[0],pos[1]+8*s]; o=1-.35*ph(t,P.tS0+.05,P.tS0+.35); tagO=tagAll*(1-s);
+    }
+    out.push(Object.assign({id,name:e.name,letter:e.letter,status:e.status,x:pos[0],y:pos[1],o,tagO,sh,chosen,fallen:false,tagDy:chosen&&t>=P.tS0?4*(1-ph(t,P.tS0+.15,P.tS0+.33,EZ.out)):0},body));
+  });
+  P.sc.fallen.forEach(id=>{
+    const e=ECHOES[id], p=P.fallenSpots[id];
+    out.push({id,name:e.name,letter:e.letter,status:e.status,x:p[0],y:p[1],o:.6,tagO:0,sh:.8,chosen:false,fallen:true,bx:0,by:0,sx:1,sy:1,rot:0,glow:0,shade:0,tagDy:0});
+  });
+  return out;
+}
+
+function itemViewIntro(P,uid,t){
+  const it=P.item[uid], r=P.rec[uid], E=P.E;
+  const fanU=it.size>1?ph(t,r.fan0,r.fan1):1;
+  const pos0=mix(it.stack,it.rest,fanU);
+  const ap=r.appear, a=pr(t,ap,ap+.12), fall=ph(t,ap,ap+.28,EZ.out);
+  const bounce=3*Math.sin(Math.PI*pr(t,ap+.28,ap+.36));
+  const v={uid,vis:'svg',x:pos0[0],y:pos0[1]-18*(1-fall)-bounce,o:a,sc:1,tilt:0,sink:0,df:0,gx:pos0[0],gy:pos0[1],shS:.85+.15*fall,shO:a,glint:-1,layer:0,pulse:0,rev:ph(t,r.reveal,r.reveal+r.revD)};
+  if(t<ap){v.vis='none';return v;}
+  const head=u=>add(chooserPos(P,u-.06),[0,-HEAD]);
+  if(r.lift0!==undefined){
+    if(t>=r.lift0&&(r.isTry||t<r.fly0)){
+      const p=ph(t,r.lift0,r.lift1,EZ[r.liftE]||EZ.smooth);
+      let pos=mix(pos0,head(t),p);
+      if(r.isTry&&t>=r.lift1){pos=head(t);}
+      v.x=pos[0];v.y=pos[1];if(r.isTry&&t>=r.lift1)v.held=true;
+      const cp=chooserPos(P,t);
+      v.gx=lerp(pos0[0],cp[0],p);v.gy=lerp(pos0[1],cp[1],p);v.shS=1-.3*p;
+    }else if(!r.isTry&&t>=r.fly0&&t<r.fly1){
+      const u=ph(t,r.fly0,r.fly1,EZ.smooth), from=head(r.fly0), to=slotCenter(r.slot);
+      const p=mix(from,to,u); p[1]-=34*Math.sin(Math.PI*u);
+      v.x=p[0];v.y=p[1];v.sc=1+.45*u;v.layer=1;v.shO=0;
+    }else if(!r.isTry&&t>=r.fly1){ v.vis='tile'; }
+  }
+  if(v.vis==='svg'&&r.lift0===undefined){
+    const d=ph(t,P.tD0,P.tD0+.3,EZ.out);
+    v.df=d;v.tilt=10*d;v.sink=5*d;v.o*=lerp(1,P.dimO,d);
+  }
+  P.glints.forEach(g=>{ if(g.uid===uid){const u=(t-g.t)/g.dur;if(u>0&&u<1)v.glint=u;} });
+  return v;
+}
+
+function introView(P,t){
+  const E=P.E, S={t,beat:beatAt(P,t)};
+  S.types={};E.finds.forEach(f=>S.types[f.uid]=f.type);E.pack0.forEach(p=>S.types[p.uid]=p.type);
+  /* enemies and objective */
+  S.enemies=[];S.spirit=null;S.shrine=null;
+  if(!P.noKill){
+    P.cells.forEach((c,j)=>{const u=ph(t,j*.1,j*.1+.4,EZ.in);S.enemies.push({x:c[0],y:c[1]+6*u,o:1-u,s:1-.3*u});});
+  }else{
+    const from=[iso(2,1),iso(4,2)];
+    from.forEach((f,j)=>{const p=mix(f,ENEMY_OUT[j],ph(t,.3,1.3,EZ.smooth));S.enemies.push({x:p[0],y:p[1],o:1-ph(t,.9,1.3),s:1});});
+    const sp=mix(SPIRIT_FROM,SHRINE,ph(t,0,1.0));
+    S.spirit={x:sp[0],y:sp[1],o:1-.15*ph(t,1.0,1.4)};
+    S.shrine={x:SHRINE[0],y:SHRINE[1],glow:.85*ph(t,1.0,1.3)};
+  }
+  S.echoes=echoViews(P,t);
+  S.items=E.finds.map(f=>itemViewIntro(P,f.uid,t));
+  /* pack panel */
+  const slots=E.pack0.map(p=>p.uid), lit=[0,0,0,0];
+  while(slots.length<PACK_SLOTS)slots.push(null);
+  E.picks.forEach(u=>{ const r=P.rec[u]; if(t>=r.fly1){slots[r.slot]=u; lit[r.slot]=1-ph(t,r.fly1,r.fly1+.25,EZ.out);} });
+  const used=slots.filter(Boolean).length;
+  const pulse=P.packPulseAt!==null?Math.sin(Math.PI*pr(t,P.packPulseAt,P.packPulseAt+.4)):0;
+  S.pack={p:ph(t,P.tS0,P.tS0+.4,EZ.out),slots,lit,tone:packTone(used),used,pulse};
+  /* pointer light */
+  const cp=chooserPos(P,t);
+  let lx,ly,lo;
+  if(P.rm||t>=P.tP0+P.Tp){lx=cp[0];ly=cp[1];lo=1;}
+  else{const q=pointerXY(P.pp,t-P.tP0,P.rows);lx=q.x;ly=q.y;lo=q.o;}
+  S.light={x:lx,y:ly,o:lo*ph(t,P.tP0,P.tP0+.15)*(1-ph(t,P.tW0,P.tW0+.4)),s:1+.22*ph(t,P.tPend-.3,P.tPend+.2)};
+  S.pointerSpeed=P.rm?0:pointerSpeed(P.pp,t-P.tP0);
+  /* bark */
+  const typed=P.rm?E.bark.length:Math.max(0,Math.floor((t-P.tB)*TYPE_CPS));
+  S.bark={text:E.bark.slice(0,typed),full:E.bark,o:ph(t,P.tB,P.tB+.12)};
+  S.skipO=ph(t,.2,.35)*(1-ph(t,P.tIdle-.1,P.tIdle));
+  S.contO=ph(t,P.tIdle-.25,P.tIdle);
+  S.chooserEnd=P.trk.at(1e9);
+  return S;
+}
+
+/* The state after the intro, built from the live path state G. o: {gt, trade, close, ghosts} */
+function idleView(P,G,o){
+  o=o||{};
+  const S=introView(P,P.tIdle), E=P.E;
+  S.skipO=0;S.contO=1;
+  const dimO=(G.swapSpent||!swapOnOffer(G))?.6:.85;
+  S.items=[];
+  const swap={phase:G.phase,origin:G.swapSrc,tgt:G.swapTgt,legal:[],twins:[]};
+  const headP=add(S.chooserEnd,[0,-HEAD]);
+  G.field.forEach(f=>{
+    const p=G.fpos[f.uid]||P.item[f.uid]&&P.item[f.uid].rest||[640,330];
+    if(G.heldUid===f.uid){ S.items.push({uid:f.uid,vis:'svg',x:headP[0],y:headP[1],o:1,sc:1,tilt:0,sink:0,df:0,gx:S.chooserEnd[0],gy:S.chooserEnd[1],shS:.7,shO:1,glint:-1,layer:0,pulse:0,rev:1,held:true}); return; }
+    S.items.push({uid:f.uid,vis:'svg',x:p[0],y:p[1],o:dimO,sc:1,tilt:10,sink:5,df:1,gx:p[0],gy:p[1],shS:1,shO:1,glint:-1,layer:0,pulse:0,rev:1});
+  });
+  S.pack.slots=G.pack.map(x=>x?x.uid:null);S.pack.lit=[0,0,0,0];S.pack.used=G.pack.filter(Boolean).length;S.pack.tone=packTone(S.pack.used);S.pack.p=1;S.pack.pulse=0;
+  if(G.phase==='swapPick'||G.phase==='swapPreview'){
+    swap.legal=partners(G,G.swapSrc);swap.twins=twinPartners(G,G.swapSrc);
+  }
+  if(G.phase==='swapPick'){
+    S.items.forEach(i=>{ if(swap.legal.indexOf(i.uid)>=0||i.uid===G.swapSrc){i.o=1;i.tilt=0;i.sink=0;i.df=0;} });
+  }
+  if(G.phase==='swapPreview'){
+    const A=findItem(G,G.swapSrc),B=findItem(G,G.swapTgt);
+    const fld=A.side==='field'?A:B, pck=A.side==='pack'?A:B;
+    const fp=G.fpos[fld.item.uid];
+    S.items=S.items.filter(i=>i.uid!==fld.item.uid);
+    S.items.push({uid:pck.item.uid,vis:'svg',ghost:true,lost:true,x:fp[0],y:fp[1],o:.7,sc:1,tilt:10,sink:5,df:1,gx:fp[0],gy:fp[1],shS:1,shO:.5,glint:-1,layer:0,pulse:0,rev:1});
+    S.pack.slots[pck.i]=fld.item.uid;S.pack.ghostSlot=pck.i;
+    S.items.forEach(i=>{ if(i.uid!==pck.item.uid&&i.uid!==fld.item.uid){i.o*=.5;} });
+  }
+  S.swap=swap;
+  /* trade in flight: 0.6 s arcs, then the dropped item settles */
+  if(o.trade){
+    const T=o.trade, u=(o.gt-T.t0)/.6, fp=G.fpos[T.outUid], sc=slotCenter(T.slot);
+    if(u<1){
+      const e=EZ.smooth(clamp(u,0,1));
+      const inP=mix(T.fromHeld?headP:fp,sc,e); inP[1]-=28*Math.sin(Math.PI*e);
+      const outP=mix(sc,fp,e); outP[1]+=28*Math.sin(Math.PI*e);
+      S.pack.slots[T.slot]=null;
+      S.items=S.items.filter(i=>i.uid!==T.outUid);
+      S.items.push({uid:T.inUid,vis:'svg',x:inP[0],y:inP[1],o:1,sc:1+.45*e,tilt:0,sink:0,df:0,gx:inP[0],gy:inP[1],shS:1,shO:0,glint:-1,layer:1,pulse:0,rev:1});
+      S.items.push({uid:T.outUid,vis:'svg',x:outP[0],y:outP[1],o:1,sc:1.45-.45*e,tilt:0,sink:0,df:0,gx:fp[0],gy:fp[1],shS:1,shO:0,glint:-1,layer:1,pulse:0,rev:1});
+    }else{
+      const d=ph(o.gt,T.t0+.6,T.t0+.8,EZ.out);
+      const it=S.items.find(i=>i.uid===T.outUid);
+      if(it){it.o=lerp(1,dimO,d);it.tilt=10*d;it.sink=5*d;it.df=d;}
+    }
+    S.pack.lit[T.slot]=u>=1?1-ph(o.gt,T.t0+.6,T.t0+.85,EZ.out):0;
+  }
+  /* chooser: sway, and the close */
+  const me=S.echoes.find(e=>e.chosen);
+  me.by+=Math.sin((o.gt||0)*Math.PI)*1;
+  me.x=S.chooserEnd[0];me.y=S.chooserEnd[1];
+  if(o.close){
+    const u=o.gt-o.close.t0;
+    const back=mix(S.chooserEnd,P.rows[P.cIdx],ph(u,.05,.55));
+    me.x=back[0];me.y=back[1];me.tagO=1-ph(u,0,.2);
+    S.echoes.forEach(e=>{ if(!e.chosen&&!e.fallen){ e.o=lerp(.65,1,ph(u,.2,.5)); e.y-=8*ph(u,.2,.5); e.tagO=0; } });
+    S.items.forEach(i=>{ if(i.held){const q=mix(headP,G.fpos[i.uid],ph(u,0,.3,EZ.in));i.x=q[0];i.y=q[1];i.gx=q[0];i.gy=q[1];i.shS=1;}
+      i.o*=1-ph(u,0,.35,EZ.in); i.sink+=7*ph(u,0,.35,EZ.in); });
+    S.bark.o=1-ph(u,0,.2);
+    S.closeU=u;
+  }
+  if(G.bark!==null&&G.bark!==undefined){ S.bark.text=G.bark;S.bark.full=G.bark; }
+  S.bark.o=o.close?S.bark.o:1;
+  return S;
+}
+
+/* Marks on screen: grade pips, kind shape and twin notch, counted on revealed items only. Leaf and count capsule are tile parts, listed apart. */
+function countMarks(S){
+  const seen=[];
+  S.items.forEach(i=>{ if(i.vis!=='none'&&i.o>.25&&(i.rev===undefined||i.rev>=.5))seen.push(i.uid); });
+  if(S.pack.p>.3)S.pack.slots.forEach(u=>{ if(u&&seen.indexOf(u)<0)seen.push(u); });
+  const uniq=seen.filter(u=>TYPES[S.types[u]].qty===1);
+  const byType={};uniq.forEach(u=>{byType[S.types[u]]=(byType[S.types[u]]||0)+1;});
+  const list=[];
+  if(uniq.length)list.push('grade pips');
+  if(seen.length)list.push('kind shape');
+  if(Object.keys(byType).some(k=>byType[k]>=2))list.push('twin notch');
+  return {n:list.length,list,twins:Object.keys(byType).filter(k=>byType[k]>=2)};
+}
+
+return {clamp,lerp,EZ,pr,ph,add,sub,mul,len,unit,mix,kf,PACK_SLOTS,KIND_NAMES,LIM,TYPES,TYPE_ORDER,notchOf,ECHOES,TXT,SCENARIOS,
+  packTone,capacityCase,CASE_TEXT,REALM_CAP,trimScenario,emotionClass,isSevere,sortByReason,barkFor,resolveEvent,initState,reduce,packUsed,packFull,findItem,partners,twinPartners,
+  hasLegalPair,swapOnOffer,swapRefusal,swapStateWord,leavePromptNeeded,
+  iso,rowSpot,PACKBOX,slotCenter,HEAD,pointerPlan,pointerS,pointerSpeed,pointerIdx,pointerXY,tempo,RS,Track,buildPlan,beatAt,whereAt,bodyAt,
+  introView,idleView,countMarks,pointerFor,chooserPos,SHRINE,SPIRIT_FROM,FLY,WALK_CAP};
+})();
+if(typeof module!=='undefined')module.exports=PE;
+</script>
+<script>
+(function(){
+'use strict';
+if(typeof document==='undefined')return;
+const $=id=>document.getElementById(id);
+const {clamp,lerp,EZ,ph,add,sub,mul,len,unit,mix,TYPES,ECHOES,TXT,KIND_NAMES,LIM,notchOf,PACKBOX,slotCenter,SCENARIOS}=PE;
+const f=n=>String(Math.round(n*100)/100);
+const COL={INK2:'#2A2A3A',CREAM:'#FFF8DC',PLATE:'#F5E6D3',BRONZE:'#785C2B',INK:'#3D2817',FLOOR:'#89543f',BACK:'#6e3128',TOK:'#2f66b8',DIM:'#CDB791',ENEMY:'#c0282c'};
+const app={realm:1,destroyLeft:true,sid:1,chooser:null,directive:'scout',ruleOn:true,showDis:true,reduced:false,speed:1,playing:true,size:1280,pathSwapSpent:false,
+  P:null,G:null,t:0,gt:0,fx:{trade:null,close:null},opener:null,idleAt:0,flashAt:-9e9,items:{},key:{},line:{text:'',until:0},focusReq:null,dKey:'',lastS:null,els:{}};
+try{ app.reduced=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(e){}
+
+/* ---------- markup builders ---------- */
+const LEAF_HELD='<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3.3 10.7C0.6 6.4 4.2 0.9 13 1C13.1 9.6 8.2 13.4 3.3 10.7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" pathLength="100" stroke-dasharray="84 16" stroke-dashoffset="-8"/><path d="M3.5 10.5L1.8 12.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><path d="M4.8 9.4L9.4 4.8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" fill="none"/></svg>';
+const LEAF_WHOLE='<svg viewBox="0 0 14 14" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M3.3 10.7C0.6 6.4 4.2 0.9 13 1C13.1 9.6 8.2 13.4 3.3 10.7ZM4.6 9.6L9.6 4.6L10.4 5.4L5.4 10.4Z"/><path d="M3.5 10.5L1.8 12.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>';
+function arrowhead(x,y,ang){
+  const sz=9,p=[[sz,0],[-sz*.6,sz*.7],[-sz*.6,-sz*.7]],c=Math.cos(ang),s=Math.sin(ang);
+  return `<polygon points="${p.map(([a,b])=>f(x+a*c-b*s)+','+f(y+a*s+b*c)).join(' ')}" fill="${COL.CREAM}" stroke="${COL.INK2}" stroke-width="2" stroke-linejoin="round"/>`;
+}
+function markInner(){
+  const top='M-26,-3 Q0,-19 21,-7',bot='M26,3 Q0,19 -21,7'; let g='';
+  [[COL.INK2,7.5],[COL.CREAM,3.5]].forEach(([c,w])=>{g+=`<path d="${top}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/><path d="${bot}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;});
+  return g+arrowhead(21,-7,Math.atan2(-7+19,21))+arrowhead(-21,7,Math.atan2(7-19,-21));
+}
+function shapeSvg(kind,cx,cy){
+  const B=COL.BRONZE;
+  if(kind==='gear')return `<rect x="${cx-9.5}" y="${cy-11}" width="15" height="22" rx="3" fill="${B}"/>`;
+  if(kind==='relic'){const r=11,px=cx-2,pts=[[r,0],[r/2,.866*r],[-r/2,.866*r],[-r,0],[-r/2,-.866*r],[r/2,-.866*r]];return `<polygon points="${pts.map(([a,b])=>f(px+a)+','+f(cy+b)).join(' ')}" fill="${B}"/>`;}
+  if(kind==='consumable')return `<polygon points="${cx-2},${cy-11} ${cx+9},${cy+9} ${cx-13},${cy+9}" fill="${B}"/>`;
+  return `<rect x="${cx-13}" y="${cy-8}" width="22" height="6" rx="1" fill="${B}"/><rect x="${cx-13}" y="${cy+2}" width="22" height="6" rx="1" fill="${B}"/>`;
+}
+function notchSvg(i,cx,cy){
+  const h=`fill="${COL.INK}"`;
+  if(i===1)return `<polygon points="${cx-4},${cy-4} ${cx+4},${cy-4} ${cx+4},${cy+4}" ${h}/>`;
+  if(i===2)return `<path d="M${cx-2},${cy-4}A4,4 0 0 1 ${cx-2},${cy+4}Z" ${h}/><rect x="${cx-4}" y="${cy-4}" width="2" height="8" ${h}/>`;
+  if(i===3)return `<rect x="${cx-4}" y="${cy-4}" width="2.7" height="8" ${h}/><rect x="${cx+1.3}" y="${cy-4}" width="2.7" height="8" ${h}/>`;
+  if(i===4)return `<rect x="${cx-1.5}" y="${cy-4}" width="3" height="8" ${h}/><rect x="${cx-4}" y="${cy-1.5}" width="8" height="3" ${h}/>`;
+  if(i===5)return `<polygon points="${cx-4},${cy+4} ${cx-4},${cy} ${cx},${cy} ${cx},${cy-4} ${cx+4},${cy-4} ${cx+4},${cy+4}" ${h}/>`;
+  return `<rect x="${cx-4}" y="${cy-4}" width="8" height="8" ${h}/>`;
+}
+function itemSvg(uid,type){
+  const T=TYPES[type], cy=-24, stack=T.qty>1;
+  let pips='';
+  if(!stack)for(let k=0;k<T.grade;k++){const px=-15+k*8,py=cy+15;pips+=`<polygon points="${px},${py-3.5} ${px+3.5},${py} ${px},${py+3.5} ${px-3.5},${py}" fill="${COL.INK}"/>`;}
+  const cap=stack?`<rect x="2" y="${cy+9}" width="22" height="14" rx="7" fill="${COL.PLATE}" stroke="${COL.INK}" stroke-width="1.5"/><text class="cnt" x="13" y="${cy+19.5}" text-anchor="middle">x${T.qty}</text>`:'';
+  const nt=stack?'':`<g class="nt" opacity="0">${notchSvg(notchOf(type),14,cy-14)}</g>`;
+  const plate=(cls,fill,op)=>`<rect class="${cls}" x="-22" y="${cy-22}" width="44" height="44" rx="8" fill="${fill}" stroke="${COL.BRONZE}" stroke-width="2.5"${op?` opacity="${op}"`:''}/>`;
+  return `<g id="it_${uid}" class="it" data-uid="${uid}" opacity="0"><g class="rv"><g class="bd">
+<rect x="-22" y="${cy-17}" width="44" height="44" rx="8" fill="${COL.INK}"/>
+${stack?`<rect x="-19" y="${cy-19}" width="44" height="44" rx="8" fill="${COL.PLATE}" stroke="${COL.BRONZE}" stroke-width="2"/>`:''}
+${plate('pl0',COL.DIM)}${plate('pl1',COL.PLATE)}
+${shapeSvg(T.kind,0,cy-3)}${pips}${nt}${cap}
+<clipPath id="cp_${uid}"><rect x="-22" y="${cy-22}" width="44" height="44" rx="8"/></clipPath>
+<g clip-path="url(#cp_${uid})"><polygon class="gl" points="-6,${cy-24} 8,${cy-24} 2,${cy+24} -12,${cy+24}" fill="#fff" opacity="0"/></g>
+</g></g>
+<g class="gen"><ellipse cx="0" cy="-12" rx="15" ry="12" fill="#9C8052" stroke="${COL.INK}" stroke-width="2.5"/><path d="M-12,-13 Q0,-5 12,-13" fill="none" stroke="${COL.INK}" stroke-width="2"/><circle cx="0" cy="-23" r="3" fill="${COL.INK}"/></g>
+<rect class="tgt" x="-31" y="-54" width="62" height="60" rx="12" fill="none" stroke="#FFF8DC" stroke-width="3" opacity="0"/>
+<text class="lostT" x="0" y="-58" text-anchor="middle" opacity="0">Lost</text>
+<rect class="hit" x="-26" y="${cy-26}" width="52" height="56" tabindex="-1" role="button" data-uid="${uid}" data-tgt aria-label="Sealed item"/></g>`;
+}
+function echoSvg(id){
+  const e=ECHOES[id], w=e.status.length*7+18;
+  return `<g id="ec_${id}" class="ec" opacity="0">
+<ellipse class="esh" cx="0" cy="0" rx="25" ry="7" fill="#000" fill-opacity=".36"/>
+<circle class="eglow" cx="0" cy="-20" r="27" fill="#FFE9A8" opacity="0"/>
+<g class="ebd"><circle r="20" fill="${COL.TOK}" stroke="${COL.INK2}" stroke-width="3"/><text class="ini" x="0" y="6" text-anchor="middle">${e.letter}</text><circle class="esd" r="20" fill="#000" opacity="0"/></g>
+<text class="nm etag" x="0" y="27" text-anchor="middle" opacity="0">${e.name}</text>
+<g class="ech" opacity="0"><rect x="${-w/2}" y="34" width="${w}" height="18" rx="9" fill="${COL.INK2}" fill-opacity=".8"/><text class="chip" x="0" y="47" text-anchor="middle">${e.status}</text></g></g>`;
+}
+function groundSvg(){
+  let s=`<rect width="1280" height="720" fill="${COL.BACK}"/>`;
+  for(let c=0;c<7;c++)for(let r=0;r<7;r++){const [x,y]=PE.iso(c,r);s+=`<polygon points="${f(x-64)},${f(y)} ${f(x)},${f(y-32)} ${f(x+64)},${f(y)} ${f(x)},${f(y+32)}" fill="${COL.FLOOR}" stroke="#e8b080" stroke-opacity=".17" stroke-width="1.5"/>`;}
+  return s;
+}
+function sceneSvg(P){
+  const E=P.E;
+  let s=`<defs><radialGradient id="vg" cx=".5" cy=".5" r=".62"><stop offset=".42" stop-color="#1b0b08" stop-opacity="0"/><stop offset="1" stop-color="#1b0b08" stop-opacity=".72"/></radialGradient>
+<radialGradient id="lg"><stop offset="0" stop-color="#FFEFB8" stop-opacity=".55"/><stop offset=".5" stop-color="#FFD982" stop-opacity=".3"/><stop offset="1" stop-color="#FFD982" stop-opacity="0"/></radialGradient></defs>`;
+  s+=groundSvg();
+  if(P.noKill){
+    const [x,y]=PE.SHRINE;
+    s+=`<g id="shrine" transform="translate(${x},${y})"><ellipse class="sg" cx="0" cy="0" rx="54" ry="24" fill="#FFE9A8" opacity="0"/><ellipse cx="0" cy="0" rx="46" ry="21" fill="none" stroke="#b99a72" stroke-width="5"/><rect x="-52" y="-34" width="10" height="30" rx="3" fill="#9b7f5c" stroke="${COL.INK2}" stroke-width="2"/><rect x="42" y="-34" width="10" height="30" rx="3" fill="#9b7f5c" stroke="${COL.INK2}" stroke-width="2"/></g>`;
+  }
+  s+='<g id="shG"></g><g id="enG">';
+  for(let j=0;j<P.enemyCount;j++)s+=`<g id="en${j}"><ellipse cx="0" cy="0" rx="25" ry="7" fill="#000" fill-opacity=".28"/><circle cx="0" cy="-20" r="20" fill="${COL.ENEMY}" stroke="${COL.INK2}" stroke-width="3"/></g>`;
+  s+='</g>';
+  if(P.noKill)s+=`<g id="spirit" opacity="0"><ellipse cx="0" cy="0" rx="22" ry="6" fill="#000" fill-opacity=".25"/><circle cx="0" cy="-20" r="20" fill="#DDE9F2" fill-opacity=".85" stroke="${COL.INK2}" stroke-width="3"/><circle cx="0" cy="-20" r="10" fill="none" stroke="#7fa6c0" stroke-width="2.5"/></g>`;
+  s+=`<g id="light" opacity="0"><ellipse cx="0" cy="2" rx="52" ry="22" fill="url(#lg)"/><ellipse cx="0" cy="2" rx="20" ry="8" fill="#FFF6D5" fill-opacity=".5"/></g>`;
+  s+='<g id="objG">';
+  P.stand.forEach(id=>{s+=echoSvg(id);});
+  P.sc.fallen.forEach(id=>{s+=echoSvg(id);});
+  Object.keys(app.items).forEach(u=>{s+=itemSvg(u,app.items[u].type);});
+  s+='</g>';
+  s+=`<rect width="1280" height="720" fill="url(#vg)" pointer-events="none"/>`;
+  return s;
+}
+function shadowsSvg(){
+  return Object.keys(app.items).map(u=>`<ellipse id="sh_${u}" cx="0" cy="0" rx="19" ry="5.5" fill="#000" fill-opacity=".38" opacity="0"/>`).join('');
+}
+function tileHtml(uid,o){
+  o=o||{};
+  const T=TYPES[app.items[uid].type], stack=T.qty>1;
+  const leaf=o.origin==='held'?LEAF_HELD:o.origin==='gathered'?LEAF_WHOLE:'';
+  const pips=stack?'':'<span class="pips">'+'<i></i>'.repeat(T.grade)+'</span>';
+  const notch=(!stack&&o.notch)?`<span class="notch n${notchOf(app.items[uid].type)}"></span>`:'';
+  const cap=stack?`<span class="count-capsule">x${T.qty}</span>`:'';
+  return `<div class="item-tile kind-${T.kind} ${stack?'stack':'unique'} ${o.carried?'carried':''}"><i class="plate"><i class="art"><i class="shape"></i></i>${leaf?`<span class="leafm">${leaf}</span>`:''}${notch}${pips}${cap}</i></div>`;
+}
+
+/* ---------- loading a scenario ---------- */
+function load(sid,chooser){
+  const T=PE.trimScenario(SCENARIOS[sid-1],app.realm), sc=T.sc;
+  app.trim=T;
+  app.sid=sid;app.chooser=chooser||sc.chooser;
+  app.P=PE.buildPlan(sc,app.chooser,{reduced:app.reduced,ruleOn:app.ruleOn,swapSpent:app.pathSwapSpent});
+  app.G=PE.initState(sc,app.P.E,{swapSpent:app.pathSwapSpent,directive:app.directive});
+  app.G.fpos={};Object.keys(app.P.item).forEach(u=>{app.G.fpos[u]=app.P.item[u].rest;});
+  if(app.P.E.tryUid){const ce=app.P.trk.at(1e9);app.G.fpos[app.P.E.tryUid]=[ce[0]+40,ce[1]+6];}
+  app.items={};
+  app.P.E.finds.forEach(x=>{app.items[x.uid]={uid:x.uid,type:x.type};});
+  app.P.E.pack0.forEach(x=>{app.items[x.uid]={uid:x.uid,type:x.type};});
+  app.t=0;app.gt=0;app.fx={trade:null,close:null};app.opener=null;app.key={};app.dKey='';app.idleAt=0;app.line={text:'',until:0};app.focusReq=null;
+  $('board').innerHTML=sceneSvg(app.P);
+  $('shG').innerHTML=shadowsSvg();
+  $('topObj').innerHTML='';
+  $('pslots').innerHTML=[0,1,2,3].map(i=>`<button class="slot empty" data-slot="${i}" data-tgt tabindex="-1"><i class="ring"></i><span class="si"></span></button>`).join('');
+  $('resolve').hidden=true;$('resolve').classList.remove('on');
+  $('dtl').hidden=true;
+  buildStrip();
+  app.els={};
+}
+function el(id){ return app.els[id]||(app.els[id]=$(id)); }
+
+/* ---------- actions ---------- */
+function dispatch(a){
+  const G=app.G, b={phase:G.phase,seq:G.lineSeq,react:G.reactSeq||0};
+  PE.reduce(G,a);
+  if(G.lineSeq!==b.seq&&G.line&&!G.linePersist)showLine(G.line);
+  if(a.t==='pickTarget'&&G.phase==='swapPick'&&G.lineSeq!==b.seq)showLine(G.line);
+  if((G.reactSeq||0)!==b.react){
+    app.fx.trade={t0:app.gt,inUid:G.traded.inUid,outUid:G.traded.outUid,slot:G.traded.slot};
+    app.pathSwapSpent=true;
+    const tmp=ECHOES[app.chooser].temper;
+    G.bark=TXT.react[tmp][(G.reactSeq-1)%2];
+    app.focusReq='cont';
+  }
+  if(G.phase==='closing'&&b.phase!=='closing')app.fx.close={t0:app.gt};
+  if(G.phase==='swapPick'&&b.phase!=='swapPick'){app.focusReq='target';}
+  if(G.phase==='swapPreview'&&b.phase!=='swapPreview'){app.focusReq='keep';}
+  if(G.phase==='leave'&&b.phase!=='leave'){app.focusReq='stay';}
+  if(G.phase==='idle'&&(b.phase==='swapPick'||b.phase==='swapPreview'||b.phase==='leave')&&!app.focusReq)app.focusReq=b.phase==='leave'?'cont':'opener';
+  if(a.t==='open'&&G.details)app.focusReq='dtl';
+  if(a.t==='close'&&b.phase==='idle'||a.t==='close'&&b.phase==='intro')app.focusReq='opener';
+  return G;
+}
+function showLine(text){ app.line={text,until:performance.now()+2800}; }
+function skipIntro(){
+  if(app.G.phase!=='intro')return;
+  app.G.details=null;
+  app.t=app.P.tIdle;app.idleAt=app.gt;dispatch({t:'toIdle'});app.flashAt=performance.now();
+}
+function itemClick(uid,target){
+  const G=app.G;
+  const vv=app.lastS&&app.lastS.items.find(i=>i.uid===uid);
+  if(vv&&vv.rev!==undefined&&vv.rev<.5)return; /* hidden items cannot be selected (D-45) */
+  if(G.phase==='swapPick'){dispatch({t:'pickTarget',uid});return;}
+  if(G.phase!=='intro'&&G.phase!=='idle')return;
+  if(G.details===uid){dispatch({t:'close'});return;}
+  app.opener=target;
+  dispatch({t:'open',uid});
+}
+function outsideClick(){
+  const G=app.G;
+  if(G.details){dispatch({t:'close'});return;}
+  if(G.phase==='swapPick'||G.phase==='swapPreview'){dispatch({t:'cancel'});return;}
+  if(G.phase==='leave'){dispatch({t:'stay'});return;}
+  if(G.phase==='intro')skipIntro();
+}
+function act(name){
+  const G=app.G;
+  switch(name){
+  case 'skip': skipIntro();break;
+  case 'cont': if(G.phase==='idle'&&app.gt-app.idleAt>=.25)dispatch({t:'continue'});break;
+  case 'swap': dispatch({t:'swapStart'});break;
+  case 'confirm': dispatch({t:'confirm'});break;
+  case 'cancel': case 'back': dispatch({t:'cancel'});break;
+  case 'leave': dispatch({t:'leave'});break;
+  case 'stay': dispatch({t:'stay'});break;
+  case 'close': dispatch({t:'close'});break;
+  }
+}
+function onStageClick(e){
+  const t=e.target;
+  const a=t.closest&&t.closest('[data-act]');
+  if(a){ if(a.getAttribute('aria-disabled')==='true'&&a.dataset.act==='cont'){return;} act(a.dataset.act);return; }
+  const u=t.closest&&t.closest('[data-uid]');
+  if(u){ const slot=t.closest('.slot'); if(slot&&slot.classList.contains('empty'))return; itemClick(u.dataset.uid,u.tagName.toLowerCase()==='g'?u.querySelector('.hit'):u);return; }
+  if(t.closest&&t.closest('#dtl'))return;
+  if(t.closest&&(t.closest('#pack')||t.closest('#swapbar')||t.closest('#leave')))return;
+  outsideClick();
+}
+function onKey(e){
+  const G=app.G;
+  if(e.key==='Escape'||e.key==='GoBack'||e.key==='BrowserBack'){
+    if(G.details||G.phase==='swapPick'||G.phase==='swapPreview'||G.phase==='leave'){
+      e.preventDefault();
+      if(G.details)dispatch({t:'close'});else if(G.phase==='leave')dispatch({t:'stay'});else dispatch({t:'cancel'});
+    }
+    return;
+  }
+  if((e.key==='Enter'||e.key===' ')&&e.target&&e.target.classList&&e.target.classList.contains('hit')){
+    e.preventDefault();itemClick(e.target.getAttribute('data-uid'),e.target);
+  }
+  if(e.key==='Tab'&&G.details){ /* keep focus inside the open details */
+    const d=$('dtl'), f=Array.prototype.filter.call(d.querySelectorAll('button'),b=>!b.hidden);
+    if(f.length){const i=f.indexOf(document.activeElement);
+      if(e.shiftKey&&i<=0){e.preventDefault();f[f.length-1].focus();}
+      else if(!e.shiftKey&&i===f.length-1){e.preventDefault();f[0].focus();}}
+  }
+}
+
+/* ---------- drawing ---------- */
+const fcol=(x,y)=>`translate(${f(x)},${f(y)})`;
+function twinSetOf(S){ return PE.countMarks(S).twins; }
+function applyScene(S,twins){
+  const P=app.P,G=app.G, T={};twins.forEach(k=>T[k]=1);
+  /* enemies, spirit, shrine */
+  S.enemies.forEach((e,j)=>{const g=el('en'+j);if(!g)return;g.setAttribute('transform',`${fcol(e.x,e.y)} scale(${f(e.s)})`);g.setAttribute('opacity',f(Math.max(0,e.o)));});
+  if(S.spirit){const g=el('spirit');g.setAttribute('transform',fcol(S.spirit.x,S.spirit.y));g.setAttribute('opacity',f(S.spirit.o));}
+  if(S.shrine){app.els.sg=app.els.sg||document.querySelector('#shrine .sg');app.els.sg.setAttribute('opacity',f(S.shrine.glow*.5));}
+  /* light */
+  const L=S.light, lg=el('light');
+  lg.setAttribute('transform',`${fcol(L.x,L.y)} scale(${f(L.s)})`);lg.setAttribute('opacity',f(Math.max(0,Math.min(1,L.o))));
+  /* ground marker */
+  /* echoes */
+  const order=[];
+  S.echoes.forEach(e=>{
+    let g=el('ec_'+e.id); if(!g)return;
+    g.setAttribute('transform',fcol(e.x,e.y));g.setAttribute('opacity',f(Math.max(0,e.o)));
+    const c=app.key['ec'+e.id]||(app.key['ec'+e.id]={bd:g.querySelector('.ebd'),sh:g.querySelector('.esh'),gl:g.querySelector('.eglow'),sd:g.querySelector('.esd'),tag:g.querySelector('.etag'),chip:g.querySelector('.ech'),ini:g.querySelector('.ini')});
+    if(e.fallen){c.bd.setAttribute('transform','translate(0,-9) scale(1.2,.42)');c.ini.setAttribute('opacity','0');}
+    else c.bd.setAttribute('transform',`translate(${f(e.bx)},${f(e.by-20)})${e.rot?` rotate(${f(e.rot)})`:''} scale(${f(e.sx)},${f(e.sy)})`);
+    c.sh.setAttribute('fill-opacity',f(.36*e.sh));
+    c.gl.setAttribute('opacity',f(e.glow));c.sd.setAttribute('opacity',f(e.shade));
+    c.tag.setAttribute('opacity',f(Math.max(0,e.tagO)));c.tag.setAttribute('transform',`translate(0,${f(e.tagDy)})`);
+    c.chip.setAttribute('opacity',f(Math.max(0,e.tagO)));
+    order.push([e.y,g]);
+  });
+  /* items */
+  const shown={};
+  S.items.forEach(v=>{
+    if(v.vis==='none'||v.vis==='tile')return;
+    shown[v.uid]=1;
+    const g=el('it_'+v.uid); if(!g)return;
+    const want=v.layer===1?el('topObj'):el('objG');
+    if(g.parentNode!==want)want.appendChild(g);
+    g.setAttribute('transform',fcol(v.x,v.y)+(v.sc!==1?` scale(${f(v.sc)})`:''));
+    const k=app.key['it'+v.uid]||(app.key['it'+v.uid]={bd:g.querySelector('.bd'),pl0:g.querySelector('.pl0'),pl1:g.querySelector('.pl1'),nt:g.querySelector('.nt'),gl:g.querySelector('.gl'),rv:g.querySelector('.rv'),gen:g.querySelector('.gen'),tgt:g.querySelector('.tgt'),lost:g.querySelector('.lostT'),hit:g.querySelector('.hit'),sh:el('sh_'+v.uid)});
+    k.bd.setAttribute('transform',`translate(0,${f(v.sink)})`+(v.tilt?` rotate(${f(v.tilt)} 0 -24)`:''));
+    k.pl1.setAttribute('opacity',f(1-v.df));
+    if(k.nt)k.nt.setAttribute('opacity',T[app.items[v.uid].type]?'1':'0');
+    k.gl.setAttribute('opacity',v.glint>=0?f(.6*Math.sin(Math.PI*v.glint)):'0');
+    if(v.glint>=0)k.gl.setAttribute('transform',`translate(${f(-34+68*v.glint)},0)`);
+    let o=v.o, legal=false, twinT=false, inSwap=S.swap&&S.swap.phase==='swapPick';
+    if(inSwap){ legal=S.swap.legal.indexOf(v.uid)>=0; twinT=S.swap.twins.indexOf(v.uid)>=0; if(!legal&&v.uid!==S.swap.origin)o*=.38; }
+    if(S.swap&&S.swap.phase==='swapPreview'&&!v.ghost)o=o;
+    g.setAttribute('opacity',f(Math.max(0,Math.min(1,o))));
+    const rev=v.rev===undefined?1:v.rev;
+    if(app.reduced){ k.rv.removeAttribute('transform');k.gen.removeAttribute('transform');k.rv.setAttribute('opacity',f(rev));k.gen.setAttribute('opacity',f(1-rev)); }
+    else{ k.rv.setAttribute('transform',`scale(${f(Math.max(.001,clamp(rev*2-1,0,1)))},1)`);k.rv.setAttribute('opacity',rev>=.5?'1':'0');k.gen.setAttribute('transform',`scale(${f(Math.max(.001,clamp(1-rev*2,0,1)))},1)`);k.gen.setAttribute('opacity',rev<.5?'1':'0'); }
+    k.tgt.setAttribute('opacity',inSwap&&(legal||v.uid===S.swap.origin)?'1':'0');
+    const lbl=rev>=.5?TYPES[app.items[v.uid].type].name+(v.held?', held up':', on the ground'):'Sealed item';
+    if(k.lbl!==lbl){k.hit.setAttribute('aria-label',lbl);k.lbl=lbl;}
+    k.lost.setAttribute('opacity',v.lost?'1':'0');
+    g.classList.toggle('sel',inSwap&&v.uid===S.swap.origin||G.details===v.uid);
+    const live=o>.3&&rev>=.5&&v.layer!==1&&!(S.swap&&S.swap.phase==='swapPreview')&&G.phase!=='closing'&&G.phase!=='resolve'&&G.phase!=='leave';
+    const tab=live&&(!inSwap||legal||twinT);
+    k.hit.setAttribute('tabindex',tab?'0':'-1');
+    g.style.pointerEvents=(live||(rev<.5&&o>.3&&v.layer!==1))?'auto':'none';
+    /* shadow */
+    const sh=k.sh;
+    if(v.layer===1){sh.setAttribute('opacity','0');}
+    else{
+      sh.setAttribute('transform',`${fcol(v.gx,v.gy)} scale(${f(v.shS*(v.layer===0&&v.sc>1?1:1))},${f(v.shS)})`);
+      sh.setAttribute('opacity',f(Math.max(0,Math.min(1,v.o*(1-v.df*.3)*(v.shO>0?1:0)))));
+    }
+    order.push([v.gy+1,g]);
+  });
+  Object.keys(app.items).forEach(u=>{
+    if(!shown[u]){ const g=el('it_'+u); if(g){g.setAttribute('opacity','0'); g.style.pointerEvents='none'; g.querySelector('.hit').setAttribute('tabindex','-1'); } const s=el('sh_'+u); if(s)s.setAttribute('opacity','0'); }
+  });
+  /* depth order on the board */
+  order.sort((a,b)=>a[0]-b[0]);
+  const key=order.map(o=>o[1].id).join(',');
+  if(app.key.zorder!==key){ const og=el('objG'); order.forEach(o=>{ if(o[1].parentNode===og)og.appendChild(o[1]); }); app.key.zorder=key; }
+  return shown;
+}
+
+function bubbleW(text){return Math.max(150,Math.round(text.length*9.6+38));}
+function applyBubble(S){
+  const b=el('bubble'), B=S.bark, c=S.chooserEnd;
+  const me=S.echoes.find(e=>e.chosen);
+  if(!B.full||B.o<=0){b.setAttribute('opacity','0');return;}
+  const heldUp=S.items.some(i=>i.held), w=bubbleW(B.full), cx=clamp(me.x,w/2+20,1260-w/2), y=Math.max(60,me.y-118-(heldUp?48:0)), tx=clamp(me.x,cx-w/2+20,cx+w/2-20);
+  const key=B.full+'|'+f(cx)+'|'+f(y);
+  if(app.key.bk!==key){
+    b.innerHTML=`<rect x="${f(cx-w/2)}" y="${f(y-22)}" width="${w}" height="44" rx="12" fill="${COL.CREAM}" stroke="${COL.INK2}" stroke-width="2"/><polygon points="${f(tx-8)},${f(y+21)} ${f(tx+8)},${f(y+21)} ${f(tx)},${f(y+34)}" fill="${COL.CREAM}" stroke="${COL.INK2}" stroke-width="2"/><rect x="${f(tx-7)}" y="${f(y+19)}" width="14" height="4" fill="${COL.CREAM}"/><text class="bk" x="${f(cx-w/2+18)}" y="${f(y+6)}"></text>`;
+    app.key.bk=key;app.key.bkT=b.querySelector('text');app.key.bkTxt=null;
+  }
+  if(app.key.bkTxt!==B.text){app.key.bkT.textContent=B.text;app.key.bkTxt=B.text;}
+  b.setAttribute('opacity',f(Math.max(0,Math.min(1,B.o))));
+}
+
+function srcOf(uid){
+  const G=app.G; const p=G.pack.find(x=>x&&x.uid===uid); if(p)return p.origin;
+  return 'gathered';
+}
+function setTok(id,left,lines){
+  const e=$(id), line=left?lines[0]:lines[1];
+  e.classList.toggle('spent',!left);e.querySelector('b').textContent=left?'1':'0';
+  e.setAttribute('aria-label',line);e.querySelector('.tip').textContent=line;
+}
+function applyPack(S,twins){
+  const pk=S.pack, G=app.G, T={};twins.forEach(k=>T[k]=1);
+  const box=el('pack');
+  box.style.transform=`translateY(${f((1-pk.p)*170)}px)`;box.style.opacity=f(Math.min(1,pk.p*1.6));
+  box.style.pointerEvents=pk.p>.5?'auto':'none';
+  box.className=pk.tone==='plain'?'':pk.tone;
+  const strapPulse=pk.pulse||0;
+  box.style.boxShadow=strapPulse>0?`0 0 0 ${f(3*strapPulse)}px rgba(255,248,220,${f(.4*strapPulse)})`:'none';
+  const swLeft=!G.swapSpent, deLeft=app.destroyLeft, tk=swLeft+'|'+deLeft;
+  if(app.key.tok!==tk){app.key.tok=tk;setTok('tokSwap',swLeft,TXT.allow.swap);setTok('tokDes',deLeft,TXT.allow.destroy);}
+  const offer=G.phase==='idle'&&PE.swapOnOffer(G);
+  if(offer&&!app.key.offered&&!app.reduced){const t=$('tokSwap');t.classList.remove('pulse');void t.offsetWidth;t.classList.add('pulse');}
+  app.key.offered=offer;
+  const word=pk.tone==='full'?'Full':(pk.tone==='near'?'Almost full.':'');
+  if(app.key.word!==word){el('pword').textContent=word;app.key.word=word;}
+  const slots=document.querySelectorAll('#pslots .slot');
+  const inSwap=S.swap&&S.swap.phase==='swapPick';
+  pk.slots.forEach((uid,i)=>{
+    const s=slots[i];
+    const ghost=pk.ghostSlot===i;
+    let k;
+    if(!uid)k='empty';
+    else{
+      const legal=inSwap&&S.swap.legal.indexOf(uid)>=0;
+      k=uid+'|'+srcOf(uid)+'|'+(T[app.items[uid].type]?1:0)+'|'+(ghost?1:0)+'|'+(legal?1:0);
+    }
+    if(app.key['sl'+i]!==k){
+      app.key['sl'+i]=k;
+      const ring='<i class="ring"></i>';
+      if(!uid){ s.className='slot empty'; s.innerHTML=ring; s.removeAttribute('data-uid'); s.setAttribute('aria-label','Empty slot'); s.setAttribute('tabindex','-1'); }
+      else{
+        const legal=inSwap&&S.swap.legal.indexOf(uid)>=0;
+        s.className='slot'+(ghost?' ghost':'');
+        s.innerHTML=ring+tileHtml(uid,{origin:srcOf(uid),notch:T[app.items[uid].type],carried:true})+'';
+        s.setAttribute('data-uid',uid);
+        s.setAttribute('aria-label',TYPES[app.items[uid].type].name+', in the pack');
+      }
+    }
+    if(uid){
+      const legal=inSwap&&S.swap.legal.indexOf(uid)>=0, twinT=inSwap&&S.swap.twins.indexOf(uid)>=0;
+      s.classList.toggle('dim',!!(inSwap&&!legal&&uid!==S.swap.origin));
+      s.classList.toggle('legal',!!(inSwap&&(legal||uid===S.swap.origin)));
+      const live=pk.p>.5&&G.phase!=='preview'&&!(S.swap&&S.swap.phase==='swapPreview')&&G.phase!=='closing'&&G.phase!=='resolve'&&G.phase!=='leave';
+      s.setAttribute('tabindex',live&&(!inSwap||legal||twinT)?'0':'-1');
+      s.style.pointerEvents=live?'auto':'none';
+      s.classList.toggle('sel',false);
+    }
+    s.firstChild&&s.firstChild.style&&(s.firstChild.style.opacity=f(.55*(pk.lit[i]||0)));
+  });
+}
+
+function whereWord(uid){
+  const G=app.G;
+  if(G.phase==='intro')return PE.whereAt(app.P,uid,app.t);
+  if(G.heldUid===uid)return 'carried';
+  return G.pack.some(x=>x&&x.uid===uid)?'pack':'ground';
+}
+const WHERE_TXT={ground:'On the ground',carried:'Carried',pack:'Pack'};
+function anchorOf(uid,S){
+  const v=S.items.find(i=>i.uid===uid&&i.vis==='svg');
+  if(v)return {x:v.x,y:v.y-24,pack:false};
+  const si=S.pack.slots.indexOf(uid);
+  if(si>=0){const c=slotCenter(si);return {x:c[0],y:c[1],pack:true};}
+  return null;
+}
+function renderDetails(S,twins){
+  const G=app.G, d=$('dtl'), uid=G.details;
+  if(!uid||G.phase==='swapPick'||G.phase==='swapPreview'||G.phase==='closing'||G.phase==='resolve'||G.phase==='leave'){ if(!d.hidden)d.hidden=true; app.dKey=''; return; }
+  const an=anchorOf(uid,S);
+  if(!an){ dispatch({t:'close'}); return; }
+  const where=whereWord(uid);
+  const refusal=G.phase==='idle'?PE.swapRefusal(G,uid):'n/a';
+  const type=app.items[uid].type, T=TYPES[type];
+  const twin=twins.indexOf(type)>=0;
+  const key=[uid,where,refusal,app.showDis,twin,srcOf(uid)].join('|');
+  if(app.dKey!==key){
+    app.dKey=key;
+    const pips='<span class="pips" aria-hidden="true">'+'<i></i>'.repeat(T.grade)+'</span>';
+    const count=T.qty===1?'1 piece':`x${T.qty} of ${LIM[T.kind]}`;
+    let btn='';
+    if(G.phase==='idle'&&!G.noSwap){
+      if(refusal===null)btn='<button class="btn primary" data-act="swap" id="swapBtn">Swap</button>';
+      else if(app.showDis)btn='<button class="btn" data-act="swap" id="swapBtn" aria-disabled="true">Swap</button>';
+    }
+    d.innerHTML=`<div class="dh"><div class="nmx">${T.name}</div><button class="xbtn" data-act="close" data-tgt>Close</button></div>
+<div class="top2"><div class="bigt" aria-hidden="true">${tileHtml(uid,{origin:where==='pack'?srcOf(uid):'',notch:twin,carried:where==='pack'})}</div>
+<div class="lines"><div class="kv"><span>Kind:</span><b>${KIND_NAMES[T.kind]}</b></div><div class="kv"><span>Grade:</span>${pips}<b>${T.grade}</b></div><div class="kv"><span>Count:</span><b>${count}</b></div></div></div>
+<p class="desc">${T.desc}</p>
+<span class="where ${where}">${WHERE_TXT[where]}</span>
+<div class="dbtns">${btn}</div>`;
+  }
+  const wasHidden=d.hidden; d.hidden=false;
+  const W=292, H=d.offsetHeight, bottomLimit=PACKBOX.y-8;
+  let x,y;
+  if(an.pack){ x=an.x<640?PACKBOX.x-W-14:PACKBOX.x+PACKBOX.w+14; y=clamp(an.y-H/2,56,708-H); }
+  else{
+    x=an.x+38; if(x+W>1262)x=an.x-38-W; x=Math.max(14,x);
+    y=clamp(an.y-H/2,56,bottomLimit-H);
+  }
+  d.style.left=f(x)+'px';d.style.top=f(y)+'px';
+}
+
+function renderControls(S){
+  const G=app.G;
+  const skip=el('skip'), cont=el('cont');
+  const sk=G.phase==='intro'?S.skipO:0, ct=G.phase==='idle'?1:(G.phase==='intro'?S.contO:0);
+  skip.style.opacity=f(sk);skip.style.pointerEvents=sk>.2?'auto':'none';skip.tabIndex=sk>.2?0:-1;
+  const swapState=G.phase==='swapPick'||G.phase==='swapPreview'||G.phase==='leave'||G.phase==='closing'||G.phase==='resolve';
+  const cOn=G.phase==='idle'&&app.gt-app.idleAt>=.25;
+  cont.style.opacity=swapState?'0':f(ct);cont.style.pointerEvents=(G.phase==='idle')?'auto':'none';cont.tabIndex=G.phase==='idle'?0:-1;
+  cont.setAttribute('aria-disabled',cOn?'false':'true');
+  $('back').hidden=!(G.phase==='swapPick'||G.phase==='swapPreview');
+  $('leave').hidden=G.phase!=='leave';
+  $('swapbar').hidden=G.phase!=='swapPreview';
+  /* one line in the frame: the pick prompt, or a refusal or a result, then gone */
+  const L=$('line'); const now=performance.now();
+  let text='',op=0;
+  if(app.line.text&&now<app.line.until){text=app.line.text;op=1;}
+  else if(G.phase==='swapPick'){text=TXT.pick;op=1;}
+  else if(G.phase==='swapPreview'){text='';op=0;}
+  if(app.key.lineT!==text){L.textContent=text;app.key.lineT=text;}
+  L.style.opacity=f(op);
+  /* flash on skip */
+  const fl=Math.max(0,1-(now-app.flashAt)/180);
+  $('flash').style.opacity=f(.35*fl);
+}
+function renderResolve(){
+  const G=app.G, r=$('resolve');
+  if(G.phase==='resolve'){
+    if(r.hidden){
+      r.hidden=false;
+      $('rrow').innerHTML=G.pack.map((it,i)=>it?`<div class="sm">${tileHtml(it.uid,{origin:'',notch:false,carried:true})}</div>`:`<div class="sm"><div class="item-tile" style="background:none;box-shadow:inset 0 0 0 2px rgba(245,230,211,.3);border-radius:9px"></div></div>`).join('');
+      if(app.playing)requestAnimationFrame(()=>r.classList.add('on'));else r.classList.add('now','on');
+    }
+  }else if(!r.hidden){r.hidden=true;r.classList.remove('on','now');}
+}
+function serveFocus(){
+  const q=app.focusReq; if(!q)return; app.focusReq=null;
+  const G=app.G; let t=null;
+  if(q==='dtl'){ t=document.querySelector('#dtl button.primary')||document.querySelector('#dtl .xbtn'); }
+  else if(q==='opener'){ t=app.opener&&app.opener.isConnected?app.opener:null; }
+  else if(q==='target'){ t=document.querySelector('#board .it .hit[tabindex="0"], #pslots .slot[tabindex="0"]'); }
+  else if(q==='keep')t=$('keepBtn');
+  else if(q==='stay')t=$('stayBtn');
+  else if(q==='cont')t=$('cont');
+  if(t&&t.focus)t.focus({preventScroll:true});
+}
+
+function render(){
+  if(!app.G)return;
+  const G=app.G;
+  const S=G.phase==='intro'?PE.introView(app.P,app.t):PE.idleView(app.P,G,{gt:app.gt,trade:app.fx.trade,close:app.fx.close});
+  app.lastS=S;
+  const cm=PE.countMarks(S);
+  applyScene(S,cm.twins);
+  applyBubble(S);
+  applyPack(S,cm.twins);
+  renderDetails(S,cm.twins);
+  renderControls(S);
+  renderResolve();
+  serveFocus();
+  readouts(S,cm);
+}
+
+/* ---------- strip ---------- */
+function setT(id,txt){const e=$(id);if(e.textContent!==txt)e.textContent=txt;}
+function readouts(S,cm){
+  const G=app.G,P=app.P,E=P.E;
+  let beat=S.beat||'';
+  if(G.phase==='intro'){ beat=PE.beatAt(P,app.t)+(G.details?' (paused: details open)':''); }
+  else beat={idle:'Idle',swapPick:'Swap: pick the other item',swapPreview:'Swap: preview',leave:'Leave prompt',closing:'Event closes',resolve:'Resolve stand-in'}[G.phase];
+  if(G.phase==='idle'&&app.fx.trade&&app.gt-app.fx.trade.t0<.85)beat='Swap: the items trade';
+  setT('rBeat',beat);
+  setT('rClock',G.phase==='intro'?`${app.t.toFixed(2)} of ${P.tIdle.toFixed(2)} s`:`idle (intro took ${P.tIdle.toFixed(2)} s)`);
+  const used=G.phase==='intro'?S.pack.used:PE.packUsed(G);
+  setT('rPack',`${PE.PACK_SLOTS-used} free of ${PE.PACK_SLOTS}, tone ${S.pack.tone}`);
+  const sw=G.phase==='intro'?(app.pathSwapSpent?'spent (path)':'unspent; decided at the end of the intro'):PE.swapStateWord(G);
+  setT('rSwap',sw);
+  setT('rCase',E.cs==='froze'?`Froze: no pick (${E.F} finds, ${E.free} free before)`:`${E.cs}: ${PE.CASE_TEXT[E.cs]} (${E.F} finds, ${E.free} free before)`);
+  setT('rAllow',(G.swapSpent?TXT.allow.swap[1]:TXT.allow.swap[0])+' '+(app.destroyLeft?TXT.allow.destroy[0]:TXT.allow.destroy[1]));
+  setT('rEmo',`${E.emo}${E.severe?' (severe band: '+(app.ruleOn?'rule on':'rule off')+')':''}; style ${E.reason}`);
+  setT('rMarks',`${cm.n} of 4: ${cm.list.join(', ')||'none'}`);
+  setT('pathSwap','swap on this path: '+(app.pathSwapSpent?'spent':'unspent'));
+}
+const EXPECT={
+ 1:'Expect: Abena takes all three finds, the pack ends near full, a small plus, no swap. Items start as sealed bundles and flip when she touches them.',
+ 2:'Expect: Yaw takes the Bead and the Salve, the pack ends full, the Spear stays held up next to him, one more find stays on the ground, neutral, the swap token pulses once.',
+ 3:'Expect: the pack is full. Kweku lifts the Dusk Charm and it stays above him. "My pack is full." Small minus. Play: Dusk Charm, Swap, Red Clay Lump, preview, confirm or keep. Play again after a swap: "The swap is used."',
+ 4:'Expect: no slot. Abena holds the Spear up and it stays. Small minus. The swap is offered for any held piece.',
+ 5:'Expect: Esi stops and trembles and takes nothing. All five items are revealed. No swap is offered and there is no minus. Continue: they are lost.',
+ 6:'Expect: Kweku takes the Spear and the Root. Pick "Yaw" in the chooser control and replay: he takes the Bead and the Shield.',
+ 7:'Expect: the spirit reaches the shrine, enemies withdraw, items lie at the shrine, Abena takes both, small plus.',
+ 8:'Expect (realm 3): five finds on three cells. Piles fan out as Yaw arrives. One is taken, one is held up, the swap is offered.',
+ 9:'Expect (realm 2): three Salves carry the twin notch once revealed. Try to swap the ground Salve with a pack Salve: "These two are the same."',
+ 10:'Expect: Efua is burdened and the pack is full: no extra minus. The Spear stays held up. Untick the severe-band rule and replay: small minus.'};
+function buildStrip(){
+  const sc=SCENARIOS[app.sid-1];
+  if(!$('scn').children.length){
+    $('scn').innerHTML=SCENARIOS.map(s=>`<button data-sc="${s.id}" aria-pressed="false"><b>${s.id}. ${s.name}</b><span>${s.desc}</span></button>`).join('');
+  }
+  Array.prototype.forEach.call($('scn').children,b=>b.setAttribute('aria-pressed',String(+b.dataset.sc===app.sid)));
+  const stand=sc.party.filter(id=>sc.fallen.indexOf(id)<0);
+  $('selCh').innerHTML=stand.map(id=>`<option value="${id}"${id===app.chooser?' selected':''}>${ECHOES[id].name} (Standing ${ECHOES[id].standing})</option>`).join('');
+  $('expect').textContent=EXPECT[app.sid];
+  $('selRealm').value=String(app.realm);
+  const T=app.trim;
+  $('capNote').textContent=T.trimmed?`Realm ${app.realm} allows ${T.cap} finds. ${T.trimmed} find${T.trimmed>1?'s were':' was'} trimmed from the end of the find order.`:`Realm ${app.realm} allows up to ${T.cap} finds. This scenario has ${app.P.E.F}.`;
+}
+function fit(){
+  const host=$('host'), vw=document.documentElement.clientWidth, vh=window.innerHeight;
+  const byH=(vh-72)*16/9;
+  const w=Math.max(480,Math.min(app.size,vw-24,Math.max(560,byH)));
+  const k=w/1280;
+  host.style.width=w+'px';host.style.height=(w*9/16)+'px';
+  $('stage').style.transform=`scale(${k})`;
+  $('sizeNote').textContent=`Frame ${Math.round(w)} x ${Math.round(w*9/16)} px (${app.size===1920?'1920 x 1080 view':'1280 x 720 view'})`;
+}
+
+/* ---------- loop ---------- */
+let lastTs=null;
+function step(dt){
+  const G=app.G; if(!G||!app.playing)return;
+  const d=dt*app.speed;
+  if(G.phase==='intro'){
+    if(!G.details){ app.t+=d; if(app.t>=app.P.tIdle){ app.t=app.P.tIdle;app.idleAt=app.gt;dispatch({t:'toIdle'}); } }
+  }
+  app.gt+=d;
+  if(G.phase==='closing'&&app.fx.close&&app.gt-app.fx.close.t0>.7)dispatch({t:'closed'});
+}
+function tick(ts){
+  const dt=lastTs===null?0:Math.min(.1,(ts-lastTs)/1000);lastTs=ts;
+  step(dt);render();requestAnimationFrame(tick);
+}
+
+/* ---------- strip handlers ---------- */
+function restart(sid,chooser,resetPath){
+  if(resetPath)app.pathSwapSpent=false;
+  load(sid,chooser);
+  app.playing=true;syncBtns();render();
+}
+function syncBtns(){
+  $('bPlay').textContent=app.playing?'Pause':'Play';$('bPlay').setAttribute('aria-pressed',String(app.playing));
+  document.querySelectorAll('[data-sp]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.sp===app.speed)));
+  document.querySelectorAll('[data-dir]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.dir===app.directive)));
+  document.querySelectorAll('[data-size]').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.size===app.size)));
+}
+function bind(){
+  $('swIcon').innerHTML=markInner();
+  const st=$('stage');
+  st.addEventListener('click',onStageClick);
+  document.addEventListener('keydown',onKey);
+  $('scn').addEventListener('click',e=>{const b=e.target.closest('[data-sc]');if(b){app.realm=SCENARIOS[+b.dataset.sc-1].realm;restart(+b.dataset.sc,null,true);}});
+  $('selRealm').onchange=e=>{app.realm=+e.target.value;restart(app.sid,app.chooser);};
+  $('chkDes').onchange=e=>{app.destroyLeft=e.target.checked;};
+  $('bReplay').onclick=()=>restart(app.sid,app.chooser);
+  $('bAgain').onclick=()=>restart(app.sid,app.chooser);
+  $('bCh').onclick=()=>restart(app.sid,$('selCh').value);
+  $('bPlay').onclick=()=>{app.playing=!app.playing;syncBtns();};
+  $('bSkip').onclick=()=>skipIntro();
+  $('bReset').onclick=()=>restart(app.sid,app.chooser,true);
+  document.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>{app.speed=+b.dataset.sp;syncBtns();});
+  document.querySelectorAll('[data-dir]').forEach(b=>b.onclick=()=>{app.directive=b.dataset.dir;dispatch({t:'directive',v:app.directive});syncBtns();});
+  document.querySelectorAll('[data-size]').forEach(b=>b.onclick=()=>{app.size=+b.dataset.size;syncBtns();fit();});
+  $('chkRm').onchange=e=>{app.reduced=e.target.checked;restart(app.sid,app.chooser);};
+  $('chkGuides').onchange=e=>st.classList.toggle('guides',e.target.checked);
+  $('chkGray').onchange=e=>st.classList.toggle('gray',e.target.checked);
+  $('chkRule').onchange=e=>{app.ruleOn=e.target.checked;restart(app.sid,app.chooser);};
+  $('chkDis').onchange=e=>{app.showDis=e.target.checked;app.dKey='';};
+  window.addEventListener('resize',fit);
+}
+
+/* ---------- test hooks (URL hash) and the in-page click test ---------- */
+function resolveRef(ref){
+  const G=app.G; if(app.items[ref])return ref;
+  const fld=G.field.find(x=>x.type===ref); if(fld)return fld.uid;
+  const p=G.pack.find(x=>x&&x.type===ref); if(p)return p.uid;
+  const any=Object.keys(app.items).find(u=>app.items[u].type===ref); return any||null;
+}
+function applyHash(q){
+  if(q.gray==='1'){$('chkGray').checked=true;$('stage').classList.add('gray');}
+  if(q.guides==='1'){$('chkGuides').checked=true;$('stage').classList.add('guides');}
+  if(q.speed){app.speed=+q.speed;syncBtns();}
+  if(q.t!==undefined){ app.t=Math.min(+q.t,app.P.tIdle); if(+q.t>=app.P.tIdle){app.idleAt=-9;dispatch({t:'toIdle'});} }
+  if(q.phase==='idle'&&app.G.phase==='intro'){app.t=app.P.tIdle;app.idleAt=-9;dispatch({t:'toIdle'});}
+  if(q.open){const u=resolveRef(q.open);if(u){render();itemClick(u,null);}}
+  if(q.swap==='1'){render();dispatch({t:'swapStart'});}
+  if(q.target){const u=resolveRef(q.target);if(u){render();dispatch({t:'pickTarget',uid:u});}}
+  if(q.confirm==='1'){render();dispatch({t:'confirm'});}
+  if(q.adv){app.gt+=+q.adv;}
+  if(q.cont==='1'){app.idleAt=-9;render();dispatch({t:'continue'});}
+  if(q.leave==='1')dispatch({t:'leave'});
+  if(q.end==='1'){app.gt+=1;render();dispatch({t:'closed'});}
+  if(q.pause==='1'){app.playing=false;syncBtns();}
+  if(q.size){app.size=+q.size;syncBtns();fit();}
+}
+function go(sid){app.realm=SCENARIOS[sid-1].realm;restart(sid,null,true);}
+function selfTest(){
+  const out=[]; const ok=(n,c)=>out.push((c?'PASS ':'FAIL ')+n);
+  const clickEl=e=>e&&e.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+  const fr=()=>{app.idleAt=-9;render();};
+  const skipAndIdle=()=>{app.playing=false;render();clickEl($('skip'));fr();};
+  const key=k=>document.dispatchEvent(new KeyboardEvent('keydown',{key:k,bubbles:true}));
+  app.playing=false;
+  /* scenario 3: the full swap play-through with real DOM clicks */
+  go(3);app.playing=false;render();
+  clickEl($('skip'));fr();ok('3: Skip jumps to idle',app.G.phase==='idle');
+  clickEl(document.querySelector('#it_f0 .hit'));fr();
+  ok('3: click on Dusk Charm opens details next to it',!$('dtl').hidden&&$('dtl').textContent.indexOf('Dusk Charm')>=0&&$('dtl').textContent.indexOf('Carried')>=0);
+  const sb=$('swapBtn');ok('3: Swap button is enabled',!!sb&&sb.getAttribute('aria-disabled')!=='true');
+  clickEl(sb);fr();ok('3: swap state opens, prompt shown',app.G.phase==='swapPick'&&$('line').textContent==='Pick one to trade.');
+  clickEl(document.querySelector('#it_f1 .hit'));fr();ok('3: a second field item is not a target',app.G.phase==='swapPick');
+  clickEl(document.querySelector('.slot[data-uid="p3"]'));fr();ok('3: preview opens',app.G.phase==='swapPreview'&&!$('swapbar').hidden);
+  key('Escape');fr();ok('3: Esc cancels, nothing spent',app.G.phase==='idle'&&!app.G.swapSpent);
+  clickEl(document.querySelector('#it_f0 .hit'));fr();clickEl($('swapBtn'));fr();clickEl(document.querySelector('.slot[data-uid="p3"]'));fr();
+  clickEl($('confirmBtn'));fr();
+  ok('3: confirm trades: pack holds the Charm, field holds the Clay, swap spent',app.G.swapSpent&&app.G.pack[3].uid==='f0'&&app.G.field.some(x=>x.uid==='p3'));
+  ok('3: path swap is spent',app.pathSwapSpent===true);
+  clickEl(document.querySelector('#it_p3 .hit'));fr();
+  const sb2=$('swapBtn');ok('3: disabled Swap shown after the swap',!!sb2&&sb2.getAttribute('aria-disabled')==='true');
+  clickEl(sb2);fr();ok('3: refusal line "The swap is used."',$('line').textContent==='The swap is used.');
+  key('Escape');fr();
+  restart(3,null,false);app.playing=false;render();clickEl($('skip'));fr();
+  ok('3: play again keeps the swap spent, no marker',app.G.swapSpent&&!PE.swapOnOffer(app.G));
+  /* scenario 2: Directive prompt */
+  go(2);app.playing=false;render();clickEl($('skip'));fr();
+  clickEl($('cont'));fr();ok('2: Scout Carefully asks "Leave these behind?"',app.G.phase==='leave'&&!$('leave').hidden);
+  clickEl($('stayBtn'));fr();ok('2: Stay returns to idle',app.G.phase==='idle');
+  document.querySelector('[data-dir="seek"]').click();clickEl($('cont'));fr();ok('2: Seek Signs does not ask',app.G.phase==='closing');
+  /* hidden items, frozen chooser, realm cap, pack icon */
+  go(3);app.playing=false;app.t=1.3;render();
+  const g0=document.querySelector('#it_f0');
+  ok('3: before the reveal an item is a sealed bundle',g0.querySelector('.gen').getAttribute('opacity')==='1'&&g0.querySelector('.rv').getAttribute('opacity')==='0');
+  ok('3: a hidden item has no focus',g0.querySelector('.hit').getAttribute('tabindex')==='-1');
+  clickEl(g0.querySelector('.hit'));render();ok('3: a click on a hidden item opens no details',!app.G.details&&app.G.phase==='intro');
+  ok('3: the marks counter counts no mark on hidden items',PE.countMarks(app.lastS).n===0);
+  app.t=app.P.tIdle-.2;app.G.details=null;render();
+  ok('3: later the left items are revealed and selectable',document.querySelector('#it_f1 .rv').getAttribute('opacity')==='1'&&document.querySelector('#it_f1 .hit').getAttribute('tabindex')==='0');
+  ok('3: the lifted item stays near the Echo (held)',app.G.heldUid==='f0');
+  go(3);skipAndIdle();
+  ok('3: pack tokens show swap 1 and destroy 1',$('tokSwap').querySelector('b').textContent==='1'&&$('tokDes').querySelector('b').textContent==='1');
+  ok('3: pack token carries the full line',$('tokSwap').getAttribute('aria-label')==='1 swap left on this path.');
+  ok('3: the held item is above the Echo',(()=>{const v=app.lastS.items.find(i=>i.uid==='f0');return v&&v.held&&v.y<app.lastS.chooserEnd[1]-40;})());
+  go(5);skipAndIdle();
+  ok('5: frozen: nothing taken, all five items on the field',PE.packUsed(app.G)===0&&app.G.field.length===5);
+  ok('5: frozen: swap not offered and no token pulse',!PE.swapOnOffer(app.G));
+  clickEl(document.querySelector('#it_f4 .hit'));fr();ok('5: frozen: details have no Swap button',!$('dtl').hidden&&!$('swapBtn'));
+  key('Escape');fr();
+  clickEl($('cont'));fr();ok('5: frozen: Continue asks nothing',app.G.phase==='closing');
+  app.realm=2;restart(5,null,true);app.playing=false;render();
+  ok('realm 2 trims scenario 5 to four finds and shows a note',app.P.E.F===4&&$('capNote').textContent.indexOf('trimmed')>=0);
+  /* scenario 9: twin refusal */
+  document.querySelector('[data-dir="scout"]').click();
+  go(9);app.playing=false;render();clickEl($('skip'));fr();
+  clickEl(document.querySelector('#it_f3 .hit'));fr();clickEl($('swapBtn'));fr();
+  clickEl(document.querySelector('.slot[data-uid="p1"]'));fr();
+  ok('9: swap with an identical Salve is refused with the line',app.G.phase==='swapPick'&&$('line').textContent==='These two are the same.');
+  key('Escape');
+  $('selftest').hidden=false;$('selftest').textContent=out.join('\n');
+  return out;
+}
+
+/* Plays every scenario in 60 fps steps through the page's own loop code and checks the DOM each frame. */
+function selfTestRun(){
+  const out=[];let bad=0;
+  const vis=()=>{let n=0;document.querySelectorAll('#board .it,#topObj .it').forEach(g=>{if(+g.getAttribute('opacity')>.05)n++;});return n;};
+  SCENARIOS.forEach(sc=>{
+    go(sc.id);app.playing=false;
+    let frames=0,maxVis=0,over=0,t0=app.t;
+    while(app.G.phase==='intro'&&frames<2400){
+      const G=app.G;app.playing=true;step(1/60);app.playing=false;render();frames++;
+      const v=vis(), pk=document.querySelectorAll('#pslots .slot:not(.empty)').length;
+      maxVis=Math.max(maxVis,v);
+      const total=Object.keys(app.items).length;
+      if(v+pk>total)over++;
+      if(pk>4)over++;
+    }
+    const idle=app.G.phase==='idle';
+    const finalPack=document.querySelectorAll('#pslots .slot:not(.empty)').length, finalField=vis();
+    const ok=idle&&over===0&&finalPack===PE.packUsed(app.G)&&finalField===app.G.field.length;
+    if(!ok)bad++;
+    out.push((ok?'PASS ':'FAIL ')+'S'+sc.id+' plays to idle in '+(frames/60).toFixed(2)+' s ('+frames+' frames); pack tiles '+finalPack+', field items '+finalField+(over?(' OVER '+over):''));
+  });
+  $('selftest').hidden=false;$('selftest').textContent=out.join('\n');
+  return out;
+}
+
+/* ---------- start ---------- */
+function start(){
+  const h=(location.hash||'').replace(/^#/,''); const q={};
+  h.split('&').forEach(p=>{const a=p.split('=');if(a[0])q[a[0]]=decodeURIComponent(a[1]||'');});
+  if(q.rm!==undefined)app.reduced=q.rm==='1';
+  if(q.dir)app.directive=q.dir;
+  if(q.rule==='0')app.ruleOn=false;
+  if(q.spent==='1')app.pathSwapSpent=true;
+  $('chkRm').checked=app.reduced;$('chkRule').checked=app.ruleOn;
+  bind();
+  const sid0=q.scenario?+q.scenario:1;app.realm=q.realm?+q.realm:SCENARIOS[sid0-1].realm;
+  load(sid0,q.chooser||null);
+  syncBtns();fit();
+  render();
+  applyHash(q);
+  render();
+  if(q.selftest==='1'){selfTest();fit();}
+  if(q.selftest==='2'){selfTestRun();fit();}
+  requestAnimationFrame(ts=>{lastTs=ts;requestAnimationFrame(tick);});
+}
+window.PEUI={app,dispatch,render,load,restart};
+start();
+})();
+</script>
+</body></html>

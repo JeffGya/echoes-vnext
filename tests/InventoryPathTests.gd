@@ -454,7 +454,7 @@ static func _t_reset() -> Dictionary:
 	if ItemPacksTests._stage(ctx).has("discard_used"):
 		m.append("path end: the mark stayed")
 	# (d) A cleared mark gives the next path its discard again.
-	InventoryRules.clear_discard_used(InventoryActionTests._stage_of(env2))
+	InventoryRules.clear_path_marks(InventoryActionTests._stage_of(env2))
 	if InventoryRules.discard_block_reason(fc2, "pack") != "":
 		m.append("a new path: the pack discard is still refused with '%s'" % InventoryRules.discard_block_reason(fc2, "pack"))
 	return _result(m)
