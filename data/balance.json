@@ -3776,7 +3776,7 @@
 				"first_find_floor_pct": 60,
 				"first_find_floor_rank": "C"
 			},
-			"_pick_comment": "V2-ITEM-001b D-06, D-12, D-39: the pick rule of the pickup event. All values are PROPOSED DEFAULTS (D-09, D-63): tune after probe P2. Appeal = identity + sense + state. identity = calling_pick[calling][kind] + sum(vector score x vector_pick_muls) x (1 + Judgment x maturity_expression.identity_weight_scale.vector) + sum(trait x trait_pick_muls) x (1 + Judgment x identity_weight_scale.trait) + sum(stat x stat_pick_muls) + archetype_pick[archetype_birth][kind]. sense = worth x worth_weight x (sense_base + (1 - sense_base) x Judgment); worth = kind_weight[kind] + grade_step x grade index + quantity_gain x (min(quantity, quantity_cap) - 1). state = afraid x afraid_pick[kind] + bold x bold_pick[kind] + afraid x afraid_pick_signature[calling][kind] (maturity_expression.calling_behavior). afraid and bold are the curved, composure-softened ends from EmotionStatusLean.state_ends. A chooser with afraid at or above freeze_at takes nothing. Columns are gear, relic, consumable, material. Every row of the tables below sums to 0 over the four kinds, so no Calling, archetype or trait is greedy for all kinds. ConfigValidator.validate_pick checks the shape; the game does not run it at load.",
+			"_pick_comment": "V2-ITEM-001b D-06, D-12, D-39: the pick rule of the pickup event. All values are PROPOSED DEFAULTS (D-09, D-63): tune after probe P2. sense_base is 0.0 since D-67 (under review after a probe correction). Appeal = identity + sense + state. identity = calling_pick[calling][kind] + sum(vector score x vector_pick_muls) x (1 + Judgment x maturity_expression.identity_weight_scale.vector) + sum(trait x trait_pick_muls) x (1 + Judgment x identity_weight_scale.trait) + sum(stat x stat_pick_muls) + archetype_pick[archetype_birth][kind]. sense = worth x worth_weight x (sense_base + (1 - sense_base) x Judgment); worth = kind_weight[kind] + grade_step x grade index + quantity_gain x (min(quantity, quantity_cap) - 1). state = afraid x afraid_pick[kind] + bold x bold_pick[kind] + afraid x afraid_pick_signature[calling][kind] (maturity_expression.calling_behavior). afraid and bold are the curved, composure-softened ends from EmotionStatusLean.state_ends. A chooser with afraid at or above freeze_at takes nothing. Columns are gear, relic, consumable, material. Every row of the tables below sums to 0 over the four kinds, so no Calling, archetype or trait is greedy for all kinds. ConfigValidator.validate_pick checks the shape; the game does not run it at load.",
 			"pick": {
 				"_calling_pick_comment": "Points by Calling id (6 rows, not by family), gear, relic, consumable, material.",
 				"calling_pick": {
@@ -3837,7 +3837,7 @@
 				"quantity_gain": 0.5,
 				"quantity_cap": 3,
 				"worth_weight": 6,
-				"sense_base": 0.3,
+				"sense_base": 0.0,
 				"_freeze_at_comment": "A chooser whose curved, composure-softened afraid is at or above this takes nothing (D-39, D-12 assumption E). Allowed above 0 up to 1.",
 				"freeze_at": 0.5
 			},

@@ -219,7 +219,7 @@ Headline values approved by Jeff (D-12). The columns are gear / relic / consumab
 | empathic | -4, 0, 6, -2 |
 | reflective | -4, 4, -2, 2 |
 | `kind_weight` | gear 3, relic 4, consumable 2, material 1 |
-| Scalars | `grade_step` 1.5, `quantity_gain` 0.5 (cap 3), `worth_weight` 6, `sense_base` 0.3, `freeze_at` 0.5 |
+| Scalars | `grade_step` 1.5, `quantity_gain` 0.5 (cap 3), `worth_weight` 6, `sense_base` 0.0 (D-67, under review after a probe correction), `freeze_at` 0.5 |
 | `afraid_pick` | 4, -8, 16, -12 |
 | `bold_pick` | 6, 10, -8, -8 |
 

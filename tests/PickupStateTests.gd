@@ -104,7 +104,33 @@ static func _t_gate() -> Dictionary:
 static func _t_order() -> Dictionary:
 	var m: Array = []
 	var ctx := _ctx(3, 4)
-	var finds := _finds(["ph_weapon_a", "ph_relic_a", "ph_consumable_a", "ph_armor_a"])
+	# Give every Echo a taste (archetype valiant: gear first). Taste alone may still tie finds, so the search below picks a listing whose order differs.
+	for e in ctx.save_data["sanctum"]["roster"]:
+		(e as Dictionary)["archetype_birth"] = "valiant"
+	var standing := ["e0", "e1", "e2", "e3", "e4"]
+	var drawn := PickupChooser.draw(0, "stage.0", 0, _SIT, standing)
+	var data := ConfigService.get_balance_data(ctx.config_service)
+	var party := SanctumService.get_party_actors_static(ctx.save_data)
+	var chooser := PickupEventService._chooser_view(ctx.save_data, data, party, standing, str(drawn["chooser_id"]))
+	# The fixture chooser has no Judgment and little taste, so at the shipping sense_base 0.0 (D-67) several finds can
+	# tie and the pick order would be the find order. Take the first listing of the four types whose pick order
+	# differs from the find order, so the row order can show the plumbing.
+	var pool := ["ph_weapon_a", "ph_relic_a", "ph_consumable_a", "ph_armor_a"]
+	var finds: Array = []
+	var want_order: Array = []
+	for a in 4:
+		for b in 4:
+			for c in 4:
+				if a == b or b == c or a == c or not finds.is_empty():
+					continue
+				var cand := _finds([pool[a], pool[b], pool[c], pool[6 - a - b - c]])
+				var o: Array = PickupPick.order(chooser, cand.slice(0, 3), PickupPick.ctx_from(data)).map(
+					func(f): return str(f["find_id"]))
+				if str(o) != str(["f0", "f1", "f2"]):
+					finds = cand
+					want_order = o
+	if finds.is_empty():
+		return { "ok": false, "error": "test setup: no listing of the four types gives a pick order unlike the find order" }
 	var rec := _open(ctx, finds)
 	if rec.is_empty():
 		return { "ok": false, "error": "no event opened" }
@@ -112,17 +138,8 @@ static func _t_order() -> Dictionary:
 	var n := FindsRules.roll_count(inv_cfg, 0, "stage.0", 0, _SIT, 1.0, "S")
 	if n != 3 or (rec["finds"] as Array).size() != n:
 		m.append("roll count %d, finds %d: the event must offer the first `count` finds" % [n, (rec["finds"] as Array).size()])
-	var standing := ["e0", "e1", "e2", "e3", "e4"]
-	var drawn := PickupChooser.draw(0, "stage.0", 0, _SIT, standing)
 	if str(rec["chooser"]) != str(drawn["chooser_id"]) or str(rec["standing_ids"]) != str(standing):
 		m.append("chooser %s of %s, expected %s" % [rec["chooser"], str(rec["standing_ids"]), drawn["chooser_id"]])
-	var data := ConfigService.get_balance_data(ctx.config_service)
-	var party := SanctumService.get_party_actors_static(ctx.save_data)
-	var chooser := PickupEventService._chooser_view(ctx.save_data, data, party, standing, str(drawn["chooser_id"]))
-	var want_order: Array = PickupPick.order(chooser, finds.slice(0, 3), PickupPick.ctx_from(data)).map(
-		func(f): return str(f["find_id"]))
-	if str(want_order) == str(["f0", "f1", "f2"]):
-		m.append("test setup: the pick order equals the find order, so the row order cannot show it; change the finds")
 	if str(rec["order"]) != str(want_order) or str(rec["taken"]) != str(want_order):
 		m.append("order %s taken %s, expected %s" % [str(rec["order"]), str(rec["taken"]), str(want_order)])
 	var rows: Array = ItemPacksTests._ids_of_rows(ctx).filter(func(id): return str(id).begins_with("item:"))
