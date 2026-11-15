@@ -8,8 +8,8 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 |---|---|---|---|---|---|
 | 1 | Real finds in real fights | `PickupFinds.finds_for_win` returns none in shipping. Only debug `event` and `arm` produce finds. | V2-ITEM-002 (seam S1) | real drops exist | `PickupFinds.gd` |
 | 2 | Real item names, grades, images, descriptions | placeholder definitions in the test fixture. Details show placeholders. | V2-ITEM-002 | the catalogue exists | details card, `ItemUiText` |
-| 3 | Real placement (where enemies fell) and no-kill objective anchors | a simple row (`finds[].cell`) | new story "Pickup placement on the board" (S2) | the placement story starts | the placement function |
-| 4 | The emotion effect (plus and minus) | a reaction class only. No `EmotionService` call. | new story "Pickup reaction effect" (S3) | that story starts | `PickupCase.gd` |
+| 3 | Real placement (where enemies fell) and no-kill objective anchors | a simple row (`finds[].cell`) | new story "Pickup placement on the board" (S2); marker `NEW "Pickup placement on the board"` (D-65) | the placement story starts | `PickupEventService.open_after_win`, where the rows get `cell` |
+| 4 | The emotion effect (plus and minus) | a reaction class only. No `EmotionService` call. | new story "Pickup reaction effect" (S3); marker `NEW "Pickup reaction effect"` (D-65) | that story starts | `PickupEventService.open_after_win`, where `reaction` is stored |
 | 5 | Swap with equipped or in-use items | swap legality ignores equipment | V2-ITEM-003 (S4) | equipping exists | `PickupSwapRules.gd` |
 | 6 | Recycle route for the dropped item | the dropped item is lost | V2-ITEM-004 (S4) | recycle exists | `PickupEventService.commit_swap` |
 | 7 | Pack size by progression and per Echo | pack size is read from config only | V2-CONTINUITY-002 and V2-ITEM-003 (S5) | those stories start | cap and pack readers |
@@ -18,10 +18,11 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 | 10 | Finds cap and chance numbers beyond realm.02 | bands 1.75, 2.5 and 3.5 are placeholders | V2-ITEM-002, or the story that adds realm 3 | realm 3 exists | `finds_cap_by_realm_scale` |
 | 11 | Cell limit on the cap, and the piles rule | none | the placement story | the placement story starts | the cap helper |
 | 12 | Repetition forms (short and brief intro) | Skip only | a feel pass after Jeff's playtests (no story yet: Jeff names it) | Jeff decides | `PickupEventPlan.gd` |
-| 13 | Win emotion drift is skipped after a reload on the Resolve card (pre-existing) | inherited, not fixed | no story: Jeff assigns (candidate: V2-ECONOMY-004 follow-ups) | Jeff decides | noted here only |
+| 13 | Win emotion drift is skipped after a reload on the Resolve card (pre-existing). A reload during the pickup event also skips the win steps (emotion drift, `check_vow_discovery`, `clear_ally_fields_if_present`), because the machine is then in RESOLVE, not ENCOUNTER (found by C9 QA). | inherited, not fixed | no story: Jeff assigns (candidate: V2-ECONOMY-004 follow-ups) | Jeff decides | noted here only |
 | 14 | UX redesign items: pack discoverability, text size, panel placement | not touched | Jeff's UX redesign | that redesign starts | design document Q12 |
 | 15 | Debug producer, debug cap override, F1 scene menu | debug builds only | none: stays debug-only. Remove only if Jeff asks. | not applicable | `DebugController.gd` |
 | 16 | A natural freeze in real play | the freeze path is built and tested. Probe P3 measures the rate. | the pick tuning (D-09) after P3 | the P3 result | `PickupPick.gd` |
+| 17 | `realm.seed` is a 63-bit int stored as a JSON number. After a reload it can lose digits. Every seeded stream that reads it after a reload is affected. Found by C9 QA. Needs an opus determinism check. | not fixed (pre-existing, project-wide) | new story "Realm seed survives a save reload" | Jeff decides | `PickupEventService.open_after_win` (finds roll, chooser draw), `PickupSnapshotBuilder.build` (pointer) |
 
 ## Other open items (not unwired code)
 - The pass line for the Standing 1 against Standing 9 probe (D-09). Needs a number from `mid-game-designer`, approved by Jeff, before step C4 closes.

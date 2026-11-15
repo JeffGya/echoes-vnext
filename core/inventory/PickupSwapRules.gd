@@ -43,8 +43,8 @@ static func pair(event: Dictionary, finds: Array, pack_items: Array, swap_used: 
 	var gate := _gate(event, swap_used)
 	if not gate["ok"]:
 		return gate
-	var find_type: String = _type_of(finds, "find_id", find_id) if (event.get("left", []) as Array).has(find_id) else ""
-	var pack_type := _type_of(pack_items, "id", pack_id)
+	var find_type: String = type_of(finds, "find_id", find_id) if (event.get("left", []) as Array).has(find_id) else ""
+	var pack_type := type_of(pack_items, "id", pack_id)
 	if find_type.is_empty() or pack_type.is_empty():
 		return _res("bad_pair")
 	if find_type == pack_type:
@@ -75,7 +75,7 @@ static func _gate(event: Dictionary, swap_used: bool) -> Dictionary:
 
 
 ## The type_id of the first entry whose `key` is `id`, or "".
-static func _type_of(entries: Array, key: String, id: String) -> String:
+static func type_of(entries: Array, key: String, id: String) -> String:
 	if id.is_empty():
 		return ""
 	for e in entries:

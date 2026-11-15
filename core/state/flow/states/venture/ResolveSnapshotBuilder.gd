@@ -270,6 +270,14 @@ static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bo
 	data["pace_changed_rank"]  = pace_changed_rank
 
 
+## 18 — The final items of the pickup event of this win (V2-ITEM-001b, D-16): { taken, left, lost, dropped,
+## swap_used }, built by `PickupSnapshotBuilder.result_of`. Written only when an event ran. Producers A (through
+## `pickup.continue`) and G.
+static func add_pickup_result(data: Dictionary, pickup_result: Dictionary) -> void:
+	if not pickup_result.is_empty():
+		data["pickup_result"] = pickup_result.duplicate(true)
+
+
 ## 17 — The standoff card (D-116). Producers H2 and G. Words and names only: no amount, no percent, no odds.
 ## `cause` is "froze", "blocked" or "unknown". Names are display names, at most two each.
 static func add_standoff(data: Dictionary, standoff_count: int, can_go_sanctum: bool, cause: String,

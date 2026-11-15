@@ -237,7 +237,7 @@ Whether Standing 6 and 9 Callings resolve to a Calling family: OPEN (001b "Open"
 
 ---
 
-## 5. The pickup event — DESIGNED
+## 5. The pickup event — DESIGNED (backend BUILT by 001b C9; UI not built)
 
 **Story:** V2-ITEM-001b. **Decisions:** 001b D-16, D-20 to D-22, D-25, D-31, D-32, D-36, D-37, D-38, D-45. The spec for the playable mockup is `design-rules-v2.md` (session scratchpad, not in the repo). Where it conflicts with `decisions.md`, `decisions.md` wins.
 
@@ -281,6 +281,16 @@ Whether Standing 6 and 9 Callings resolve to a Calling family: OPEN (001b "Open"
 - 001b places items in a simple row. Real placement is a later story (D-29, D-52 b; section 8).
 
 **Continue guard.** See section 6.
+
+**Built in 001b C9 (backend) — BUILT.** Files: `FlowRuntime._open_pickup_event`, `PendingResultService`, `PickupController`, `FlowResolveState`, `ResolveSnapshotBuilder`, `StageSettlementService.refresh_card`. Decisions: D-16, D-58, D-66.
+
+| Part | Rule |
+|---|---|
+| Hook | `FlowRuntime._end_round`, win branch, after the bond and Thread block, before `refresh_snapshot`. With an event, the dispatch publishes `flow.pickup` (intro). The Resolve card waits in `ectx.final_snapshot`. Without an event nothing changes. |
+| Hold | A `flow.pickup` snapshot never consumes the pending result. It captures the held card, plus the top-level keys `terrain`, `placement_seed` (a String) and `bounds { w, h }`. |
+| End mark | Continue sets `stage.pickup.phase` to "done" and requests a save. After it, every pickup action is refused with `ended`. |
+| Continue | Publishes the held card with `data.pickup_result` (block 18). A stage-clearing card also gets a fresh stage payout and `items` block, because the event adds and loses item rows. The same keys go into the pending result. |
+| Resume | After a reload the machine is in RESOLVE. If the saved event of the pending result's win (`win_t == created_t`) is not ended, `flow.pickup` resumes at idle. Otherwise Resolve shows. |
 
 ---
 
@@ -484,7 +494,7 @@ I checked the constants named above in the code. I did not check each UI rule ag
 | Draw order | Finds chance: all `cap` slot draws, always. Chooser: one draw. The pick rule makes no further draw. | D-49, D-05, D-06 |
 | Stamps | Finds result stored at the first draw. A saved pick stamp for the chooser. The saved field names are OPEN (section 14 Q6). 001a `decisions.md` section 8 names `stage.pick_stamps`. 001b `decisions.md` D-05 says "a saved pick stamp" without a name. | D-05, D-49 |
 | Swap flag | Saved stage flag, proposed name `swap_used`. | D-03, D-27 |
-| Event state | The event must resume at idle after a quit (mockup spec). What is saved to rebuild the field (left finds, the chosen Echo, picks) is OPEN. | Section 14, Q6 |
+| Event state | BUILT (C6, C9): the record `stage.pickup` (with `phase` "idle" or "done") rebuilds the field; the pending result holds the board keys. The event resumes at idle after a quit. | D-58, D-66 |
 | Exactly once | The find row id stamp (section 3.1) and the pick stamp. A reload, retry or replay gives the same chooser, picks and finds. | ANSWERS #87 |
 | Core vs UI | The UI never reads the save. It reads `snapshot` data only. | AGENTS.md |
 | Config | All tunables in `data/balance.json` (ANSWERS #83). | D-09, D-46 |
@@ -575,3 +585,4 @@ One line per story. Newest last.
 | 2026-11-08 | V2-ITEM-001a | Built the containers, slots, moves, destroy, item rows and the early-leave rules. Approved item text and panels. |
 | 2026-11-09 | V2-ECONOMY-004 Part B | Added the recipe price contract. Removed the definition `cost`. Added `EconomyService.pay_cost`. |
 | 2026-11-10 to 2026-11-13 | V2-ITEM-001b design | Recorded D-01 to D-56 as DESIGNED: finds chance and cap, chooser, pick rule, pickup event, swap, reaction class. Defined seams S1 to S6 in section 13.2. |
+| 2026-11-15 | V2-ITEM-001b C9 | Wired the pickup event into a won fight (backend): hook, pending-result hold, end mark, resume, Resolve block 18. |

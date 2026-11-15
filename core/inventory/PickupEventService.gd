@@ -11,10 +11,12 @@ extends RefCounted
 ## grade, quantity, cell }], order, taken, left, tried, free, swap }. `order`, `taken`, `left` hold find ids.
 ## `free` = free pack slots before the seam call, saved in the record (the swap gate needs it).
 ## `swap` = {} until a swap commits, then { find_id, dropped_id, dropped_type_id, dropped, t }.
+## `phase` = "idle" while the event is open, "done" after Continue (the durable end mark: no action, no resume).
 
 const STAGE_KEY := "pickup"
 const SWAP_KEY := "swap_used"
 const PHASE_IDLE := "idle"
+const PHASE_DONE := "done"
 
 
 static func record_of(stage: Dictionary) -> Dictionary:
@@ -24,6 +26,29 @@ static func record_of(stage: Dictionary) -> Dictionary:
 
 static func swap_used(stage: Dictionary) -> bool:
 	return bool(stage.get(SWAP_KEY, false))
+
+
+static func is_ended(record: Dictionary) -> bool:
+	return str(record.get("phase", "")) == PHASE_DONE
+
+
+## True when `stage` holds an open event of the win that made `pending` (`win_t == created_t`, D-58). Ints are
+## cast: a JSON reload turns them into floats.
+static func is_open_for(stage: Dictionary, pending: Dictionary) -> bool:
+	var record := record_of(stage)
+	return not record.is_empty() and not pending.is_empty() and not is_ended(record) \
+		and int(record.get("win_t", -1)) == int(pending.get("created_t", -2))
+
+
+## Party Echo ids that fell in this stage: the stage's one answer (`lost_echo_names_with`, names) over the active
+## party, so an Echo that fell in an earlier fight and is still in the party counts as fallen.
+static func fallen_party_ids(flow_ctx: FlowContext, actors: Array) -> Array:
+	var lost := ActiveStageService.lost_echo_names_with(flow_ctx, actors)
+	var out: Array = []
+	for a: Dictionary in SanctumService.get_party_actors_static(flow_ctx.save_data):
+		if lost.has(str(a.get("name", ""))):
+			out.append(str(a.get("id", "")))
+	return out
 
 
 ## Opens the event of one won fight and returns a copy of its record; {} when no event opens (no stage, no
@@ -39,13 +64,14 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 	var realm := RealmService.get_active(flow_ctx)
 	var run_count := int(realm.get("run_count", 0))
 	var stored := record_of(stage)
-	# `stage.pickup` holds only the LAST event. C9 must call this only for `last_situation_id`: a later event
-	# replaces the stamp, so reopening an older situation would offer its left finds again.
+	# `stage.pickup` holds only the LAST event: call this only for `last_situation_id`. A later event replaces the
+	# stamp, so reopening an older situation would offer its left finds again.
 	if int(stored.get("run_count", -1)) == run_count and str(stored.get("situation_id", "")) == situation_id:
 		return stored.duplicate(true)
 
 	var data := ConfigService.get_balance_data(flow_ctx.config_service)
 	var inv_cfg := ConfigService.get_inventory_cfg(flow_ctx.config_service)
+	# UNWIRED (target: NEW "Realm seed survives a save reload"): realm.seed can lose digits through JSON; the finds roll and chooser draw read it
 	var realm_seed := int(realm.get("seed", 0))
 	var realm_scale := float(ActiveStageService.get_payout_factors(flow_ctx, flow_ctx.config_service)["realm_scale"])
 	var count := FindsRules.roll_count(inv_cfg, realm_seed, flow_ctx.stage_id, run_count, situation_id, realm_scale, rank)
@@ -87,10 +113,11 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 	for i in kept_finds.size():
 		var f: Dictionary = kept_finds[i]
 		var type_id := str(f.get("type_id", ""))
-		# Simple row (D-52 b): real board placement belongs to the placement story (seam S2).
+		# UNWIRED (target: NEW "Pickup placement on the board"): real placement of finds on the board (a simple row today)
 		rows.append({ "find_id": str(f.get("find_id", "")), "type_id": type_id,
 			"name": InventoryService.name_of(inv_cfg, type_id), "kind": str(f.get("kind", "")),
 			"grade": str(f.get("grade", "")), "quantity": int(f.get("quantity", 1)), "cell": i })
+	# UNWIRED (target: NEW "Pickup reaction effect"): the reaction class is stored; no EmotionService call applies it
 	var record := {
 		"situation_id": situation_id, "run_count": run_count, "win_t": t, "phase": PHASE_IDLE,
 		"return_to": return_to, "chooser": chooser_id, "standing_ids": standing, "fallen_names": fallen_names,

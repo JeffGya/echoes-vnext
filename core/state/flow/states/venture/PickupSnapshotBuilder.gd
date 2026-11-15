@@ -67,12 +67,12 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 	var target := str(session.get("swap_target", "")) if phase == PHASE_SWAP_PREVIEW else ""
 	var twins: Array = []
 	if not origin.is_empty():
-		var origin_type := _type_in(finds, "find_id", origin)
+		var origin_type := PickupSwapRules.type_of(finds, "find_id", origin)
 		if origin_type.is_empty():
-			origin_type = _type_in(entries, "id", origin)
-		var field_side := not _type_in(finds, "find_id", origin).is_empty()
+			origin_type = PickupSwapRules.type_of(entries, "id", origin)
+		var field_side := not PickupSwapRules.type_of(finds, "find_id", origin).is_empty()
 		for fid in (entries.map(func(e: Dictionary) -> String: return str(e["id"])) if field_side else left_ids):
-			var other_type := _type_in(entries if field_side else finds, "id" if field_side else "find_id", str(fid))
+			var other_type := PickupSwapRules.type_of(entries if field_side else finds, "id" if field_side else "find_id", str(fid))
 			if other_type == origin_type:
 				twins.append(str(fid))
 
@@ -89,6 +89,7 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		if bool(r["is_chooser"]):
 			chooser = { "id": r["id"], "name": r["name"], "standing": r["standing"] }
 
+	# UNWIRED (target: NEW "Realm seed survives a save reload"): realm.seed can lose digits through JSON; the pointer plan reads it
 	var realm_seed := int(RealmService.get_active(flow_ctx).get("seed", 0))
 	var pointer := PickupChooser.pointer(inv_cfg, realm_seed, flow_ctx.stage_id, int(record.get("run_count", 0)),
 		str(record.get("situation_id", "")), standing.size(), standing.find(chooser_id))
@@ -118,14 +119,6 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 	return { "type": FlowStateIds.PICKUP, "data": data, "actions": _actions(phase, offered), "meta": { "t": t } }
 
 
-## The type_id of the first entry of `list` whose `key` is `id`, or "".
-static func _type_in(list: Array, key: String, id: String) -> String:
-	for e in list:
-		if e is Dictionary and str((e as Dictionary).get(key, "")) == id:
-			return str((e as Dictionary).get("type_id", ""))
-	return ""
-
-
 static func _selected(id: String, phase: String, record: Dictionary, pack: Dictionary) -> Dictionary:
 	if id.is_empty():
 		return {}
@@ -136,6 +129,29 @@ static func _selected(id: String, phase: String, record: Dictionary, pack: Dicti
 		if str(slot["id"]) == id:
 			return { "id": id, "side": "pack" }
 	return {}
+
+
+## The final items of an event for the Resolve card (`data.pickup_result`): { taken, left, lost, dropped, swap_used }.
+## Rows are { type_id, name, kind, grade, quantity }, no ids. The buckets are the snapshot statuses: a tried find
+## is `left`, every find of a frozen chooser is `lost` (D-43). `dropped` is the pack item the swap lost, or {}.
+## {} for no record.
+static func result_of(record: Dictionary) -> Dictionary:
+	if record.is_empty():
+		return {}
+	var out := { "taken": [], "left": [], "lost": [], "dropped": {},
+		"swap_used": not (record.get("swap", {}) as Dictionary).is_empty() }
+	for f: Dictionary in _find_rows(record, PHASE_IDLE):
+		var bucket := str(f["status"]) if str(f["status"]) != STATUS_TRIED else STATUS_LEFT
+		(out[bucket] as Array).append(_item_row(f))
+	var dropped := _dropped(record)
+	if not dropped.is_empty():
+		out["dropped"] = _item_row(dropped)
+	return out
+
+
+static func _item_row(v: Dictionary) -> Dictionary:
+	return { "type_id": v["type_id"], "name": v["name"], "kind": v["kind"], "grade": v["grade"],
+		"quantity": v["quantity"] }
 
 
 ## The pack item the saved swap dropped (`PickupEventService.commit_swap`), or {}.
@@ -244,9 +260,9 @@ static func _row_entry(actor: Dictionary, is_chooser: bool) -> Dictionary:
 ## Board keys as `EncounterSnapshotBuilder.build_round_snapshot` carries them (board_cols, board_rows, terrain,
 ## placement_seed, encounter_id, actors, via its `_project_actor`), so the board redraws. Actor source, in order:
 ## the encounter context; else the durable result's `resolve_data` (`PendingResultService`); else the held
-## `flow.resolve` snapshot; else []. The durable result keeps `encounter_id` and `actors` only: after a reload
-## `terrain` is {}, `placement_seed` is 0 and the board size comes from the grid config. Only `bark_line` is
-## cleared on the actors: the event shows its own reaction, and a stale bark would pop again.
+## `flow.resolve` snapshot; else []. After a reload `terrain`, `placement_seed` and `bounds` come from the durable
+## result's top-level keys (D-66); a result captured without them gives {}, 0 and the grid config size. Only
+## `bark_line` is cleared on the actors: the event shows its own reaction, and a stale bark would pop again.
 static func _board(flow_ctx: FlowContext) -> Dictionary:
 	var ectx: EncounterContext = flow_ctx.encounter_ctx
 	var data := ConfigService.get_balance_data(flow_ctx.config_service)
@@ -257,14 +273,16 @@ static func _board(flow_ctx: FlowContext) -> Dictionary:
 	var stored: Dictionary = stored_v if stored_v is Dictionary else {}
 	var terrain: Dictionary = {}
 	var actors: Array = []
+	var bounds_v: Variant = {}
 	if ectx != null:
 		terrain = ectx.terrain
 		for a_v in ectx.actors:
 			if a_v is Dictionary:
 				actors.append(EncounterSnapshotBuilder._project_actor(a_v))
 	else:
-		var terrain_v: Variant = stored.get("terrain", {})
+		var terrain_v: Variant = pending.get("terrain", {})
 		terrain = terrain_v if terrain_v is Dictionary else {}
+		bounds_v = pending.get("bounds", {})
 		var held_v: Variant = stored.get("actors", null)
 		if not (held_v is Array) and str(flow_ctx.last_snapshot.get("type", "")) == FlowStateIds.RESOLVE:
 			var last_v: Variant = flow_ctx.last_snapshot.get("data", {})
@@ -274,13 +292,13 @@ static func _board(flow_ctx: FlowContext) -> Dictionary:
 	for a: Variant in actors:
 		if a is Dictionary:
 			(a as Dictionary)["bark_line"] = ""
-	var bounds_v: Variant = terrain.get("bounds", {})
+	bounds_v = terrain.get("bounds", bounds_v)
 	var bounds: Dictionary = bounds_v if bounds_v is Dictionary else {}
 	return {
 		"board_cols": int(bounds["w"]) if bounds.has("w") else GridService.get_board_cols(grid_cfg),
 		"board_rows": int(bounds["h"]) if bounds.has("h") else GridService.get_board_rows(grid_cfg),
 		"terrain": terrain.duplicate(true),
-		"placement_seed": ectx.placement_seed if ectx != null else int(stored.get("placement_seed", 0)),
+		"placement_seed": ectx.placement_seed if ectx != null else str(pending.get("placement_seed", "0")).to_int(),
 		"encounter_id": ectx.encounter_id if ectx != null else str(stored.get("encounter_id", pending.get("encounter_id", ""))),
 		"actors": actors,
 	}

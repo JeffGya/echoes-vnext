@@ -13,6 +13,8 @@ func _init(id: String = FlowStateIds.RESOLVE) -> void:
 ##
 ## The order is now inverted. The DURABLE result comes first, the live snapshot second:
 ##
+##   0. An open pickup event of the pending result's win (`PickupEventService.is_open_for`):
+##      the `flow.pickup` snapshot at idle. The card waits until the event's Continue.
 ##   1. `save.flow.pending_result` — producer G (PendingResultService.build_snapshot). This is
 ##      the only branch that can serve a player who quit on the Resolve screen and pressed
 ##      Continue, because after a relaunch there is no live snapshot to pass through.
@@ -29,6 +31,14 @@ func _init(id: String = FlowStateIds.RESOLVE) -> void:
 ## that was deliberately written wins over the one that was merely left behind.
 func enter(ctx: RefCounted, t: int) -> void:
 	var flow_ctx := ctx as FlowContext
+
+	# 0 — an open pickup event of the pending result's win (D-58): the event is a snapshot phase, so a reload
+	# lands here. It resumes at idle; the card waits in the pending result until the event's Continue.
+	if PickupEventService.is_open_for(FlowStageExploreState._get_current_stage(flow_ctx),
+			PendingResultService.read(flow_ctx.save_data)):
+		flow_ctx.pickup_session = {}
+		flow_ctx.last_snapshot = PickupSnapshotBuilder.build(flow_ctx, t, flow_ctx.pickup_session)
+		return
 
 	# 1 — producer G, from the durable result.
 	var pending := PendingResultService.build_snapshot(flow_ctx, t)

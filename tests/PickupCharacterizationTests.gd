@@ -49,7 +49,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_char/discard_mark_cleared_at_path_end", Callable(PickupCharacterizationTests, "_t_clear_path_end"))
 	runner.register_test("pickup_char/discard_mark_cleared_at_early_leave", Callable(PickupCharacterizationTests, "_t_clear_early_leave"))
 	runner.register_test("pickup_char/discard_mark_cleared_at_defeat", Callable(PickupCharacterizationTests, "_t_clear_defeat"))
-	runner.register_test("pickup_char/pending_result_consumed_by_a_non_resolve_snapshot", Callable(PickupCharacterizationTests, "_t_pending_consumed"))
+	runner.register_test("pickup_char/pending_result_held_by_pickup_consumed_by_other_snapshots", Callable(PickupCharacterizationTests, "_t_pending_consumed"))
 	runner.register_test("pickup_char/win_with_no_finds_snapshot_and_save_are_pinned", Callable(PickupCharacterizationTests, "_t_win_no_finds_pinned"))
 
 
@@ -210,11 +210,13 @@ static func _t_seam_no_cap() -> Dictionary:
 
 ## A 5-Echo party on realm.01 stage.0 engages a combat situation through the production dispatch. Each enemy is set to 1 hp so
 ## the win is certain. `last_situation_id` is set the way an Advance sets it. Drives the real round loop and records the
-## first dispatch after which the final snapshot exists.
-static func _won_fight(tag: String) -> Dictionary:
+## first dispatch after which the final snapshot exists. `prepare` (pickup_flow) runs on the setup env before the engage.
+static func _won_fight(tag: String, prepare: Callable = Callable()) -> Dictionary:
 	var env: Dictionary = CombatRoundtripIntegrationTests._setup_two_combat_situations(tag)
 	if env.is_empty():
 		return { "ok": false, "error": "setup failed" }
+	if prepare.is_valid():
+		prepare.call(env)
 	var rt: FlowRuntime = env["runtime"]
 	var fc: FlowContext = env["flow_ctx"]
 	var sit := str((env["sit_ids"] as Array)[0])
@@ -362,12 +364,17 @@ static func _t_pending_consumed() -> Dictionary:
 	var same := PendingResultService.capture_or_consume(fc, fc.last_snapshot, 90)
 	if not same.is_empty() or _pending_outcome(rt).is_empty():
 		m.append("republishing the resolve card gave '%s'" % same)
-	# KNOWN DEFECT (V2-ITEM-001b step C9 will change this): any snapshot that is not flow.resolve consumes the result.
-	# A pickup snapshot published between the win and the Resolve card would spend it.
+	# C9 fixed the defect pinned here in C0: a flow.pickup snapshot HOLDS the result (no consume, no save request).
 	var other := { "type": "flow.pickup", "meta": { "t": 91 }, "data": {}, "actions": {} }
+	var before := JSON.stringify(PendingResultService.read(rt.get_save_data()))
+	fc.save_request = false
 	var got := PendingResultService.capture_or_consume(fc, other, 91)
-	if got != "consumed" or not _pending_outcome(rt).is_empty():
-		m.append("a flow.pickup snapshot gave '%s', pending '%s'" % [got, _pending_outcome(rt)])
+	if got != "" or JSON.stringify(PendingResultService.read(rt.get_save_data())) != before or fc.save_request:
+		m.append("a flow.pickup snapshot gave '%s', pending '%s', save request %s" % [got, _pending_outcome(rt), str(fc.save_request)])
+	# Any other non-resolve snapshot still consumes it.
+	var path := { "type": FlowStateIds.STAGE_EXPLORE, "meta": { "t": 92 }, "data": {}, "actions": {} }
+	if PendingResultService.capture_or_consume(fc, path, 92) != "consumed" or not _pending_outcome(rt).is_empty():
+		m.append("a path snapshot did not consume the result")
 	return _result(m)
 
 
