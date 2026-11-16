@@ -71,7 +71,7 @@ sanctioned dispatcher, which calls `FlowRuntime.dispatch()`.
 | Shell | Handles |
 |-------|---------|
 | `SanctumShell.gd` | `flow.sanctum`, `flow.summon`, `flow.echo_party`, `flow.realm_select`, `flow.vow_manage`, `flow.weaving_rite` |
-| `RealmShell.gd` | `flow.stage_map`, `flow.stage`, `flow.stage_explore`, `flow.encounter`, `flow.keeper_trial`, `flow.resolve` |
+| `RealmShell.gd` | `flow.stage_map`, `flow.stage`, `flow.stage_explore`, `flow.encounter`, `flow.keeper_trial`, `flow.pickup`, `flow.resolve` |
 
 AppRoot routes on `snapshot.type` → shell. Shell routes to screen.
 

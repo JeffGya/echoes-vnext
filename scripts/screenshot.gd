@@ -175,6 +175,7 @@ func _fixtures() -> Dictionary:
 		"standoff_froze_two": [_combat(6, recover), _standoff_card(2, true, "froze", ["Ama", "Kofi"], [])],
 		"standoff_calm": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"])],
 		"standoff_fight_gone": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"], false)],
+		"pickup_host": [_pickup_host()],
 		"warning_level_1": [_combat_stall(1, "")],
 		"warning_level_2": [_combat_stall(2, "Ama")],
 		"prebattle_stalled": [_prebattle({ "stalled_before": true })],
@@ -256,6 +257,20 @@ func _combat(round_num: int, objective_state: Dictionary) -> Dictionary:
 			"objective_state": objective_state,
 		},
 		"actions": {},
+	}
+
+
+## U1 host fixture: the flow.pickup shape (board keys and actors, idle phase) with no event content.
+func _pickup_host() -> Dictionary:
+	return {
+		"type": "flow.pickup",
+		"meta": { "t": 1 },
+		"data": {
+			"phase": "idle", "situation_id": "screenshot_pickup", "run_count": 1,
+			"encounter_id": "screenshot", "board_cols": 10, "board_rows": 10,
+			"terrain": {}, "placement_seed": 0, "actors": _actors(),
+		},
+		"actions": { "cta.continue": { "type": "pickup.continue", "slot": "cta.continue" } },
 	}
 
 

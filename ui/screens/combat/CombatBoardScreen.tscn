@@ -8,6 +8,8 @@
 [ext_resource type="Script" uid="uid://cb8j2g1nyt3or" path="res://ui/screens/combat/CombatTokenVisualConfig.gd" id="6_visual_config"]
 [ext_resource type="PackedScene" uid="uid://voice001_bark_popup_layer" path="res://ui/screens/combat/BarkPopupLayer.tscn" id="7_bark_popup_layer"]
 [ext_resource type="Script" uid="uid://cmas1ml5am5ou" path="res://ui/shared/BoardCamera.gd" id="8_board_camera"]
+[ext_resource type="PackedScene" path="res://ui/screens/combat/PickupEventStage.tscn" id="9_pickup_stage"]
+[ext_resource type="PackedScene" path="res://ui/screens/combat/PickupDebugContinue.tscn" id="10_pickup_debug"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -328,6 +330,7 @@ grow_vertical = 0
 text = "Manual"
 
 [node name="SpeedBar" type="HBoxContainer" parent="." unique_id=100000018]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = -1
 anchor_left = 0.5
@@ -443,6 +446,14 @@ focus_mode = 0
 custom_minimum_size = Vector2(160, 56)
 layout_mode = 2
 text = "Return to Sanctum"
+
+[node name="PickupEventStage" parent="." instance=ExtResource("9_pickup_stage")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+
+[node name="PickupDebugContinue" parent="." instance=ExtResource("10_pickup_debug")]
+unique_name_in_owner = true
 
 [node name="TransientLayer" type="CanvasLayer" parent="."]
 layer = 30

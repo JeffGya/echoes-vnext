@@ -22,6 +22,7 @@ signal modal_requested(modal_id: StringName, payload: Dictionary)
 const InitiativeRowScene := preload("res://ui/components/InitiativeRowItem.tscn")
 const EmotionPresentation := preload("res://ui/components/EmotionPresentation.gd")
 const PacePresentation := preload("res://ui/components/PacePresentation.gd")
+const PICKUP_TYPE := "flow.pickup"
 const StandoffStrings := preload("res://ui/components/StandoffPresentation.gd")
 const CarriedHomePresentation := preload("res://ui/components/CarriedHomePresentation.gd")
 const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.gd")
@@ -81,6 +82,11 @@ const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.
 @onready var _speed_fast_button: Button             = %SpeedFastButton
 # Camera controls (all modes): recenter-on-party button.
 @onready var _recenter_button: Button               = %RecenterButton
+# Pickup event host (V2-ITEM-001b). The stage sits over the board; the speed bar lies outside
+# _reset_transient_ui, so the pickup branch hides it and every other snapshot shows it again.
+@onready var _speed_bar: HBoxContainer              = %SpeedBar
+@onready var _pickup_stage: PickupEventStage        = %PickupEventStage
+@onready var _pickup_debug: PickupDebugContinue     = %PickupDebugContinue
 
 # Clay floor tile: source 0, atlas position (0, 0)
 const _TILE_SOURCE_ID:    int       = 0
@@ -210,6 +216,7 @@ func _ready() -> void:
 	# Camera controls (all modes): recenter-on-party button. Hidden until combat is drawn.
 	_recenter_button.visible = false
 	_recenter_button.pressed.connect(_on_recenter_pressed)
+	_pickup_debug.action_requested.connect(_on_action)
 
 	# CanvasLayer visibility and Camera2D.enabled do not follow this Control. A hidden screen must
 	# neither draw its board nor drive the viewport canvas transform.
@@ -243,7 +250,11 @@ func set_snapshot(snap: Dictionary) -> void:
 	if _should_reset_presentation(data):
 		_reset_presentation_state()
 	_reset_transient_ui()
-	_render(data, snap.get("actions", {}))
+	if str(snap["type"]) == PICKUP_TYPE:
+		_render_pickup(snap, data)
+	else:
+		_leave_pickup()
+		_render(data, snap.get("actions", {}))
 	_active_encounter_id = str(data.get("encounter_id", ""))
 	_presentation_board_size = Vector2i(
 		int(data.get("board_cols", 10)),
@@ -260,6 +271,41 @@ func set_layout(layout: Dictionary) -> void:
 		var min_zoom := _min_zoom_for_span(_board_span_px)
 		camera.configure_zoom_range(min_zoom, _ZOOM_MAX, clampf(camera.zoom.x, min_zoom, _ZOOM_MAX))
 		camera.reclamp()
+
+
+## The pickup event keeps the board drawn from the snapshot (actors, terrain, size) and shows no
+## combat HUD. The snapshot has no nav.back slot, so Back stays hidden and AppRoot's Back does nothing.
+func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
+	_flush_held_barks()
+	_current_cols = int(data.get("board_cols", 10))
+	_current_rows = int(data.get("board_rows", 10))
+	var terrain_v: Variant = data.get("terrain", {})
+	_draw_board(_current_cols, _current_rows, terrain_v if terrain_v is Dictionary else {})
+	_center_board(_current_cols, _current_rows)
+	var actors: Array = data.get("actors", [])
+	_last_actors = actors
+	if actors.is_empty():
+		_token_layer.reset_presentation()
+		_move_telegraph_layer.clear_telegraph()
+	else:
+		_draw_tokens(actors, "", data)
+	_push_camera_follow_target()
+	_stall_level = 0
+	_kill_stall_tween()
+	_stall_panel.visible = false
+	_speed_bar.visible = false
+	_pickup_stage.visible = true
+	_pickup_stage.apply_snapshot(snap)
+	if is_instance_valid(_pickup_debug):
+		_pickup_debug.apply_actions(snap.get("actions", {}))
+
+
+func _leave_pickup() -> void:
+	_speed_bar.visible = true
+	_pickup_stage.visible = false
+	_pickup_stage.clear()
+	if is_instance_valid(_pickup_debug):
+		_pickup_debug.apply_actions({})
 
 
 func _sync_world_visibility() -> void:
@@ -1507,8 +1553,12 @@ func _apply_responsive_layout() -> void:
 	_cta_button.offset_bottom = -bottom - 8.0
 	_manual_toggle.offset_top = -bottom - 112.0
 	_manual_toggle.offset_bottom = -bottom - 64.0
+	# `$SpeedBar` here, not `_speed_bar`: layout runs before _ready in some tests (Stage004SeamTests wires the nodes by hand).
 	var speed_bar := $SpeedBar as HBoxContainer
 	speed_bar.offset_top = -bottom - 168.0
 	speed_bar.offset_bottom = -bottom - 120.0
+	if is_instance_valid(_pickup_debug):
+		_pickup_debug.offset_top = -bottom - 56.0
+		_pickup_debug.offset_bottom = -bottom - 8.0
 	_initiative_panel.offset_top = 150.0 + top
 	_initiative_panel.offset_bottom = -bottom - 62.0

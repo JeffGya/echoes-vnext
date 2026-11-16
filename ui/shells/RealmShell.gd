@@ -60,6 +60,7 @@ func _ready() -> void:
 		"flow.stage_explore": _stage_explore_scene,   # V2-STAGE-001
 		"flow.encounter":     _combat_board_scene,
 		"flow.keeper_trial":  _combat_board_scene,
+		"flow.pickup":        _combat_board_scene,   # V2-ITEM-001b: the board hosts the pickup event
 		# flow.resolve is NOT in this dict — handled as a dim modal overlay by _show_resolve_overlay()
 	}
 	# CanvasLayer visibility is independent of its Control parent. Keep Realm
@@ -145,7 +146,7 @@ func _update_echo_bar(snap: Dictionary) -> void:
 	# render it as a distinct gold-accented ally slot at the end of the bar.
 	var spirit_actor: Dictionary = {}
 	match snap_type:
-		"flow.encounter", "flow.keeper_trial", "flow.resolve":
+		"flow.encounter", "flow.keeper_trial", "flow.resolve", "flow.pickup":
 			# Encounter snapshots include all combatants — filter for echoes only.
 			for a in data.get("actors", []):
 				if not (a is Dictionary):

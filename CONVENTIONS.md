@@ -135,7 +135,7 @@ AppRoot routes `snapshot.type` → shell → bespoke screen.
 | Shell | File | Snapshot types |
 |-------|------|---------------|
 | `SanctumShell` | `ui/shells/SanctumShell.gd` | flow.sanctum, flow.summon, flow.echo_party, flow.realm_select, flow.vow_manage, flow.weaving_rite |
-| `RealmShell` | `ui/shells/RealmShell.gd` | flow.stage_map, flow.stage, flow.stage_explore, flow.encounter, flow.keeper_trial, flow.resolve |
+| `RealmShell` | `ui/shells/RealmShell.gd` | flow.stage_map, flow.stage, flow.stage_explore, flow.encounter, flow.keeper_trial, flow.pickup, flow.resolve |
 
 `AppRoot` remains the application composition root. It owns runtime boot/dispatch,
 shell and onboarding routing, save recovery, economy timing, debug/test entry points,
