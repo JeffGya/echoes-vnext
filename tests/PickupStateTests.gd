@@ -31,6 +31,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_state/seam_cap_counts_rows_first_so_a_repeat_writes_nothing", Callable(PickupStateTests, "_t_cap_repeat_any_order"))
 	runner.register_test("pickup_state/chooser_view_judgment_and_composure_by_hand", Callable(PickupStateTests, "_t_chooser_view_numbers"))
 	runner.register_test("pickup_state/nobody_standing_opens_nothing", Callable(PickupStateTests, "_t_nobody_standing"))
+	runner.register_test("pickup_state/fallen_party_ids_use_ids_not_names", Callable(PickupStateTests, "_t_fallen_ids"))
 	runner.register_test("pickup_state/every_find_refused_opens_nothing", Callable(PickupStateTests, "_t_all_refused"))
 
 
@@ -560,6 +561,39 @@ static func _t_nobody_standing() -> Dictionary:
 
 
 ## L3: the seam refuses every find: no event, no stamp, no row.
+## Codex review on PR 132: two Echoes can share a name, so the fallen set must follow ids.
+static func _t_fallen_ids() -> Dictionary:
+	var m: Array = []
+	var ctx := _ctx(3, 4)
+	var roster: Array = ctx.save_data["sanctum"]["roster"]
+	(roster[1] as Dictionary)["name"] = str((roster[0] as Dictionary)["name"])
+	var shared := str((roster[0] as Dictionary)["name"])
+	var stage := ItemPacksTests._stage(ctx)
+	stage["lost_echo_names"] = [shared]
+	stage["lost_echo_ids"] = ["e0"]
+	var got := PickupEventService.fallen_party_ids(ctx, [])
+	if str(got) != str(["e0"]):
+		m.append("two Echoes share the name %s, only e0 fell: got %s" % [shared, str(got)])
+	# A stage saved before the id field: an ambiguous name is not guessed, a unique one still counts.
+	stage.erase("lost_echo_ids")
+	if not PickupEventService.fallen_party_ids(ctx, []).is_empty():
+		m.append("a legacy stage with an ambiguous name must guess nobody: %s" % str(PickupEventService.fallen_party_ids(ctx, [])))
+	stage["lost_echo_names"] = [str((roster[3] as Dictionary)["name"])]
+	if str(PickupEventService.fallen_party_ids(ctx, [])) != str(["e3"]):
+		m.append("a legacy stage with a unique name: got %s" % str(PickupEventService.fallen_party_ids(ctx, [])))
+	# The fight just played: two dead Echoes with the same name are both recorded by id.
+	stage.erase("lost_echo_names")
+	var actors: Array = [
+		{ "faction": "echo", "id": "e0", "name": shared, "is_dead": true },
+		{ "faction": "echo", "id": "e1", "name": shared, "is_dead": true },
+		{ "faction": "echo", "id": "e2", "name": "Echo 2", "is_dead": false },
+		{ "faction": "echo", "id": "ally", "name": "Ally", "is_dead": true, "is_ally": true },
+	]
+	if str(ActiveStageService.lost_echo_ids_with(ctx, actors)) != str(["e0", "e1"]):
+		m.append("dead ids %s" % str(ActiveStageService.lost_echo_ids_with(ctx, actors)))
+	return _result(m)
+
+
 static func _t_all_refused() -> Dictionary:
 	var ctx := _ctx(2, 4)
 	var before := _norm(ctx.save_data)

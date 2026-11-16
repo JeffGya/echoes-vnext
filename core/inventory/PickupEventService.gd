@@ -40,14 +40,23 @@ static func is_open_for(stage: Dictionary, pending: Dictionary) -> bool:
 		and int(record.get("win_t", -1)) == int(pending.get("created_t", -2))
 
 
-## Party Echo ids that fell in this stage: the stage's one answer (`lost_echo_names_with`, names) over the active
-## party, so an Echo that fell in an earlier fight and is still in the party counts as fallen.
+## Party Echo ids that fell in this stage: the stage's stored ids (`lost_echo_ids_with`) over the active party, so an
+## Echo that fell in an earlier fight and is still in the party counts as fallen. Names can repeat, so ids decide.
+## A stage saved before the id field has names only: then a party Echo counts as fallen only when its name is
+## unique in the party (no save repair; an ambiguous name is not guessed).
 static func fallen_party_ids(flow_ctx: FlowContext, actors: Array) -> Array:
-	var lost := ActiveStageService.lost_echo_names_with(flow_ctx, actors)
+	var ids := ActiveStageService.lost_echo_ids_with(flow_ctx, actors)
+	var names := ActiveStageService.lost_echo_names_with(flow_ctx, actors)
+	var legacy := ActiveStageService.stage_lost_echo_ids(flow_ctx).is_empty() and not names.is_empty()
+	var party: Array = SanctumService.get_party_actors_static(flow_ctx.save_data)
 	var out: Array = []
-	for a: Dictionary in SanctumService.get_party_actors_static(flow_ctx.save_data):
-		if lost.has(str(a.get("name", ""))):
-			out.append(str(a.get("id", "")))
+	for a: Dictionary in party:
+		var id := str(a.get("id", ""))
+		var name := str(a.get("name", ""))
+		if ids.has(id):
+			out.append(id)
+		elif legacy and names.has(name) and party.filter(func(b: Dictionary) -> bool: return str(b.get("name", "")) == name).size() == 1:
+			out.append(id)
 	return out
 
 
