@@ -77,7 +77,10 @@ Written in STE. Project-wide rule: `ANSWERS.md` #91 (Echo decisions follow one r
 
 - **D-68 U2 text decisions (2026-11-16, from the U2 QA).** (a) The Standing bands that pick a bark (low at Standing 2 or less, high at 9 or more) stay constants in `ui/components/PickupUiText.gd`: ANSWERS #83 allows a documented reason: presentation only, the pick rule never reads them, values come from the approved mockup, Jeff reviews them with the copy (D-56). (b) The six chooser replies after a swap in the mockup are out of 001b: the core has no temper key (follow-ups row 19). (c) A colour counts as reused when its RGB exists in the theme; alpha-only variants count as reuse. (d) The spent swap/destroy allowance edge uses alpha 0.7 (contrast 3.38:1 on the plain pack tone). (Jeff: "We will fix copy during my playtest.")
 
-- **D-69 Pack strip gap (2026-11-16, U4 review).** The pack strip bottom edge sits 24 px above the EchoBar top, at every screen size. The gap is a fixed pixel value, not scaled. It replaces the 104 units of D-59. (Jeff: "A space of around 24px should be fine. That should be maintained throughout all screensizes")
+- **D-69 Pack strip gap (2026-11-16, U4 review).** The pack strip bottom edge sits 24 px above the EchoBar top, at every screen size. The gap is 24 logical (canvas) units: it scales with the UI scale like the EchoBar, so it looks the same at every size (about 30 physical px at 1600x900). Jeff chose this on 2026-11-16 after QA. It replaces the 104 units of D-59. (Jeff: "A space of around 24px should be fine. That should be maintained throughout all screensizes")
+- **D-70 Pack tone before the event (2026-11-16).** Core publishes `data.pack.tone_before` (the tone without the finds of this event). The strip uses it in the intro phase and keeps no tone rule. (Jeff, 2026-11-16)
+
+- **D-71 Stack leaf (2026-11-16).** A held stack shows the "held" leaf in the pickup strip, as in the 001a pack panel. Only finds gathered at this event show "gathered". (Jeff, 2026-11-16)
 
 ## Open
 - Who calls `record_found_items` for real drops (ITEM-002).

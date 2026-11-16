@@ -247,10 +247,18 @@ static func _pack(save: Dictionary, inv_cfg: Dictionary, entries: Array, record:
 				"quantity": int(item.get("quantity", 1)), "source": "gathered", "mark_index": -1 })
 		slots.append(slot)
 	var load_info := PickupCase.pack_room(save, inv_cfg)
-	var level := int(load_info["level"])
-	return { "slots": slots, "free": int(load_info["free"]), "capacity": int(load_info["capacity"]),
-		"carried": int(load_info["carried"]),
-		"tone": TONE_FULL if level >= 3 else (TONE_NEAR if level == 2 else TONE_PLAIN) }
+	var carried := int(load_info["carried"])
+	var capacity := int(load_info["capacity"])
+	var gathered := slots.filter(func(s: Dictionary) -> bool: return str(s["find_id"]) != "").size()
+	var before := InventoryService.level_of(maxi(0, carried - gathered), capacity,
+		int(inv_cfg.get("warn_pack_free_at", 0)))
+	return { "slots": slots, "free": int(load_info["free"]), "capacity": capacity, "carried": carried,
+		"tone": _tone_of(int(load_info["level"])), "tone_before": _tone_of(before) }
+
+
+## `tone_before` is the tone without the finds of this event, for the intro phase.
+static func _tone_of(level: int) -> String:
+	return TONE_FULL if level >= 3 else (TONE_NEAR if level == 2 else TONE_PLAIN)
 
 
 static func _row_entry(actor: Dictionary, is_chooser: bool) -> Dictionary:

@@ -19,6 +19,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/actions_per_phase_and_no_nav_back", Callable(PickupSnapshotTests, "_t_actions"))
 	runner.register_test("pickup_snapshot/hidden_in_intro_revealed_after", Callable(PickupSnapshotTests, "_t_revealed"))
 	runner.register_test("pickup_snapshot/pack_tone_follows_the_load_level", Callable(PickupSnapshotTests, "_t_tone"))
+	runner.register_test("pickup_snapshot/pack_tone_before_leaves_out_the_finds_of_this_event", Callable(PickupSnapshotTests, "_t_tone_before"))
 	runner.register_test("pickup_snapshot/swap_offered_and_refused_keys", Callable(PickupSnapshotTests, "_t_swap_keys"))
 	runner.register_test("pickup_snapshot/swap_phase_falls_back_when_unsupported", Callable(PickupSnapshotTests, "_t_phase_fallback"))
 	runner.register_test("pickup_snapshot/swap_and_destroy_left_and_leave_flag", Callable(PickupSnapshotTests, "_t_tokens_and_directive"))
@@ -156,7 +157,7 @@ static func _t_shape() -> Dictionary:
 				if not f.has(k):
 					m.append("%s: find row misses %s" % [kind, k])
 		var pk: Dictionary = d["pack"]
-		if str(_keys(pk)) != str(["capacity", "carried", "free", "slots", "tone"]):
+		if str(_keys(pk)) != str(["capacity", "carried", "free", "slots", "tone", "tone_before"]):
 			m.append("%s: pack keys %s" % [kind, str(_keys(pk))])
 		var gathered := (pk["slots"] as Array).filter(func(s): return str(s["source"]) == "gathered").size()
 		if gathered != counts["taken"]:
@@ -223,6 +224,34 @@ static func _t_tone() -> Dictionary:
 		if str(pk["tone"]) != c[1] or int(pk["carried"]) != c[2] or int(pk["free"]) != c[3] or int(pk["capacity"]) != c[2] + c[3]:
 			m.append("%s: tone %s carried %s free %s capacity %s, expected %s" % [c[0], pk["tone"], pk["carried"],
 				pk["free"], pk["capacity"], str(c)])
+	return _result(m)
+
+
+## `tone_before` counts only what was carried before the event, with the same `warn_pack_free_at` rule.
+static func _t_tone_before() -> Dictionary:
+	var m: Array = []
+	# Nothing held, two finds fill a pack of two: tone full, tone_before plain.
+	var a: Dictionary = _build(_event("C2")["ctx"])["data"]["pack"]
+	if str(a["tone"]) != "full" or str(a["tone_before"]) != "plain":
+		m.append("empty before, full after: tone %s tone_before %s" % [a["tone"], a["tone_before"]])
+	# Three held in a pack of four, one find: one free slot before (near), full after.
+	var ctx: FlowContext = PickupStateTests._ctx(1, 4)
+	ItemPacksTests._hold(ctx, 3)
+	PickupStateTests._open(ctx, PickupStateTests._finds(["ph_weapon_a"]), "S", [])
+	var b: Dictionary = _build(ctx)["data"]["pack"]
+	if str(b["tone"]) != "full" or str(b["tone_before"]) != "near":
+		m.append("one free before: tone %s tone_before %s" % [b["tone"], b["tone_before"]])
+	# Two held in a pack of four, two finds: two free before. Plain at warn 1, near at warn 2.
+	for c in [[1, "plain"], [2, "near"]]:
+		var ctx2: FlowContext = PickupStateTests._ctx(2, 4)
+		ItemPacksTests._hold(ctx2, 2)
+		var inv: Dictionary = ConfigService.get_inventory_cfg(ctx2.config_service).duplicate(true)
+		inv["warn_pack_free_at"] = c[0]
+		ctx2.config_service.set("inv", inv)
+		PickupStateTests._open(ctx2, PickupStateTests._finds(["ph_weapon_a", "ph_relic_a"]), "S", [])
+		var pk: Dictionary = _build(ctx2)["data"]["pack"]
+		if str(pk["tone_before"]) != c[1]:
+			m.append("warn_pack_free_at %d: tone_before %s, expected %s" % [c[0], pk["tone_before"], c[1]])
 	return _result(m)
 
 

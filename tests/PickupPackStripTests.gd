@@ -13,6 +13,7 @@ const _GAP := 24.0
 
 
 static func register(runner: CoreTestRunner) -> void:
+	runner.register_test("pickup_ui/pack_strip_stack_shows_the_held_leaf", Callable(PickupPackStripTests, "_t_stack_leaf"))
 	runner.register_test("pickup_ui/pack_strip_slot_count_equals_capacity", Callable(PickupPackStripTests, "_t_capacity"))
 	runner.register_test("pickup_ui/pack_strip_tone_follows_the_snapshot", Callable(PickupPackStripTests, "_t_tone"))
 	runner.register_test("pickup_ui/pack_strip_intro_shows_only_the_pre_event_pack", Callable(PickupPackStripTests, "_t_intro"))
@@ -32,14 +33,14 @@ static func _slot(id: String, find_id: String = "", kind: String = "gear", sourc
 
 
 static func _snap(phase: String, slots: Array, capacity: int = 4, tone: String = "plain", swap_left: int = 1,
-		destroy_left: int = 1, carried: int = -1, run_count: int = 1) -> Dictionary:
+		destroy_left: int = 1, carried: int = -1, run_count: int = 1, tone_before: String = "plain") -> Dictionary:
 	return {
 		"type": "flow.pickup", "meta": { "t": 1 },
 		"data": { "phase": phase, "situation_id": "strip_test", "run_count": run_count, "encounter_id": "strip_test",
 			"board_cols": 6, "board_rows": 5, "terrain": {}, "placement_seed": 0, "actors": [],
 			"swap_left": swap_left, "destroy_left": destroy_left,
 			"pack": { "slots": slots, "free": maxi(0, capacity - slots.size()), "capacity": capacity,
-				"carried": slots.size() if carried < 0 else carried, "tone": tone } },
+				"carried": slots.size() if carried < 0 else carried, "tone": tone, "tone_before": tone_before } },
 		"actions": { "cta.continue": { "type": "pickup.continue", "slot": "cta.continue" } },
 	}
 
@@ -102,6 +103,16 @@ static func _back_of(slot: Node) -> StringName:
 	return (slot.get_node("Back") as Panel).theme_type_variation
 
 
+static func _t_stack_leaf() -> Dictionary:
+	var errors: Array = []
+	var map: Dictionary = PickupPackStrip.SOURCE_TILE
+	if str(map.get("stack", "")) != "held":
+		errors.append("a held stack maps to leaf %s, want held (D-71)" % str(map.get("stack", "")))
+	if str(map.get("gathered", "")) != "gathered" or str(map.get("held", "")) != "held":
+		errors.append("held or gathered leaf map changed: %s" % str(map))
+	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
+
+
 static func _t_capacity() -> Dictionary:
 	var errors: Array = []
 	var fx := _mount(_snap("idle", [], 4))
@@ -132,7 +143,7 @@ static func _t_tone() -> Dictionary:
 static func _t_intro() -> Dictionary:
 	var errors: Array = []
 	var slots: Array = [_slot("held1"), _slot("item:s:f0", "f0", "relic", "gathered"), _slot("held2", "", "consumable", "stack")]
-	var fx := _mount(_snap("intro", slots, 4, "full"))
+	var fx := _mount(_snap("intro", slots, 4, "full", 1, 1, -1, 1, "near"))
 	if fx.is_empty():
 		return _fail(fx, "mount failed")
 	var view: Dictionary = _strip(fx).view()
@@ -143,8 +154,8 @@ static func _t_intro() -> Dictionary:
 	for c: Dictionary in cells:
 		if str((c["row"] as Dictionary).get("find_id", "")) != "":
 			errors.append("intro shows a taken find")
-	if str(view["tone"]) != "plain":
-		errors.append("intro tone %s: two of four slots used should be plain" % str(view["tone"]))
+	if str(view["tone"]) != "near":
+		errors.append("intro tone %s: the strip must show pack.tone_before (near), not pack.tone (full) and not its own rule" % str(view["tone"]))
 	return _done(fx, errors)
 
 

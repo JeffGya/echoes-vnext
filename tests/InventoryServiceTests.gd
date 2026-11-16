@@ -19,6 +19,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("inventory_service/rejections", Callable(InventoryServiceTests, "_t_rejections"))
 	runner.register_test("inventory_service/discard_outcomes", Callable(InventoryServiceTests, "_t_discard"))
 	runner.register_test("inventory_service/pack_load_levels", Callable(InventoryServiceTests, "_t_pack_load"))
+	runner.register_test("inventory_service/level_of_is_the_pack_load_rule", Callable(InventoryServiceTests, "_t_level_of"))
 	runner.register_test("inventory_service/snapshot_is_deep_copy_without_banned_keys", Callable(InventoryServiceTests, "_t_snapshot"))
 	runner.register_test("inventory_service/fixed_calls_give_the_pinned_save", Callable(InventoryServiceTests, "_t_pinned"))
 	runner.register_test("inventory_service/cfg_of_the_wrong_type_does_not_crash", Callable(InventoryServiceTests, "_t_cfg_types"))
@@ -398,6 +399,17 @@ static func _t_discard() -> Dictionary:
 		m.append("the kept piece changed its slot: %s" % _json(rows))
 	_check_invariants(save, cfg, "discard", m)
 	return _result(m)
+
+
+static func _t_level_of() -> Dictionary:
+	var m: Array = []
+	# [carried, capacity, warn_free_at, level]
+	for c in [[0, 4, 1, 0], [1, 4, 1, 1], [3, 4, 1, 2], [3, 4, 2, 2], [2, 4, 2, 2], [2, 4, 1, 1], [4, 4, 1, 3], [5, 4, 1, 3],
+			[0, 0, 1, 0], [1, 0, 1, 3], [1, 2, 9, 2]]:
+		var got := InventoryService.level_of(c[0], c[1], c[2])
+		if got != c[3]:
+			m.append("level_of(%d, %d, %d) = %d, expected %d" % [c[0], c[1], c[2], got, c[3]])
+	return { "ok": m.is_empty(), "error": "; ".join(m) }
 
 
 static func _t_pack_load() -> Dictionary:

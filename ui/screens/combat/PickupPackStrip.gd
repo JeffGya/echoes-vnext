@@ -20,7 +20,7 @@ const TONE_VARIATION := {
 	"near": &"ItemPanelPackNear",
 	"full": &"ItemPanelPackHeavy",
 }
-const SOURCE_TILE := { "held": "held", "gathered": "gathered", "stack": "gathered" }
+const SOURCE_TILE := { "held": "held", "gathered": "gathered", "stack": "held" }
 
 @onready var _panel: PanelContainer = %Panel
 @onready var _title: Label = %TitleLabel
@@ -112,22 +112,15 @@ static func view_of(snapshot: Dictionary) -> Dictionary:
 		cells.append({ "kind": "unlisted", "row": {} })
 	var capacity: int = int(pack.get("capacity", 0))
 	var count: int = clampi(maxi(capacity if capacity > 0 else PickupEventPlan.PACK_SLOTS_DEFAULT, cells.size()), 1, MAX_SLOTS)
-	var used: int = mini(cells.size(), count)
 	while cells.size() < count:
 		cells.append({ "kind": "empty", "row": {} })
 	cells.resize(count)
 	var tone: String = str(pack.get("tone", "plain"))
 	if intro:
-		tone = tone_for(used, count)
+		tone = str(pack.get("tone_before", "plain"))
 	return { "count": count, "tone": tone, "cells": cells,
 		"swap_left": int(data.get("swap_left", 0)), "destroy_left": int(data.get("destroy_left", 0)) }
 
-
-## Same rule as the mockup `packTone` and `PickupEventPlan._tone_for`: full at no free slot, near at one free slot.
-static func tone_for(used: int, count: int) -> String:
-	if used >= count:
-		return "full"
-	return "near" if used == count - 1 else "plain"
 
 
 static func bottom_edge(bar_top_global: float) -> float:
