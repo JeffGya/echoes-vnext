@@ -296,8 +296,28 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_speed_bar.visible = false
 	_pickup_stage.visible = true
 	_pickup_stage.apply_snapshot(snap)
+	_place_pickup_strip()
+	call_deferred("_place_pickup_strip")
 	if is_instance_valid(_pickup_debug):
 		_pickup_debug.apply_actions(snap.get("actions", {}))
+
+
+## The pack strip sits above the EchoBar of the shell; NAN (no shell above this board) lets the strip use its fallback.
+func _place_pickup_strip() -> void:
+	if not is_instance_valid(_pickup_stage):
+		return
+	_pickup_stage.set_layout(_layout)
+	_pickup_stage.place_pack_strip(_echo_bar_top())
+
+
+func _echo_bar_top() -> float:
+	var node: Node = get_parent()
+	while node != null:
+		var frame := node.get_node_or_null("%EchoBarFrame") as Control
+		if frame != null:
+			return frame.get_global_rect().position.y
+		node = node.get_parent()
+	return NAN
 
 
 func _leave_pickup() -> void:
@@ -1562,3 +1582,5 @@ func _apply_responsive_layout() -> void:
 		_pickup_debug.offset_bottom = -bottom - 8.0
 	_initiative_panel.offset_top = 150.0 + top
 	_initiative_panel.offset_bottom = -bottom - 62.0
+	if is_instance_valid(_pickup_stage) and _pickup_stage.visible:
+		_place_pickup_strip()

@@ -6,6 +6,8 @@ extends Control
 ## An event is named by situation_id + run_count. A repeat snapshot of the same event must not
 ## restart anything, so state is rebuilt only when the identity changes.
 
+@onready var _pack_strip: PickupPackStrip = %PickupPackStrip
+
 var _identity: String = ""
 var _starts: int = 0
 
@@ -14,7 +16,9 @@ static func identity_of(data: Dictionary) -> String:
 	return "%s#%d" % [str(data.get("situation_id", "")), int(data.get("run_count", 0))]
 
 
+## The strip gets every snapshot: it is idempotent and must follow a swap inside the same event.
 func apply_snapshot(snapshot: Dictionary) -> void:
+	_pack_strip.apply_snapshot(snapshot)
 	var data_v: Variant = snapshot.get("data", {})
 	var data: Dictionary = data_v if data_v is Dictionary else {}
 	var next := identity_of(data)
@@ -35,3 +39,17 @@ func identity() -> String:
 
 func start_count() -> int:
 	return _starts
+
+
+func set_layout(layout: Dictionary) -> void:
+	var profile: StringName = layout.get("profile", &"standard")
+	_pack_strip.set_profile(profile)
+
+
+## `bar_top_global`: the top edge of the EchoBar, read by the board from the shell.
+func place_pack_strip(bar_top_global: float) -> void:
+	_pack_strip.place(bar_top_global)
+
+
+func pack_strip() -> PickupPackStrip:
+	return _pack_strip

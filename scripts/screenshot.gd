@@ -15,12 +15,16 @@
 # The layer hierarchy (RealmShell on layer 10, ModalHost on layer 40, as in Approot.tscn) lives
 # in screenshot_harness.tscn (AGENTS.md "Build structure in .tscn"). This script only instances it,
 # feeds it a hand-built snapshot and saves the frame. It never boots FlowRuntime, so it writes no save and does not touch the test save
-# directory. A fixture's snapshots are applied in order; a flow.resolve snapshot opens as the
+# directory. EXCEPTION: the fixtures pickup_pack_empty, pickup_pack_near and pickup_pack_full play a real won fight through
+# FlowRuntime (tests/fixtures/PickupRealBoard.gd) and publish its real flow.pickup snapshot. Run them with
+# ECHOES_TEST_SAVE_DIR=<fresh dir>; they write and delete save files there. Fixture pickup_host stays the hand-built U1 frame.
+# A fixture's snapshots are applied in order; a flow.resolve snapshot opens as the
 # resolve modal over the board before it. To add a screen state, add a FIXTURES entry.
 # A fixture copies the snapshot contract; update it when that contract changes.
 extends SceneTree
 
 const InventoryUIFixtures := preload("res://tests/fixtures/InventoryUIFixtures.gd")
+const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 const HarnessScene := preload("res://scripts/screenshot_harness.tscn")
 const SanctumHarnessScene := preload("res://scripts/screenshot_harness_sanctum.tscn")
 const SETTLE_FRAMES := 45
@@ -69,6 +73,13 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 		if snap is Dictionary and snap.has("_modal"):
 			var req: Dictionary = snap["_modal"]
 			modal_host.call("present_modal_for_id", req["id"], shell.call("modal_scene_for", req["id"]), req["payload"])
+		elif snap is String and (snap as String).begins_with("real_pickup:"):
+			var real_parts: PackedStringArray = (snap as String).split(":")
+			var real_snap: Dictionary = PickupRealBoard.snapshot(real_parts[1], real_parts[2] if real_parts.size() > 2 else "idle")
+			if real_snap.is_empty():
+				push_error("real_pickup fixture %s did not reach the pickup event" % real_parts[1])
+			else:
+				shell.call("set_snapshot", real_snap)
 		elif snap is String:
 			_run_step(harness, snap)
 		else:
@@ -176,6 +187,9 @@ func _fixtures() -> Dictionary:
 		"standoff_calm": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"])],
 		"standoff_fight_gone": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"], false)],
 		"pickup_host": [_pickup_host()],
+		"pickup_pack_empty": ["real_pickup:empty"],
+		"pickup_pack_near": ["real_pickup:near"],
+		"pickup_pack_full": ["real_pickup:full"],
 		"warning_level_1": [_combat_stall(1, "")],
 		"warning_level_2": [_combat_stall(2, "Ama")],
 		"prebattle_stalled": [_prebattle({ "stalled_before": true })],

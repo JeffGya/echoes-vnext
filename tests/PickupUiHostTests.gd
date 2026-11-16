@@ -1,7 +1,7 @@
 # res://tests/PickupUiHostTests.gd
 # V2-ITEM-001b step U1: the combat board hosts the pickup event.
 # flow.pickup routes to the combat board scene through the real RealmShell. The board stays drawn
-# from the snapshot, the encounter HUD is hidden, one empty PickupEventStage sits on top, and the
+# from the snapshot, the encounter HUD is hidden, one PickupEventStage sits on top, and the
 # debug placeholder sends the slot actions of the snapshot.
 # The fixture is a hand-built dictionary in the shape of PickupSnapshotBuilder: board keys, actors,
 # situation_id, run_count and the slot-keyed actions.
@@ -23,7 +23,7 @@ const _HUD_NODES: Array = ["RoundLabel", "ObjectiveLabel", "ObjectiveBanner", "S
 
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/pickup_routes_to_the_combat_board", Callable(PickupUiHostTests, "_t_routing"))
-	runner.register_test("pickup_ui/stage_is_one_empty_non_blocking_control", Callable(PickupUiHostTests, "_t_stage_mounts_once"))
+	runner.register_test("pickup_ui/stage_is_one_non_blocking_control", Callable(PickupUiHostTests, "_t_stage_mounts_once"))
 	runner.register_test("pickup_ui/same_event_does_not_restart_new_event_does", Callable(PickupUiHostTests, "_t_identity"))
 	runner.register_test("pickup_ui/encounter_hud_is_hidden_and_comes_back", Callable(PickupUiHostTests, "_t_hud"))
 	runner.register_test("pickup_ui/board_draws_the_snapshot_actors_and_size", Callable(PickupUiHostTests, "_t_board"))
@@ -152,8 +152,8 @@ static func _t_stage_mounts_once() -> Dictionary:
 		errors.append("stage blocks the mouse")
 	if stage.anchor_right != 1.0 or stage.anchor_bottom != 1.0:
 		errors.append("stage is not full rect")
-	if stage.get_child_count() != 0:
-		errors.append("stage is not empty in U1")
+	if stage.get_child_count() != 1 or not (stage.get_child(0) is PickupPackStrip):
+		errors.append("the stage holds anything but the pack strip (U4)")
 	if stage.name != &"PickupEventStage":
 		errors.append("stage name changed")
 	_free(fx)

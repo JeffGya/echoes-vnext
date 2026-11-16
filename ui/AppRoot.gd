@@ -672,6 +672,7 @@ func _run_tests(parts: Array) -> void:
 	PickupUiHostTests.register(runner)  # V2-ITEM-001b step U1: flow.pickup routes to the combat board, the empty stage, the debug placeholder
 	PickupUiTextTests.register(runner)  # V2-ITEM-001b step U2: pickup text module, proposed-copy fixture, theme variations, contrast
 	PickupPlannerTests.register(runner)  # V2-ITEM-001b step U3: pure intro timeline and swap planners
+	PickupPackStripTests.register(runner)  # V2-ITEM-001b step U4: the Travel pack strip, tone, tokens, 24 px above the EchoBar
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)
