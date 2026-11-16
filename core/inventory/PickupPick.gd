@@ -48,6 +48,7 @@ static func state_ends(chooser: Dictionary, ctx: Dictionary) -> Array:
 
 ## True when the chooser takes nothing (D-39): afraid is at or above `freeze_at`.
 static func frozen(chooser: Dictionary, ctx: Dictionary) -> bool:
+	# UNWIRED (target: NEW "Pickup tuning from real play"): freeze_at is untuned for real play; probe P3 shows only the status at the event
 	return float(state_ends(chooser, ctx)[0]) >= float(_d(ctx.get("pick")).get("freeze_at", INF))
 
 

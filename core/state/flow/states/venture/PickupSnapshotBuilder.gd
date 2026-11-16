@@ -22,6 +22,7 @@ extends RefCounted
 ## Per-row actions are NOT in `snapshot.actions`; the UI dispatches them itself:
 ##   `pickup.select` { find_id | pack_id } (details), `pickup.swap.pick` { id } (the other item of the swap).
 
+# UNWIRED (target: NEW "Pickup intro short forms"): the intro has Skip only; short and brief forms need a feel pass
 const PHASE_INTRO := "intro"
 const PHASE_IDLE := "idle"
 const PHASE_SWAP_PICK := "swap_pick"
@@ -231,6 +232,7 @@ static func _pack(save: Dictionary, inv_cfg: Dictionary, entries: Array, record:
 	for e: Dictionary in entries:
 		var id := str(e["id"])
 		var type_id := str(e["type_id"])
+		# UNWIRED (target: V2-ITEM-002): real item names, grades, images and descriptions come with the catalogue; placeholder names show until then
 		var slot := { "id": id, "type_id": type_id, "name": InventoryService.name_of(inv_cfg, type_id),
 			"find_id": id.trim_prefix(prefix) if id.begins_with(prefix) else "" }
 		if held.has(id):

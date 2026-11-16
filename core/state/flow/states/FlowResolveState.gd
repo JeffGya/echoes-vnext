@@ -36,6 +36,7 @@ func enter(ctx: RefCounted, t: int) -> void:
 	# lands here. It resumes at idle; the card waits in the pending result until the event's Continue.
 	if PickupEventService.is_open_for(FlowStageExploreState._get_current_stage(flow_ctx),
 			PendingResultService.read(flow_ctx.save_data)):
+		# UNWIRED (target: NEW "Win steps after a reload"): a reload during the pickup event skips the win steps (emotion drift, vow discovery, ally fields); see follow-ups row 13
 		flow_ctx.pickup_session = {}
 		flow_ctx.last_snapshot = PickupSnapshotBuilder.build(flow_ctx, t, flow_ctx.pickup_session)
 		return

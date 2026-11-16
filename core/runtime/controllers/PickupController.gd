@@ -6,7 +6,7 @@
 #
 # The session { phase, swap_origin, swap_target, selected } lives in `FlowContext.pickup_session` and is never
 # saved. Every action is refused (nothing changes, one log line `inventory.pickup.denied`, error_code = the
-# reason key) when no event is open ("no_event") or the live snapshot is not `flow.pickup` ("not_pickup").
+# reason key) when no event is open ("no_event"), the live snapshot is not `flow.pickup` ("not_pickup") or the event has ended ("ended").
 # `commit_swap` trusts its caller, so the phase checks here are the only guard against a swap outside the event.
 # The phase is read from the built snapshot, not the raw session: the builder already falls back to idle for a
 # swap phase the record cannot support.

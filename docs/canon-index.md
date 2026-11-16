@@ -55,21 +55,28 @@ exhaust an agent's budget before it does any work. `~tok` below is the cost of o
 | `780-845` | 4803 | &nbsp;&nbsp;&nbsp;&nbsp;Shared Movement Contract, Pressure + Route-Arbitration Foundation (V2-COMBAT-002 Slices 1–5) |
 | `846-890` | 813 | &nbsp;&nbsp;&nbsp;&nbsp;Save Schema (`core/save/SaveSchema.gd` + `SaveService.gd`) |
 | `891-917` | 595 | &nbsp;&nbsp;&nbsp;&nbsp;ContinuityService (`core/sanctum/ContinuityService.gd`) — V2-CONTINUITY-001 |
-| `918-927` | 270 | &nbsp;&nbsp;&nbsp;&nbsp;Economy Settlement (`core/economy/EconomyService.gd` + `EconomyAccrualService.gd`) |
-| `928-957` | 720 | &nbsp;&nbsp;&nbsp;&nbsp;DirectiveService (`core/directives/DirectiveService.gd`) — V2 (V2-DIRECTIVE-001) |
-| `958-997` | 5179 | &nbsp;&nbsp;&nbsp;&nbsp;Stage Exploration — Terrain, Traversal & Fog-of-War (V2-STAGE-004 Phase 2 + 2.5 + 5) |
-| `998-1021` | 1988 | &nbsp;&nbsp;Per-Screen Snapshot Summaries |
-| `1022-1023` | 5 | &nbsp;&nbsp;Flow Architecture |
-| `1024-1030` | 42 | &nbsp;&nbsp;&nbsp;&nbsp;Macro Loop |
-| `1031-1033` | 44 | &nbsp;&nbsp;&nbsp;&nbsp;Save Triggers (no manual save in MVP) |
-| `1034-1042` | 75 | &nbsp;&nbsp;&nbsp;&nbsp;Encounter Resolution |
-| `1043-1116` | 2182 | &nbsp;&nbsp;Action Type Registry |
-| `1117-1138` | 342 | &nbsp;&nbsp;Log Event Type Registry |
-| `1139-1155` | 236 | &nbsp;&nbsp;Summoning Contract |
-| `1156-1157` | 7 | &nbsp;&nbsp;Decisions Made vs Deferred |
-| `1158-1214` | 5054 | &nbsp;&nbsp;&nbsp;&nbsp;Made (locked) |
-| `1215-1306` | 3395 | &nbsp;&nbsp;&nbsp;&nbsp;V2-STAGE-001 + V2-STAGE-002 — Stage Exploration + Objective Taxonomy |
-| `1307-1313` | 183 | &nbsp;&nbsp;&nbsp;&nbsp;Deferred |
+| `918-928` | 270 | &nbsp;&nbsp;&nbsp;&nbsp;Economy Settlement (`core/economy/EconomyService.gd` + `EconomyAccrualService.gd`) |
+| `929-958` | 720 | &nbsp;&nbsp;&nbsp;&nbsp;DirectiveService (`core/directives/DirectiveService.gd`) — V2 (V2-DIRECTIVE-001) |
+| `959-998` | 5179 | &nbsp;&nbsp;&nbsp;&nbsp;Stage Exploration — Terrain, Traversal & Fog-of-War (V2-STAGE-004 Phase 2 + 2.5 + 5) |
+| `999-1022` | 1988 | &nbsp;&nbsp;Per-Screen Snapshot Summaries |
+| `1023-1024` | 5 | &nbsp;&nbsp;Flow Architecture |
+| `1025-1031` | 42 | &nbsp;&nbsp;&nbsp;&nbsp;Macro Loop |
+| `1032-1034` | 44 | &nbsp;&nbsp;&nbsp;&nbsp;Save Triggers (no manual save in MVP) |
+| `1035-1043` | 75 | &nbsp;&nbsp;&nbsp;&nbsp;Encounter Resolution |
+| `1044-1124` | 2182 | &nbsp;&nbsp;Action Type Registry |
+| `1125-1146` | 342 | &nbsp;&nbsp;Log Event Type Registry |
+| `1147-1163` | 236 | &nbsp;&nbsp;Summoning Contract |
+| `1164-1165` | 7 | &nbsp;&nbsp;Decisions Made vs Deferred |
+| `1166-1222` | 5054 | &nbsp;&nbsp;&nbsp;&nbsp;Made (locked) |
+| `1223-1318` | 3395 | &nbsp;&nbsp;&nbsp;&nbsp;V2-STAGE-001 + V2-STAGE-002 — Stage Exploration + Objective Taxonomy |
+| `1319-1327` | 183 | &nbsp;&nbsp;&nbsp;&nbsp;Deferred |
+| `1328-1331` | 45 | &nbsp;&nbsp;Item Containers, Item Text and One-Shot Snapshot Fields (V2-ITEM-001a) |
+| `1332-1339` | 270 | &nbsp;&nbsp;&nbsp;&nbsp;Player-facing item text (ANSWERS #89, decisions D-49, D-51) |
+| `1340-1350` | 322 | &nbsp;&nbsp;&nbsp;&nbsp;Slot model of the item containers |
+| `1351-1359` | 269 | &nbsp;&nbsp;&nbsp;&nbsp;One-shot snapshot field pattern |
+| `1360-1366` | 211 | &nbsp;&nbsp;&nbsp;&nbsp;Panels are UI-local state, not flow states |
+| `1367-1378` | 910 | &nbsp;&nbsp;&nbsp;&nbsp;Recipe price records (`core/economy/RecipeCostService.gd`) |
+| `1379-1390` | 818 | &nbsp;&nbsp;&nbsp;&nbsp;Pickup event (V2-ITEM-001b) |
 
 ## docs/Echoes vNext Working GDD.md  (41,923 tokens total)
 

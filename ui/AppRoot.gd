@@ -680,6 +680,7 @@ func _run_tests(parts: Array) -> void:
 	PickupFlowTests.register(runner)  # V2-ITEM-001b step C9: the event in a real won fight, hold rule, end mark, Resolve, reload
 	PickupDebugTests.register(runner)  # V2-ITEM-001b step C10: debug producer modes event and arm, scene check and apply
 	PickupProbeTests.register(runner)  # V2-ITEM-001b step C11: probes P1 finds chance, P2 pick rule Standing 1 vs 9, P3 real freeze rate (env-gated)
+	PickupUnwiredTests.register(runner)  # V2-ITEM-001b step C12: code markers of the unwired register match follow-ups.md
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)

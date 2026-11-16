@@ -1854,6 +1854,7 @@ func _end_round(t: int) -> void:
 ## (count 0, a loss rank, nobody standing) keeps them armed and logs `inventory.pickup.armed_kept`. A path end
 ## does not clear them. The real rank and the real fallen Echoes are always used.
 func _open_pickup_event(final_snap: Dictionary, t: int) -> void:
+	# UNWIRED (target: NEW "Pickup event after the win relief"): the event opens before the win relief (fear -5, morale +10) runs, so a chooser freezes on its fear from before the relief
 	var armed := flow_ctx.pickup_armed
 	var final_data_v: Variant = final_snap.get("data", {})
 	var final_data: Dictionary = final_data_v if final_data_v is Dictionary else {}

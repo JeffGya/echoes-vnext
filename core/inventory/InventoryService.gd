@@ -72,6 +72,7 @@ static func sanctum_room(save: Dictionary, cfg: Dictionary) -> int:
 
 ## The configured number of slots of a container.
 static func box_size(cfg: Dictionary, box: String) -> int:
+	# UNWIRED (target: V2-CONTINUITY-002): pack size is read from config only; no size by progression or per Echo
 	return _cfg_int(cfg, "unique_cap" if box == BOX_SANCTUM else "pack_capacity")
 
 
