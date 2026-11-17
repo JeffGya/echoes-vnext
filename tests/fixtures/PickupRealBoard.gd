@@ -10,10 +10,11 @@ const SCENES := {
 	"empty": { "held": [], "finds": ["ph_weapon_a", "ph_relic_a"], "cap": 2 },
 	"near": { "held": ["ph_armor_a", "ph_charm_a"], "finds": ["ph_consumable_a"], "cap": 1 },
 	"full": { "held": ["ph_armor_a", "ph_charm_a", "ph_relic_a", "ph_weapon_a"], "finds": ["ph_consumable_a"], "cap": 1 },
+	"many": { "held": ["ph_armor_a", "ph_charm_a", "ph_relic_a", "ph_weapon_a"], "finds": ["ph_consumable_a", "ph_weapon_a", "ph_relic_a"], "cap": 3 },
 }
 
 
-## `kind`: empty (pack empty, two finds taken), near (two held pieces, one find taken), full (pack full, one find left).
+## `kind`: empty (pack empty, two finds taken), near (two held pieces, one find taken), full (pack full, one find left), many (pack full, three finds left on the ground).
 ## `phase`: "idle" (the intro is skipped) or "intro" (the first publish). {} when the fight did not reach the event.
 ## `variant`: "" keeps the real event. "plus" sets reaction plus on the real event. "none" sets reaction none. "frozen" turns
 ## the chooser frozen: every find lost, nothing in the pack from this event. Only the event keys change (U5 screenshots);

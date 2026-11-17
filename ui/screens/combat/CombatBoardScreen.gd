@@ -42,6 +42,7 @@ const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.
 @onready var _bridge_layer: TileMapLayer            = %BridgeLayer
 @onready var _move_telegraph_layer: Node2D          = %MoveTelegraphLayer
 @onready var _token_layer: CombatTokenLayer         = %TokenLayer
+@onready var _finds_layer: PickupFindsLayer         = %PickupFindsLayer
 # V2-VOICE-001: bark popup layer — optional; null-checked before use.
 @onready var _bark_popup_layer: BarkPopupLayer      = get_node_or_null("%BarkPopupLayer") as BarkPopupLayer
 @onready var _distance_layer: CombatDistanceLayer   = %DistanceLayer
@@ -313,6 +314,7 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		_move_telegraph_layer.clear_telegraph()
 	else:
 		_draw_tokens(actors, pickup_chooser_id(data), {})
+	_finds_layer.show_finds(data, _board)
 	_push_camera_follow_target()
 	_stall_level = 0
 	_kill_stall_tween()
@@ -397,7 +399,7 @@ static func pickup_frame_cells(data: Dictionary) -> Array[Vector2i]:
 	for key in ["row", "finds"]:
 		for entry_v in data.get(key, []):
 			var tile_v: Variant = (entry_v as Dictionary).get("tile", {}) if entry_v is Dictionary else {}
-			if tile_v is Dictionary and not (tile_v as Dictionary).is_empty():
+			if PickupFindsLayer.tile_valid(tile_v):
 				cells.append(Vector2i(int((tile_v as Dictionary).get("col", 0)), int((tile_v as Dictionary).get("row", 0))))
 	return cells
 
@@ -443,6 +445,7 @@ static func pickup_chooser_id(data: Dictionary) -> String:
 
 func _leave_pickup() -> void:
 	_speed_bar.visible = true
+	_finds_layer.clear()
 	if _pickup_stage.visible:
 		_kill_pickup_camera_tween()
 		_token_layer.reset_presentation()

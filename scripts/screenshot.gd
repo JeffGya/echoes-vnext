@@ -17,10 +17,10 @@
 # feeds it a hand-built snapshot and saves the frame. It never boots FlowRuntime, so it writes no save and does not touch the test save
 # directory. Step real_pickup:<kind>[:idle|intro][:<variant>][:seed=<n>]; a seed makes core place the row again (pickup_idle_axis_a
 # seed 0 gives the row axis, falling to the right; pickup_idle_axis_b seed 1 the col axis, rising to the right).
-# EXCEPTION: the fixtures pickup_pack_* and pickup_idle_* play a real won fight through
+# EXCEPTION: the fixtures pickup_pack_*, pickup_idle_* and pickup_intro_* play a real won fight through
 # FlowRuntime (tests/fixtures/PickupRealBoard.gd) and publish its real flow.pickup snapshot. pickup_idle_* then set only
-# the event keys reaction (plus, none) or frozen; the board stays real. Run them with
-# ECHOES_TEST_SAVE_DIR=<fresh dir>; they write and delete save files there. Fixture pickup_host stays the hand-built U1 frame.
+# the event keys reaction (plus, none) or frozen; the board stays real. pickup_intro_* publish the real first (intro) snapshot. Run them with
+# ECHOES_TEST_SAVE_DIR=<fresh dir>; they write and delete save files there. ECHOES_CLIP_EXTRA=<frames> keeps the app running that many frames after the shot (for --write-movie recordings). Fixture pickup_host stays the hand-built U1 frame.
 # A fixture's snapshots are applied in order; a flow.resolve snapshot opens as the
 # resolve modal over the board before it. To add a screen state, add a FIXTURES entry.
 # A fixture copies the snapshot contract; update it when that contract changes.
@@ -105,6 +105,11 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 	var path := out_dir.path_join(file_name + ".png")
 	var err := root.get_texture().get_image().save_png(path)
 	print("SHOT %s -> %s (err=%d)" % [fixture_name, ProjectSettings.globalize_path(path), err])
+	# Video proof: run godot with --write-movie <file.avi> --fixed-fps 30 and ECHOES_CLIP_EXTRA=<frames>; the extra frames
+	# keep the scene alive after the shot so a recording shows the motion.
+	var clip_extra := int(OS.get_environment("ECHOES_CLIP_EXTRA")) if OS.get_environment("ECHOES_CLIP_EXTRA").is_valid_int() else 0
+	for _c in range(clip_extra):
+		await process_frame
 	harness.queue_free()
 	await process_frame
 
@@ -206,6 +211,15 @@ func _fixtures() -> Dictionary:
 		"pickup_idle_plus": ["real_pickup:empty:idle:plus"],
 		"pickup_idle_none": ["real_pickup:full:idle:none"],
 		"pickup_idle_frozen": ["real_pickup:near:idle:frozen"],
+		"pickup_intro_many": ["real_pickup:many:intro"],
+		"pickup_intro_many_b": ["real_pickup:many:intro:seed=1"],
+		"pickup_intro_empty": ["real_pickup:empty:intro"],
+		"pickup_intro_near": ["real_pickup:near:intro"],
+		"pickup_intro_full": ["real_pickup:full:intro"],
+		"pickup_intro_axis_a": ["real_pickup:empty:intro:seed=0"],
+		"pickup_intro_axis_b": ["real_pickup:empty:intro:seed=1"],
+		"pickup_idle_many": ["real_pickup:many:idle:none"],
+		"pickup_idle_many_b": ["real_pickup:many:idle:none:seed=1"],
 		"pickup_idle_axis_a": ["real_pickup:empty:idle:plus:seed=0"],
 		"pickup_idle_axis_b": ["real_pickup:empty:idle:plus:seed=1"],
 		"pickup_idle_zoomed_out": ["real_pickup:empty:idle:plus", "cam_zoom:0.3", "cam_frame"],
