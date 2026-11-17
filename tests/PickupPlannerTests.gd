@@ -127,6 +127,7 @@ static func _snap(o: Dictionary) -> Dictionary:
 			"origin": origin, "target": o.get("target", ""), "twins": twins, "targets": targets, "dropped": o.get("dropped", {}) },
 		"confirm_leave_items": true,
 		"board_cols": 6, "board_rows": 5, "terrain": {}, "placement_seed": 0, "encounter_id": "enc_u3", "actors": [],
+		"camera_frame": { "floor_zoom": 0.75, "margin_px": 48.0, "tween_seconds": 0.45 },
 	}
 	var actions := {}
 	match str(data["phase"]):

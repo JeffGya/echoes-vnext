@@ -5,7 +5,8 @@ extends RefCounted
 ## `place` returns { row: { echo_id -> {col,row} }, finds: { find_id -> {col,row} } }. Every ordering is a
 ## lexicographic key of integers that ends in numeric (col, row), so the result never depends on dictionary order.
 ##
-## ROW. The party anchor is the integer average of the row Echoes' cells (board centre when none has a cell).
+## ROW. The party anchor is the board centre (cols / 2, rows / 2) plus `entry_offset`, clamped into the board
+## rectangle. The fight cells of the Echoes are not used: the lineup always forms where the Echoes "enter".
 ## The row is the straight line of n adjacent region tiles (col axis or row axis) whose centre is nearest the
 ## anchor; the hash (which includes the axis) picks between ties. Else a connected chain of n region tiles grown
 ## from the tile nearest the anchor; else every Echo keeps its own tile.
@@ -20,6 +21,8 @@ extends RefCounted
 const DEFAULT_NEAR := 2
 const DEFAULT_FAR := 3
 const DEFAULT_SPACING := 2
+const DEFAULT_ENTRY_COL := -2
+const DEFAULT_ENTRY_ROW := 0
 
 
 ## Same algorithm as PickupEventPlan.hash_of in ui/ (core must not call ui/; a test checks they agree).
@@ -34,16 +37,19 @@ static func hash_of(parts: Array) -> int:
 	return h
 
 
-## { near, far, spacing } from `inv_cfg.pickup.placement`. A missing key reads as 2, 3 and 2. near < 0 reads as 0,
-## far < near as near, spacing < 1 as 1.
+## { near, far, spacing, entry_offset {col,row} } from `inv_cfg.pickup.placement`. A missing key reads as 2, 3, 2 and
+## { -2, 0 }. near < 0 reads as 0, far < near as near, spacing < 1 as 1. The offset is not clamped here.
 static func settings(inv_cfg: Dictionary) -> Dictionary:
 	var pk_v: Variant = inv_cfg.get("pickup", {})
 	var pk: Dictionary = pk_v if pk_v is Dictionary else {}
 	var pl_v: Variant = pk.get("placement", {})
 	var pl: Dictionary = pl_v if pl_v is Dictionary else {}
+	var eo_v: Variant = pl.get("entry_offset", {})
+	var eo: Dictionary = eo_v if eo_v is Dictionary else {}
 	var near := maxi(0, int(pl.get("near", DEFAULT_NEAR)))
 	return { "near": near, "far": maxi(near, int(pl.get("far", DEFAULT_FAR))),
-		"spacing": maxi(1, int(pl.get("spacing", DEFAULT_SPACING))) }
+		"spacing": maxi(1, int(pl.get("spacing", DEFAULT_SPACING))),
+		"entry_offset": { "col": int(eo.get("col", DEFAULT_ENTRY_COL)), "row": int(eo.get("row", DEFAULT_ENTRY_ROW)) } }
 
 
 ## `actors` = every actor of the board (dead or alive); each has `id` and `grid_pos`. `row_ids` = the standing
@@ -69,13 +75,11 @@ static func place(terrain: Dictionary, cols: int, rows: int, seed_value: int, si
 		if row_set.has(str(a.get("id", ""))):
 			own[str(a.get("id", ""))] = cell
 
-	var own_cells: Array = []
-	for id in row_ids:
-		if own.has(str(id)):
-			own_cells.append(own[str(id)])
 	@warning_ignore("integer_division")
 	var board_centre := Vector2i(cols / 2, rows / 2)
-	var anchor := _average(own_cells, board_centre)
+	var eo: Dictionary = cfg["entry_offset"]
+	var anchor := Vector2i(clampi(board_centre.x + int(eo["col"]), 0, maxi(cols - 1, 0)),
+		clampi(board_centre.y + int(eo["row"]), 0, maxi(rows - 1, 0)))
 	var tiles := _row_tiles(region, own, row_ids, anchor, key)
 	var centre := _average(tiles, anchor)
 	var out_row := {}

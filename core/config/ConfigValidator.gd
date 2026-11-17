@@ -220,6 +220,20 @@ static func validate_pickup(inv_cfg: Dictionary, logger: StructuredLogger = null
 			var sp: Variant = pl.get("spacing", null)
 			if not _is_whole(sp) or int(sp) < 1:
 				out.append("pickup.placement.spacing is not a whole number of 1 or more")
+			var eo_v: Variant = pl.get("entry_offset", null)
+			if eo_v != null:
+				var eo: Dictionary = eo_v if eo_v is Dictionary else {}
+				if not _is_whole(eo.get("col", null)) or not _is_whole(eo.get("row", null)):
+					out.append("pickup.placement.entry_offset is not { col, row } of whole numbers")
+		var cam_v: Variant = pk.get("camera", null)
+		if cam_v != null:
+			var cam: Dictionary = cam_v if cam_v is Dictionary else {}
+			if not _is_finite_num(cam.get("floor_zoom", null)) or float(cam.get("floor_zoom", 0)) <= 0.0:
+				out.append("pickup.camera.floor_zoom is not a number above 0")
+			if not _is_finite_num(cam.get("margin_px", null)) or float(cam.get("margin_px", -1)) < 0.0:
+				out.append("pickup.camera.margin_px is not a number of 0 or more")
+			if not _is_finite_num(cam.get("tween_seconds", null)) or float(cam.get("tween_seconds", -1)) < 0.0:
+				out.append("pickup.camera.tween_seconds is not a number of 0 or more")
 	for p in out:
 		_fail(logger, t, "balance.inventory.pickup", p)
 	return out

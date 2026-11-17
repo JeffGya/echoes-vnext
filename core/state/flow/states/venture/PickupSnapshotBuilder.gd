@@ -13,7 +13,7 @@ extends RefCounted
 ## reads it as the origin). The snapshot key `selected` is { id, side: "find"|"pack" }, or {} when the id is not
 ## valid now (a hidden find in the intro, an id of no find and no pack slot).
 ## Board tiles (D-72, `PickupPlacement`, derived on every build, never saved): `row[].tile` and `finds[].tile` are
-## { col, row }. `finds[].cell` stays the index in the record.
+## { col, row }. `finds[].cell` stays the index in the record. `camera_frame` is the camera tunables (D-73).
 ## `swap.targets` is keyed by BOTH sides: left find id -> legal pack ids, pack id -> legal left find ids.
 ##
 ## Actions (slot-keyed; no `nav.back`, the event has no way out except Continue):
@@ -117,10 +117,24 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		"swap": { "offered": offered, "reason_key": str(offer["reason_key"]), "spent": swap_spent,
 			"origin": origin, "target": target, "twins": twins, "targets": targets, "dropped": _dropped(record) },
 		"confirm_leave_items": DirectiveService.confirms_leave_items(directives_cfg, DirectiveService.active_id(save)),
+		"camera_frame": camera_frame(inv_cfg),
 	}
 	data.merge(_board(flow_ctx))
 	_add_tiles(data, inv_cfg)
 	return { "type": FlowStateIds.PICKUP, "data": data, "actions": _actions(phase, offered), "meta": { "t": t } }
+
+
+## `data.camera_frame` { floor_zoom, margin_px, tween_seconds } from `inv_cfg.pickup.camera` (D-73): the framing the UI
+## applies at event start. A missing key reads as 0.75, 48 and 0.45; floor_zoom is clamped to 0.05..2.2, the other two
+## to 0 or more.
+static func camera_frame(inv_cfg: Dictionary) -> Dictionary:
+	var pk_v: Variant = inv_cfg.get("pickup", {})
+	var pk: Dictionary = pk_v if pk_v is Dictionary else {}
+	var cam_v: Variant = pk.get("camera", {})
+	var cam: Dictionary = cam_v if cam_v is Dictionary else {}
+	return { "floor_zoom": clampf(float(cam.get("floor_zoom", 0.75)), 0.05, 2.2),
+		"margin_px": maxf(0.0, float(cam.get("margin_px", 48))),
+		"tween_seconds": maxf(0.0, float(cam.get("tween_seconds", 0.45))) }
 
 
 ## Adds `row[].tile` and `finds[].tile` (board tiles, `PickupPlacement`; derived on every build, never saved).

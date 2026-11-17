@@ -9,7 +9,7 @@ extends RefCounted
 const _SIT := "s0"
 const _ACTION_TYPES := { "overlay.skip": "pickup.skip", "cta.continue": "pickup.continue", "cta.swap": "pickup.swap.start",
 	"back": "pickup.swap.cancel", "cta.confirm": "pickup.swap.confirm" }
-const _DATA_KEYS := ["actors", "board_cols", "board_rows", "case", "chooser", "confirm_leave_items", "destroy_left",
+const _DATA_KEYS := ["actors", "board_cols", "board_rows", "camera_frame", "case", "chooser", "confirm_leave_items", "destroy_left",
 	"encounter_id", "fallen", "finds", "frozen", "order", "pack", "phase", "placement_seed", "pointer", "reaction",
 	"reason", "return_to", "row", "run_count", "selected", "situation_id", "swap", "swap_left", "terrain"]
 

@@ -3759,11 +3759,18 @@
 				"pointer_laps_min": 1,
 				"pointer_laps_max": 2,
 				"severe_from_status": "burdened",
-				"_placement_comment": "V2-ITEM-001b D-72 (ANSWERS #83): where the pickup event puts finds on the board (PickupPlacement). near and far are the Chebyshev tile distance from the row centre in which a find may lie; spacing is the least Chebyshev distance between two finds. PROPOSED DEFAULTS: Jeff approves. A missing key reads as 2, 3 and 2.",
+				"_placement_comment": "V2-ITEM-001b D-72 (ANSWERS #83): where the pickup event puts Echoes and finds on the board (PickupPlacement). near and far are the Chebyshev tile distance from the row centre in which a find may lie; spacing is the least Chebyshev distance between two finds. entry_offset is the whole-tile shift (col, row) of the Echo lineup from the board centre: a col step of -1 moves a tile down-left on screen, so -2, 0 puts the lineup 2 tiles down-left of the centre. PROPOSED DEFAULTS: Jeff tunes in play. A missing key reads as 2, 3, 2 and -2, 0.",
 				"placement": {
 					"near": 2,
 					"far": 3,
-					"spacing": 2
+					"spacing": 2,
+					"entry_offset": { "col": -2, "row": 0 }
+				},
+				"_camera_comment": "V2-ITEM-001b D-73 (ANSWERS #83): how the camera frames the pickup event at its start; it travels in the snapshot as data.camera_frame. floor_zoom is the lowest zoom the framing zooms IN to when the player is zoomed out too far (a tile is then 96x48 px). margin_px is the free screen margin round the framed box, in logical px. tween_seconds is the length of the camera move to the framing (presentation only). PROPOSED DEFAULTS: Jeff tunes in play. A missing key reads as 0.75, 48 and 0.45.",
+				"camera": {
+					"floor_zoom": 0.75,
+					"margin_px": 48,
+					"tween_seconds": 0.45
 				}
 			},
 			"_finds_cap_comment": "V2-ITEM-001b D-46: cap on finds offered in one pickup event, by realm scale (RewardCalc.realm_scale). Ordered bands, ascending scale. The cap of a realm scale is the cap of the highest band whose scale is at or below it (FindsRules.cap_for_scale). 1.0 (realm.01, prologue) = 2 and 1.25 (realm.02) = 3 are approved. The bands from 1.75 up are placeholders for realms that do not exist yet.",

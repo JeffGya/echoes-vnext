@@ -26,8 +26,13 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/placement_piles_finds_when_tiles_run_out", Callable(PickupPlacementTests, "_t_pile"))
 	runner.register_test("pickup_snapshot/placement_row_fallback_is_a_chain_then_own_tiles", Callable(PickupPlacementTests, "_t_row_fallback"))
 	runner.register_test("pickup_snapshot/placement_with_no_echo_cells_centres_on_the_board", Callable(PickupPlacementTests, "_t_no_echo_cells"))
+	runner.register_test("pickup_snapshot/placement_anchor_ignores_the_fight_cells", Callable(PickupPlacementTests, "_t_anchor_ignores_cells"))
+	runner.register_test("pickup_snapshot/placement_anchor_outside_region_or_board_stays_total", Callable(PickupPlacementTests, "_t_anchor_outside"))
 	runner.register_test("pickup_snapshot/placement_hash_equals_the_ui_hash", Callable(PickupPlacementTests, "_t_hash_equal"))
 	runner.register_test("pickup_snapshot/placement_constants_come_from_config", Callable(PickupPlacementTests, "_t_config"))
+	runner.register_test("pickup_snapshot/camera_frame_defaults_clamps_and_config", Callable(PickupPlacementTests, "_t_camera_config"))
+	runner.register_test("pickup_snapshot/camera_frame_validator_accepts_shipping_and_rejects_bad", Callable(PickupPlacementTests, "_t_camera_validator"))
+	runner.register_test("pickup_snapshot/camera_frame_is_in_the_snapshot_live_and_after_reload", Callable(PickupPlacementTests, "_t_camera_snapshot"))
 	runner.register_test("pickup_snapshot/placement_config_validator_accepts_shipping_and_rejects_bad", Callable(PickupPlacementTests, "_t_validator"))
 	runner.register_test("pickup_snapshot/placement_tiles_in_the_snapshot_are_live_equal_to_reload", Callable(PickupPlacementTests, "_t_snapshot_tiles"))
 
@@ -44,8 +49,9 @@ static func _a(id: String, col: int, row: int) -> Dictionary:
 	return { "id": id, "grid_pos": { "col": col, "row": row } }
 
 
-static func _cfg(near: int = 2, far: int = 3, spacing: int = 2) -> Dictionary:
-	return { "pickup": { "placement": { "near": near, "far": far, "spacing": spacing } } }
+static func _cfg(near: int = 2, far: int = 3, spacing: int = 2, entry_col: int = -2, entry_row: int = 0) -> Dictionary:
+	return { "pickup": { "placement": { "near": near, "far": far, "spacing": spacing,
+		"entry_offset": { "col": entry_col, "row": entry_row } } } }
 
 
 static func _run(actors: Array, row_ids: Array, find_ids: Array, terrain: Dictionary = {}, cols: int = 7, rows: int = 5,
@@ -89,54 +95,60 @@ static func _t_deterministic() -> Dictionary:
 	return _result(m)
 
 
-## Hand-derived. Board 7 x 5 (sentinel), Echoes (1,1) (2,1) (3,1). Anchor = ((6 + 1) / 3, (3 + 1) / 3) = (2, 1).
-## A line is scored by the Chebyshev distance of its doubled centre to (4, 2). Axis 0 start (1,1): centre (4, 2), 0.
-## Axis 1 start (2,0): centre (4, 2), 0. No other line has 0. The hash of [seed, sit, run, axis, col, row] picks
-## between the two (the axis is part of the hash); the test computes both hashes with `hash_of`.
+## Hand-derived. Anchor = board centre + entry_offset (-2, 0), so 7 x 5 gives (3,2) + (-2,0) = (1,2) and 10 x 10 gives
+## (5,5) + (-2,0) = (3,5). A line is scored by the Chebyshev distance of its doubled centre to twice the anchor.
+## n = 3, 7 x 5, doubled anchor (2,4): axis 0 start (c,r) has centre (2c+2, 2r), so (0,2) scores 0; axis 1 start
+## (c,r) has centre (2c, 2r+2), so (1,1) scores 0. No other line scores 0. The hash of [seed, sit, run, axis, col, row]
+## picks between the two; the test computes both hashes with `hash_of`. 10 x 10 (doubled anchor (6,10)): axis 0
+## start (2,5) and axis 1 start (3,4). The Echo fight cells are scattered on purpose: they play no part.
 static func _t_worked_row() -> Dictionary:
 	var m: Array = []
-	var r: Dictionary = _run([_a("e0", 1, 1), _a("e1", 2, 1), _a("e2", 3, 1)], ["e0", "e1", "e2"], [])["row"]
-	var h0 := PickupPlacement.hash_of([_SEED, _SIT, _RUN, 0, 1, 1])
-	var h1 := PickupPlacement.hash_of([_SEED, _SIT, _RUN, 1, 2, 0])
-	var horizontal := h0 <= h1
-	var want := { "e0": Vector2i(1, 1), "e1": Vector2i(2, 1), "e2": Vector2i(3, 1) } if horizontal \
-		else { "e0": Vector2i(2, 0), "e1": Vector2i(2, 1), "e2": Vector2i(2, 2) }
-	for id in want:
-		if _t(r[id]) != want[id]:
-			m.append("%s at %s, want %s" % [id, str(r[id]), str(want[id])])
-	if not horizontal:
-		m.append("golden changed: the hash now picks the vertical line for seed %d" % _SEED)
-	# The hash, not the axis, decides: find a seed whose axis 1 hash is the lower one, and expect the vertical line.
+	var echoes := [_a("e0", 6, 4), _a("e1", 0, 0), _a("e2", 3, 3)]
+	var ids := ["e0", "e1", "e2"]
+	# 7 x 5: the two distance-0 lines are axis 0 start (0,2) and axis 1 start (1,1).
+	var r: Dictionary = _run(echoes, ids, [])["row"]
+	var horizontal := PickupPlacement.hash_of([_SEED, _SIT, _RUN, 0, 0, 2]) <= PickupPlacement.hash_of([_SEED, _SIT, _RUN, 1, 1, 1])
+	var want := [Vector2i(0, 2), Vector2i(1, 2), Vector2i(2, 2)] if horizontal else [Vector2i(1, 1), Vector2i(1, 2), Vector2i(1, 3)]
+	for i in 3:
+		if _t(r[ids[i]]) != want[i]:
+			m.append("7x5: %s at %s, want %s" % [ids[i], str(r[ids[i]]), str(want[i])])
+	# 10 x 10: anchor (3,5); axis 0 start (2,5) and axis 1 start (3,4).
+	var r2: Dictionary = _run(echoes, ids, [], {}, 10, 10)["row"]
+	var horizontal2 := PickupPlacement.hash_of([_SEED, _SIT, _RUN, 0, 2, 5]) <= PickupPlacement.hash_of([_SEED, _SIT, _RUN, 1, 3, 4])
+	var want2 := [Vector2i(2, 5), Vector2i(3, 5), Vector2i(4, 5)] if horizontal2 else [Vector2i(3, 4), Vector2i(3, 5), Vector2i(3, 6)]
+	for i in 3:
+		if _t(r2[ids[i]]) != want2[i]:
+			m.append("10x10: %s at %s, want %s" % [ids[i], str(r2[ids[i]]), str(want2[i])])
+	# The hash, not the axis, decides: find a seed whose axis 1 hash is lower and expect the vertical line (7 x 5).
 	var vertical_seen := false
 	for sd in 60:
-		if PickupPlacement.hash_of([sd, _SIT, _RUN, 1, 2, 0]) < PickupPlacement.hash_of([sd, _SIT, _RUN, 0, 1, 1]):
+		if PickupPlacement.hash_of([sd, _SIT, _RUN, 1, 1, 1]) < PickupPlacement.hash_of([sd, _SIT, _RUN, 0, 0, 2]):
 			vertical_seen = true
-			var o: Dictionary = PickupPlacement.place({}, 7, 5, sd, _SIT, _RUN, [_a("e0", 1, 1), _a("e1", 2, 1), _a("e2", 3, 1)],
-				["e0", "e1", "e2"], [], _cfg())["row"]
-			if _t(o["e0"]) != Vector2i(2, 0) or _t(o["e2"]) != Vector2i(2, 2):
+			var o: Dictionary = PickupPlacement.place({}, 7, 5, sd, _SIT, _RUN, echoes, ids, [], _cfg())["row"]
+			if _t(o["e0"]) != Vector2i(1, 1) or _t(o["e2"]) != Vector2i(1, 3):
 				m.append("seed %d: axis 1 hash is lower but the row is %s" % [sd, str(o)])
 	if not vertical_seen:
 		m.append("test setup: no seed in 0..59 prefers axis 1")
-	var one: Dictionary = _run([_a("e0", 2, 3)], ["e0"], [])["row"]
-	if _t(one["e0"]) != Vector2i(2, 3):
-		m.append("n = 1 at %s, want (2,3)" % str(one["e0"]))
+	var one: Dictionary = _run([_a("e0", 6, 4)], ["e0"], [])["row"]
+	if _t(one["e0"]) != Vector2i(1, 2):
+		m.append("n = 1 at %s, want the anchor (1,2)" % str(one["e0"]))
 	return _result(m)
 
 
-## Hand-worked band. Echo e0 (2,3) on 7 x 5, near 2, far 3: the row tile and centre are (2,3). Free tiles with
-## Chebyshev distance 2..3 from (2,3): cols 0, 4, 5 on every row (15 tiles; col 0 and col 4 are 2 away, col 5 is 3
-## away) plus cols 1..3 on rows 0 and 1 (6 tiles) = 21. Cols 1..3 on rows 2..4 are within 1; col 6 is 4 away.
+## Hand-worked band. One Echo, 7 x 5: the row tile and the row centre are the anchor (1,2). Chebyshev distance 2..3
+## from (1,2): cols 3 and 4 on every row (10 tiles: 2 and 3 away) plus cols 0..2 on rows 0 and 4 (6 tiles, 2 away on
+## the row axis) = 16. Cols 5 and 6 are 4 and 5 away. Rows 1..3 on cols 0..2 are within 1.
 static func _t_worked_find() -> Dictionary:
 	var m: Array = []
 	var cand: Array = []
-	for c in [0, 4, 5]:
+	for c in [3, 4]:
 		for r in 5:
 			cand.append(Vector2i(c, r))
-	for c in [1, 2, 3]:
-		for r in [0, 1]:
+	for c in [0, 1, 2]:
+		for r in [0, 4]:
 			cand.append(Vector2i(c, r))
-	if cand.size() != 21:
-		m.append("hand list has %d tiles, want 21" % cand.size())
+	if cand.size() != 16:
+		m.append("hand list has %d tiles, want 16" % cand.size())
 	var want := Vector2i(-1, -1)
 	var best := -1
 	for c: Vector2i in cand:
@@ -147,9 +159,8 @@ static func _t_worked_find() -> Dictionary:
 	var got := _t(_run([_a("e0", 2, 3)], ["e0"], ["f0"])["finds"]["f0"])
 	if got != want:
 		m.append("find at %s, want %s" % [str(got), str(want)])
-	# Golden value: pins the hash and the rule together, so an edit to either shows here.
-	if got != Vector2i(1, 0):
-		m.append("golden find tile is %s, pinned (1,0)" % str(got))
+	if got != Vector2i(1, 4):
+		m.append("golden find tile is %s, pinned (1,4)" % str(got))
 	return _result(m)
 
 
@@ -254,17 +265,11 @@ static func _t_finds_free() -> Dictionary:
 	var out := _run([_a("e0", 0, 0), _a("x", 3, 0)], ["e0"], ["f0"], {}, 4, 1, _cfg(3, 3, 2))
 	if _t(out["finds"]["f0"]) != Vector2i(3, 0):
 		m.append("find at %s, want the dead enemy tile (3,0)" % str(out["finds"]["f0"]))
-	# 3 x 1 board, Echoes on (0,0) and (1,0). Search a seed where the row moves to (1,0) (2,0): the one tile left is
-	# the old start tile (0,0), and the find must lie there.
-	var found := false
-	for sd in 60:
-		var o := PickupPlacement.place({}, 3, 1, sd, _SIT, _RUN, [_a("e0", 0, 0), _a("e1", 1, 0)], ["e0", "e1"], ["f0"], _cfg(0, 5, 1))
-		if _t(o["row"]["e0"]) == Vector2i(1, 0):
-			found = true
-			if _t(o["finds"]["f0"]) != Vector2i(0, 0):
-				m.append("seed %d: find at %s, want the old start tile (0,0)" % [sd, str(o["finds"]["f0"])])
-	if not found:
-		m.append("test setup: no seed moved the row off the start tiles")
+	# 3 x 1 board, Echoes on (0,0) and (1,0), entry offset (+1, 0): the anchor is (2,0), the row moves to (1,0) (2,0),
+	# and the old start tile (0,0) is the one tile left: the find must lie there.
+	var o := _run([_a("e0", 0, 0), _a("e1", 1, 0)], ["e0", "e1"], ["f0"], {}, 3, 1, _cfg(0, 5, 1, 1, 0))
+	if _t(o["row"]["e0"]) != Vector2i(1, 0) or _t(o["finds"]["f0"]) != Vector2i(0, 0):
+		m.append("row %s, find %s; want the row on (1,0) (2,0) and the find on the old start tile (0,0)" % [str(o["row"]), str(o["finds"])])
 	return _result(m)
 
 
@@ -311,13 +316,13 @@ static func _t_sentinel() -> Dictionary:
 
 static func _t_pile() -> Dictionary:
 	var m: Array = []
-	# 2 x 2 board, one Echo on (0,0): 3 non-row tiles. Five finds: 3 distinct tiles, then the pile reuses a taken tile.
+	# 2 x 2 board: the anchor (1,1) + (-2,0) clamps to (0,1), which is the row tile; 3 non-row tiles. Five finds: 3 distinct tiles, then the pile reuses a taken tile.
 	var out := _run([_a("e0", 0, 0)], ["e0"], _ids("f", 5), {}, 2, 2)
 	var tiles := {}
 	for fid in out["finds"]:
 		var t := _t(out["finds"][fid])
 		tiles[str(t)] = true
-		if t == Vector2i(0, 0) or t.x > 1 or t.y > 1:
+		if t == Vector2i(0, 1) or t.x > 1 or t.y > 1:
 			m.append("%s on %s" % [fid, str(t)])
 	if (out["finds"] as Dictionary).size() != 5:
 		m.append("a find has no tile: %s" % str(out["finds"]))
@@ -391,16 +396,58 @@ static func _ids_actors(n: int) -> Array:
 
 static func _t_no_echo_cells() -> Dictionary:
 	var m: Array = []
-	# No Echo has a cell: the anchor is the board centre (7/2, 5/2) = (3, 2). Two Echoes: every line near it is
-	# within distance 1 (doubled) and the hash picks one; the pair must touch and stay next to the centre.
+	# No Echo has a cell. The anchor never used cells, so the row is the one an Echo with a cell would get: anchor
+	# (1,2) on 7 x 5, a pair of touching tiles within distance 1 of it.
 	var out := _run([], ["a", "b"], ["f0"])
 	var ra := _t(out["row"]["a"])
 	var rb := _t(out["row"]["b"])
 	var step := rb - ra
-	if _cheb(ra, Vector2i(3, 2)) > 1 or _cheb(rb, Vector2i(3, 2)) > 1 or (step != Vector2i(1, 0) and step != Vector2i(0, 1)):
+	if _cheb(ra, Vector2i(1, 2)) > 1 or _cheb(rb, Vector2i(1, 2)) > 1 or (step != Vector2i(1, 0) and step != Vector2i(0, 1)):
 		m.append("row of two without cells: %s %s" % [str(ra), str(rb)])
 	if not (out["finds"] as Dictionary).has("f0"):
 		m.append("no find tile")
+	if str(out["row"]) != str(_run([_a("a", 6, 4), _a("b", 0, 0)], ["a", "b"], ["f0"])["row"]):
+		m.append("the row depends on the Echo cells")
+	return _result(m)
+
+
+static func _t_anchor_ignores_cells() -> Dictionary:
+	var m: Array = []
+	var ids := ["e0", "e1", "e2"]
+	var near_centre := [_a("e0", 3, 2), _a("e1", 3, 3), _a("e2", 2, 2), _a("x", 5, 1)]
+	var far_corners := [_a("e0", 6, 4), _a("e1", 0, 0), _a("e2", 6, 0), _a("x", 1, 1)]
+	var a := _run(near_centre, ids, ["f0", "f1"])
+	var b := _run(far_corners, ids, ["f0", "f1"])
+	if str(a) != str(b):
+		m.append("the fight cells change the result: %s / %s" % [str(a), str(b)])
+	return _result(m)
+
+
+## An offset that leaves the board is clamped into the board rectangle; an anchor on void is handled by the nearest line.
+static func _t_anchor_outside() -> Dictionary:
+	var m: Array = []
+	var ids := ["e0", "e1", "e2"]
+	var echoes := [_a("e0", 1, 1), _a("e1", 2, 1), _a("e2", 3, 1)]
+	for eo in [Vector2i(-50, -50), Vector2i(50, 50), Vector2i(-50, 50), Vector2i(0, 0)]:
+		for board in [[7, 5], [3, 3], [2, 9]]:
+			var cfg := _cfg(2, 3, 2, eo.x, eo.y)
+			var out := _run(echoes, ids, ["f0", "f1"], {}, board[0], board[1], cfg)
+			for t_v: Variant in (out["row"] as Dictionary).values() + (out["finds"] as Dictionary).values():
+				var t := _t(t_v)
+				if t.x < 0 or t.y < 0 or t.x >= board[0] or t.y >= board[1]:
+					m.append("offset %s board %s: tile %s is off the board" % [str(eo), str(board), str(t)])
+			if (out["row"] as Dictionary).size() != 3 or (out["finds"] as Dictionary).size() != 2:
+				m.append("offset %s board %s: a tile is missing" % [str(eo), str(board)])
+	# A 1 x 1 board holds no row of 3: the Echoes keep their tiles, and every tile still exists.
+	var tiny := _run(echoes, ids, ["f0", "f1"], {}, 1, 1)
+	if (tiny["row"] as Dictionary).size() != 3 or (tiny["finds"] as Dictionary).size() != 2:
+		m.append("1 x 1 board: a tile is missing %s" % str(tiny))
+	# Anchor (clamped) on a void tile: the terrain keeps one far column; the row is still found.
+	var column := { "bounds": { "w": 7, "h": 5 }, "plateaus": [{ "col": 6, "row": 0, "w": 1, "h": 5, "cells": [[6, 0], [6, 1], [6, 2], [6, 3], [6, 4]] }] }
+	var out2 := _run(echoes, ids, ["f0"], column, 7, 5)
+	for t_v: Variant in (out2["row"] as Dictionary).values():
+		if _t(t_v).x != 6:
+			m.append("row left the only region: %s" % str(t_v))
 	return _result(m)
 
 
@@ -419,14 +466,14 @@ static func _t_hash_equal() -> Dictionary:
 static func _t_config() -> Dictionary:
 	var m: Array = []
 	var d := PickupPlacement.settings({})
-	if d != { "near": 2, "far": 3, "spacing": 2 }:
-		m.append("missing keys read %s, want 2, 3, 2" % str(d))
+	if d != { "near": 2, "far": 3, "spacing": 2, "entry_offset": { "col": -2, "row": 0 } }:
+		m.append("missing keys read %s, want 2, 3, 2, -2/0" % str(d))
 	var shipping := ConfigService.new()
 	shipping.load_balance()
 	var inv := ConfigService.get_inventory_cfg(shipping)
-	if PickupPlacement.settings(inv) != { "near": 2, "far": 3, "spacing": 2 }:
+	if PickupPlacement.settings(inv) != { "near": 2, "far": 3, "spacing": 2, "entry_offset": { "col": -2, "row": 0 } }:
 		m.append("shipping config reads %s" % str(PickupPlacement.settings(inv)))
-	if PickupPlacement.settings(_cfg(0, 0, 0)) != { "near": 0, "far": 0, "spacing": 1 }:
+	if PickupPlacement.settings(_cfg(0, 0, 0)) != { "near": 0, "far": 0, "spacing": 1, "entry_offset": { "col": -2, "row": 0 } }:
 		m.append("bad values are not clamped: %s" % str(PickupPlacement.settings(_cfg(0, 0, 0))))
 	var actors := [_a("e0", 8, 8)]
 	var ids := _ids("f", 3)
@@ -441,9 +488,14 @@ static func _t_config() -> Dictionary:
 	var six := _ids("g", 6)
 	if str(_run(actors, ["e0"], six, {}, 17, 17, _cfg(2, 2, 2))) == str(_run(actors, ["e0"], six, {}, 17, 17, _cfg(2, 2, 1))):
 		m.append("changing spacing changes nothing")
+	# Entry offset: moving it moves the row tile (n = 1: the anchor itself, board centre (8,8) + offset).
+	for eo in [Vector2i(-2, 0), Vector2i(0, 3), Vector2i(4, -1)]:
+		var at := _t(_run(actors, ["e0"], [], {}, 17, 17, _cfg(2, 3, 2, eo.x, eo.y))["row"]["e0"])
+		if at != Vector2i(8, 8) + eo:
+			m.append("entry_offset %s put the row at %s" % [str(eo), str(at)])
 	var wide := _run(actors, ["e0"], ids, {}, 17, 17, _cfg(4, 6, 2))
 	for d2: Dictionary in (wide["finds"] as Dictionary).values():
-		var dist := _cheb(_t(d2), Vector2i(8, 8))
+		var dist := _cheb(_t(d2), Vector2i(6, 8))
 		if dist < 4 or dist > 6:
 			m.append("near 4, far 6 gave a find at distance %d" % dist)
 	return _result(m)
@@ -459,7 +511,8 @@ static func _t_validator() -> Dictionary:
 		m.append("shipping config: %s" % str(problems))
 	var base: Dictionary = (inv["pickup"] as Dictionary).duplicate(true)
 	for bad in [{ "near": -1, "far": 3, "spacing": 2 }, { "near": 2, "far": 1, "spacing": 2 }, { "near": 2, "far": 3, "spacing": 0 },
-			{ "near": 1.5, "far": 3, "spacing": 2 }, {}]:
+			{ "near": 1.5, "far": 3, "spacing": 2 }, {}, { "near": 2, "far": 3, "spacing": 2, "entry_offset": { "col": 1.5, "row": 0 } },
+			{ "near": 2, "far": 3, "spacing": 2, "entry_offset": { "col": 1 } }]:
 		var cfg := { "pickup": base.duplicate(true) }
 		cfg["pickup"]["placement"] = bad
 		if ConfigValidator.validate_pickup(cfg).is_empty():
@@ -516,4 +569,70 @@ static func _t_snapshot_tiles() -> Dictionary:
 		m.append("row tiles differ after a reload")
 	if str((live["finds"] as Array).map(tile_of)) != str((back["finds"] as Array).map(tile_of)):
 		m.append("find tiles differ after a reload")
+	return _result(m)
+
+
+static func _cam(zoom: Variant, margin: Variant, secs: Variant) -> Dictionary:
+	return { "pickup": { "camera": { "floor_zoom": zoom, "margin_px": margin, "tween_seconds": secs } } }
+
+
+static func _t_camera_config() -> Dictionary:
+	var m: Array = []
+	var want := { "floor_zoom": 0.75, "margin_px": 48.0, "tween_seconds": 0.45 }
+	if PickupSnapshotBuilder.camera_frame({}) != want or PickupSnapshotBuilder.camera_frame({ "pickup": {} }) != want:
+		m.append("a missing block reads %s, want %s" % [str(PickupSnapshotBuilder.camera_frame({})), str(want)])
+	var shipping := ConfigService.new()
+	shipping.load_balance()
+	if PickupSnapshotBuilder.camera_frame(ConfigService.get_inventory_cfg(shipping)) != want:
+		m.append("shipping config reads %s" % str(PickupSnapshotBuilder.camera_frame(ConfigService.get_inventory_cfg(shipping))))
+	if PickupSnapshotBuilder.camera_frame(_cam(1.5, 20, 0.2)) != { "floor_zoom": 1.5, "margin_px": 20.0, "tween_seconds": 0.2 }:
+		m.append("config values are not read: %s" % str(PickupSnapshotBuilder.camera_frame(_cam(1.5, 20, 0.2))))
+	if PickupSnapshotBuilder.camera_frame(_cam(0.0, -5, -1)) != { "floor_zoom": 0.05, "margin_px": 0.0, "tween_seconds": 0.0 } \
+			or float(PickupSnapshotBuilder.camera_frame(_cam(9.0, 1, 1))["floor_zoom"]) != 2.2:
+		m.append("clamps are wrong")
+	return _result(m)
+
+
+static func _t_camera_validator() -> Dictionary:
+	var m: Array = []
+	var shipping := ConfigService.new()
+	shipping.load_balance()
+	var inv := ConfigService.get_inventory_cfg(shipping)
+	if not ConfigValidator.validate_pickup(inv).is_empty():
+		m.append("shipping config: %s" % str(ConfigValidator.validate_pickup(inv)))
+	var base: Dictionary = (inv["pickup"] as Dictionary).duplicate(true)
+	for bad in [_cam(0, 48, 0.45), _cam(-1.0, 48, 0.45), _cam("a", 48, 0.45), _cam(0.75, -1, 0.45), _cam(0.75, 48, -0.1), _cam(0.75, null, 0.45)]:
+		var cfg := { "pickup": base.duplicate(true) }
+		cfg["pickup"]["camera"] = (bad["pickup"] as Dictionary)["camera"]
+		if ConfigValidator.validate_pickup(cfg).is_empty():
+			m.append("accepted %s" % str(bad["pickup"]["camera"]))
+	var good := { "pickup": base.duplicate(true) }
+	good["pickup"]["camera"] = { "floor_zoom": 1, "margin_px": 0, "tween_seconds": 0 }
+	if not ConfigValidator.validate_pickup(good).is_empty():
+		m.append("rejected a valid camera block: %s" % str(ConfigValidator.validate_pickup(good)))
+	var none := { "pickup": base.duplicate(true) }
+	none["pickup"].erase("camera")
+	if not ConfigValidator.validate_pickup(none).is_empty():
+		m.append("the camera block must stay optional")
+	return _result(m)
+
+
+## A changed config changes `data.camera_frame`, and a reload (no encounter context, JSON round trip) gives the same.
+static func _t_camera_snapshot() -> Dictionary:
+	var m: Array = []
+	var ctx: FlowContext = PickupSnapshotTests._event("C1")["ctx"]
+	var d0: Dictionary = PickupSnapshotTests._build(ctx)["data"]
+	if d0.get("camera_frame") != { "floor_zoom": 0.75, "margin_px": 48.0, "tween_seconds": 0.45 }:
+		m.append("default camera_frame %s" % str(d0.get("camera_frame")))
+	var inv: Dictionary = ctx.config_service.get("inv")
+	inv["pickup"] = { "camera": { "floor_zoom": 1.25, "margin_px": 30, "tween_seconds": 0.1 } }
+	var d1: Dictionary = PickupSnapshotTests._build(ctx)["data"]
+	if d1.get("camera_frame") != { "floor_zoom": 1.25, "margin_px": 30.0, "tween_seconds": 0.1 }:
+		m.append("a config change did not reach the snapshot: %s" % str(d1.get("camera_frame")))
+	ctx.encounter_ctx = null
+	PickupSnapshotTests._json_trip(ctx)
+	ctx.last_snapshot = {}
+	var d2: Dictionary = PickupSnapshotTests._build(ctx)["data"]
+	if str(d2.get("camera_frame")) != str(d1.get("camera_frame")):
+		m.append("after a reload %s, live %s" % [str(d2.get("camera_frame")), str(d1.get("camera_frame"))])
 	return _result(m)
