@@ -954,33 +954,49 @@ static func test_purity_dispatch_clears_pending_flags_after_publish() -> Diction
 		return { "ok": false, "error": "Starter echo has no id" }
 
 	ctx.pending_awakening_banner = true
-	ctx.pending_return_notification = { "ase_earned": 5, "situations_revealed": 1 }
+	var notice := {
+		"id": "offline.test",
+		"title": "The Flame Held",
+		"amount": "+5 Ase retained",
+	}
+	ctx.pending_return_notification = notice.duplicate(true)
 
+	var economy: Dictionary = ctx.save_data["economy"]
+	economy["last_settle_unix"] = 1_700_000_000
+	var settle_unix := 1_700_000_240
 	var out: Dictionary = runtime.dispatch({ "type": "sanctum.party.toggle", "payload": { "echo_id": echo_id } })
 
-	var data_v: Variant = out.get("data", {})
-	var data: Dictionary = data_v if data_v is Dictionary else {}
-
 	var mismatches: Array = []
-	if bool(data.get("show_awakening_overlay", false)) != true:
-		mismatches.append("expected the snapshot PUBLISHED by this dispatch() to show the overlay once")
-	var notif_out_v: Variant = data.get("return_notification", {})
-	if not ((notif_out_v is Dictionary) and (notif_out_v as Dictionary).has("ase_earned")):
-		mismatches.append("expected the snapshot PUBLISHED by this dispatch() to carry return_notification.ase_earned")
+	var first_tick := int(out.get("meta", {}).get("t", -1))
+	if out.get("type") != FlowStateIds.SANCTUM or first_tick < 0:
+		mismatches.append("expected party toggle to publish a Sanctum snapshot with a build tick")
 	if ctx.pending_awakening_banner != false:
 		mismatches.append("expected pending_awakening_banner cleared to false after dispatch() returns")
 	if not ctx.pending_return_notification.is_empty():
 		mismatches.append("expected pending_return_notification emptied after dispatch() returns")
 
-	# A second real reenter (another toggle) must NOT show the overlay again — the flags were
-	# cleared by the first dispatch()'s closure, and build() only reads them, never re-arms them.
-	var out2: Dictionary = runtime.dispatch({ "type": "sanctum.party.toggle", "payload": { "echo_id": echo_id } })
-	var data2_v: Variant = out2.get("data", {})
-	var data2: Dictionary = data2_v if data2_v is Dictionary else {}
-	if bool(data2.get("show_awakening_overlay", false)) != false:
-		mismatches.append("expected the SECOND dispatch()'s snapshot to NOT show the overlay again")
+	# The bank timer renders the cached snapshot. A fresh build would hide the replay.
+	var out2 := runtime.dispatch({
+		"type": "economy.settle_time",
+		"now_unix": settle_unix,
+		"source": "bank.interval",
+	})
+	if int(economy["last_settle_unix"]) != settle_unix:
+		mismatches.append("expected economy.settle_time to update the settlement timestamp")
+	if out2.get("type") != FlowStateIds.SANCTUM or out2.get("meta", {}).get("t") != first_tick:
+		mismatches.append("expected settlement to reuse the Sanctum snapshot's build tick")
+
+	var data: Dictionary = out.get("data", {})
+	if data.get("show_awakening_overlay") != true:
+		mismatches.append("expected the first response to retain the Awakening overlay after settlement")
+	if data.get("return_notification") != notice:
+		mismatches.append("expected the first response to retain the welcome-back notice after settlement")
+
+	var data2: Dictionary = out2.get("data", {})
+	if data2.get("show_awakening_overlay") != false:
+		mismatches.append("expected settlement response to carry show_awakening_overlay=false")
 	if data2.has("return_notification"):
-		mismatches.append("expected the SECOND dispatch()'s snapshot to NOT carry return_notification again")
+		mismatches.append("expected settlement response to omit return_notification")
 
 	if not mismatches.is_empty():
 		return { "ok": false, "error": " | ".join(mismatches) }

@@ -486,6 +486,12 @@ static func _t_sanctum_snapshots_share_layout() -> Dictionary:
 ## Drives the whole keeper intro to the Sanctum. Returns the runtime, parked on flow.sanctum with
 ## the prologue Realm open.
 static func _run_full_keeper_intro() -> FlowRuntime:
+	var runtime := _run_keeper_intro_until_keeping()
+	runtime.dispatch({ "type": "keeper_intro.complete" })
+	return runtime
+
+
+static func _run_keeper_intro_until_keeping() -> FlowRuntime:
 	var runtime := _prepare_named_runtime()
 	runtime.dispatch({ "type": "keeper_intro.call.answer" })
 	_defeat_trial_wound(runtime)
@@ -493,7 +499,6 @@ static func _run_full_keeper_intro() -> FlowRuntime:
 	runtime.dispatch({ "type": "keeper_intro.thread.continue" })
 	runtime.dispatch({ "type": "keeper_intro.awakening.choose", "choice": "guard" })
 	runtime.dispatch({ "type": "keeper_intro.weave.complete" })
-	runtime.dispatch({ "type": "keeper_intro.complete" })
 	return runtime
 
 
@@ -527,8 +532,8 @@ static func _t_flame_lights_at_awakening_and_arms_modal() -> Dictionary:
 ## The modal survives the two intervening dispatches, reaches the first Sanctum snapshot, and is
 ## spent there — the established one-shot contract, exercised for the first time.
 static func _t_awakening_modal_shows_once_on_first_sanctum() -> Dictionary:
-	var runtime := _run_full_keeper_intro()
-	var snap: Dictionary = runtime.flow_ctx.last_snapshot
+	var runtime := _run_keeper_intro_until_keeping()
+	var snap := runtime.dispatch({ "type": "keeper_intro.complete" })
 	if str(snap.get("type", "")) != FlowStateIds.SANCTUM:
 		return { "ok": false, "error": "Expected Sanctum after keeper_intro.complete" }
 	var data: Dictionary = snap.get("data", {})
@@ -539,8 +544,8 @@ static func _t_awakening_modal_shows_once_on_first_sanctum() -> Dictionary:
 	# And exactly once: leave Sanctum and come back, so a genuinely NEW Sanctum snapshot is built
 	# (re-entering the state you are already in does not rebuild one).
 	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.ECHO_PARTY })
-	runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.SANCTUM })
-	var data2: Dictionary = runtime.flow_ctx.last_snapshot.get("data", {})
+	var next_snap := runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.SANCTUM })
+	var data2: Dictionary = next_snap.get("data", {})
 	if bool(data2.get("show_awakening_overlay", false)):
 		return { "ok": false, "error": "Awakening overlay must show exactly once" }
 	return { "ok": true }

@@ -751,22 +751,20 @@ func dispatch(action: Dictionary) -> Dictionary:
 	var out := flow_ctx.last_snapshot
 	_log_snapshot_emitted(t, out, "dispatch.weave_locked" if weave_locked else "dispatch")
 
-	# V2-INFRA-003 Phase 3 (slice A follow-up): consume the two Sanctum one-shot flags here,
-	# exactly once, AFTER the snapshot that surfaced their derived values
-	# (show_awakening_overlay / return_notification, built by SanctumSnapshotBuilder.build())
-	# has been published and logged. This is the single choke point for the "shown exactly
-	# once" contract — a second refresh_snapshot() within the same dispatch can no longer
-	# swallow the overlay, because SanctumSnapshotBuilder.build() never clears these flags
-	# itself.
-	#
-	# GATE: only clear when `out` is actually a flow.sanctum snapshot. flow.continue can set
-	# pending_return_notification (via OfflineAccrualService.apply_if_needed) and then land on a
-	# keeper-intro step instead of Sanctum (keeper intro incomplete). An unconditional clear
-	# here would discard the notice before the player ever reaches Sanctum to see it. Do NOT
-	# "simplify" this back to an unconditional clear.
+	# Keep notices queued through Keeper intro. When Sanctum first carries them, give the
+	# caller a copy and clear the cache so the bank timer cannot publish them again.
 	if str(out.get("type", "")) == FlowStateIds.SANCTUM:
-		flow_ctx.pending_awakening_banner = false
-		flow_ctx.pending_return_notification = {}
+		var sanctum_data: Dictionary = out["data"]
+		var shows_awakening := bool(sanctum_data.get("show_awakening_overlay", false))
+		var shows_return_notice := sanctum_data.has("return_notification")
+		if shows_awakening or shows_return_notice:
+			out = out.duplicate(true)
+			if shows_awakening:
+				sanctum_data["show_awakening_overlay"] = false
+				flow_ctx.pending_awakening_banner = false
+			if shows_return_notice:
+				sanctum_data.erase("return_notification")
+				flow_ctx.pending_return_notification = {}
 
 	# V2-INFRA-003 Phase 5 Slice B: consume the two scout-return one-shots here, exactly once,
 	# AFTER the snapshot that surfaced them (VentureResolveSnapshotBuilder
