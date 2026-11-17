@@ -170,6 +170,16 @@ const _ZOOM_DEFAULT: float        = 1.3
 var _board_span_px: Vector2       = Vector2(1280.0, 640.0)
 # A new encounter (or board size) resets zoom, position and selection on the next _center_board.
 var _camera_needs_reset: bool     = true
+# Pickup framing (D-73): the tiles to keep in view, the camera tunables of the snapshot, and the running move.
+const _PICKUP_FRAME_PAD: float    = 16.0
+const _PICKUP_FRAME_STRIP_GAP: float = 8.0
+# EchoBar height (ui/AGENTS.md: 88). The pads 16 and 8 and the 88 stay in code: screen-layout offsets, as in _apply_responsive_layout (ANSWERS #83).
+const _ECHO_BAR_HEIGHT: float     = 88.0
+var _pickup_cells: Array[Vector2i] = []
+var _pickup_camera_cfg: Dictionary = {}
+var _pickup_camera_tween: Tween = null
+# True from a new event until the deferred framing runs. Tests read it, because deferred calls do not run inside a test.
+var _pickup_frame_due: bool = false
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
@@ -271,24 +281,38 @@ func set_layout(layout: Dictionary) -> void:
 		var min_zoom := _min_zoom_for_span(_board_span_px)
 		camera.configure_zoom_range(min_zoom, _ZOOM_MAX, clampf(camera.zoom.x, min_zoom, _ZOOM_MAX))
 		camera.reclamp()
+		if is_instance_valid(_pickup_stage) and _pickup_stage.visible and not camera.has_manual_override:
+			frame_pickup_camera(false)
 
 
-## The pickup event keeps the board drawn from the snapshot (actors, terrain, size) and shows no
-## combat HUD. The snapshot has no nav.back slot, so Back stays hidden and AppRoot's Back does nothing.
+## The pickup event keeps the board drawn from the snapshot (terrain, size) and shows no combat HUD. Only the standing
+## Echoes get a token, on their row tiles, with the chooser as the active actor.
+## The snapshot has no nav.back slot, so Back stays hidden and AppRoot's Back does nothing.
 func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_flush_held_barks()
+	var new_event := PickupEventStage.identity_of(data) != _pickup_stage.identity()
+	if new_event:
+		camera.deselect()
+		camera.has_manual_override = false
+	_pickup_cells = pickup_frame_cells(data)
+	var cfg_v: Variant = data.get("camera_frame", {})
+	_pickup_camera_cfg = cfg_v if cfg_v is Dictionary else {}
+	if not _pickup_stage.visible:
+		# Tokens left from the fight would slide to the row tiles.
+		_token_layer.reset_presentation()
+		_move_telegraph_layer.clear_telegraph()
 	_current_cols = int(data.get("board_cols", 10))
 	_current_rows = int(data.get("board_rows", 10))
 	var terrain_v: Variant = data.get("terrain", {})
 	_draw_board(_current_cols, _current_rows, terrain_v if terrain_v is Dictionary else {})
 	_center_board(_current_cols, _current_rows)
-	var actors: Array = data.get("actors", [])
+	var actors: Array = pickup_row_actors(data)
 	_last_actors = actors
 	if actors.is_empty():
 		_token_layer.reset_presentation()
 		_move_telegraph_layer.clear_telegraph()
 	else:
-		_draw_tokens(actors, "", data)
+		_draw_tokens(actors, pickup_chooser_id(data), {})
 	_push_camera_follow_target()
 	_stall_level = 0
 	_kill_stall_tween()
@@ -298,6 +322,9 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_pickup_stage.apply_snapshot(snap)
 	_place_pickup_strip()
 	call_deferred("_place_pickup_strip")
+	if new_event:
+		_pickup_frame_due = true
+		call_deferred("frame_pickup_camera", true)
 	if is_instance_valid(_pickup_debug):
 		_pickup_debug.apply_actions(snap.get("actions", {}))
 
@@ -310,6 +337,71 @@ func _place_pickup_strip() -> void:
 	_pickup_stage.place_pack_strip(_echo_bar_top())
 
 
+## Moves the camera so every row and find tile is in view, clear of the pack strip, the EchoBar and the safe areas.
+## Does nothing without `camera_frame` in the snapshot. The tween copies the Sanctum camera tween.
+func frame_pickup_camera(animated: bool) -> void:
+	_pickup_frame_due = false
+	if not is_instance_valid(_pickup_stage) or not _pickup_stage.visible or _pickup_cells.is_empty() \
+			or not _pickup_camera_cfg.has("floor_zoom"):
+		return
+	var view := get_viewport_rect().size
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var bottom := _echo_bar_top()
+	if is_nan(bottom):
+		bottom = view.y - ceilf(insets.w) - _ECHO_BAR_HEIGHT
+	var strip := _pickup_stage.pack_strip().panel_global_rect()
+	if strip.size.y > 0.0:
+		bottom = minf(bottom, strip.position.y - _PICKUP_FRAME_STRIP_GAP)
+	var top := ceilf(insets.y) + _PICKUP_FRAME_PAD
+	var left := ceilf(insets.x) + _PICKUP_FRAME_PAD
+	var usable := Rect2(left, top, view.x - ceilf(insets.z) - _PICKUP_FRAME_PAD - left, bottom - top)
+	var points := PackedVector2Array()
+	for cell in _pickup_cells:
+		points.append(_board_root.position + _board.map_to_local(cell))
+	var framed := PickupCameraFrame.frame(points, Vector2(_board.tile_set.tile_size), view, usable, camera.zoom.x,
+		_min_zoom_for_span(_board_span_px), _ZOOM_MAX, float(_pickup_camera_cfg["floor_zoom"]),
+		float(_pickup_camera_cfg.get("margin_px", 0.0)))
+	if not bool(framed["valid"]):
+		return
+	var target_zoom := Vector2(float(framed["zoom"]), float(framed["zoom"]))
+	var target_position := camera.clamped_position(framed["position"], target_zoom)
+	var seconds := float(_pickup_camera_cfg.get("tween_seconds", 0.0))
+	_kill_pickup_camera_tween()
+	if not animated or seconds <= 0.0:
+		camera.cancel_zoom_ease()
+		camera.zoom = target_zoom
+		camera.position = target_position
+		camera.reclamp()
+		return
+	camera.begin_screen_animation()
+	_pickup_camera_tween = create_tween()
+	_pickup_camera_tween.set_trans(Tween.TRANS_SINE)
+	_pickup_camera_tween.set_ease(Tween.EASE_OUT)
+	_pickup_camera_tween.parallel().tween_property(camera, "zoom", target_zoom, seconds)
+	_pickup_camera_tween.parallel().tween_property(camera, "position", target_position, seconds)
+	_pickup_camera_tween.tween_callback(camera.end_screen_animation)
+	_pickup_camera_tween.tween_callback(camera.reclamp)
+
+
+## A killed tween never runs its end callback, so the camera hold is released here.
+func _kill_pickup_camera_tween() -> void:
+	if _pickup_camera_tween != null and _pickup_camera_tween.is_valid():
+		_pickup_camera_tween.kill()
+	_pickup_camera_tween = null
+	camera.end_screen_animation()
+
+
+## The tiles the pickup camera keeps in view: every row tile and every find tile.
+static func pickup_frame_cells(data: Dictionary) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for key in ["row", "finds"]:
+		for entry_v in data.get(key, []):
+			var tile_v: Variant = (entry_v as Dictionary).get("tile", {}) if entry_v is Dictionary else {}
+			if tile_v is Dictionary and not (tile_v as Dictionary).is_empty():
+				cells.append(Vector2i(int((tile_v as Dictionary).get("col", 0)), int((tile_v as Dictionary).get("row", 0))))
+	return cells
+
+
 func _echo_bar_top() -> float:
 	var node: Node = get_parent()
 	while node != null:
@@ -320,8 +412,43 @@ func _echo_bar_top() -> float:
 	return NAN
 
 
+## The actors to draw in a pickup snapshot: the `row` Echoes, in row order, each moved to its `tile`.
+static func pickup_row_actors(data: Dictionary) -> Array:
+	var by_id: Dictionary = {}
+	for actor_v in data.get("actors", []):
+		if actor_v is Dictionary:
+			by_id[str((actor_v as Dictionary).get("id", ""))] = actor_v
+	var drawn: Array = []
+	for entry_v in data.get("row", []):
+		if not (entry_v is Dictionary):
+			continue
+		var entry: Dictionary = entry_v
+		var actor_v: Variant = by_id.get(str(entry.get("id", "")))
+		if actor_v == null:
+			continue
+		var actor: Dictionary = (actor_v as Dictionary).duplicate(true)
+		var tile_v: Variant = entry.get("tile", {})
+		if tile_v is Dictionary and not (tile_v as Dictionary).is_empty():
+			actor["grid_pos"] = { "col": int((tile_v as Dictionary).get("col", 0)), "row": int((tile_v as Dictionary).get("row", 0)) }
+		drawn.append(actor)
+	return drawn
+
+
+static func pickup_chooser_id(data: Dictionary) -> String:
+	for entry_v in data.get("row", []):
+		if entry_v is Dictionary and bool((entry_v as Dictionary).get("is_chooser", false)):
+			return str((entry_v as Dictionary).get("id", ""))
+	return ""
+
+
 func _leave_pickup() -> void:
 	_speed_bar.visible = true
+	if _pickup_stage.visible:
+		_kill_pickup_camera_tween()
+		_token_layer.reset_presentation()
+		_move_telegraph_layer.clear_telegraph()
+		if _bark_popup_layer != null:
+			_bark_popup_layer.clear_all()
 	_pickup_stage.visible = false
 	_pickup_stage.clear()
 	if is_instance_valid(_pickup_debug):
@@ -1423,7 +1550,10 @@ func _process(_delta: float) -> void:
 ## Locks the camera onto one actors-array entry. Echoes, enemies, spirits and structures are all
 ## entries in that array, so one path covers every target type in every objective mode.
 ## Public: RealmShell forwards echo-card taps here.
+## The pickup event ignores it, so its camera stays FREE (D-73).
 func select_board_target(actor_id: String) -> void:
+	if is_instance_valid(_pickup_stage) and _pickup_stage.visible:
+		return
 	var actor := _find_actor(actor_id)
 	if actor.is_empty() or _actor_is_dead(actor):
 		return
@@ -1557,7 +1687,7 @@ func _apply_responsive_layout() -> void:
 	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
 	var top := float(ceilf(insets.y))
 	var right := float(ceilf(insets.z))
-	var bottom := float(ceilf(insets.w)) + 88.0
+	var bottom := float(ceilf(insets.w)) + _ECHO_BAR_HEIGHT
 	_back_button.offset_top = 16.0 + top
 	_back_button.offset_bottom = _back_button.offset_top + 48.0
 	_round_label.offset_top = 16.0 + top

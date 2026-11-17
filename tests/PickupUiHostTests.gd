@@ -10,6 +10,7 @@ class_name PickupUiHostTests
 extends RefCounted
 
 const RealmShellScene := preload("res://ui/shells/RealmShell.tscn")
+const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 const _VIEW := Vector2i(1280, 720)
 const _LAYOUT := { "profile": &"standard", "safe_insets": Vector4.ZERO, "logical_size": Vector2(1280, 720) }
 const _NEW_FILES: Array = [
@@ -27,6 +28,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/same_event_does_not_restart_new_event_does", Callable(PickupUiHostTests, "_t_identity"))
 	runner.register_test("pickup_ui/encounter_hud_is_hidden_and_comes_back", Callable(PickupUiHostTests, "_t_hud"))
 	runner.register_test("pickup_ui/board_draws_the_snapshot_actors_and_size", Callable(PickupUiHostTests, "_t_board"))
+	runner.register_test("pickup_ui/board_draws_only_the_row_echoes_on_their_tiles", Callable(PickupUiHostTests, "_t_row_tokens"))
+	runner.register_test("pickup_ui/row_tokens_appear_on_their_tile_without_a_slide", Callable(PickupUiHostTests, "_t_no_stale_slide"))
+	runner.register_test("pickup_ui/leaving_the_event_restores_tokens_and_clears_barks", Callable(PickupUiHostTests, "_t_leave"))
+	runner.register_test("pickup_ui/repeat_and_swap_snapshots_keep_the_row_tokens", Callable(PickupUiHostTests, "_t_repeat"))
+	runner.register_test("pickup_ui/real_won_fight_snapshot_draws_its_row", Callable(PickupUiHostTests, "_t_real_snapshot"))
 	runner.register_test("pickup_ui/debug_placeholder_sends_slot_actions", Callable(PickupUiHostTests, "_t_placeholder"))
 	runner.register_test("pickup_ui/placeholder_exists_only_in_debug_builds", Callable(PickupUiHostTests, "_t_placeholder_gate"))
 	runner.register_test("pickup_ui/stage_nodes_send_no_action", Callable(PickupUiHostTests, "_t_stage_sends_nothing"))
@@ -47,6 +53,22 @@ static func _actor(id: String, actor_name: String, faction: String, col: int, ro
 		"hp": 10, "current_hp": 10, "max_hp": 12, "emotional_status": "grounded" }
 
 
+static func _dead_echo() -> Dictionary:
+	var dead := _actor("a3", "Esi", "echo", 1, 1)
+	dead["hp"] = 0
+	dead["current_hp"] = 0
+	return dead
+
+
+## Row order differs from actor order, and the tiles differ from the fight cells, so a host that draws every actor or
+## keeps `grid_pos` fails the row tests.
+static func _row() -> Array:
+	return [
+		{ "id": "a2", "name": "Kofi", "standing": 1, "status": "grounded", "is_chooser": false, "tile": { "col": 1, "row": 0 } },
+		{ "id": "a1", "name": "Ama", "standing": 1, "status": "grounded", "is_chooser": true, "tile": { "col": 2, "row": 0 } },
+	]
+
+
 static func _pickup(situation: String = "sit_a", run_count: int = 1, phase: String = "idle", cols: int = 6, rows: int = 5) -> Dictionary:
 	var actions := { "cta.continue": { "type": "pickup.continue", "slot": "cta.continue" } }
 	if phase == "intro":
@@ -55,7 +77,8 @@ static func _pickup(situation: String = "sit_a", run_count: int = 1, phase: Stri
 		"type": "flow.pickup", "meta": { "t": 1 },
 		"data": { "phase": phase, "situation_id": situation, "run_count": run_count,
 			"encounter_id": "host_test", "board_cols": cols, "board_rows": rows, "terrain": {},
-			"placement_seed": 0, "actors": _actors() },
+			"placement_seed": 0, "actors": _actors() + [_dead_echo(), _actor("m2", "Fallen", "enemy", 4, 4)],
+			"row": _row() },
 		"actions": actions,
 	}
 
@@ -227,11 +250,145 @@ static func _t_board() -> Dictionary:
 	if board.get_used_cells().size() != 30:
 		errors.append("board drew %d cells, wanted 30 (6 x 5)" % board.get_used_cells().size())
 	var last_actors: Array = combat.get("_last_actors")
-	if last_actors.size() != 3:
-		errors.append("screen holds %d actors, wanted 3" % last_actors.size())
+	if last_actors.size() != 2:
+		errors.append("screen holds %d actors, wanted the 2 row Echoes" % last_actors.size())
 	var tokens: Array = (combat.get_node("%TokenLayer") as Node).get("_tokens")
-	if tokens.size() != 3:
-		errors.append("token layer holds %d tokens, wanted 3" % tokens.size())
+	if tokens.size() != 2:
+		errors.append("token layer holds %d tokens, wanted 2" % tokens.size())
+	_free(fx)
+	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
+
+
+static func _tokens_of(fx: Dictionary) -> Array:
+	return (fx["combat"].get_node("%TokenLayer") as Node).get("_tokens")
+
+
+static func _drawn_cell_errors(combat: CombatBoardScreen, row: Array, errors: Array) -> void:
+	var layer := combat.get_node("%TokenLayer") as CombatTokenLayer
+	var board := combat.get_node("%Board") as TileMapLayer
+	for entry: Dictionary in row:
+		var tile: Dictionary = entry["tile"]
+		var want := board.map_to_local(Vector2i(int(tile["col"]), int(tile["row"])))
+		var got := layer.display_cell_position(str(entry["id"]))
+		if got == Vector2.INF or not got.is_equal_approx(want):
+			errors.append("token %s is drawn at %s, wanted %s" % [entry["id"], got, want])
+
+
+static func _row_errors(fx: Dictionary, row: Array, errors: Array) -> void:
+	var ids: Array = []
+	var cells: Array = []
+	for tok: Dictionary in _tokens_of(fx):
+		ids.append(str(tok["actor_id"]))
+		cells.append(tok["grid_pos"])
+		if str(tok["faction"]) != "echo":
+			errors.append("a %s token is drawn" % tok["faction"])
+		if float(tok["hp_ratio"]) <= 0.0:
+			errors.append("a dead actor token is drawn")
+	var want_ids: Array = row.map(func(e: Dictionary) -> String: return str(e["id"]))
+	if ids != want_ids:
+		errors.append("token ids %s, row ids %s" % [ids, want_ids])
+	for i in mini(cells.size(), row.size()):
+		if cells[i] != row[i]["tile"]:
+			errors.append("token %d is at %s, tile is %s" % [i, cells[i], row[i]["tile"]])
+	var chooser := ""
+	for e: Dictionary in row:
+		if bool(e["is_chooser"]):
+			chooser = str(e["id"])
+	if str((fx["combat"].get_node("%TokenLayer") as Node).get("_active_actor_id")) != chooser or chooser.is_empty():
+		errors.append("the chooser is not the active token")
+
+
+static func _t_row_tokens() -> Dictionary:
+	var fx := _mount(_pickup())
+	if fx.is_empty():
+		return { "ok": false, "error": "mount failed" }
+	var errors: Array = []
+	var snap := _pickup()
+	_row_errors(fx, snap["data"]["row"], errors)
+	_drawn_cell_errors(fx["combat"], snap["data"]["row"], errors)
+	var layer := fx["combat"].get_node("%TokenLayer") as CanvasItem
+	if not layer.visible:
+		errors.append("token layer is hidden")
+	var held: Array = fx["combat"].get("_last_actors")
+	if held.size() != 2 or held[0]["grid_pos"] != snap["data"]["row"][0]["tile"]:
+		errors.append("_last_actors does not hold the row actors on their tiles")
+	_free(fx)
+	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
+
+
+## Entering from a fight: tokens already drawn at fight cells must not slide to the tiles.
+static func _t_no_stale_slide() -> Dictionary:
+	var fx := _mount(_encounter())
+	if fx.is_empty():
+		return { "ok": false, "error": "mount failed" }
+	var errors: Array = []
+	(fx["realm"] as RealmShell).set_snapshot(_pickup())
+	_drawn_cell_errors(fx["combat"], _pickup()["data"]["row"], errors)
+	_free(fx)
+	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
+
+
+static func _t_leave() -> Dictionary:
+	var fx := _mount(_pickup())
+	if fx.is_empty():
+		return { "ok": false, "error": "mount failed" }
+	var combat := fx["combat"] as CombatBoardScreen
+	var barks := combat.get_node_or_null("%BarkPopupLayer") as BarkPopupLayer
+	var errors: Array = []
+	if barks != null:
+		barks.show_barks([{ "actor_id": "a1", "bark_line": "Hm.", "kind": "bark" }])
+		if (barks.get("_active_popups") as Dictionary).is_empty():
+			errors.append("control: no bark popup existed before the leave, the check proves nothing")
+	(fx["realm"] as RealmShell).set_snapshot(_encounter())
+	if _tokens_of(fx).size() != 3:
+		errors.append("after the event the board holds %d tokens, wanted the 3 encounter actors" % _tokens_of(fx).size())
+	if barks != null and not (barks.get("_active_popups") as Dictionary).is_empty():
+		errors.append("a bark popup outlived the event")
+	var layer := combat.get_node("%TokenLayer") as CombatTokenLayer
+	var board := combat.get_node("%Board") as TileMapLayer
+	for actor: Dictionary in _actors():
+		var gp: Dictionary = actor["grid_pos"]
+		var want := board.map_to_local(Vector2i(int(gp["col"]), int(gp["row"])))
+		if not layer.display_cell_position(str(actor["id"])).is_equal_approx(want):
+			errors.append("token %s did not return to its fight cell" % actor["id"])
+	_free(fx)
+	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
+
+
+static func _t_repeat() -> Dictionary:
+	var fx := _mount(_pickup())
+	if fx.is_empty():
+		return { "ok": false, "error": "mount failed" }
+	var errors: Array = []
+	var before: Array = _tokens_of(fx).duplicate(true)
+	var realm := fx["realm"] as RealmShell
+	realm.set_snapshot(_pickup())
+	realm.set_snapshot(_pickup("sit_a", 1, "intro"))
+	if _tokens_of(fx) != before:
+		errors.append("a repeat snapshot changed the tokens")
+	var swapped := _pickup()
+	swapped["data"]["pack"] = { "slots": [] }
+	realm.set_snapshot(swapped)
+	_row_errors(fx, _pickup()["data"]["row"], errors)
+	_drawn_cell_errors(fx["combat"], _pickup()["data"]["row"], errors)
+	_free(fx)
+	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
+
+
+## The real builder output: a won fight, row tiles from PickupPlacement.
+static func _t_real_snapshot() -> Dictionary:
+	var snap := PickupRealBoard.snapshot("empty")
+	if snap.is_empty():
+		return { "ok": false, "error": "the fixture fight did not reach the event" }
+	var row: Array = snap["data"]["row"]
+	var fx := _mount(snap)
+	if fx.is_empty():
+		return { "ok": false, "error": "mount failed" }
+	var errors: Array = []
+	if row.is_empty():
+		errors.append("the real snapshot has an empty row")
+	_row_errors(fx, row, errors)
+	_drawn_cell_errors(fx["combat"], row, errors)
 	_free(fx)
 	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
 

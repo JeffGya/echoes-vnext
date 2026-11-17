@@ -15,8 +15,11 @@
 # The layer hierarchy (RealmShell on layer 10, ModalHost on layer 40, as in Approot.tscn) lives
 # in screenshot_harness.tscn (AGENTS.md "Build structure in .tscn"). This script only instances it,
 # feeds it a hand-built snapshot and saves the frame. It never boots FlowRuntime, so it writes no save and does not touch the test save
-# directory. EXCEPTION: the fixtures pickup_pack_empty, pickup_pack_near and pickup_pack_full play a real won fight through
-# FlowRuntime (tests/fixtures/PickupRealBoard.gd) and publish its real flow.pickup snapshot. Run them with
+# directory. Step real_pickup:<kind>[:idle|intro][:<variant>][:seed=<n>]; a seed makes core place the row again (pickup_idle_axis_a
+# seed 0 gives the row axis, falling to the right; pickup_idle_axis_b seed 1 the col axis, rising to the right).
+# EXCEPTION: the fixtures pickup_pack_* and pickup_idle_* play a real won fight through
+# FlowRuntime (tests/fixtures/PickupRealBoard.gd) and publish its real flow.pickup snapshot. pickup_idle_* then set only
+# the event keys reaction (plus, none) or frozen; the board stays real. Run them with
 # ECHOES_TEST_SAVE_DIR=<fresh dir>; they write and delete save files there. Fixture pickup_host stays the hand-built U1 frame.
 # A fixture's snapshots are applied in order; a flow.resolve snapshot opens as the
 # resolve modal over the board before it. To add a screen state, add a FIXTURES entry.
@@ -75,7 +78,17 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 			modal_host.call("present_modal_for_id", req["id"], shell.call("modal_scene_for", req["id"]), req["payload"])
 		elif snap is String and (snap as String).begins_with("real_pickup:"):
 			var real_parts: PackedStringArray = (snap as String).split(":")
-			var real_snap: Dictionary = PickupRealBoard.snapshot(real_parts[1], real_parts[2] if real_parts.size() > 2 else "idle")
+			var real_phase := "idle"
+			var real_variant := ""
+			var real_seed := ""
+			for token in real_parts.slice(2):
+				if token.begins_with("seed="):
+					real_seed = token.substr(5)
+				elif token == "idle" or token == "intro":
+					real_phase = token
+				else:
+					real_variant = token
+			var real_snap: Dictionary = PickupRealBoard.snapshot(real_parts[1], real_phase, real_variant, real_seed)
 			if real_snap.is_empty():
 				push_error("real_pickup fixture %s did not reach the pickup event" % real_parts[1])
 			else:
@@ -190,6 +203,12 @@ func _fixtures() -> Dictionary:
 		"pickup_pack_empty": ["real_pickup:empty"],
 		"pickup_pack_near": ["real_pickup:near"],
 		"pickup_pack_full": ["real_pickup:full"],
+		"pickup_idle_plus": ["real_pickup:empty:idle:plus"],
+		"pickup_idle_none": ["real_pickup:full:idle:none"],
+		"pickup_idle_frozen": ["real_pickup:near:idle:frozen"],
+		"pickup_idle_axis_a": ["real_pickup:empty:idle:plus:seed=0"],
+		"pickup_idle_axis_b": ["real_pickup:empty:idle:plus:seed=1"],
+		"pickup_idle_zoomed_out": ["real_pickup:empty:idle:plus", "cam_zoom:0.3", "cam_frame"],
 		"warning_level_1": [_combat_stall(1, "")],
 		"warning_level_2": [_combat_stall(2, "Ama")],
 		"prebattle_stalled": [_prebattle({ "stalled_before": true })],
@@ -351,6 +370,16 @@ func _run_step(harness: Node, step: String) -> void:
 			panels.call("toggle_pack")
 		elif parts[1] == "select":
 			panels.call("_on_slot_chosen", parts[2], int(parts[3]))
+	if parts[0] == "cam_zoom" or parts[0] == "cam_frame":
+		var board_camera := harness.find_child("BoardCamera", true, false) as Camera2D
+		if board_camera != null and board_camera.owner != null and parts[0] == "cam_zoom":
+			# The opening tween would overwrite the zoom, so it is killed first.
+			board_camera.owner.call("_kill_pickup_camera_tween")
+			board_camera.zoom = Vector2(float(parts[1]), float(parts[1]))
+			print("CAM zoom before reframe: %s" % board_camera.zoom.x)
+		if board_camera != null and board_camera.owner != null and parts[0] == "cam_frame":
+			board_camera.owner.call("frame_pickup_camera", false)
+			print("CAM zoom after reframe: %s" % board_camera.zoom.x)
 	if parts[0] == "freeze_motion":
 		for node in harness.find_children("*", "Control", true, false):
 			if node.has_method("skip_motion") and node.get("_motion") != null:
