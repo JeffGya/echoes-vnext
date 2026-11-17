@@ -3758,7 +3758,13 @@
 			"pickup": {
 				"pointer_laps_min": 1,
 				"pointer_laps_max": 2,
-				"severe_from_status": "burdened"
+				"severe_from_status": "burdened",
+				"_placement_comment": "V2-ITEM-001b D-72 (ANSWERS #83): where the pickup event puts finds on the board (PickupPlacement). near and far are the Chebyshev tile distance from the row centre in which a find may lie; spacing is the least Chebyshev distance between two finds. PROPOSED DEFAULTS: Jeff approves. A missing key reads as 2, 3 and 2.",
+				"placement": {
+					"near": 2,
+					"far": 3,
+					"spacing": 2
+				}
 			},
 			"_finds_cap_comment": "V2-ITEM-001b D-46: cap on finds offered in one pickup event, by realm scale (RewardCalc.realm_scale). Ordered bands, ascending scale. The cap of a realm scale is the cap of the highest band whose scale is at or below it (FindsRules.cap_for_scale). 1.0 (realm.01, prologue) = 2 and 1.25 (realm.02) = 3 are approved. The bands from 1.75 up are placeholders for realms that do not exist yet.",
 			"finds_cap_by_realm_scale": [

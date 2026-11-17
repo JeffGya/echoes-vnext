@@ -191,7 +191,7 @@ static func validate_pick(pick: Dictionary, calling_behavior: Dictionary = {}, l
 		_fail(logger, t, "balance.inventory.pick", p)
 	return out
 
-# data.inventory.pickup (pointer laps, severe band). One problem string per broken rule; [] = valid.
+# data.inventory.pickup (pointer laps, severe band, placement). One problem string per broken rule; [] = valid.
 # Test-only caller, like validate_finds; the game does not run it at load.
 static func validate_pickup(inv_cfg: Dictionary, logger: StructuredLogger = null, t: int = -1) -> Array:
 	var out: Array = []
@@ -208,6 +208,18 @@ static func validate_pickup(inv_cfg: Dictionary, logger: StructuredLogger = null
 			out.append("pickup.pointer_laps_max is not a whole number at or above pointer_laps_min")
 		if not EmotionService.STATUS_LADDER.has(str(pk.get("severe_from_status", ""))):
 			out.append("pickup.severe_from_status is not a status on EmotionService.STATUS_LADDER")
+		var pl_v: Variant = pk.get("placement", null)
+		if pl_v != null:
+			var pl: Dictionary = pl_v if pl_v is Dictionary else {}
+			var near: Variant = pl.get("near", null)
+			var far: Variant = pl.get("far", null)
+			if not _is_whole(near) or int(near) < 0:
+				out.append("pickup.placement.near is not a whole number of 0 or more")
+			if not _is_whole(far) or (_is_whole(near) and int(far) < int(near)):
+				out.append("pickup.placement.far is not a whole number at or above near")
+			var sp: Variant = pl.get("spacing", null)
+			if not _is_whole(sp) or int(sp) < 1:
+				out.append("pickup.placement.spacing is not a whole number of 1 or more")
 	for p in out:
 		_fail(logger, t, "balance.inventory.pickup", p)
 	return out

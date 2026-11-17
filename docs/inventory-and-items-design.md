@@ -96,7 +96,7 @@ Player words follow ANSWERS #86. The code words never appear in player text.
 | Pack size by Sanctum progression | Not built. Pack stays at the config size in 001b (001b D-52 a). | V2-CONTINUITY-002 |
 | Pack size per Echo (each Echo adds a slot) | Not built. | V2-ITEM-003 |
 | Pack shrink rule (pieces in closing slots move to the Storehouse; player chooses at party prep) | Designed in 001a D-41, not built. Never on a live path. | The story that shrinks packs |
-| Pack grows with the finds cap | OPEN (001b D-46, section 14 Q7). | Jeff |
+| Pack grows with the finds cap | OPEN (001b D-46, section 14 Q7, first half). | Jeff |
 | Storehouse `unique_cap` as anti-hoarding | GDD 19.7 lists "inventory cap". Size is PROVISIONAL. | Jeff, after play |
 
 ---
@@ -276,9 +276,8 @@ Whether Standing 6 and 9 Callings resolve to a Calling family: OPEN (001b "Open"
 
 **Board rules.**
 - Items appear on the board only when the event starts. Nothing is on the board during combat. Combat cells and AI do not change (D-31).
-- For kills, an item lies where the enemy fell (D-32).
-- For a win without killing every enemy, items lie at the objective's own cell: shrine, spirit's end cell, relic tile, quarry, protected entity. Extra items go to the nearest free cells. No random numbers. `endure` has no anchor and uses the party centre (D-32).
-- 001b places items in a simple row. Real placement is a later story (D-29, D-52 b; section 8).
+- Finds lie on free board tiles chosen by a seeded rule in core (`PickupPlacement`, D-72; section 8). The fall-cell rule and the objective anchors of D-32 are not used.
+- The standing Echoes form a straight row of tiles near the party centre (D-72; section 8).
 
 **Continue guard.** See section 6.
 
@@ -370,19 +369,22 @@ D-34: a severe-band Echo "may still get the plus when everything fits".
 
 ---
 
-## 8. Board placement — DESIGNED, not built
+## 8. Board placement — BUILT in 001b (D-72)
 
-**Story:** a new story, "Pickup placement on the board" (no code). **Decisions:** 001b D-26 b and c, D-31, D-32, D-52 b.
+**Code:** `core/inventory/PickupPlacement.gd`, called by `PickupSnapshotBuilder`. **Decisions:** 001b D-66, D-72 (replaces D-29 "later placement story", D-32 and D-52 b).
 
 | Topic | Rule or state |
 |---|---|
 | Items on the board | Only after the win, at the start of the event (D-31). |
-| Kills | An item lies where the enemy fell (D-32). |
-| Win without a kill of every enemy | Items lie at the objective's own cell. Extra items go to the nearest free cells. No random numbers. (D-32) |
-| `endure` | No anchor. Uses the party centre (D-32). |
-| Piles | The mockup shows finds sharing a cell as a pile that fans out. Not decided as a rule. OPEN (section 14 Q11). |
-| Limit by free board cells | None in 001b (D-52 b). The later story decides. OPEN (section 14 Q7). |
-| 001b | A simple row (D-52 b). |
+| Snapshot keys | `row[].tile = {col,row}` for each standing Echo and `finds[].tile = {col,row}` for each find. `finds[].cell` stays the index in the record. The tiles are derived on every build and are not saved. |
+| Walkable tiles | The largest connected walkable region of the terrain. The sentinel terrain (`{}`) means every cell of the board. |
+| Echo row | A straight line of N adjacent region tiles along the col axis or the row axis. The line centre is as near as possible to the party anchor (the integer average of the standing Echoes' cells; the board centre if none has a cell). Ties: a seeded hash that includes the axis (so the hash picks the axis), then axis, then numeric col and row. Fallback: a connected chain of N region tiles (each touches the next by Chebyshev distance 1, no tile twice), grown from the tile nearest the anchor by always adding the unused neighbour of the last tile that is nearest the anchor; a start that dead-ends is skipped. Last: each Echo keeps its own tile. Echoes take the tiles in snapshot `row` order, screen-left to screen-right. |
+| Finds | Region tiles that are not row tiles (only drawn tokens occupy a tile: dead enemies, fallen Echoes and the old start tiles of the row Echoes are free) at Chebyshev distance `near` to `far` from the row centre. Per find, in snapshot order: the lowest hash at least `spacing` from every earlier find. Fallbacks in order: spacing 1, wider `far`, any other non-row region tile, then a pile on the nearest taken tile. Every find has a tile. |
+| Constants | `data.inventory.pickup.placement`: `near` 2, `far` 3, `spacing` 2 (proposed defaults). A missing key reads as 2, 3, 2. |
+| Random numbers | None. One FNV-1a integer hash over `[placement_seed, situation_id, run_count, ...]`. It has the same algorithm as `PickupEventPlan.hash_of` in `ui/`. |
+| Limit by free board cells | None. A pile takes the finds that no free tile can hold (the cell-limit half of section 14 Q7 is closed by this; the pack-growth half stays OPEN). |
+| Piles | A pile is a rule fallback only. The fan-out look of a pile is a UI decision (section 14 Q11 stays open for the look). |
+| Not built | Items that lie where the enemy fell, and objective anchors (D-32). Jeff may reopen them as a new story. |
 
 ---
 
@@ -533,7 +535,7 @@ Story codes below come from `docs/Echoes vNext V2 Story Backlog ..._all.csv`. Th
 | V2-ITEM-005 (unverified) | Draft | Death-formed relic seam (CSV text). Duplicate rows exist (001a handoff). |
 | V2-ECONOMY-003 (unverified) | Draft | Crafting screen, held-item check, item consumption, price display, `short_items`, use of materials. Seam S6. |
 | V2-CONTINUITY-002 (unverified) | Draft | Pack size by Sanctum progression (note). Seam S5. |
-| Pickup placement on the board | New, no code | Section 8. Seam S2. |
+| Pickup placement on the board | Built in 001b (D-72) | Section 8. Seam S2. |
 | Pickup reaction effect | New, no code | Emotion change through `EmotionService` (section 7). Seam S3. |
 
 ### 13.2 Seams S1 to S6 (001b story split, D-29)
@@ -543,7 +545,7 @@ Source: Jeff's acceptance of the split as a working draft (001b D-29, 2026-11-12
 | Seam | Name | What 001b builds | What 001b must NOT build | Who takes the rest |
 |---|---|---|---|---|
 | S1 | Finds source | The call `record_found_items(finds)` (exists from 001a) and the pick function (chooser draw and pick rule, section 4). The finds chance and cap function (D-49) is built with the pick function. | No drop table, no loot source, no item catalogue. | V2-ITEM-002 |
-| S2 | Placement | One function that returns a cell per find, with a simple row layout (D-52 b). | No fall-cell logic, no objective anchors, no spill logic, no seeded placement stream. | The new "Pickup placement on the board" story |
+| S2 | Placement | `PickupPlacement.place`: a board tile per standing Echo and per find, by a seeded hash rule (D-72; section 8). | No fall-cell logic and no objective anchors (D-32 is not used). | Nobody: built in 001b. Jeff may reopen D-32 as a new story. |
 | S3 | Reaction | A reaction class on the pick result (plus, none, minus; section 7). | No `EmotionService` call. No emotion value changes. | The new "Pickup reaction effect" story |
 | S4 | Swap legality | One function `swap_is_legal` (section 6.2). | No rules for equipped or in-use items. No recycle route for the dropped item. | V2-ITEM-003 (equipped items); V2-ITEM-004 (recycle of a dropped item) |
 | S5 | Capacity | Reads the pack size from config and the pack service (`InventoryService.box_size`, `pack_free`). | No hard-coded 4. No pack size by progression or per Echo. | V2-CONTINUITY-002 (by progression); V2-ITEM-003 (per Echo) |
@@ -563,13 +565,13 @@ The function names `swap_is_legal` and the S1 pick function are names from the s
 | Q4 | The size of the emotion plus and minus. Which `EmotionService` values? Does the plus stack with the +10 win lift without a cap? | Jeff (Pickup reaction effect story) |
 | Q5 | CLOSED. `swap_used` clears at an early leave, at defeat and at the path end, as `discard_used` does. Decided by 001b D-04 (Jeff approved it in the interview). The left-list part of D-04 is superseded by D-14. Kept here so the numbering holds. | none (decided) |
 | Q6 | CLOSED (001b C6, C9). The saved record is `stage.pickup` (with `phase` idle or done); the saved swap flag is `stage.swap_used`. A reload resumes at idle. | none (decided) |
-| Q7 | Does the pack grow with the finds cap? Is there a limit by free board cells? | Jeff (D-46, D-52) |
+| Q7 | OPEN: does the pack grow with the finds cap? (CLOSED half: a limit by free board cells. D-72: there is none; a pile takes the finds that no free tile can hold.) | Jeff (D-46) |
 | Q8 | Are slot rolls for finds independent or is it one count roll? (Assumed independent from D-50.) | Jeff |
 | Q9 | The leftover rule for a stack larger than one stack. | Jeff (ITEM-002) |
 | Q10 | The item catalogue: names, grades, rarity ladder (GDD 21.1 lists it as open). | Jeff (ITEM-002) |
-| Q11 | The piles rule for finds that share a cell. | Jeff (placement story) |
+| Q11 | The look of a pile (how finds that share a tile are drawn). The rule is built (D-72): a pile is the last fallback in `PickupPlacement`. | Jeff (UI) |
 | Q12 | Panel placement of the Travel pack, small text size, and other UX points of the redesign (K1, K2, F11-03, F11-04). | Jeff (UX redesign) |
-| Q13 | Notion rows: 001b, the placement story, the reaction story, the catalogue. Each needs Jeff's yes. | Jeff |
+| Q13 | Notion rows: 001b, the reaction story, the catalogue. Each needs Jeff's yes. (D-72 built the placement in 001b: no placement story.) | Jeff |
 | Q14 | The Directive field name `confirm_leave_items`, the `swap_used` name and the function names in section 13.2 are proposals. | Jeff, `mechanics-developer` |
 | Q15 | A pack debuff stays closed (001a D-36). Revisit only if play shows nobody feels the pack. | Jeff |
 | Q16 | The win fear of -5 (from D-33 text) is not verified in config. Which key holds it? | `mechanics-developer` |

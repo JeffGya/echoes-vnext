@@ -8,7 +8,7 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 |---|---|---|---|---|---|
 | 1 | Real finds in real fights | `PickupFinds.finds_for_win` returns none in shipping. Only debug `event` and `arm` produce finds. | V2-ITEM-002 (seam S1) | real drops exist | `PickupFinds.gd` |
 | 2 | Real item names, grades, images, descriptions | placeholder definitions in the test fixture. Details show placeholders. | V2-ITEM-002 | the catalogue exists | `PickupSnapshotBuilder.gd` (`name_of` for the find rows). The pack strip names come from `ItemUiText` in `ui/`; it has no marker (`ui/` is not edited in the backend) |
-| 3 | Real placement (where enemies fell) and no-kill objective anchors | a simple row (`finds[].cell`) | new story "Pickup placement on the board" (S2); marker `NEW "Pickup placement on the board"` (D-65) | the placement story starts | `PickupEventService.gd` (`open_after_win`, where the rows get `cell`) |
+| 3 | Items that lie where the enemy fell, and no-kill objective anchors (D-32) | done differently in 001b (D-72): the event puts Echoes and finds on real board tiles by a seeded rule in `PickupPlacement` (`row[].tile`, `finds[].tile`; `finds[].cell` stays an index). D-32 is not used. | none (Jeff may reopen D-32 as a new story) | Jeff decides | none (no marker: the placement is built) |
 | 4 | The emotion effect (plus and minus) | a reaction class only. No `EmotionService` call. | new story "Pickup reaction effect" (S3); marker `NEW "Pickup reaction effect"` (D-65) | that story starts | `PickupEventService.gd` (`open_after_win`, where `reaction` is stored) |
 | 5 | Swap with equipped or in-use items | swap legality ignores equipment | V2-ITEM-003 (S4) | equipping exists | `PickupSwapRules.gd` |
 | 6 | Recycle route for the dropped item | the dropped item is lost | V2-ITEM-004 (S4) | recycle exists | `PickupEventService.gd` (`commit_swap`) |
@@ -16,7 +16,7 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 | 8 | Use of materials | materials show as items only | V2-ECONOMY-003 (S6) | crafting exists | none (no code) |
 | 9 | `confirm_leave_items` on future Directives | set on Scout Carefully (true) and Seek Signs (false) | V2-DIRECTIVE-003 (new Directives) | a Directive is added | `DirectiveService.gd` (`confirms_leave_items`) |
 | 10 | Finds cap and chance numbers beyond realm.02 | bands 1.75, 2.5 and 3.5 are placeholders | V2-ITEM-002, or the story that adds realm 3 | realm 3 exists | `FindsRules.gd` (`cap_for_scale`, key `finds_cap_by_realm_scale`) |
-| 11 | Cell limit on the cap, and the piles rule | none | `NEW "Pickup placement on the board"` | the placement story starts | `FindsRules.gd` (`cap_for_scale`) |
+| 11 | Cell limit on the cap, and the piles rule | done in 001b (D-72): `PickupPlacement` piles finds on a taken tile when the free tiles run out, so every find has a tile. The cap has no cell limit. | none (Jeff may add a cell limit later) | Jeff decides | none (no marker: the placement is built) |
 | 12 | Repetition forms (short and brief intro) | Skip only | `NEW "Pickup intro short forms"` (a feel pass after Jeff's playtests; the title is a proposal, Jeff names it) | Jeff decides | `PickupSnapshotBuilder.gd` (`PHASE_INTRO`) |
 | 13 | Win emotion drift is skipped after a reload on the Resolve card (pre-existing). A reload during the pickup event also skips the win steps (emotion drift, `check_vow_discovery`, `clear_ally_fields_if_present`), because the machine is then in RESOLVE, not ENCOUNTER (found by C9 QA). | inherited, not fixed. Candidate owner: V2-ECONOMY-004 follow-ups | `NEW "Win steps after a reload"` (Jeff assigns) | Jeff decides | `FlowResolveState.gd` (`enter`, step 0: the resume of the event) |
 | 14 | UX redesign items: pack discoverability, text size, panel placement | not touched. A story title may be `NEW "Pickup UX redesign"` (proposed) | none (Jeff's UX redesign, design document Q12) | that redesign starts | none (no code: a UX redesign) |
@@ -30,7 +30,7 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 - The pass line for the Standing 1 against Standing 9 probe (D-09). Needs a number from `mid-game-designer`, approved by Jeff, before step C4 closes.
 - What Resolve shows for final items beyond the `data.pickup_result` block.
 - The real sizes of the emotion plus and minus (the reaction story).
-- Notion rows for 001b, the placement story, the reaction story and the catalogue. Each needs Jeff's yes.
+- Notion rows for 001b, the reaction story and the catalogue (D-72 built the placement in 001b, so there is no placement story). Each needs Jeff's yes.
 - Short notes on the Notion rows of V2-ITEM-001, V2-ITEM-002 and the other target stories, pointing at the design document. Only with Jeff's yes.
 - Jeff reviews ALL player-facing copy in one pass at the end (D-56).
 

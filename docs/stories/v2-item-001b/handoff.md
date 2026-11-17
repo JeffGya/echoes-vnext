@@ -29,7 +29,7 @@ Written in STE. Keep this file current. Last update: 2026-11-15, after the C12 b
 | The three `clear_path_marks` sites: `StageSettlementService.gd` (path end), `VentureController.gd` (early leave), `ActiveStageService.gd` (defeat). | C0 |
 
 ## The design in one paragraph
-After a won fight with finds, an event plays on the combat board before Resolve (snapshot type `flow.pickup`, a phase of the encounter, not a machine state, D-58). The finds count is a rolling chance by encounter rank, capped by realm scale (D-46 to D-51). One standing Echo is drawn with equal chance; a pointer shows it (D-05, D-21). The chooser scores the finds by its own traits (D-06, D-12); a frozen chooser takes nothing and no swap is offered (D-39, D-43). Items show as hidden icons and are revealed when chosen (D-37, D-45). Items go into the Travel pack; an item that does not fit is held up near the Echo (D-41, D-55). The Keeper has one swap per path, only when the pack is full (D-27, D-28). Details float next to any visible item (D-25). The Directive decides the "Leave these behind?" prompt (D-35). Reaction is a class only (D-29, D-33, D-34). Items are placed in a simple row (D-52). Jeff reviews ALL copy at the end (D-56).
+After a won fight with finds, an event plays on the combat board before Resolve (snapshot type `flow.pickup`, a phase of the encounter, not a machine state, D-58). The finds count is a rolling chance by encounter rank, capped by realm scale (D-46 to D-51). One standing Echo is drawn with equal chance; a pointer shows it (D-05, D-21). The chooser scores the finds by its own traits (D-06, D-12); a frozen chooser takes nothing and no swap is offered (D-39, D-43). Items show as hidden icons and are revealed when chosen (D-37, D-45). Items go into the Travel pack; an item that does not fit is held up near the Echo (D-41, D-55). The Keeper has one swap per path, only when the pack is full (D-27, D-28). Details float next to any visible item (D-25). The Directive decides the "Leave these behind?" prompt (D-35). Reaction is a class only (D-29, D-33, D-34). Echoes and finds stand on real board tiles chosen by a seeded rule in core (D-72; `row[].tile`, `finds[].tile`). Jeff reviews ALL copy at the end (D-56).
 
 ## What the UI steps need (the backend contract)
 - Snapshot shape: the header of `core/state/flow/states/venture/PickupSnapshotBuilder.gd`. Data keys include `order`, `pick_index`, `selected`, `swap.targets` (keyed from both sides) and `swap.dropped`. Core emits keys and ids, never player text.
@@ -58,10 +58,9 @@ Rows 1 to 18. Every row has a Target cell with a story code, a `NEW "<title>"`, 
 9. The end review of ALL player-facing copy (D-56).
 
 ## `NEW "<title>"` story rows to create in Notion
-The suite `pickup_unwired` prints this list from the markers. Titles marked "proposed" were chosen by the builder; Jeff names them. There are 7 distinct titles with markers.
+The suite `pickup_unwired` prints this list from the markers. Titles marked "proposed" were chosen by the builder; Jeff names them. There are 6 distinct titles with markers.
 | Title | Marker site (file:line at C12) | Register row |
 |---|---|---|
-| `NEW "Pickup placement on the board"` | `PickupEventService.gd:135`, `FindsRules.gd:24` | 3, 11 |
 | `NEW "Pickup reaction effect"` | `PickupEventService.gd:139` | 4 |
 | `NEW "Win steps after a reload"` (proposed) | `FlowResolveState.gd:39` | 13 |
 | `NEW "Pickup intro short forms"` (proposed) | `PickupSnapshotBuilder.gd:25` | 12 |

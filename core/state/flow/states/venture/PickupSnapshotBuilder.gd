@@ -12,6 +12,8 @@ extends RefCounted
 ## other side. `selected` = the id of the item whose details show (`pickup.select` writes it, `pickup.swap.start`
 ## reads it as the origin). The snapshot key `selected` is { id, side: "find"|"pack" }, or {} when the id is not
 ## valid now (a hidden find in the intro, an id of no find and no pack slot).
+## Board tiles (D-72, `PickupPlacement`, derived on every build, never saved): `row[].tile` and `finds[].tile` are
+## { col, row }. `finds[].cell` stays the index in the record.
 ## `swap.targets` is keyed by BOTH sides: left find id -> legal pack ids, pack id -> legal left find ids.
 ##
 ## Actions (slot-keyed; no `nav.back`, the event has no way out except Continue):
@@ -117,7 +119,23 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		"confirm_leave_items": DirectiveService.confirms_leave_items(directives_cfg, DirectiveService.active_id(save)),
 	}
 	data.merge(_board(flow_ctx))
+	_add_tiles(data, inv_cfg)
 	return { "type": FlowStateIds.PICKUP, "data": data, "actions": _actions(phase, offered), "meta": { "t": t } }
+
+
+## Adds `row[].tile` and `finds[].tile` (board tiles, `PickupPlacement`; derived on every build, never saved).
+## `cell` stays the index of a find in the record.
+static func _add_tiles(data: Dictionary, inv_cfg: Dictionary) -> void:
+	var row: Array = data["row"]
+	var finds: Array = data["finds"]
+	var placed := PickupPlacement.place(data["terrain"] as Dictionary, int(data["board_cols"]), int(data["board_rows"]),
+		int(data["placement_seed"]), str(data["situation_id"]), int(data["run_count"]), data["actors"] as Array,
+		row.map(func(r: Dictionary) -> String: return str(r["id"])),
+		finds.map(func(f: Dictionary) -> String: return str(f["find_id"])), inv_cfg)
+	for r: Dictionary in row:
+		r["tile"] = (placed["row"] as Dictionary)[str(r["id"])]
+	for f: Dictionary in finds:
+		f["tile"] = (placed["finds"] as Dictionary)[str(f["find_id"])]
 
 
 static func _selected(id: String, phase: String, record: Dictionary, pack: Dictionary) -> Dictionary:

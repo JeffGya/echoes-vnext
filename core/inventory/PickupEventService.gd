@@ -141,7 +141,7 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 	for i in kept_finds.size():
 		var f: Dictionary = kept_finds[i]
 		var type_id := str(f.get("type_id", ""))
-		# UNWIRED (target: NEW "Pickup placement on the board"): real placement of finds on the board (a simple row today)
+		# `cell` is only the index in this record; the board tile of a find is derived in PickupSnapshotBuilder (`tile`)
 		rows.append({ "find_id": str(f.get("find_id", "")), "type_id": type_id,
 			"name": _row_name(inv_cfg, type_id, debug), "kind": str(f.get("kind", "")),
 			"grade": str(f.get("grade", "")), "quantity": int(f.get("quantity", 1)), "cell": i })

@@ -38,6 +38,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/tried_find_and_pack_slot_fields", Callable(PickupSnapshotTests, "_t_tried_and_slots"))
 	runner.register_test("pickup_snapshot/chooser_standing_return_to_and_tick", Callable(PickupSnapshotTests, "_t_standing_meta"))
 	runner.register_test("pickup_snapshot/build_leaves_the_flow_context_alone_and_terrain_is_a_copy", Callable(PickupSnapshotTests, "_t_context_untouched"))
+	PickupPlacementTests.register(runner)  # D-72: board tiles; no ui/ edit needed, the suite name stays pickup_snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +154,7 @@ static func _t_shape() -> Dictionary:
 		if counts["taken"] + counts["tried"] + counts["left"] + counts["lost"] != (d["finds"] as Array).size():
 			m.append("%s: a find has an unknown status" % kind)
 		for f: Dictionary in d["finds"]:
-			for k in ["find_id", "type_id", "name", "kind", "grade", "quantity", "cell", "status", "revealed", "pick_index"]:
+			for k in ["find_id", "type_id", "name", "kind", "grade", "quantity", "cell", "tile", "status", "revealed", "pick_index"]:
 				if not f.has(k):
 					m.append("%s: find row misses %s" % [kind, k])
 		var pk: Dictionary = d["pack"]
