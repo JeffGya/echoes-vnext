@@ -584,10 +584,18 @@ func handle_ledger_mark_seen(t: int) -> FlowActionOutcome:
 ## and route to REALM_SELECT. `destination` overrides the non-completed destination (cta.continue
 ## on victory routes to SANCTUM instead of STAGE_MAP); realm completion always wins.
 func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
-	# Re-check the gate the offering snapshot used. A stage with no objectives passes, as it does
-	# on the Resolve card (EncounterSnapshotBuilder._count_remaining_required_objectives).
-	var _gate_stage := FlowStageExploreState._get_current_stage(flow_ctx)
-	var _gate_objs_v: Variant = _gate_stage.get("objectives", [])
+	var realm := RealmService.get_active(flow_ctx)
+	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
+	# The selected stage can still point to the last fight after the Realm advances.
+	if flow_ctx.stage_id.is_empty() or stage.is_empty() or bool(realm.get("is_completed", false)) \
+			or int(stage.get("index", -1)) != int(realm.get("current_stage_index", 0)):
+		logger.debug(t, "stage.complete.stale", "Stage completion ignored for a stage that is no longer current", {
+			"stage_id": flow_ctx.stage_id,
+		})
+		return FlowActionOutcome.handled_outcome()
+
+	# Keep the existing exception for a stage with no objectives.
+	var _gate_objs_v: Variant = stage.get("objectives", [])
 	var _gate_objs: Array = _gate_objs_v if _gate_objs_v is Array else []
 	if not _gate_objs.is_empty() and not ObjectiveModel.stage_completable(_gate_objs):
 		logger.warn(t, "stage.complete.refused", "flow.complete_stage refused: the stage is not completable", {
@@ -633,52 +641,15 @@ func handle_complete_stage(action: Dictionary, t: int) -> FlowActionOutcome:
 	# VOW-001: post-stage complete benefit (obi_nnim_kyere full-scout bonus).
 	_vow_consequence_service().apply_vow_stage_complete_benefit(t)
 
-	# On combat victory: resolve the situation that triggered the encounter.
-	# engage_situation deliberately left it unresolved so a defeat allows retry.
-	if is_combat_victory and not flow_ctx.stage_id.is_empty():
-		var _vstage := FlowStageExploreState._get_current_stage(flow_ctx)
-		if not _vstage.is_empty():
-			var _vmap_v: Variant = _vstage.get("explore_map", {})
-			var _vmap: Dictionary = _vmap_v if _vmap_v is Dictionary else {}
-			var _vsit_id := str(_vmap.get("last_situation_id", ""))
-			if not _vsit_id.is_empty():
-				var _vsits_v: Variant = _vmap.get("situations", [])
-				var _vsits: Array = _vsits_v if _vsits_v is Array else []
-				for _vi in range(_vsits.size()):
-					var _vsv: Variant = _vsits[_vi]
-					if _vsv is Dictionary and str((_vsv as Dictionary).get("id", "")) == _vsit_id:
-						var _vs: Dictionary = _vsv
-						_vs["resolved"] = true
-						_vs["revealed"] = true
-						_vsits[_vi] = _vs
-						if bool(_vs.get("is_objective", false)):
-							_vmap["objectives_found"] = int(_vmap.get("objectives_found", 0)) + 1
-							# V2-STAGE-002: mark the associated objective completed
-							var _vobj_idx := int(_vs.get("objective_index", -1))
-							if _vobj_idx >= 0:
-								var _vstage_objs_v: Variant = _vstage.get("objectives", [])
-								if _vstage_objs_v is Array:
-									var _vstage_objs: Array = _vstage_objs_v
-									if _vobj_idx < _vstage_objs.size() and _vstage_objs[_vobj_idx] is Dictionary:
-										_vstage_objs[_vobj_idx]["completed"] = true
-										EarningsService.record_objective(_vstage, _vobj_idx, ConfigService.get_rewards_cfg(config_service), logger, t)
-									_vstage["objectives"] = _vstage_objs
-						break
-				_vmap["situations"] = _vsits
-				# Check stage completion after resolving
-				var _vobj_found := int(_vmap.get("objectives_found", 0))
-				var _vobj_total := int(_vmap.get("objectives_total", 0))
-				if _vobj_total > 0 and _vobj_found >= _vobj_total:
-					_vmap["party_state"] = StageExploreModel.STATE_COMPLETE
-				_vstage["explore_map"] = _vmap
-				FlowStageExploreState._write_stage_back(flow_ctx, _vstage)
-				flow_ctx.request_save("stage.combat_resolved")
-				logger.info(t, "stage.combat_resolved", "Combat situation resolved on victory", {
-					"stage_id":     flow_ctx.stage_id,
-					"situation_id": _vsit_id,
-					"obj_found":    _vmap.get("objectives_found", 0),
-					"obj_total":    _vmap.get("objectives_total", 0),
-				})
+	if is_combat_victory and not ActiveStageService.last_situation_id(stage).is_empty():
+		ActiveStageService.new(flow_ctx, config_service, logger).resolve_combat_situation_and_objective(
+			t, true, true, "stage.combat_resolved", "Combat situation resolved on victory", true
+		)
+		# The map counts all objective situations, including optional ones. Stage advance saves it.
+		var explore_map: Dictionary = stage["explore_map"]
+		var objectives_total := int(explore_map.get("objectives_total", 0))
+		if objectives_total > 0 and int(explore_map.get("objectives_found", 0)) >= objectives_total:
+			explore_map["party_state"] = StageExploreModel.STATE_COMPLETE
 
 	# VOW-001: discovery check runs AFTER the combat-victory situation write-back so
 	# all_situations_scouted reads the correct revealed state. ectx is still non-null

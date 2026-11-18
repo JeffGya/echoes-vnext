@@ -855,6 +855,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 # that call site).
 func _apply_victory_return_to_explore(t: int) -> void:
 	var _ncv_from: String = str(flow_machine._current_state_id)
+	if _ncv_from == FlowStateIds.STAGE_EXPLORE:
+		return
 	if _ncv_from == FlowStateIds.ENCOUNTER and flow_ctx.encounter_ctx != null:
 		var _ncv_victory := bool(flow_ctx.encounter_ctx.combat_result.get("victory", false))
 		if _ncv_victory:
