@@ -213,6 +213,14 @@ func _fixtures() -> Dictionary:
 		"pickup_idle_frozen": ["real_pickup:near:idle:frozen"],
 		"pickup_intro_many": ["real_pickup:many:intro"],
 		"pickup_intro_many_b": ["real_pickup:many:intro:seed=1"],
+		"pickup_intro_pointer": ["real_pickup:many:intro:seed=0"],
+		"pickup_intro_pointer_b": ["real_pickup:many:intro:seed=1"],
+		# Fixed-time stills of the mote (seed 0, 5 Echoes, chooser index 2: path 3.79 s, P0 0.5 s; intro time = path time + 0.5).
+		# 2.5 = path 2.0, mid-glide on the return leg; 1.7 = path 1.2, the first half turn; 4.49 = 0.2 s into the landing; 4.89 = end of the hold.
+		"pickup_intro_pointer_t1": ["real_pickup:many:intro:seed=0", "pointer_at:2.5"],
+		"pickup_intro_pointer_turn": ["real_pickup:many:intro:seed=0", "pointer_at:1.7"],
+		"pickup_intro_pointer_land": ["real_pickup:many:intro:seed=0", "pointer_at:4.49"],
+		"pickup_intro_pointer_hold": ["real_pickup:many:intro:seed=0", "pointer_at:4.89"],
 		"pickup_intro_empty": ["real_pickup:empty:intro"],
 		"pickup_intro_near": ["real_pickup:near:intro"],
 		"pickup_intro_full": ["real_pickup:full:intro"],
@@ -394,6 +402,15 @@ func _run_step(harness: Node, step: String) -> void:
 		if board_camera != null and board_camera.owner != null and parts[0] == "cam_frame":
 			board_camera.owner.call("frame_pickup_camera", false)
 			print("CAM zoom after reframe: %s" % board_camera.zoom.x)
+	if parts[0] == "pointer_advance" or parts[0] == "pointer_at":
+		# pointer_advance:<s> moves the intro clock on by <s> in one tick; pointer_at:<t> moves it to the intro time <t> and then
+		# stops it, so the PNG shows that exact moment (later frames would add time).
+		var stage := harness.find_child("PickupEventStage", true, false)
+		if stage != null:
+			var delta := float(parts[1]) if parts[0] == "pointer_advance" else maxf(float(parts[1]) - float(stage.call("clock_time")), 0.0)
+			stage.call("advance", delta)
+			if parts[0] == "pointer_at":
+				stage.set_process(false)
 	if parts[0] == "freeze_motion":
 		for node in harness.find_children("*", "Control", true, false):
 			if node.has_method("skip_motion") and node.get("_motion") != null:

@@ -43,6 +43,7 @@ const StopShortMotion := preload("res://ui/screens/combat/CombatStopShortMotion.
 @onready var _move_telegraph_layer: Node2D          = %MoveTelegraphLayer
 @onready var _token_layer: CombatTokenLayer         = %TokenLayer
 @onready var _finds_layer: PickupFindsLayer         = %PickupFindsLayer
+@onready var _pickup_mote: PickupPointerMote        = %PickupPointerMote
 # V2-VOICE-001: bark popup layer — optional; null-checked before use.
 @onready var _bark_popup_layer: BarkPopupLayer      = get_node_or_null("%BarkPopupLayer") as BarkPopupLayer
 @onready var _distance_layer: CombatDistanceLayer   = %DistanceLayer
@@ -183,6 +184,10 @@ var _pickup_camera_tween: Tween = null
 var _pickup_frame_due: bool = false
 # "event|chooser|text" of the bark now shown in the pickup event; "" when none. A repeat snapshot with the same key shows nothing again.
 var _pickup_bark_key: String = ""
+# The row Echoes' board positions by row index, one grid step toward the camera, and the chooser, for the pointer mote.
+var _pickup_row_positions: Array = []
+var _pickup_lateral: Vector2 = Vector2.ZERO
+var _pickup_chooser_id: String = ""
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
@@ -230,6 +235,7 @@ func _ready() -> void:
 	_recenter_button.visible = false
 	_recenter_button.pressed.connect(_on_recenter_pressed)
 	_pickup_debug.action_requested.connect(_on_action)
+	_pickup_stage.clock_ticked.connect(_on_pickup_clock)
 
 	# CanvasLayer visibility and Camera2D.enabled do not follow this Control. A hidden screen must
 	# neither draw its board nor drive the viewport canvas transform.
@@ -289,7 +295,7 @@ func set_layout(layout: Dictionary) -> void:
 
 
 ## The pickup event keeps the board drawn from the snapshot (terrain, size) and shows no combat HUD. Only the standing
-## Echoes get a token, on their row tiles, with the chooser as the active actor.
+## Echoes get a token, on their row tiles, with no active actor (no selection ring; the intro pointer is the mote).
 ## The snapshot has no nav.back slot, so Back stays hidden and AppRoot's Back does nothing.
 func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_flush_held_barks()
@@ -298,6 +304,7 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		camera.deselect()
 		camera.has_manual_override = false
 		_pickup_bark_key = ""
+		_hide_pickup_mote()
 		if _bark_popup_layer != null:
 			_bark_popup_layer.clear_all()
 	_pickup_cells = pickup_frame_cells(data)
@@ -318,7 +325,12 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		_token_layer.reset_presentation()
 		_move_telegraph_layer.clear_telegraph()
 	else:
-		_draw_tokens(actors, pickup_chooser_id(data), {})
+		_draw_tokens(actors, "", {})
+	_pickup_row_positions = pickup_row_positions(data)
+	_pickup_lateral = pickup_lateral(data, _pickup_row_positions)
+	_pickup_chooser_id = pickup_chooser_id(data)
+	if str(data.get("phase", "")) != "intro":
+		_hide_pickup_mote()
 	_finds_layer.show_finds(data, _board)
 	_show_pickup_bark(data, actors)
 	_update_bark_positions(actors)
@@ -336,6 +348,45 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		call_deferred("frame_pickup_camera", true)
 	if is_instance_valid(_pickup_debug):
 		_pickup_debug.apply_actions(snap.get("actions", {}))
+
+
+## The pointer mote follows the intro clock. No token is drawn again, no ring, no camera move.
+func _on_pickup_clock(t: float) -> void:
+	if not _pickup_stage.visible:
+		return
+	var cfg: CombatTokenVisualConfig = _token_layer.visual_config
+	var pose := PickupPointerMote.pose_at(_pickup_stage.plan(), _pickup_row_positions, _pickup_lateral, t, cfg.token_radius + PickupPointerMote.ABOVE_HEAD)
+	_pickup_mote.apply_pose(pose, float(_board.tile_set.tile_size.x))
+	_token_layer.set_brighten(_pickup_chooser_id, float(pose["brighten"]))
+
+
+func _hide_pickup_mote() -> void:
+	_pickup_mote.hide_all()
+	_token_layer.clear_brighten()
+
+
+## The board centre of every row token, by row index: the token's own draw position.
+func pickup_row_positions(data: Dictionary) -> Array:
+	var out: Array = []
+	for entry_v in data.get("row", []):
+		var tile: Dictionary = (entry_v as Dictionary).get("tile", {}) if entry_v is Dictionary else {}
+		out.append(_board.map_to_local(Vector2i(int(tile.get("col", 0)), int(tile.get("row", 0)))) + Vector2(0.0, _token_layer.visual_config.feet_offset_y))
+	return out
+
+
+## One step toward the camera, in board pixels: the neighbour grid tile across a straight row, else the screen perpendicular.
+func pickup_lateral(data: Dictionary, positions: Array) -> Vector2:
+	var rows: Array = data.get("row", [])
+	if rows.size() >= 2 and rows[0] is Dictionary and rows[1] is Dictionary:
+		var a: Dictionary = (rows[0] as Dictionary).get("tile", {})
+		var b: Dictionary = (rows[1] as Dictionary).get("tile", {})
+		var step := Vector2i(int(b.get("col", 0)) - int(a.get("col", 0)), int(b.get("row", 0)) - int(a.get("row", 0)))
+		if absi(step.x) + absi(step.y) == 1:
+			var from := Vector2i(int(a.get("col", 0)), int(a.get("row", 0)))
+			var perp := Vector2i(-step.y, step.x)
+			var down := _board.map_to_local(from + perp) - _board.map_to_local(from)
+			return down if down.y >= 0.0 else -down
+	return PickupPointerMote.screen_lateral(positions)
 
 
 ## The pack strip sits above the EchoBar of the shell; NAN (no shell above this board) lets the strip use its fallback.
@@ -487,6 +538,7 @@ static func pickup_chooser_id(data: Dictionary) -> String:
 
 func _leave_pickup() -> void:
 	_pickup_bark_key = ""
+	_hide_pickup_mote()
 	_speed_bar.visible = true
 	_finds_layer.clear()
 	if _pickup_stage.visible:

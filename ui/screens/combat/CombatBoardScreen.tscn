@@ -12,6 +12,30 @@
 [ext_resource type="PackedScene" path="res://ui/screens/combat/PickupDebugContinue.tscn" id="10_pickup_debug"]
 [ext_resource type="Script" path="res://ui/screens/combat/PickupFindsLayer.gd" id="11_finds_layer"]
 [ext_resource type="PackedScene" path="res://ui/components/ItemTile.tscn" id="12_item_tile"]
+[ext_resource type="Script" path="res://ui/screens/combat/PickupPointerMote.gd" id="13_pointer_mote"]
+
+[sub_resource type="Gradient" id="Gradient_pointer_soft"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="Gradient" id="Gradient_pointer_mote"]
+offsets = PackedFloat32Array(0, 0.22, 0.4, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0.85, 1, 1, 1, 0.25, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_pointer_soft"]
+gradient = SubResource("Gradient_pointer_soft")
+width = 64
+height = 64
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_pointer_mote"]
+gradient = SubResource("Gradient_pointer_mote")
+width = 64
+height = 64
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_board"]
 texture = ExtResource("2_tile")
@@ -169,10 +193,57 @@ offset_bottom = 40.0
 mouse_filter = 2
 focus_mode = 0
 
+[node name="PickupPointerHalo" type="Node2D" parent="WorldLayer/BoardRoot"]
+unique_name_in_owner = true
+visible = false
+
+[node name="Halo" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerHalo"]
+unique_name_in_owner = true
+texture = SubResource("GradientTexture2D_pointer_soft")
+
 [node name="TokenLayer" type="Node2D" parent="WorldLayer/BoardRoot" unique_id=743928105]
 unique_name_in_owner = true
 script = ExtResource("3_token_layer")
 visual_config = SubResource("Resource_combat_visual_config")
+
+[node name="PickupPointerMote" type="Node2D" parent="WorldLayer/BoardRoot"]
+unique_name_in_owner = true
+visible = false
+script = ExtResource("13_pointer_mote")
+visual_config = SubResource("Resource_combat_visual_config")
+
+[node name="Shadow" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerMote"]
+unique_name_in_owner = true
+texture = SubResource("GradientTexture2D_pointer_soft")
+
+[node name="Trail1" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerMote"]
+unique_name_in_owner = true
+visible = false
+texture = SubResource("GradientTexture2D_pointer_mote")
+
+[node name="Trail2" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerMote"]
+unique_name_in_owner = true
+visible = false
+texture = SubResource("GradientTexture2D_pointer_mote")
+
+[node name="Trail3" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerMote"]
+unique_name_in_owner = true
+visible = false
+texture = SubResource("GradientTexture2D_pointer_mote")
+
+[node name="Trail4" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerMote"]
+unique_name_in_owner = true
+visible = false
+texture = SubResource("GradientTexture2D_pointer_mote")
+
+[node name="Trail5" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerMote"]
+unique_name_in_owner = true
+visible = false
+texture = SubResource("GradientTexture2D_pointer_mote")
+
+[node name="Mote" type="Sprite2D" parent="WorldLayer/BoardRoot/PickupPointerMote"]
+unique_name_in_owner = true
+texture = SubResource("GradientTexture2D_pointer_mote")
 
 [node name="DistanceLayer" type="Node2D" parent="WorldLayer/BoardRoot" unique_id=394827651]
 unique_name_in_owner = true

@@ -14,23 +14,29 @@ extends RefCounted
 ##   walk[]     { find_id, k, is_try, t0, t1, stand }          one per stop; stand = the tile before the find tile
 ##   finds[]    { find_id, index, status, pick_index, tile, reveal, reveal_len, walked, is_try, walk0, arrive,
 ##              lift0, lift1, lift_ease, fly0, fly1, slot }    -1 = no time or no slot
-##   pointer    { n, start, laps, decided, travel, length, steps[{ t, index }], plan }   the light's row index over time
+##   pointer    { n, reduced, start_index, land_index, total, land_t, lead, path[{ kind, from, to, s0, s1, t0, t1, arc_k }], knots }
+##              the racetrack of the drifting mote (D-76): see "Pointer" below. Path times are seconds after `times.pointer0`.
 ##   pack       { before, after, slot_count, unlisted, tone, tone_before, land_end, pulse_at, held_find }
 ##   bark       { text, case, reaction, reason, band, variant, chars, t0, t1 };  emo = reaction name (emo_style)
 ## frame_at(plan, t) / skip_to_idle(snapshot, opts) -> { t, phase, beat, echoes[{ id, chosen, cell, walking, from, to,
 ##   progress }], items{ find_id: { state, cell, rev, p, held, dim, slot } }, pack{ slots, lit, used, pulse, tone },
-##   pointer{ index, speed }, bark{ chars, total }, skip_o, cont_o, chooser_end }
+##   pointer{ visible, phase, pos_row, side, arc, arc_k, speed, lt }, bark{ chars, total }, skip_o, cont_o, chooser_end }
 ##   item state: hidden | revealed | lifted | flying | pack.
 ## A scene must handle `plan.valid == false` (no chooser, error snapshot, pointer start below 0, a row or find with no
 ## tile): show no intro.
 
-# Seconds of still picture before the pointer starts. Feel value, tune in playtest (the mockup had 1.05 s with a row formation in it).
-const POINTER_START := 0.4
-# Mockup line 670 and 671: pointer rest to step-out gap, step-out length, reduced-motion values.
-const STEP_GAP := 0.2
+# Seconds before the pointer starts: the 0.45 s camera tween, then a short rest. Feel value, tune in playtest.
+const POINTER_START := 0.5
+# Seconds the mote rests (fades in) at the start of the path clock before it moves. Feel value, tune in playtest.
+const POINTER_LEAD := 0.30
+# Pause between the pointer landing and the chooser's step out (the mote sinks and the halo opens in it). Feel value, tune in playtest.
+const HOLD := 0.60
+const HOLD_REDUCED := 0.2
 const STEP_LEN := 0.45
 const STEP_LEN_REDUCED := 0.15
 const POINTER_REDUCED := 0.5
+# Length of the landing (wind-up 0.08 s, then the 0.28 s sink) after which the phase reads hold. Feel value, tune in playtest.
+const LAND_PHASE_LEN := 0.36
 # Mockup line 774: reveal length.
 const REVEAL_LEN := 0.25
 const REVEAL_LEN_REDUCED := 0.15
@@ -38,17 +44,25 @@ const REVEAL_LEN_REDUCED := 0.15
 const BARK_AFTER_LAST := 0.15
 const IDLE_AFTER_BARK := 0.3
 const IDLE_AFTER_DEPOSIT := 0.45
-# Mockup line 566, 568 and 570: pointer slow-down distance, run-in time, minimum travel, minimum cruise, step.
-const POINTER_DECEL_DIST := 2.5
-const POINTER_ACCEL := 0.4
-const POINTER_MIN_TRAVEL := 6.0
-const POINTER_MIN_CRUISE := 0.25
-const POINTER_T_STEP := 0.05
-# Mockup line 602: base length 2.0 s plus 0.2 s times a hash value 0..4.
-const POINTER_T_BASE := 2.0
-const POINTER_T_VARY := 0.2
-const POINTER_T_STEPS := 5
-const POINTER_SAMPLE_DT := 0.05
+# Racetrack timing for a row that has no authored table (feel values, tune in playtest). `PATH_TABLES` holds the authored ones.
+# Seconds per spacing unit at cruise; the first move takes PATH_FIRST_K times longer; each of the last PATH_SLOW_N moves takes
+# PATH_SLOW_K times the one before, and the final move PATH_FINAL_K times its predecessor; a turn takes 0.26 to 0.64 s.
+const PATH_PACE := 0.19
+const PATH_FIRST_K := 1.5
+const PATH_SLOW_N := 5
+const PATH_SLOW_K := 1.25
+const PATH_FINAL_K := 1.6
+const PATH_TURN_MIN := 0.26
+const PATH_TURN_MAX := 0.64
+# A move that lasts PATH_ARC_FAST s or less is a fast hop, one that lasts PATH_ARC_FAST + PATH_ARC_SPAN s or more a slow one.
+const PATH_ARC_FAST := 0.18
+const PATH_ARC_SPAN := 0.72
+# Authored arrival times (seconds after the path clock starts; the lead-in is the first 0.30 s) by "n:land_index".
+# Moves: n - 1 glides, a half turn, n - 1 glides, a half turn, then the glides to the chooser.
+const PATH_TABLES := {
+	"5:2": [0.58, 0.78, 0.96, 1.14, 1.40, 1.58, 1.77, 2.01, 2.31, 2.81, 3.19, 3.79],
+	"3:1": [0.68, 0.96, 1.42, 1.72, 2.06, 2.70, 3.60],
+}
 # Mockup line 619: walk cap, fly time, typing speed.
 const WALK_CAP := 3.4
 const FLY_LEN := 0.34
@@ -141,13 +155,12 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	var walkable := StageTerrain.walkable_set(_d(d.get("terrain", {})))
 	var bounds: Dictionary = { "w": cols, "h": rows_n } if cols > 0 and rows_n > 0 else {}
 
-	# World beats (mockup lines 666 to 673).
 	var find_ids: Array = finds.map(func(f: Variant) -> String: return str((f as Dictionary).get("find_id", "")))
-	var pp := _pointer_plan(n, int(ptr["start"]), cidx, maxi(1, int(ptr.get("laps", 1))),
-		POINTER_T_BASE + POINTER_T_VARY * float(hash_of([sit, find_ids]) % POINTER_T_STEPS))
+	# World beats (mockup lines 666 to 673): the pointer path, then the hold, then the chooser steps out.
+	var pp := _pointer_path(n, cidx, rm)
 	var t_p0 := POINTER_START
-	var t_pend := t_p0 + (POINTER_REDUCED if rm else float(pp["T"]))
-	var t_s0 := t_pend + STEP_GAP
+	var t_pend := t_p0 + float(pp["total"])
+	var t_s0 := t_pend + (HOLD_REDUCED if rm else HOLD)
 	var t_s1 := t_s0 + (STEP_LEN_REDUCED if rm else STEP_LEN)
 
 	# Stops in pick order, then the held-up find.
@@ -308,8 +321,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		"row": rows_out,
 		"chooser_cell": start_cell, "out_cell": out_cell, "chooser_end_cell": (trk["cell"] as Dictionary).duplicate(),
 		"legs": trk["legs"],
-		"pointer": { "n": n, "start": int(ptr["start"]), "laps": maxi(1, int(ptr.get("laps", 1))), "decided": cidx,
-			"travel": float(pp["U"]), "length": float(pp["T"]), "plan": pp, "steps": _pointer_steps(pp, t_p0, rm, cidx) },
+		"pointer": pp,
 		"finds": out_finds,
 		"walk": walk,
 		"pack": { "before": pack_before, "after": pack_after, "slot_count": slot_count, "unlisted": unlisted,
@@ -360,14 +372,6 @@ static func frame_at(plan: Dictionary, t_in: float) -> Dictionary:
 	var pulse_at := float(pk["pulse_at"])
 	var pulse := sin(PI * _pr(t, pulse_at, pulse_at + PULSE_LEN)) if pulse_at >= 0.0 else 0.0
 
-	var pointer: Dictionary = plan["pointer"]
-	var t_p0 := float(tm["pointer0"])
-	var on := -1
-	var speed := 0.0
-	if t >= t_p0 and t < float(tm["step0"]):
-		on = int(plan["chooser_index"]) if rm or t >= float(tm["pointer_end"]) else _pointer_row(pointer["plan"], t - t_p0)
-		speed = 0.0 if rm else _pointer_speed(pointer["plan"], t - t_p0)
-
 	var bark: Dictionary = plan["bark"]
 	var chars := int(bark["chars"])
 	var typed := chars if rm else clampi(int(floor((t - float(bark["t0"])) * TYPE_CPS)), 0, chars)
@@ -377,7 +381,7 @@ static func frame_at(plan: Dictionary, t_in: float) -> Dictionary:
 		"echoes": echoes, "items": items,
 		"pack": { "slots": slots, "lit": lit, "used": used, "pulse": pulse,
 			"tone": str(pk["tone"]) if t >= float(pk["land_end"]) else str(pk["tone_before"]) },
-		"pointer": { "index": on, "speed": speed },
+		"pointer": pointer_pose(plan, t),
 		"bark": { "chars": typed, "total": chars },
 		"skip_o": _ph(t, 0.2, 0.35, "smooth") * (1.0 - _ph(t, t_idle - 0.1, t_idle, "smooth")),
 		"cont_o": _ph(t, t_idle - 0.25, t_idle, "smooth"),
@@ -426,7 +430,7 @@ static func skip_to_idle(snapshot: Dictionary, opts: Dictionary = {}) -> Diction
 		"t": float(plan["total"]), "phase": "idle", "beat": "idle",
 		"echoes": echoes, "items": items,
 		"pack": { "slots": slots, "lit": lit, "used": used, "pulse": 0.0, "tone": str(pk["tone"]) },
-		"pointer": { "index": -1, "speed": 0.0 },
+		"pointer": _hidden_pointer(),
 		"bark": { "chars": int((plan["bark"] as Dictionary)["chars"]), "total": int((plan["bark"] as Dictionary)["chars"]) },
 		"skip_o": 0.0, "cont_o": 1.0, "chooser_end": (plan["chooser_end_cell"] as Dictionary).duplicate(),
 	}
@@ -463,7 +467,7 @@ static func _invalid(d: Dictionary, rm: bool) -> Dictionary:
 static func _empty_frame() -> Dictionary:
 	return { "t": 0.0, "phase": "idle", "beat": "idle", "echoes": [], "items": {},
 		"pack": { "slots": [], "lit": [], "used": 0, "pulse": 0.0, "tone": "plain" },
-		"pointer": { "index": -1, "speed": 0.0 }, "bark": { "chars": 0, "total": 0 }, "skip_o": 0.0, "cont_o": 1.0,
+		"pointer": _hidden_pointer(), "bark": { "chars": 0, "total": 0 }, "skip_o": 0.0, "cont_o": 1.0,
 		"chooser_end": {} }
 
 
@@ -669,80 +673,204 @@ static func _chooser_at(plan: Dictionary, t: float) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# Pointer (mockup lines 565 to 598)
+# Pointer: the racetrack of the drifting mote (D-76)
 # ---------------------------------------------------------------------------
+# The path starts on the last row index N = n - 1 and runs along the row to index 0 (N glides, each one spacing long), turns
+# on a half circle of radius 0.5 spacing to the return leg one spacing toward the camera, runs back to N, turns again, and
+# runs to the chooser's index: N glides, a turn, N glides, a turn, then N - chooser_index glides. Two laps, no wrap, no stop
+# at the ends. The mote moves along the path with a monotone cubic s(t) (tangent 0 at both ends): a lead-in rest, then the
+# knots' arrival times. Rows with an authored table in PATH_TABLES use it exactly. Any other row (n 2, 4, 6, 7, or another
+# chooser index) gets move durations from the slow-down law: cruise PATH_PACE s per spacing unit, the first move x1.5,
+# the last five moves x1.25 on the move before, the final move x1.6 on its predecessor, a turn 0.26 to 0.64 s.
+# A row with one Echo has no path: the mote only fades in above it and lands.
+# `pos_row` is the position along the row in row-index units (below 0 or above N on a turn); `side` is the offset toward the
+# camera in spacing units (0 on the row, 1 on the return leg).
 
-static func _pointer_plan(n: int, start: int, decided: int, laps: int, t0: float) -> Dictionary:
-	var u := float(posmod(decided - start, n) + n * laps)
-	while u < POINTER_MIN_TRAVEL:
-		u += float(n)
-	var t_len := t0
-	var v := 0.0
-	var tc := 0.0
-	var td := 0.0
-	for _i in 60:
-		v = (u + 2.0 * POINTER_DECEL_DIST) / (t_len - POINTER_ACCEL / 2.0)
-		td = 3.0 * POINTER_DECEL_DIST / v
-		tc = t_len - POINTER_ACCEL - td
-		if tc >= POINTER_MIN_CRUISE:
-			break
-		t_len += POINTER_T_STEP
-	return { "n": n, "start": start, "decided": decided, "U": u, "V": v, "tc": tc, "td": td, "T": t_len }
+static func _hidden_pointer() -> Dictionary:
+	return { "visible": false, "phase": "gone", "pos_row": 0.0, "side": 0.0, "arc": 0.0, "arc_k": 0.0, "speed": 0.0, "lt": 0.0 }
 
 
-static func _pointer_s(pp: Dictionary, t: float) -> float:
-	var ta := POINTER_ACCEL
-	var v := float(pp["V"])
-	var tc := float(pp["tc"])
-	var td := float(pp["td"])
-	var u := float(pp["U"])
-	if t <= 0.0:
+## The racetrack for `n` Echoes and the chooser at `land`. Pure and deterministic.
+static func _pointer_path(n: int, land: int, rm: bool) -> Dictionary:
+	var out := { "n": n, "reduced": rm, "start_index": n - 1, "land_index": land, "lead": POINTER_LEAD,
+		"total": POINTER_REDUCED, "land_t": POINTER_REDUCED, "path": [], "knots": { "t": [], "s": [], "m": [] } }
+	if rm or n < 2:
+		out["total"] = POINTER_REDUCED if rm else POINTER_LEAD
+		out["land_t"] = out["total"]
+		return out
+	var last := n - 1
+	var half := PI * 0.5
+	var moves: Array = []
+	for i in last:
+		moves.append({ "kind": "glide", "from": last - i, "to": last - i - 1, "len": 1.0 })
+	moves.append({ "kind": "turn", "from": 0, "to": 0, "len": half })
+	for i in last:
+		moves.append({ "kind": "glide", "from": i, "to": i + 1, "len": 1.0 })
+	moves.append({ "kind": "turn", "from": last, "to": last, "len": half })
+	for i in last - land:
+		moves.append({ "kind": "glide", "from": last - i, "to": last - i - 1, "len": 1.0 })
+	var times: Array = PATH_TABLES.get("%d:%d" % [n, land], []) as Array
+	if times.size() != moves.size():
+		times = _law_times(moves)
+	var knots_t: Array = [0.0, POINTER_LEAD]
+	var knots_s: Array = [0.0, 0.0]
+	var s_cum := 0.0
+	var t_prev := POINTER_LEAD
+	for i in moves.size():
+		var mv: Dictionary = moves[i]
+		mv["s0"] = s_cum
+		s_cum += float(mv["len"])
+		mv["s1"] = s_cum
+		mv["t0"] = t_prev
+		mv["t1"] = float(times[i])
+		mv["arc_k"] = clampf((float(mv["t1"]) - t_prev - PATH_ARC_FAST) / PATH_ARC_SPAN, 0.0, 1.0)
+		t_prev = float(times[i])
+		knots_t.append(t_prev)
+		knots_s.append(s_cum)
+	out["path"] = moves
+	out["total"] = t_prev
+	out["land_t"] = t_prev
+	out["knots"] = { "t": knots_t, "s": knots_s, "m": _slopes(knots_t, knots_s) }
+	return out
+
+
+## Arrival times from the slow-down law (see the section header).
+static func _law_times(moves: Array) -> Array:
+	var times: Array = []
+	var t := POINTER_LEAD
+	var count := moves.size()
+	for j in count:
+		var e := count - 1 - j
+		var k := 1.0
+		if e <= PATH_SLOW_N - 1:
+			k = pow(PATH_SLOW_K, float(PATH_SLOW_N - e)) if e >= 1 else pow(PATH_SLOW_K, float(PATH_SLOW_N - 1)) * PATH_FINAL_K
+		if j == 0:
+			k *= PATH_FIRST_K
+		var mv: Dictionary = moves[j]
+		var dur := float(mv["len"]) * PATH_PACE * k
+		if str(mv["kind"]) == "turn":
+			dur = clampf(dur, PATH_TURN_MIN, PATH_TURN_MAX)
+		t += dur
+		times.append(t)
+	return times
+
+
+## Monotone cubic Hermite slopes (Fritsch-Carlson, clamped) for the knots; the first and last slope is 0.
+static func _slopes(kt: Array, ks: Array) -> Array:
+	var cnt := kt.size()
+	var d: Array = []
+	for i in cnt - 1:
+		d.append((float(ks[i + 1]) - float(ks[i])) / (float(kt[i + 1]) - float(kt[i])))
+	var m: Array = []
+	m.resize(cnt)
+	m[0] = 0.0
+	m[cnt - 1] = 0.0
+	for i in range(1, cnt - 1):
+		m[i] = (float(d[i - 1]) + float(d[i])) * 0.5 if float(d[i - 1]) * float(d[i]) > 0.0 else 0.0
+	for i in cnt - 1:
+		if float(d[i]) == 0.0:
+			m[i] = 0.0
+			m[i + 1] = 0.0
+			continue
+		var al := float(m[i]) / float(d[i])
+		var be := float(m[i + 1]) / float(d[i])
+		var h := al * al + be * be
+		if h > 9.0:
+			var tau := 3.0 / sqrt(h)
+			m[i] = tau * al * float(d[i])
+			m[i + 1] = tau * be * float(d[i])
+	return m
+
+
+## Path distance (spacing units) at path-clock time `tp`, and its speed.
+static func _s_at(knots: Dictionary, tp: float, want_speed: bool = false) -> float:
+	var kt: Array = knots["t"]
+	var ks: Array = knots["s"]
+	var km: Array = knots["m"]
+	var cnt := kt.size()
+	if cnt < 2:
 		return 0.0
-	if t < ta:
-		return v * t * t / (2.0 * ta)
-	if t < ta + tc:
-		return v * ta / 2.0 + v * (t - ta)
-	if t < ta + tc + td:
-		var tau := (t - ta - tc) / td
-		return (u - POINTER_DECEL_DIST) + POINTER_DECEL_DIST * (1.0 - pow(1.0 - tau, 3.0))
-	return u
-
-
-static func _pointer_speed(pp: Dictionary, t: float) -> float:
-	var ta := POINTER_ACCEL
-	var v := float(pp["V"])
-	var tc := float(pp["tc"])
-	var td := float(pp["td"])
-	if t <= 0.0 or t >= ta + tc + td:
+	if tp <= float(kt[0]):
 		return 0.0
-	if t < ta:
-		return v * t / ta
-	if t < ta + tc:
-		return v
-	var tau := (t - ta - tc) / td
-	return 3.0 * POINTER_DECEL_DIST / td * pow(1.0 - tau, 2.0)
+	if tp >= float(kt[cnt - 1]):
+		return 0.0 if want_speed else float(ks[cnt - 1])
+	var k := 0
+	while k < cnt - 2 and tp > float(kt[k + 1]):
+		k += 1
+	var h := float(kt[k + 1]) - float(kt[k])
+	var u := (tp - float(kt[k])) / h
+	var u2 := u * u
+	var u3 := u2 * u
+	if want_speed:
+		return ((6.0 * u2 - 6.0 * u) * float(ks[k]) + (3.0 * u2 - 4.0 * u + 1.0) * h * float(km[k])
+			+ (-6.0 * u2 + 6.0 * u) * float(ks[k + 1]) + (3.0 * u2 - 2.0 * u) * h * float(km[k + 1])) / h
+	return (2.0 * u3 - 3.0 * u2 + 1.0) * float(ks[k]) + (u3 - 2.0 * u2 + u) * h * float(km[k]) \
+		+ (-2.0 * u3 + 3.0 * u2) * float(ks[k + 1]) + (u3 - u2) * h * float(km[k + 1])
 
 
-## The row index the light is on at `t` seconds after it starts: the nearest index of the running position.
-static func _pointer_row(pp: Dictionary, t: float) -> int:
+## Where the path is at distance `s`: { pos_row, side } (see the section header).
+static func path_at(n: int, s: float) -> Dictionary:
+	var last := float(n - 1)
+	var half := PI * 0.5
+	if s <= last:
+		return { "pos_row": last - s, "side": 0.0 }
+	if s <= last + half:
+		var q := (s - last) / 0.5
+		return { "pos_row": -0.5 * sin(q), "side": 0.5 - 0.5 * cos(q) }
+	if s <= 2.0 * last + half:
+		return { "pos_row": s - (last + half), "side": 1.0 }
+	if s <= 2.0 * last + PI:
+		var q2 := (s - (2.0 * last + half)) / 0.5
+		return { "pos_row": last + 0.5 * sin(q2), "side": 0.5 + 0.5 * cos(q2) }
+	return { "pos_row": last - (s - (2.0 * last + PI)), "side": 0.0 }
+
+
+## The mote's path state at `t` seconds of the intro. Hidden before `times.pointer0` and from `total` (the intro end).
+## phase: lead (fading in at rest), glide, turn, land (the landing), hold (after the landing), gone.
+## `lt` is the seconds since the mote reached the chooser (negative before). `arc` is sin(pi u) in the current move.
+static func pointer_pose(plan: Dictionary, t: float) -> Dictionary:
+	if not bool(plan.get("valid", false)) or is_nan(t) or not plan.has("pointer") or not plan.has("times") or not plan.has("total"):
+		return _hidden_pointer()
+	var tm: Dictionary = plan["times"]
+	var pp: Dictionary = plan["pointer"]
+	if not tm.has("pointer0"):
+		return _hidden_pointer()
+	for key: String in ["n", "reduced", "land_index", "land_t", "lead", "knots", "path"]:
+		if not pp.has(key):
+			return _hidden_pointer()
+	var tp := t - float(tm["pointer0"])
+	if tp < 0.0 or t >= float(plan["total"]):
+		return _hidden_pointer()
 	var n := int(pp["n"])
-	return posmod(int(roundf(float(pp["start"]) + _pointer_s(pp, t))), n)
-
-
-## The light's index over time: one entry each time it moves to another row index. Ends on the chooser at `pointer_end`.
-static func _pointer_steps(pp: Dictionary, t_p0: float, rm: bool, cidx: int) -> Array:
-	if rm:
-		return [{ "t": t_p0, "index": cidx }]
-	var steps: Array = []
-	var last := -1
-	var count := int(ceil(float(pp["T"]) / POINTER_SAMPLE_DT))
-	for i in count + 1:
-		var ts := minf(float(i) * POINTER_SAMPLE_DT, float(pp["T"]))
-		var idx := _pointer_row(pp, ts)
-		if idx != last:
-			steps.append({ "t": t_p0 + ts, "index": idx })
-			last = idx
-	return steps
+	var land_pos := float(pp["land_index"])
+	var out := { "visible": true, "phase": "lead", "pos_row": land_pos, "side": 0.0, "arc": 0.0, "arc_k": 0.0, "speed": 0.0,
+		"lt": tp - float(pp["land_t"]) }
+	if bool(pp["reduced"]) or n < 2:
+		out["phase"] = "lead" if tp < float(pp["land_t"]) else "land"
+		return out
+	var knots: Dictionary = pp["knots"]
+	var s := _s_at(knots, tp)
+	var at := path_at(n, s)
+	out["pos_row"] = float(at["pos_row"])
+	out["side"] = float(at["side"])
+	out["speed"] = _s_at(knots, tp, true)
+	if tp < float(pp["lead"]):
+		return out
+	if tp >= float(pp["land_t"]):
+		out["pos_row"] = land_pos
+		out["side"] = 0.0
+		out["speed"] = 0.0
+		out["phase"] = "land" if tp - float(pp["land_t"]) < LAND_PHASE_LEN else "hold"
+		return out
+	for mv_v: Variant in pp["path"]:
+		var mv: Dictionary = mv_v
+		if tp <= float(mv["t1"]):
+			var u := clampf((tp - float(mv["t0"])) / (float(mv["t1"]) - float(mv["t0"])), 0.0, 1.0)
+			out["phase"] = str(mv["kind"])
+			out["arc"] = sin(PI * u)
+			out["arc_k"] = float(mv["arc_k"])
+			break
+	return out
 
 
 static func _beat_at(plan: Dictionary, t: float) -> String:

@@ -290,12 +290,8 @@ static func _row_errors(fx: Dictionary, row: Array, errors: Array) -> void:
 	for i in mini(cells.size(), row.size()):
 		if cells[i] != row[i]["tile"]:
 			errors.append("token %d is at %s, tile is %s" % [i, cells[i], row[i]["tile"]])
-	var chooser := ""
-	for e: Dictionary in row:
-		if bool(e["is_chooser"]):
-			chooser = str(e["id"])
-	if str((fx["combat"].get_node("%TokenLayer") as Node).get("_active_actor_id")) != chooser or chooser.is_empty():
-		errors.append("the chooser is not the active token")
+	if str((fx["combat"].get_node("%TokenLayer") as Node).get("_active_actor_id")) != "":
+		errors.append("a token has the selection ring in the pickup event")
 
 
 static func _t_row_tokens() -> Dictionary:

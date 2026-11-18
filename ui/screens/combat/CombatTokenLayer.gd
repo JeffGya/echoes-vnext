@@ -24,6 +24,8 @@ var _tokens: Array[Dictionary] = []
 var _active_actor_id: String = ""
 var _presentation_state = CombatTokenPresentationStateScript.new()
 var _last_zoom: float = 1.0
+# actor id -> 0..1 brightness lift toward white (the pickup pointer lands on an Echo); not part of any snapshot.
+var _brighten: Dictionary = {}
 
 
 func _ready() -> void:
@@ -59,7 +61,24 @@ func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", las
 	return telegraph_event
 
 
+func set_brighten(actor_id: String, amount: float) -> void:
+	if is_equal_approx(float(_brighten.get(actor_id, 0.0)), amount):
+		return
+	if amount <= 0.0:
+		_brighten.erase(actor_id)
+	else:
+		_brighten[actor_id] = amount
+	queue_redraw()
+
+
+func clear_brighten() -> void:
+	if not _brighten.is_empty():
+		_brighten.clear()
+		queue_redraw()
+
+
 func clear_tokens() -> void:
+	_brighten.clear()
 	_tokens = []
 	_active_actor_id = ""
 	queue_redraw()
@@ -110,6 +129,8 @@ func _draw() -> void:
 		var pos: Vector2 = base_pos + (body["rest"] as Vector2) + Vector2(float(body["shake"]), -float(body["rise"]))
 		var body_k: float = float(body["scale"])
 		var fill_color: Color = _faction_color(str(tok.get("faction", "")))
+		if _brighten.has(actor_id):
+			fill_color = fill_color.lerp(Color.WHITE, float(_brighten[actor_id]))
 
 		if not is_structure:
 			var air: float = float(body["air"])

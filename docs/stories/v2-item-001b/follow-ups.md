@@ -41,7 +41,11 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 
 ## Feel values to review in the playtest
 
-- Pointer start time: `PickupEventPlan.POINTER_START`, now 0.4 s.
+- Pointer start 0.5 s and hold after the landing 0.6 s: `PickupEventPlan.POINTER_START`, `HOLD` (reduced motion 0.2 s). The start follows the camera tween length; D-73 `tween_seconds` is config: keep them in step when tuning.
+- Pointer path timing: authored arrival times in `PickupEventPlan.PATH_TABLES` (n 5, chooser 2; n 3, chooser 1); the slow-down law for other rows: `PATH_PACE` 0.19 s, `PATH_FIRST_K` 1.5, `PATH_SLOW_N` 5, `PATH_SLOW_K` 1.25, `PATH_FINAL_K` 1.6, turns 0.26 to 0.64 s; lead-in `POINTER_LEAD` 0.30 s; hop height 6 to 14 px (`PATH_ARC_FAST` 0.18, `PATH_ARC_SPAN` 0.72).
+- Mote (`PickupPointerMote` constants): rise 16 px, start scale 0.5, 36 px above the head, trail of 5 samples 0.035 s apart (alpha 0.30), radius 30 px, landing wind-up 4 px in 0.08 s, sink 20 px in 0.28 s to 60% scale, halo 0.703 tile widths across, alpha 0.55, opens in 0.30 s, breathes +-8% every 1.6 s, Echo brightness +20% in 0.15 s.
+- More mote constants (`PickupPointerMote`): ground shadow radius 14 px and height scale 0.4 (`SHADOW_RADIUS`, `SHADOW_SCALE_Y`); shadow under a high mote: alpha -40% and size -30% at the top of the hop (`SHADOW_ALPHA_DROP`, `SHADOW_SCALE_DROP`); halo start alpha 0.2 (`HALO_START_ALPHA`); the mote starts to fade at 40% of the sink (`SINK_FADE_FROM`); trail scale 0.9 minus 0.08 per sample (`TRAIL_SCALE`, `TRAIL_SCALE_STEP`); `PickupEventPlan.LAND_PHASE_LEN` 0.36 s must equal the mote's `WIND_UP_LEN + SINK_LEN` (a test checks it).
+- Open question (not decided, D-76): a sound tick on each hop and one on the landing. Nothing is built.
 - Tile reference for walk time (30 px a tile assumption): `REF_TILES_FIRST` and `REF_TILES_NEXT`, now 3 and 2 tiles.
 - Walk cap and the per-tile time scale: `WALK_CAP`, `DIST_SCALE_MIN`, `DIST_SCALE_MAX`, now 3.4 s and 0.6 to 1.35.
 - Frozen chooser wait: `FROZEN_STEP + FROZEN_WAIT`, now 0.35 + 1.35 s (0.4 s reduced).
