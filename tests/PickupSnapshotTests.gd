@@ -38,6 +38,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/tried_find_and_pack_slot_fields", Callable(PickupSnapshotTests, "_t_tried_and_slots"))
 	runner.register_test("pickup_snapshot/chooser_standing_return_to_and_tick", Callable(PickupSnapshotTests, "_t_standing_meta"))
 	runner.register_test("pickup_snapshot/build_leaves_the_flow_context_alone_and_terrain_is_a_copy", Callable(PickupSnapshotTests, "_t_context_untouched"))
+	PickupPlacementBoardsTests.register(runner)
 	PickupPlacementTests.register(runner)  # D-72: board tiles; no ui/ edit needed, the suite name stays pickup_snapshot
 
 

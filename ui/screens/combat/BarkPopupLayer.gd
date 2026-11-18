@@ -53,6 +53,7 @@ func _ready() -> void:
 
 ## Shows bark events. Originals appear immediately; reactions after REACTION_DELAY seconds.
 ## A second bark for the same actor replaces the existing popup (refreshes text + duration).
+## An event with `persist: true` skips the hold and fade-out: it stays until clear_all() or a replacing bark.
 func show_barks(bark_events: Array) -> void:
 	var originals: Array = []
 	var reactions: Array = []
@@ -99,6 +100,11 @@ func update_actor_positions(positions: Dictionary) -> void:
 
 	for actor_id in dead_ids:
 		_kill_popup(actor_id)
+
+
+## True while a popup for this actor is alive.
+func has_popup(actor_id: String) -> bool:
+	return _active_popups.has(actor_id)
 
 
 ## Kills all active popups immediately. Call on combat-end.
@@ -197,12 +203,13 @@ func _show_bark_popup(ev: Dictionary) -> void:
 	tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	tween.parallel().tween_property(popup, "scale", Vector2(1.0, 1.0), FADE_IN_DURATION)
 	tween.parallel().tween_property(popup, "modulate:a", 1.0, FADE_IN_DURATION)
-	tween.tween_interval(HOLD_DURATION)
-	tween.tween_property(popup, "modulate:a", 0.0, FADE_OUT_DURATION)
-	tween.tween_callback(func() -> void:
-		_active_popups.erase(actor_id)
-		popup.queue_free()
-	)
+	if not bool(ev.get("persist", false)):
+		tween.tween_interval(HOLD_DURATION)
+		tween.tween_property(popup, "modulate:a", 0.0, FADE_OUT_DURATION)
+		tween.tween_callback(func() -> void:
+			_active_popups.erase(actor_id)
+			popup.queue_free()
+		)
 
 	_active_popups[actor_id] = { "node": popup, "tween": tween, "offset": offset }
 

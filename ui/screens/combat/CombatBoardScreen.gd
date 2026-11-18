@@ -181,6 +181,8 @@ var _pickup_camera_cfg: Dictionary = {}
 var _pickup_camera_tween: Tween = null
 # True from a new event until the deferred framing runs. Tests read it, because deferred calls do not run inside a test.
 var _pickup_frame_due: bool = false
+# "event|chooser|text" of the bark now shown in the pickup event; "" when none. A repeat snapshot with the same key shows nothing again.
+var _pickup_bark_key: String = ""
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
@@ -295,6 +297,9 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	if new_event:
 		camera.deselect()
 		camera.has_manual_override = false
+		_pickup_bark_key = ""
+		if _bark_popup_layer != null:
+			_bark_popup_layer.clear_all()
 	_pickup_cells = pickup_frame_cells(data)
 	var cfg_v: Variant = data.get("camera_frame", {})
 	_pickup_camera_cfg = cfg_v if cfg_v is Dictionary else {}
@@ -315,6 +320,8 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	else:
 		_draw_tokens(actors, pickup_chooser_id(data), {})
 	_finds_layer.show_finds(data, _board)
+	_show_pickup_bark(data, actors)
+	_update_bark_positions(actors)
 	_push_camera_follow_target()
 	_stall_level = 0
 	_kill_stall_tween()
@@ -436,6 +443,41 @@ static func pickup_row_actors(data: Dictionary) -> Array:
 	return drawn
 
 
+## The chooser's one bark line. Mirrors PickupEventPlan.build (`plan.bark.text`): same inputs; the chooser is the single `is_chooser` row.
+static func pickup_bark_text(data: Dictionary) -> String:
+	var row: Array = data.get("row", []) if data.get("row", []) is Array else []
+	for i in row.size():
+		if row[i] is Dictionary and bool((row[i] as Dictionary).get("is_chooser", false)):
+			var standing := int((row[i] as Dictionary).get("standing", 1))
+			return PickupUiText.bark(str(data.get("case", "")), str(data.get("reaction", "")), str(data.get("reason", "")),
+				PickupUiText.standing_band(standing), i)
+	return ""
+
+
+## The bark stays over the chooser's row token in the finished picture (not in the intro, which U6 plays). It shows once per
+## event, chooser and text; a repeat snapshot keeps the same popup.
+func _show_pickup_bark(data: Dictionary, actors: Array) -> void:
+	if _bark_popup_layer == null:
+		return
+	var chooser_id := pickup_chooser_id(data)
+	var text := "" if str(data.get("phase", "")) == "intro" or chooser_id.is_empty() else pickup_bark_text(data)
+	if text.is_empty():
+		if not _pickup_bark_key.is_empty():
+			_bark_popup_layer.clear_all()
+			_pickup_bark_key = ""
+		return
+	var key := "%s|%s|%s" % [PickupEventStage.identity_of(data), chooser_id, text]
+	if key == _pickup_bark_key and _bark_popup_layer.has_popup(chooser_id):
+		return
+	for actor_v in actors:
+		if actor_v is Dictionary and str((actor_v as Dictionary).get("id", "")) == chooser_id:
+			_bark_popup_layer.show_barks([{ "actor_id": chooser_id, "bark_line": text, "bark_context": "pickup",
+				"bark_tier": "", "bark_target_id": "", "bark_priority": 1, "is_response": false, "persist": true,
+				"screen_pos": _actor_screen_pos(actor_v) }])
+			_pickup_bark_key = key
+			return
+
+
 static func pickup_chooser_id(data: Dictionary) -> String:
 	for entry_v in data.get("row", []):
 		if entry_v is Dictionary and bool((entry_v as Dictionary).get("is_chooser", false)):
@@ -444,6 +486,7 @@ static func pickup_chooser_id(data: Dictionary) -> String:
 
 
 func _leave_pickup() -> void:
+	_pickup_bark_key = ""
 	_speed_bar.visible = true
 	_finds_layer.clear()
 	if _pickup_stage.visible:
@@ -531,7 +574,8 @@ func _should_reset_presentation(data: Dictionary) -> bool:
 		int(data.get("board_rows", 10))
 	)
 	if _active_encounter_id.is_empty():
-		return true
+		# A reload can publish a pickup snapshot with no encounter id; it is the same event, not a new fight, on every repeat.
+		return not (_pickup_stage.visible and next_encounter_id.is_empty() and next_board_size == _presentation_board_size)
 	if next_encounter_id != _active_encounter_id:
 		return true
 	return next_board_size != _presentation_board_size
