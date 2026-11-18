@@ -38,3 +38,11 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 1. Add one marker line at the seam: `# UNWIRED (target: <story code or NEW "title">): <what>`.
 2. Add one row to this table with the trigger. Name the marker file as `File.gd` in "Marker site" and put the marker target in "Target story".
 3. Add the target story to section 13 of the design document if it is not there.
+
+## Feel values to review in the playtest
+
+- Pointer start time: `PickupEventPlan.POINTER_START`, now 0.4 s.
+- Tile reference for walk time (30 px a tile assumption): `REF_TILES_FIRST` and `REF_TILES_NEXT`, now 3 and 2 tiles.
+- Walk cap and the per-tile time scale: `WALK_CAP`, `DIST_SCALE_MIN`, `DIST_SCALE_MAX`, now 3.4 s and 0.6 to 1.35.
+- Frozen chooser wait: `FROZEN_STEP + FROZEN_WAIT`, now 0.35 + 1.35 s (0.4 s reduced).
+- Zero-walk guard (a pick waits until the last find has landed): in `build`, before the lift. Derived, no constant.

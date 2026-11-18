@@ -11,14 +11,15 @@ const _NEW_FILES: Array = [
 	"res://ui/screens/combat/PickupSwapPlan.gd",
 ]
 const _BANNED_WORDS: Array = ["Node", "Control", "Tween", "randi", "randf", "Time.", "OS.", "dispatch", "FlowContext",
-	"RandomNumberGenerator", ".hash(", "Engine", "load(", "preload", "await", "EmotionService"]
+	"RandomNumberGenerator", ".hash(", "hash(", "seed(", "Engine", "load(", "preload", "await", "EmotionService"]
 const _CASES: Array = ["C1", "C2", "C3", "C4", "C5", "frozen"]
 const _EPS := 0.0001
+const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 
 
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/planner_beats_are_in_order_with_monotonic_times", Callable(PickupPlannerTests, "_t_beats"))
-	runner.register_test("pickup_ui/planner_pointer_path_starts_ends_and_laps", Callable(PickupPlannerTests, "_t_pointer"))
+	runner.register_test("pickup_ui/planner_pointer_steps_start_end_and_lap", Callable(PickupPlannerTests, "_t_pointer"))
 	runner.register_test("pickup_ui/planner_is_deterministic_and_follows_the_pointer_key", Callable(PickupPlannerTests, "_t_deterministic"))
 	runner.register_test("pickup_ui/planner_walk_follows_pick_order", Callable(PickupPlannerTests, "_t_pick_order"))
 	runner.register_test("pickup_ui/planner_items_stay_hidden_until_picked", Callable(PickupPlannerTests, "_t_reveal"))
@@ -37,10 +38,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/swap_dim_map_lights_origin_and_legal_items", Callable(PickupPlannerTests, "_t_swap_dim"))
 	runner.register_test("pickup_ui/planner_plans_from_a_post_swap_snapshot", Callable(PickupPlannerTests, "_t_post_swap_plan"))
 	runner.register_test("pickup_ui/planner_state_reason_follows_the_status_ladder", Callable(PickupPlannerTests, "_t_ladder"))
-	runner.register_test("pickup_ui/planner_reduced_motion_has_no_lean", Callable(PickupPlannerTests, "_t_reduced_lean"))
 	runner.register_test("pickup_ui/planner_pack_counts_unlisted_slots_and_tone_per_frame", Callable(PickupPlannerTests, "_t_unlisted_and_tone"))
 	runner.register_test("pickup_ui/planner_constants_match_the_mockup", Callable(PickupPlannerTests, "_t_constants"))
-	runner.register_test("pickup_ui/planner_start_positions_and_norm_fields", Callable(PickupPlannerTests, "_t_positions"))
+	runner.register_test("pickup_ui/planner_legs_follow_tile_paths_and_the_chooser_ends_where_the_plan_says", Callable(PickupPlannerTests, "_t_legs_follow_tile_paths"))
+	runner.register_test("pickup_ui/planner_pulse_ends_before_the_plan_total", Callable(PickupPlannerTests, "_t_pulse_ends_before_total"))
+	runner.register_test("pickup_ui/planner_probe_stand_tiles_stay_off_echo_and_find_tiles_env_gated", Callable(PickupPlannerTests, "_t_probe_stand_tiles"))
+	runner.register_test("pickup_ui/planner_plans_over_real_snapshots", Callable(PickupPlannerTests, "_t_plan_over_real_snapshots"))
 	runner.register_test("pickup_ui/planner_files_pass_the_source_scan", Callable(PickupPlannerTests, "_t_source_scan"))
 
 
@@ -61,13 +64,15 @@ static func _snap(o: Dictionary) -> Dictionary:
 	var row: Array = []
 	for i in n:
 		row.append({ "id": "e%d" % i, "name": "Echo %d" % i, "standing": int(standing[i % standing.size()]),
-			"status": str(o.get("chooser_status", "grounded")) if i == chooser else "grounded", "is_chooser": i == chooser })
+			"status": str(o.get("chooser_status", "grounded")) if i == chooser else "grounded", "is_chooser": i == chooser,
+			"tile": { "col": i, "row": 4 } })
 	var finds: Array = []
 	var taken: Array = []
 	for f: Array in o.get("finds", []):
 		var pick := int(f[3]) if f.size() > 3 else -1
 		finds.append({ "find_id": f[0], "type_id": f[1], "name": "Name " + str(f[1]), "kind": "gear", "grade": "common",
-			"quantity": 1, "cell": finds.size(), "status": f[2], "revealed": str(o.get("phase", "idle")) != "intro", "pick_index": pick })
+			"quantity": 1, "cell": finds.size(), "tile": { "col": 1 + finds.size(), "row": 0 }, "status": f[2],
+			"revealed": str(o.get("phase", "idle")) != "intro", "pick_index": pick })
 		if str(f[2]) == "taken":
 			taken.append([pick, str(f[0])])
 	taken.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
@@ -121,7 +126,8 @@ static func _snap(o: Dictionary) -> Dictionary:
 		"row": row, "fallen": [], "pointer": o.get("pointer", { "n": n, "start": 4, "laps": 2 }), "order": order,
 		"selected": o.get("selected", {}), "reason": o.get("reason", "identity"), "case": o.get("case", "C1"),
 		"frozen": o.get("frozen", false), "reaction": o.get("reaction", "none"), "finds": finds,
-		"pack": { "slots": slots, "free": 0, "capacity": o.get("capacity", 4), "carried": o.get("carried", slots.size()), "tone": o.get("tone", "plain") },
+		"pack": { "slots": slots, "free": 0, "capacity": o.get("capacity", 4), "carried": o.get("carried", slots.size()), "tone": o.get("tone", "plain"),
+			"tone_before": o.get("tone_before", o.get("tone", "plain")) },
 		"swap_left": 0 if o.get("spent", false) else 1, "destroy_left": 1,
 		"swap": { "offered": offered, "reason_key": o.get("reason_key", "" if offered else "has_room"), "spent": o.get("spent", false),
 			"origin": origin, "target": o.get("target", ""), "twins": twins, "targets": targets, "dropped": o.get("dropped", {}) },
@@ -229,7 +235,7 @@ static func _item(plan: Dictionary, fid: String) -> Dictionary:
 # ---------------------------------------------------------------------------
 
 static func _t_beats() -> Dictionary:
-	var names := ["last_enemy_falls", "items_appear", "row_forms", "pointer_runs", "chooser_steps_out"]
+	var names := ["last_enemy_falls", "pointer_runs", "chooser_steps_out"]
 	for key: String in _CASES:
 		var plan := PickupEventPlan.build(_case(key, "intro"))
 		if not bool(plan["valid"]):
@@ -238,66 +244,64 @@ static func _t_beats() -> Dictionary:
 		for i in names.size():
 			if beats[i]["name"] != names[i]:
 				return _fail("%s: beat %d is %s, expected %s" % [key, i, beats[i]["name"], names[i]])
-		if not ["walks_to_picks", "tries_a_find", "takes_nothing"].has(beats[5]["name"]) or beats[6]["name"] != "reaction" or beats[7]["name"] != "idle":
-			return _fail("%s: last beats wrong: %s" % [key, str(beats.slice(5))])
+		if not ["walks_to_picks", "tries_a_find", "takes_nothing"].has(beats[3]["name"]) or beats[4]["name"] != "reaction" or beats[5]["name"] != "idle":
+			return _fail("%s: last beats wrong: %s" % [key, str(beats.slice(3))])
 		for i in range(1, beats.size()):
 			if float(beats[i]["t"]) < float(beats[i - 1]["t"]):
 				return _fail("%s: beat times fall at %d" % [key, i])
-		if absf(float(beats[7]["t"]) - float(plan["total"])) > _EPS or float(beats[0]["t"]) != 0.0:
+		if absf(float(beats[5]["t"]) - float(plan["total"])) > _EPS or float(beats[0]["t"]) != 0.0:
 			return _fail("%s: idle beat is not the total" % key)
 		var tm: Dictionary = plan["times"]
-		if not (float(tm["items"]) < float(tm["pointer0"]) and float(tm["pointer0"]) < float(tm["pointer_end"])
-				and float(tm["pointer_end"]) < float(tm["step0"]) and float(tm["step0"]) < float(tm["step1"])
-				and float(tm["step1"]) <= float(tm["walk0"]) and float(tm["walk0"]) <= float(tm["deposit_end"])
-				and float(tm["deposit_end"]) < float(tm["idle"])):
+		if not (float(tm["pointer0"]) < float(tm["pointer_end"]) and float(tm["pointer_end"]) < float(tm["step0"])
+				and float(tm["step0"]) < float(tm["step1"]) and float(tm["step1"]) <= float(tm["walk0"])
+				and float(tm["walk0"]) <= float(tm["deposit_end"]) and float(tm["deposit_end"]) < float(tm["idle"])):
 			return _fail("%s: times are not in order: %s" % [key, str(tm)])
-		var seg_t := float(plan["track"]["t0"])
-		for s: Dictionary in plan["track"]["segs"]:
-			if float(s["t0"]) < seg_t - _EPS or float(s["t1"]) < float(s["t0"]):
-				return _fail("%s: walk segments overlap or run backwards" % key)
-			seg_t = float(s["t1"])
-		var last_appear := 0.0
-		for f: Dictionary in plan["finds"]:
-			if float(f["appear"]) < float(tm["items"]) or float(f["appear"]) < last_appear:
-				return _fail("%s: items do not appear in order from the items beat" % key)
-			last_appear = float(f["appear"])
+		var leg_t := float(tm["step0"])
+		for l: Dictionary in plan["legs"]:
+			if float(l["t0"]) < leg_t - _EPS or float(l["t1"]) <= float(l["t0"]):
+				return _fail("%s: legs overlap or run backwards" % key)
+			leg_t = float(l["t1"])
 		if str(PickupEventPlan.frame_at(plan, 0.0)["beat"]) != "last_enemy_falls" or str(PickupEventPlan.frame_at(plan, float(plan["total"]))["beat"]) != "idle":
 			return _fail("%s: first and last frame beat names wrong" % key)
 	return { "ok": true }
 
 
+## The light is plain data: a row index over time. It starts on `pointer.start` and ends on the chooser.
 static func _t_pointer() -> Dictionary:
-	var snap := _case("C1", "intro")
-	var plan := PickupEventPlan.build(snap)
+	var plan := PickupEventPlan.build(_case("C1", "intro"))
 	var p: Dictionary = plan["pointer"]
-	var samples: Array = p["samples"]
+	var steps: Array = p["steps"]
 	if int(p["start"]) != 4 or int(p["laps"]) != 2 or int(p["n"]) != 5 or int(p["decided"]) != 2:
 		return _fail("pointer header wrong: %s" % str({ "start": p["start"], "laps": p["laps"], "n": p["n"] }))
-	if absf(float(samples[0]["idx"]) - 4.0) > _EPS or float(samples[0]["t"]) != 0.0:
-		return _fail("path does not start at pointer.start")
-	var last: Dictionary = samples[samples.size() - 1]
-	if absf(float(last["idx"]) - 2.0) > _EPS or absf(float(last["t"]) - float(p["length"])) > _EPS:
-		return _fail("path does not end on the chooser: %s" % str(last))
+	if int(steps[0]["index"]) != 4 or absf(float(steps[0]["t"]) - float(plan["times"]["pointer0"])) > _EPS:
+		return _fail("the light does not start on pointer.start at pointer0: %s" % str(steps[0]))
+	var last: Dictionary = steps[steps.size() - 1]
+	if int(last["index"]) != 2 or float(last["t"]) > float(plan["times"]["pointer_end"]) + _EPS:
+		return _fail("the light does not end on the chooser by pointer_end: %s" % str(last))
 	# n 5, start 4, chooser 2: 3 steps to the chooser plus 2 laps of 5 = 13 steps (at least 6, so no extra lap).
-	if absf(float(p["travel"]) - 13.0) > _EPS:
-		return _fail("travel is %s, expected 13" % str(p["travel"]))
-	var wraps := 0
-	for i in range(1, samples.size()):
-		if float(samples[i]["t"]) < float(samples[i - 1]["t"]):
-			return _fail("sample times fall")
-		if float(samples[i]["idx"]) < float(samples[i - 1]["idx"]) - 0.5:
-			wraps += 1
-	if wraps != int(floor((4.0 + 13.0) / 5.0)):
-		return _fail("the light wrapped %d times, expected 3" % wraps)
-	var slow: Dictionary = PickupEventPlan.frame_at(plan, float(plan["times"]["pointer0"]) + float(p["length"]) - 0.01)
-	var fast: Dictionary = PickupEventPlan.frame_at(plan, float(plan["times"]["pointer0"]) + 0.8)
-	if float(slow["pointer_speed"]) >= float(fast["pointer_speed"]):
+	if absf(float(p["travel"]) - 13.0) > _EPS or steps.size() != 14:
+		return _fail("travel is %s with %d steps, expected 13 and 14" % [str(p["travel"]), steps.size()])
+	for i in range(1, steps.size()):
+		if float(steps[i]["t"]) <= float(steps[i - 1]["t"]) or int(steps[i]["index"]) != (int(steps[i - 1]["index"]) + 1) % 5:
+			return _fail("step %d does not move one Echo on, later in time: %s" % [i, str(steps[i])])
+	var tm: Dictionary = plan["times"]
+	var at_end: Dictionary = PickupEventPlan.frame_at(plan, float(tm["pointer_end"]) + 0.01)["pointer"]
+	var before: Dictionary = PickupEventPlan.frame_at(plan, float(tm["pointer0"]) - 0.01)["pointer"]
+	var after: Dictionary = PickupEventPlan.frame_at(plan, float(tm["step0"]) + 0.01)["pointer"]
+	if int(at_end["index"]) != 2 or int(before["index"]) != -1 or int(after["index"]) != -1:
+		return _fail("pointer index at end %s, before %s, after the step %s" % [str(at_end), str(before), str(after)])
+	var slow: Dictionary = PickupEventPlan.frame_at(plan, float(tm["pointer0"]) + float(p["length"]) - 0.01)["pointer"]
+	var fast: Dictionary = PickupEventPlan.frame_at(plan, float(tm["pointer0"]) + 0.8)["pointer"]
+	if float(slow["speed"]) >= float(fast["speed"]):
 		return _fail("the light does not slow down at the end")
 	var one := _case("C1", "intro")
 	one["data"]["pointer"] = { "n": 5, "start": 1, "laps": 1 }
 	var plan1 := PickupEventPlan.build(one)
 	if absf(float(plan1["pointer"]["travel"]) - 6.0) > _EPS:
 		return _fail("travel for start 1, laps 1 is %s, expected 6" % str(plan1["pointer"]["travel"]))
+	var rm := PickupEventPlan.build(_case("C1", "intro"), { "reduced": true })
+	if (rm["pointer"]["steps"] as Array).size() != 1 or int(rm["pointer"]["steps"][0]["index"]) != 2:
+		return _fail("reduced motion light is not one step on the chooser")
 	return { "ok": true }
 
 
@@ -309,7 +313,7 @@ static func _t_deterministic() -> Dictionary:
 	var moved := _case("C4", "intro")
 	moved["data"]["pointer"] = { "n": 5, "start": 0, "laps": 1 }
 	var c := PickupEventPlan.build(moved)
-	if a["pointer"]["samples"] == c["pointer"]["samples"] or int(c["pointer"]["start"]) != 0:
+	if a["pointer"]["steps"] == c["pointer"]["steps"] or int(c["pointer"]["start"]) != 0:
 		return _fail("a different pointer key gives the same path")
 	if PickupEventPlan.hash_of(["a", ["f0"]]) != PickupEventPlan.hash_of(["a", ["f0"]]) \
 			or PickupEventPlan.hash_of(["a", ["f0"]]) == PickupEventPlan.hash_of(["b", ["f0"]]) \
@@ -343,7 +347,7 @@ static func _t_pick_order() -> Dictionary:
 			return _fail("a walk starts before the last one arrived")
 	if int(_item(plan, "f1")["slot"]) != 2 or int(_item(plan, "f0")["slot"]) != 3 or int(_item(plan, "f2")["slot"]) != -1:
 		return _fail("slots are %d %d %d, expected 2 3 -1" % [_item(plan, "f1")["slot"], _item(plan, "f0")["slot"], _item(plan, "f2")["slot"]])
-	if float(_item(plan, "f1")["fly1"]) >= float(_item(plan, "f0")["fly0"]):
+	if float(_item(plan, "f1")["fly1"]) > float(_item(plan, "f0")["fly0"]) + _EPS:
 		return _fail("the second item flies before the first has landed")
 	var pack: Dictionary = plan["pack"]
 	if pack["after"] != ["held_0", "held_1", "item:%s:f1" % _SIT, "item:%s:f0" % _SIT] or pack["before"] != ["held_0", "held_1"]:
@@ -357,19 +361,20 @@ static func _t_reveal() -> Dictionary:
 	var f0 := _item(plan, "f0")
 	var before: Dictionary = PickupEventPlan.frame_at(plan, float(f0["reveal"]) - 0.01)["items"]["f0"]
 	var after: Dictionary = PickupEventPlan.frame_at(plan, float(f0["reveal"]) + float(f0["reveal_len"]) + 0.01)["items"]["f0"]
-	if float(before["rev"]) > 0.001 or float(after["rev"]) < 0.999:
-		return _fail("f0 reveal is %s before and %s after its pick" % [before["rev"], after["rev"]])
+	if float(before["rev"]) > 0.001 or before["state"] != "hidden" or float(after["rev"]) < 0.999 or after["state"] == "hidden":
+		return _fail("f0 is %s before and %s after its pick" % [str(before), str(after)])
 	if absf(float(f0["reveal"]) - float(f0["arrive"])) > _EPS:
 		return _fail("a taken find is not revealed when the chooser arrives")
 	var f2 := _item(plan, "f2")
 	if absf(float(f2["reveal"]) - dep) > _EPS:
 		return _fail("a left find is not revealed at the end of the picks")
 	var mid: Dictionary = PickupEventPlan.frame_at(plan, dep - 0.01)["items"]["f2"]
-	if float(mid["rev"]) > 0.001 or str(mid["vis"]) != "svg":
+	if float(mid["rev"]) > 0.001 or str(mid["state"]) != "hidden":
 		return _fail("a left find shows before the picks end")
-	var gone: Dictionary = PickupEventPlan.frame_at(plan, float(plan["times"]["items"]) - 0.1)["items"]["f0"]
-	if str(gone["vis"]) != "none":
-		return _fail("an item shows before it appears")
+	for f: Dictionary in plan["finds"]:
+		var first: Dictionary = PickupEventPlan.frame_at(plan, 0.0)["items"][f["find_id"]]
+		if first["state"] != "hidden" or first["cell"] != f["tile"]:
+			return _fail("find %s does not lie hidden on its tile at the start: %s" % [f["find_id"], str(first)])
 	return { "ok": true }
 
 
@@ -381,7 +386,7 @@ static func _t_tried() -> Dictionary:
 			return _fail("%s: tried find has a slot or a fly time" % key)
 		var end := PickupEventPlan.frame_at(plan, float(plan["total"]))
 		var it: Dictionary = end["items"][held["find_id"]]
-		if not bool(it["held"]) or str(it["vis"]) == "tile":
+		if not bool(it["held"]) or str(it["state"]) != "lifted":
 			return _fail("%s: tried find is not held up at the end" % key)
 		var filled := int(end["pack"]["used"])
 		var expect := (plan["pack"]["before"] as Array).size() + (plan["finds"] as Array).filter(func(f: Dictionary) -> bool: return f["status"] == "taken").size()
@@ -394,34 +399,36 @@ static func _t_tried() -> Dictionary:
 	return { "ok": true }
 
 
+## D-39: a frozen chooser walks to nothing. Its only leg is the step out of the row.
 static func _t_frozen() -> Dictionary:
 	var snap := _case("frozen", "intro")
 	var plan := PickupEventPlan.build(snap)
 	if not (plan["walk"] as Array).is_empty() or bool(plan["offered"]) or not bool(plan["frozen"]):
 		return _fail("a frozen plan walks or offers a swap")
-	if (plan["tremors"] as Array).is_empty():
-		return _fail("a frozen chooser does not tremble")
+	for l: Dictionary in plan["legs"]:
+		if l["kind"] != "out":
+			return _fail("a frozen chooser has a %s leg" % l["kind"])
 	var end := PickupEventPlan.frame_at(plan, float(plan["total"]))
 	for f: Dictionary in plan["finds"]:
 		var it: Dictionary = end["items"][f["find_id"]]
-		if int(f["slot"]) != -1 or float(it["rev"]) < 0.999 or float(it["df"]) < 0.999 or str(it["vis"]) != "svg":
+		if int(f["slot"]) != -1 or float(it["rev"]) < 0.999 or float(it["dim"]) < 0.999 or str(it["state"]) != "revealed":
 			return _fail("find %s is not revealed and left on the field" % f["find_id"])
 		if absf(float(f["reveal"]) - float(plan["times"]["deposit_end"])) > _EPS:
 			return _fail("find %s is not revealed at the end of the beat" % f["find_id"])
 	if int(end["pack"]["used"]) != 0:
 		return _fail("a frozen chooser filled the pack")
-	var shake := false
-	for t in 40:
-		var fr := PickupEventPlan.frame_at(plan, float(plan["times"]["walk0"]) + 0.35 + 0.03 * float(t))
-		for e: Dictionary in fr["echoes"]:
-			if e["chosen"] and absf(float(e["bx"])) > 0.1:
-				shake = true
-	if not shake:
-		return _fail("no tremble offset in the frames")
+	for rm in [false, true]:
+		var fp := PickupEventPlan.build(snap, { "reduced": rm })
+		var wait := float(fp["times"]["deposit_end"]) - float(fp["times"]["walk0"])
+		var want := 0.4 if rm else PickupEventPlan.FROZEN_STEP + PickupEventPlan.FROZEN_WAIT
+		if absf(wait - want) > _EPS:
+			return _fail("the frozen wait is %s s (reduced=%s), expected %s" % [str(wait), str(rm), str(want)])
+	if plan["chooser_end_cell"] != (plan["out_cell"] if not (plan["out_cell"] as Dictionary).is_empty() else plan["chooser_cell"]):
+		return _fail("a frozen chooser does not end on the out tile")
 	if PickupUiText.line("bark.froze.0") == "" or str(plan["bark"]["text"]) != PickupUiText.line("bark.froze.0"):
 		return _fail("frozen bark is not the froze bark")
-	if str(plan["beats"][5]["name"]) != "takes_nothing":
-		return _fail("frozen beat name is %s" % plan["beats"][5]["name"])
+	if str(plan["beats"][3]["name"]) != "takes_nothing":
+		return _fail("frozen beat name is %s" % plan["beats"][3]["name"])
 	return { "ok": true }
 
 
@@ -444,14 +451,6 @@ static func _t_cases() -> Dictionary:
 			return _fail("%s: emo %s" % [key, plan["emo"]])
 		if str(plan["bark"]["text"]) == "" or int(plan["bark"]["chars"]) != str(plan["bark"]["text"]).length():
 			return _fail("%s: bark text missing" % key)
-		var end := PickupEventPlan.frame_at(plan, float(plan["total"]))
-		for ech: Dictionary in end["echoes"]:
-			if ech["chosen"]:
-				var body_ok := (key in ["C1", "C3"] and float(ech["glow"]) > 0.2) \
-						or (key == "C5" and float(ech["shade"]) > 0.2 and float(ech["rot"]) < -4.0) \
-						or (key in ["C2", "C4"] and float(ech["glow"]) == 0.0 and float(ech["shade"]) == 0.0)
-				if not body_ok:
-					return _fail("%s: chooser body after the intro is wrong: %s" % [key, str(ech)])
 	var severe := _case("C5", "intro")
 	severe["data"]["reaction"] = "none"
 	var lean := PickupEventPlan.build(severe)
@@ -468,8 +467,6 @@ static func _t_tempo() -> Dictionary:
 	var high := PickupEventPlan.tempo(9)
 	if absf(float(low["pre"]) - 0.6) > _EPS or absf(float(mid["pre"]) - 0.35) > _EPS or absf(float(high["pre"]) - 0.1) > _EPS:
 		return _fail("tempo pre does not hit the anchors 0.6, 0.35, 0.1")
-	if float(low["lean"]) >= 0.0 or float(high["lean"]) <= 0.0:
-		return _fail("lean sign is wrong")
 	if float(low["pace"]) >= float(high["pace"]) or PickupEventPlan.tempo(-3) != low or PickupEventPlan.tempo(40) != high:
 		return _fail("pace or clamp is wrong")
 	var a := _snap({ "case": "C1", "phase": "intro", "standing": [1, 1, 1, 1, 1], "reaction": "plus", "reason": "identity",
@@ -487,7 +484,7 @@ static func _t_tempo() -> Dictionary:
 	var like := _case("C4", "intro")
 	like["data"]["reason"] = "identity"
 	if PickupEventPlan.build(worth)["tempo_reason"] != "worth" or PickupEventPlan.build(like)["tempo_reason"] != "likes" \
-			or PickupEventPlan.build(worth)["track"]["segs"] == PickupEventPlan.build(like)["track"]["segs"]:
+			or PickupEventPlan.build(worth)["legs"] == PickupEventPlan.build(like)["legs"]:
 		return _fail("the reason class does not change the walk")
 	var afraid := _case("C4", "intro")
 	afraid["data"]["reason"] = "state"
@@ -522,56 +519,34 @@ static func _t_skip() -> Dictionary:
 			if diff2 != "":
 				return _fail("%s reduced=%s: last frame differs from skip at %s" % [key, str(rm), diff2])
 			# Expected state derived here from the snapshot statuses only (no PickupEventPlan.build).
-			var want := _expected_final(snap, rm)
-			var got_end := Vector2(skip["chooser_end"]["x"], skip["chooser_end"]["y"])
-			if not got_end.is_equal_approx(want["end"]):
-				return _fail("%s reduced=%s: chooser end %s, expected %s" % [key, str(rm), str(got_end), str(want["end"])])
+			var want := _expected_final(snap)
 			if skip["pack"]["slots"] != want["slots"] or int(skip["pack"]["used"]) != int(want["used"]) or str(skip["pack"]["tone"]) != str(want["tone"]):
 				return _fail("%s reduced=%s: pack is %s, expected %s" % [key, str(rm), str(skip["pack"]), str(want)])
 			for fid: String in want["items"]:
 				var w: Dictionary = want["items"][fid]
 				var g: Dictionary = skip["items"][fid]
-				if g["vis"] != w["vis"] or bool(g["held"]) != bool(w["held"]) or int(g["slot"]) != int(w["slot"]) \
-						or absf(float(g["x"]) - float(w["x"])) > 0.01 or absf(float(g["y"]) - float(w["y"])) > 0.01:
+				if g["state"] != w["state"] or bool(g["held"]) != bool(w["held"]) or int(g["slot"]) != int(w["slot"]) or g["cell"] != w["cell"]:
 					return _fail("%s reduced=%s: item %s is %s, expected %s" % [key, str(rm), fid, str(g), str(w)])
+			var stops: Array = want["stops"]
+			if not stops.is_empty() and _cheb(skip["chooser_end"], stops[stops.size() - 1]["tile"]) > 1:
+				return _fail("%s reduced=%s: the chooser ends %s, not next to its last find" % [key, str(rm), str(skip["chooser_end"])])
 	var plain := PickupEventPlan.skip_to_idle({ "type": "flow.pickup", "data": {}, "actions": {} })
 	if plain["phase"] != "idle" or not (plain["echoes"] as Array).is_empty():
 		return _fail("skip on an empty snapshot is not the empty idle frame")
 	return { "ok": true }
 
 
-## The final state of a skipped intro from the snapshot alone: design-space constants are literals copied from the
-## mockup (rowSpot 557, slotCenter 559, stand 34 at line 687, head 54 at line 560, step back 10 at line 754).
-static func _expected_final(snap: Dictionary, rm: bool) -> Dictionary:
+static func _cheb(a: Dictionary, b: Dictionary) -> int:
+	return maxi(absi(int(a["col"]) - int(b["col"])), absi(int(a["row"]) - int(b["row"])))
+
+
+## The final state of a skipped intro from the snapshot alone: pack lists, tone, and each find's state.
+static func _expected_final(snap: Dictionary) -> Dictionary:
 	var d: Dictionary = snap["data"]
 	var finds: Array = d["finds"]
-	var f_n := finds.size()
-	var n: int = (d["row"] as Array).size()
-	var ci := 0
-	for i in n:
-		if d["row"][i]["is_chooser"]:
-			ci = i
-	var out_pos := Vector2(640.0 + (float(ci) - float(n - 1) / 2.0) * 96.0, 486.0 - 44.0)
 	var taken: Array = finds.filter(func(f: Dictionary) -> bool: return f["status"] == "taken")
 	taken.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["pick_index"] < b["pick_index"])
 	var tried: Array = finds.filter(func(f: Dictionary) -> bool: return f["status"] == "tried")
-	var stops: Array = taken + tried
-	var field := {}
-	for i in f_n:
-		field[finds[i]["find_id"]] = Vector2(640.0 + (float(i) - float(f_n - 1) / 2.0) * 120.0, 300.0)
-	var afraid := ["hollow", "fraying", "strained", "pressed", "burdened"].has(d["row"][ci]["status"])
-	var is_safe: bool = d["reason"] == "state" and afraid and not bool(d["frozen"]) and not ["C1", "C3"].has(d["case"])
-	var end := out_pos
-	var cur := out_pos
-	for k in stops.size():
-		var ip: Vector2 = field[stops[k]["find_id"]]
-		cur = ip + (cur - ip).normalized() * 34.0
-		end = cur
-		if is_safe and not rm and stops[k]["status"] == "taken":
-			end = cur + (out_pos - cur).normalized() * 10.0
-	if bool(d["frozen"]) and f_n > 0:
-		var ip0: Vector2 = field[finds[0]["find_id"]]
-		end = out_pos if rm else out_pos.lerp(ip0 + (out_pos - ip0).normalized() * 34.0, 0.4)
 	var slots: Array = []
 	var listed: Array = d["pack"]["slots"]
 	var taken_ids: Array = taken.map(func(f: Dictionary) -> String: return f["find_id"])
@@ -590,18 +565,16 @@ static func _expected_final(snap: Dictionary, rm: bool) -> Dictionary:
 	while slots.size() < count:
 		slots.append("")
 	var used := slots.filter(func(x: String) -> bool: return x != "").size()
-	var tone := "full" if used >= count else ("near" if used == count - 1 else "plain")
 	var items := {}
 	for f: Dictionary in finds:
 		var fid: String = f["find_id"]
-		var it := { "vis": "svg", "held": false, "slot": -1, "x": float(field[fid].x), "y": float(field[fid].y) }
+		var it := { "state": "revealed", "held": false, "slot": -1, "cell": f["tile"] }
 		if f["status"] == "taken":
-			var slot := first_new + taken_ids.find(fid)
-			it.merge({ "vis": "tile", "slot": slot, "x": 520.0 + 80.0 * slot, "y": 640.0 }, true)
+			it.merge({ "state": "pack", "slot": first_new + taken_ids.find(fid) }, true)
 		elif f["status"] == "tried":
-			it.merge({ "held": true, "x": end.x, "y": end.y - 54.0 }, true)
+			it.merge({ "state": "lifted", "held": true }, true)
 		items[fid] = it
-	return { "end": end, "slots": slots, "used": used, "tone": tone, "items": items }
+	return { "slots": slots, "used": used, "tone": d["pack"]["tone"], "items": items, "stops": taken + tried }
 
 
 static func _t_total_and_pure() -> Dictionary:
@@ -624,7 +597,7 @@ static func _t_total_and_pure() -> Dictionary:
 		if snap != before or again != PickupEventPlan.frame_at(plan, 1.7):
 			return _fail("%s: the snapshot changed or a frame is not repeatable" % key)
 		var fr0 := PickupEventPlan.frame_at(plan, 0.0)
-		for k: String in ["t", "phase", "beat", "echoes", "items", "pack", "light", "pointer_speed", "bark", "skip_o", "cont_o", "chooser_end"]:
+		for k: String in ["t", "phase", "beat", "echoes", "items", "pack", "pointer", "bark", "skip_o", "cont_o", "chooser_end"]:
 			if not fr0.has(k):
 				return _fail("frame key %s missing" % k)
 	var bad := PickupEventPlan.build({ "type": "flow.pickup", "data": { "error": "no_pickup_event" }, "actions": {} })
@@ -634,6 +607,12 @@ static func _t_total_and_pure() -> Dictionary:
 	noptr["data"]["pointer"] = { "n": 5, "start": -1, "laps": 0 }
 	if bool(PickupEventPlan.build(noptr)["valid"]):
 		return _fail("a pointer with no start should not make a plan")
+	for what: String in ["row", "find"]:
+		var notile := _case("C1", "intro")
+		((notile["data"]["row"] if what == "row" else notile["data"]["finds"])[0] as Dictionary).erase("tile")
+		var np := PickupEventPlan.build(notile)
+		if bool(np["valid"]) or not _finite(PickupEventPlan.frame_at(np, 2.0)) or PickupEventPlan.skip_to_idle(notile) != PickupEventPlan.frame_at(np, 0.0):
+			return _fail("a %s with no tile does not give the invalid plan and the empty frame" % what)
 	return { "ok": true }
 
 
@@ -645,8 +624,11 @@ static func _t_reduced() -> Dictionary:
 			return _fail("%s: reduced plan is not shorter (%s vs %s)" % [key, rm["total"], full["total"]])
 		if not _finite(PickupEventPlan.frame_at(rm, float(rm["total"]) * 0.5)):
 			return _fail("%s: reduced frame not finite" % key)
-		if not (rm["hops"] as Array).is_empty() or not (rm["tremors"] as Array).is_empty():
-			return _fail("%s: reduced plan still has hops or tremors" % key)
+		if rm["chooser_end_cell"] != full["chooser_end_cell"] or (rm["legs"] as Array).size() > (full["legs"] as Array).size():
+			return _fail("%s: reduced motion changes where the chooser ends or adds legs" % key)
+		for l: Dictionary in rm["legs"]:
+			if float(l["t1"]) - float(l["t0"]) > 0.4 + _EPS:
+				return _fail("%s: a reduced leg is longer than 0.4 s" % key)
 	return { "ok": true }
 
 
@@ -884,32 +866,14 @@ static func _t_ladder() -> Dictionary:
 	return { "ok": true }
 
 
-static func _t_reduced_lean() -> Dictionary:
-	var snap := _case("C5", "intro")
-	snap["data"]["reaction"] = "none"
-	var full := PickupEventPlan.build(snap)
-	var rm := PickupEventPlan.build(snap, { "reduced": true })
-	if full["emo"] != "lean" or rm["emo"] != "lean":
-		return _fail("fixture is not the lean case")
-	for entry: Array in [[full, -4.0], [rm, 0.0]]:
-		var end := PickupEventPlan.frame_at(entry[0], float(entry[0]["total"]))
-		for e: Dictionary in end["echoes"]:
-			if e["chosen"] and absf(float(e["rot"]) - float(entry[1])) > _EPS:
-				return _fail("chooser rot at the end is %s, expected %s" % [str(e["rot"]), str(entry[1])])
-	for opts: Dictionary in [{}, { "reduced": true }]:
-		for e: Dictionary in PickupEventPlan.skip_to_idle(snap, opts)["echoes"]:
-			if e["chosen"] and absf(float(e["rot"]) - (0.0 if opts.has("reduced") else -4.0)) > _EPS:
-				return _fail("skip chooser rot is %s with %s" % [str(e["rot"]), str(opts)])
-	return { "ok": true }
-
-
 static func _t_unlisted_and_tone() -> Dictionary:
 	# Capacity 4, one listed held piece, two carried entries the snapshot cannot list, one find taken.
-	var snap := _snap({ "case": "C3", "phase": "intro", "capacity": 4, "held": ["t_x"], "carried": 4, "tone": "full", "reaction": "plus",
-		"finds": [["f0", "t_a", "taken", 0]] })
+	var snap := _snap({ "case": "C3", "phase": "intro", "capacity": 4, "held": ["t_x"], "carried": 4, "tone": "full", "tone_before": "near",
+		"reaction": "plus", "finds": [["f0", "t_a", "taken", 0]] })
 	var plan := PickupEventPlan.build(snap)
 	var pk: Dictionary = plan["pack"]
-	if int(pk["unlisted"]) != 2 or pk["before"] != ["held_0", "unlisted_0", "unlisted_1"] or int(pk["slot_count"]) != 4 or pk["tone"] != "full":
+	if int(pk["unlisted"]) != 2 or pk["before"] != ["held_0", "unlisted_0", "unlisted_1"] or int(pk["slot_count"]) != 4 \
+			or pk["tone"] != "full" or pk["tone_before"] != "near":
 		return _fail("pack plan wrong: %s" % str(pk))
 	var f0 := _item(plan, "f0")
 	if int(f0["slot"]) != 3:
@@ -934,25 +898,27 @@ static func _t_unlisted_and_tone() -> Dictionary:
 static func _t_constants() -> Dictionary:
 	var map: Dictionary = (load("res://ui/screens/combat/PickupEventPlan.gd") as GDScript).get_script_constant_map()
 	var table: Array = [
-		["DESIGN_W", 1280.0], ["DESIGN_H", 720.0],
-		["T_ITEMS", 0.35], ["ROW_FORM", 0.9], ["POINTER_AFTER_ROW", 0.7],  # line 666
+		["POINTER_START", 0.4],  # feel value (Jeff, D-75); the mockup had 1.05 at line 666
 		["POINTER_REDUCED", 0.5], ["STEP_GAP", 0.2], ["STEP_LEN", 0.45], ["STEP_LEN_REDUCED", 0.15],  # lines 670, 671
-		["ITEM_STAGGER", 0.08], ["REVEAL_LEN", 0.25], ["REVEAL_LEN_REDUCED", 0.15],  # lines 773, 774
-		["BARK_AFTER_LAST", 0.15], ["IDLE_AFTER_BARK", 0.3], ["IDLE_AFTER_DEPOSIT", 0.45], ["DIM_OPACITY", 0.6],  # lines 778, 780, 781
+		["REVEAL_LEN", 0.25], ["REVEAL_LEN_REDUCED", 0.15],  # line 774
+		["BARK_AFTER_LAST", 0.15], ["IDLE_AFTER_BARK", 0.3], ["IDLE_AFTER_DEPOSIT", 0.45],  # lines 778, 780
 		["POINTER_ACCEL", 0.4], ["POINTER_DECEL_DIST", 2.5], ["POINTER_MIN_TRAVEL", 6.0], ["POINTER_MIN_CRUISE", 0.25],  # lines 566, 568, 570
 		["POINTER_T_STEP", 0.05], ["POINTER_T_BASE", 2.0], ["POINTER_T_VARY", 0.2], ["POINTER_T_STEPS", 5],  # lines 570, 602
 		["WALK_CAP", 3.4], ["FLY_LEN", 0.34], ["TYPE_CPS", 24.0],  # line 619
-		["REF_FIRST", 90.0], ["REF_NEXT", 60.0], ["DIST_SCALE_MIN", 0.6], ["DIST_SCALE_MAX", 1.35],  # line 688
-		["STAND_OFF", 34.0], ["WORTH_APPROACH", 0.45], ["WORTH_DWELL", 0.45], ["WORTH_BACK_OFF", 44.0],  # lines 687, 712, 716
-		["SAFE_STEP_BACK", 10.0], ["SAFE_STEP_TIME", 0.25], ["SAFE_PRE_EXTRA", 0.25],  # lines 754, 679
-		["FROZEN_FRAC", 0.4], ["FROZEN_STEP", 0.35], ["FROZEN_TREMBLE", 1.1], ["FROZEN_WAIT", 1.35],  # lines 757 to 760
+		["DIST_SCALE_MIN", 0.6], ["DIST_SCALE_MAX", 1.35],  # line 688
+		["WORTH_DWELL", 0.45], ["SAFE_PRE_EXTRA", 0.25],  # lines 716, 679
+		["FROZEN_STEP", 0.35], ["FROZEN_WAIT", 1.35],  # lines 757 to 760
 		["TRY_LIFT_EXTRA", 0.1],  # line 748
-		["ROW_SPACING", 96.0], ["ROW_Y", 486.0], ["OUT_STEP", 44.0], ["HEAD", 54.0],  # lines 557, 673, 560
-		["SLOT_X0", 520.0], ["SLOT_STEP", 80.0], ["SLOT_Y", 640.0], ["PACK_SLOTS_DEFAULT", 4],  # lines 559, 312
+		["PACK_SLOTS_DEFAULT", 4],  # line 312
+		["REF_TILES_FIRST", 3.0], ["REF_TILES_NEXT", 2.0],  # provisional feel values: 90 and 60 px at 30 px a tile (D-75)
 	]
 	for row: Array in table:
 		if not map.has(row[0]) or absf(float(map[row[0]]) - float(row[1])) > 1e-9:
 			return _fail("constant %s is %s, the mockup has %s" % [row[0], str(map.get(row[0])), str(row[1])])
+	# The pixel and body constants of the mockup are gone: the plan runs on tiles and paths.
+	for gone: String in ["DESIGN_W", "DESIGN_H", "ROW_SPACING", "ROW_Y", "OUT_STEP", "HEAD", "STAND_OFF", "SLOT_X0", "SLOT_Y", "FIELD_STEP"]:
+		if map.has(gone):
+			return _fail("design-space constant %s is still in the planner" % gone)
 	# RS rows, mockup lines 612 to 618: walk first, walk next, touch, lift, lift ease, hold.
 	var rs := {
 		"likes": [0.70, 0.60, 0.10, 0.25, "back", 0.20], "worth": [0.60, 0.60, 0.10, 0.40, "smooth", 0.20],
@@ -966,41 +932,194 @@ static func _t_constants() -> Dictionary:
 			return _fail("RS row %s differs from the mockup" % k)
 	if PickupEventPlan.RS.size() != 5:
 		return _fail("RS has a row the mockup does not")
-	# Tempo anchors, mockup lines 606 to 610: Standing 1, 5, 9 -> pre, hitch, pace, delay, lean.
-	var anchors := { 1: [0.6, 0.12, 0.8, 0.2, -4.0], 5: [0.35, 0.06, 0.95, 0.1, 3.0], 9: [0.1, 0.0, 1.0, 0.0, 5.0] }
+	# Tempo anchors, mockup lines 606 to 610: Standing 1, 5, 9 -> pre, hitch, pace, delay.
+	var anchors := { 1: [0.6, 0.12, 0.8, 0.2], 5: [0.35, 0.06, 0.95, 0.1], 9: [0.1, 0.0, 1.0, 0.0] }
 	for st: int in anchors:
 		var t := PickupEventPlan.tempo(st)
 		var a: Array = anchors[st]
-		for i in 5:
-			if absf(float(t[["pre", "hitch", "pace", "delay", "lean"][i]]) - float(a[i])) > 1e-9:
+		for i in 4:
+			if absf(float(t[["pre", "hitch", "pace", "delay"][i]]) - float(a[i])) > 1e-9:
 				return _fail("tempo(%d) key %d differs from the mockup" % [st, i])
+	if (PickupEventPlan.tempo(5) as Dictionary).size() != 4:
+		return _fail("tempo has a body key (lean) the plan does not play")
 	return { "ok": true }
 
 
-static func _t_positions() -> Dictionary:
-	var snap := _case("C1", "intro")
-	var plan := PickupEventPlan.build(snap, { "positions": { "e2": { "x": 100.0, "y": 200.0 } } })
-	var base := PickupEventPlan.build(snap)
-	var rows: Array = plan["row"]
-	if float(rows[2]["battle"]["x"]) != 100.0 or float(rows[2]["battle"]["y"]) != 200.0 or rows[0]["battle"] != (base["row"] as Array)[0]["battle"]:
-		return _fail("opts.positions did not replace only the named Echo")
-	var f0 := PickupEventPlan.frame_at(plan, 0.0)
-	for e: Dictionary in f0["echoes"]:
-		if e["id"] == "e2" and (absf(float(e["x"]) - 100.0) > _EPS or absf(float(e["y"]) - 200.0) > _EPS):
-			return _fail("the Echo does not start at the given position")
-	var end: Dictionary = plan["track"]["end"]
-	var en: Dictionary = plan["track"]["end_norm"]
-	if absf(float(en["x"]) - float(end["x"]) / 1280.0) > _EPS or absf(float(en["y"]) - float(end["y"]) / 720.0) > _EPS:
-		return _fail("track end_norm is not end / design size")
-	if (plan["pack"]["centers"] as Array).size() != int(plan["pack"]["slot_count"]) or not (plan["walk"][0] as Dictionary).has("stand_norm"):
-		return _fail("slot centres or stand_norm missing")
-	var c0: Dictionary = plan["pack"]["centers"][0]
-	if absf(float(c0["norm"]["x"]) - 520.0 / 1280.0) > _EPS:
-		return _fail("slot centre norm wrong")
-	var copy: Dictionary = PickupEventPlan.frame_at(plan, 1.0)["chooser_end"]
-	copy["x"] = -1.0
-	if float(plan["track"]["end"]["x"]) == -1.0:
-		return _fail("chooser_end is not a copy")
+# ---------------------------------------------------------------------------
+# Tiles and paths
+# ---------------------------------------------------------------------------
+
+## Every plan of a snapshot must satisfy: legs chain from the start tile, each step is to a neighbour tile on the
+## board, the out tile is free, each stand tile is next to its find tile, the end tile is where the last leg ends.
+## Returns "" or the first problem.
+static func _check_paths(plan: Dictionary, d: Dictionary) -> String:
+	var walkable := StageTerrain.walkable_set(d.get("terrain", {}))
+	var cols := int(d["board_cols"])
+	var rows := int(d["board_rows"])
+	var cur: Dictionary = plan["chooser_cell"]
+	var row_tiles: Dictionary = {}
+	for e: Dictionary in plan["row"]:
+		row_tiles["%d,%d" % [e["cell"]["col"], e["cell"]["row"]]] = true
+	if plan["chooser_cell"] != _row_tile(d, plan["chooser_id"]):
+		return "chooser_cell is not the chooser's row tile"
+	for l: Dictionary in plan["legs"]:
+		var cells: Array = l["cells"]
+		if cells.size() < 2 or cells[0] != cur:
+			return "a %s leg does not start where the last one ended" % l["kind"]
+		for i in cells.size():
+			var c: Dictionary = cells[i]
+			if int(c["col"]) < 0 or int(c["row"]) < 0 or int(c["col"]) >= cols or int(c["row"]) >= rows or not StageTerrain.is_walkable(c, walkable):
+				return "leg cell %s is off the board or not walkable" % str(c)
+			if i > 0 and _cheb(c, cells[i - 1]) != 1:
+				return "leg cells %s and %s are not neighbours" % [str(cells[i - 1]), str(c)]
+		cur = cells[cells.size() - 1]
+	if plan["chooser_end_cell"] != cur:
+		return "chooser_end_cell %s is not the end of the last leg %s" % [str(plan["chooser_end_cell"]), str(cur)]
+	var legs: Array = plan["legs"]
+	if not legs.is_empty() and legs[0]["kind"] == "out":
+		var out: Dictionary = plan["out_cell"]
+		var key := "%d,%d" % [out["col"], out["row"]]
+		if row_tiles.has(key) or out != (legs[0]["cells"] as Array)[1] or (legs[0]["cells"] as Array).size() != 2:
+			return "the out leg is not one step to a tile outside the row"
+		for f: Dictionary in plan["finds"]:
+			if f["tile"] == out:
+				return "the out tile is a find tile"
+	elif not (plan["out_cell"] as Dictionary).is_empty():
+		return "out_cell is set but the first leg is not out"
+	var find_tiles: Array = (plan["finds"] as Array).map(func(f: Dictionary) -> Dictionary: return f["tile"])
+	var row_cells: Array = (plan["row"] as Array).map(func(e: Dictionary) -> Dictionary: return e["cell"])
+	for w: Dictionary in plan["walk"]:
+		var f := _item(plan, w["find_id"])
+		if _cheb(w["stand"], f["tile"]) > 1 or w["stand"] == f["tile"]:
+			return "stand tile %s is not next to find tile %s" % [str(w["stand"]), str(f["tile"])]
+		var free := false
+		for dc in range(-1, 2):
+			for dr in range(-1, 2):
+				var n := { "col": int(f["tile"]["col"]) + dc, "row": int(f["tile"]["row"]) + dr }
+				free = free or ((dc != 0 or dr != 0) and int(n["col"]) >= 0 and int(n["row"]) >= 0 and int(n["col"]) < cols
+						and int(n["row"]) < rows and StageTerrain.is_walkable(n, walkable) and not row_cells.has(n) and not find_tiles.has(n))
+		if free and (row_cells.has(w["stand"]) or find_tiles.has(w["stand"])):
+			return "stand tile %s is a row tile or a find tile, but a free neighbour of find tile %s exists" % [str(w["stand"]), str(f["tile"])]
+	if not (plan["walk"] as Array).is_empty() and plan["chooser_end_cell"] != (plan["walk"] as Array)[(plan["walk"] as Array).size() - 1]["stand"]:
+		return "chooser_end_cell is not the last stand tile"
+	return ""
+
+
+static func _row_tile(d: Dictionary, id: String) -> Dictionary:
+	for r: Dictionary in d["row"]:
+		if r["id"] == id:
+			return r["tile"]
+	return {}
+
+
+static func _t_legs_follow_tile_paths() -> Dictionary:
+	for key: String in _CASES:
+		for rm in [false, true]:
+			var snap := _case(key, "intro")
+			var plan := PickupEventPlan.build(snap, { "reduced": rm })
+			var bad := _check_paths(plan, snap["data"])
+			if bad != "":
+				return _fail("%s reduced=%s: %s" % [key, str(rm), bad])
+			if PickupEventPlan.build(snap, { "reduced": rm }) != plan:
+				return _fail("%s: the plan is not repeatable" % key)
+	# Fixture board: Echoes on row 4, finds on row 0, chooser e2 at (2,4). The finds' side is up, so out is (2,3).
+	var plan := PickupEventPlan.build(_case("C1", "intro"))
+	if plan["out_cell"] != { "col": 2, "row": 3 }:
+		return _fail("out tile is %s, expected col 2 row 3 (up, toward the finds, off the row)" % str(plan["out_cell"]))
+	var walks: Array = (plan["legs"] as Array).filter(func(l: Dictionary) -> bool: return l["kind"] == "walk")
+	# A stop already next to its find has no leg, so there can be fewer legs than stops.
+	if walks.is_empty() or (plan["walk"] as Array).size() != 3:
+		return _fail("C1 has %d walk legs and %d stops, expected some legs and 3 stops" % [walks.size(), (plan["walk"] as Array).size()])
+	# The chooser moves between tiles in a frame in the middle of a leg.
+	var mid := (float(walks[0]["t0"]) + float(walks[0]["t1"])) / 2.0
+	var chooser: Dictionary = {}
+	for e: Dictionary in PickupEventPlan.frame_at(plan, mid)["echoes"]:
+		if e["chosen"]:
+			chooser = e
+	if not bool(chooser["walking"]) or _cheb(chooser["from"], chooser["to"]) != 1 or float(chooser["progress"]) < 0.0 or float(chooser["progress"]) >= 1.0:
+		return _fail("no tile step in the middle of a walk leg: %s" % str(chooser))
+	# The other Echoes never leave their tiles.
+	for e: Dictionary in PickupEventPlan.frame_at(plan, mid)["echoes"]:
+		if not e["chosen"] and (e["walking"] or e["cell"] != _row_tile(_case("C1")["data"], e["id"])):
+			return _fail("Echo %s left its tile" % e["id"])
+	# No free side: a find lies on the tile in front of the chooser, so the chooser stays and the plan still runs.
+	var boxed := _case("C1", "intro")
+	boxed["data"]["finds"][0]["tile"] = { "col": 2, "row": 3 }
+	var stay := PickupEventPlan.build(boxed)
+	if not bool(stay["valid"]) or not (stay["out_cell"] as Dictionary).is_empty() or _check_paths(stay, boxed["data"]) != "" \
+			or not _finite(PickupEventPlan.frame_at(stay, 3.0)):
+		return _fail("a chooser with no free tile in front must stay, with a valid plan: %s" % str(stay.get("out_cell")))
+	return { "ok": true }
+
+
+## Real snapshots: the real fight board, terrain and seeded tiles (seeds 0 and 1 give the two row axes).
+static func _t_plan_over_real_snapshots() -> Dictionary:
+	var snaps: Array = []
+	for kind: String in ["many", "empty"]:
+		for seed_text: String in ["0", "1"]:
+			var snap := PickupRealBoard.snapshot(kind, "intro", "", seed_text)
+			if snap.is_empty():
+				return _fail("the fixture fight did not reach the event (%s seed %s)" % [kind, seed_text])
+			snaps.append(["%s seed %s" % [kind, seed_text], snap])
+	# Same keys the fixture sets for a frozen chooser, on the seed 0 snapshot (no second fight).
+	var frozen: Dictionary = (snaps[0][1] as Dictionary).duplicate(true)
+	PickupRealBoard._vary(frozen, "frozen")
+	snaps.append(["many seed 0 frozen", frozen])
+	for entry: Array in snaps:
+		var snap: Dictionary = entry[1]
+		for rm in [false, true]:
+			var plan := PickupEventPlan.build(snap, { "reduced": rm })
+			var tag := "%s reduced=%s" % [entry[0], str(rm)]
+			if not bool(plan["valid"]):
+				return _fail("%s: plan not valid" % tag)
+			var bad := _check_paths(plan, snap["data"])
+			if bad != "":
+				return _fail("%s: %s" % [tag, bad])
+			if _first_diff(PickupEventPlan.skip_to_idle(snap, { "reduced": rm }), PickupEventPlan.frame_at(plan, float(plan["total"]))) != "":
+				return _fail("%s: skip differs from the last frame" % tag)
+			if not _finite(PickupEventPlan.frame_at(plan, float(plan["total"]) * 0.5)):
+				return _fail("%s: frame not finite" % tag)
+	return { "ok": true }
+
+
+## Probe, off by default: `PICKUP_PLAN_PROBE_SEEDS=n` plans the real "empty" and "many" boards for seeds 0 to n - 1 and
+## counts stops whose stand tile is a row tile or a find tile. A free neighbour must always win, so the count must be 0.
+static func _t_probe_stand_tiles() -> Dictionary:
+	var count := OS.get_environment("PICKUP_PLAN_PROBE_SEEDS").to_int()
+	var stops := 0
+	var on_row := 0
+	var on_find := 0
+	for kind: String in ["empty", "many"]:
+		for sd in count:
+			var snap := PickupRealBoard.snapshot(kind, "intro", "", str(sd))
+			var plan := PickupEventPlan.build(snap)
+			if not bool(plan["valid"]):
+				return _fail("%s seed %d: plan not valid" % [kind, sd])
+			var bad := _check_paths(plan, snap["data"])
+			if bad != "":
+				return _fail("%s seed %d: %s" % [kind, sd, bad])
+			for w: Dictionary in plan["walk"]:
+				stops += 1
+				on_row += 1 if (plan["row"] as Array).any(func(e: Dictionary) -> bool: return e["cell"] == w["stand"]) else 0
+				on_find += 1 if (plan["finds"] as Array).any(func(f: Dictionary) -> bool: return f["tile"] == w["stand"]) else 0
+	if count > 0:
+		print("PPROBE seeds 0..%d, scenes empty and many: %d stops, stand on a row tile %d, stand on a find tile %d" % [count - 1, stops, on_row, on_find])
+	return { "ok": on_row == 0 and on_find == 0, "error": "%d stand tiles on a row tile, %d on a find tile" % [on_row, on_find] }
+
+
+## The pack pulse of a held-up find must be over at the plan total, also with a short bark (reduced motion, Standing 9).
+static func _t_pulse_ends_before_total() -> Dictionary:
+	for key: String in ["C2", "C4", "C5"]:
+		for rm in [false, true]:
+			var snap := _case(key, "intro")
+			snap["data"]["row"][2]["standing"] = 9
+			snap["data"]["chooser"]["standing"] = 9
+			var plan := PickupEventPlan.build(snap, { "reduced": rm })
+			if float(plan["total"]) < float(plan["pack"]["pulse_at"]) + PickupEventPlan.PULSE_LEN - _EPS:
+				return _fail("%s reduced=%s: the plan ends at %s, before the pulse ends" % [key, str(rm), str(plan["total"])])
+			var diff := _first_diff(PickupEventPlan.skip_to_idle(snap, { "reduced": rm }), PickupEventPlan.frame_at(plan, float(plan["total"])))
+			if diff != "":
+				return _fail("%s reduced=%s: skip differs from the last frame at %s" % [key, str(rm), diff])
 	return { "ok": true }
 
 
