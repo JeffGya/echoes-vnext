@@ -53,6 +53,9 @@ static func register(runner) -> void:
 	runner.register_test("pending_result/capture_is_first_write_wins", func(): return _t_first_write_wins())
 	# 5 — D84: the run's own bond and Thread movement is on the card
 	runner.register_test("pending_result/bond_and_thread_are_on_the_card", func(): return _t_bond_and_thread_cadence())
+	runner.register_test("pending_result/final_combat_objective_counts_once", func(): return _t_final_combat_objective_once())
+	runner.register_test("pending_result/partial_combat_return_runs_once", func(): return _t_partial_combat_return_once())
+	runner.register_test("pending_result/realm_end_and_explore_completion_run_once", func(): return _t_realm_end_and_explore_completion_once())
 
 
 # ---------------------------------------------------------------------------
@@ -565,7 +568,202 @@ static func _t_bond_and_thread_cadence() -> Dictionary:
 	return { "ok": true }
 
 
-## stage index 0 of the harness realm, by reference into save_data.
+## A short fight with a real situation and objective. Adjust actor stats only in the fixture.
+static func _objective_fight(tag: String, second_required: bool, has_second: bool = true,
+		ends_realm: bool = false) -> Dictionary:
+	var env := FlowFingerprintTests._setup_encounter(EncounterResolutionModes.COMBAT, tag)
+	if env.is_empty():
+		return {}
+	var runtime: FlowRuntime = env["runtime"]
+	var ctx := runtime.flow_ctx
+	var realm := RealmService.get_active(ctx)
+	var stage := _first_stage(ctx)
+	if stage.is_empty() or int(realm.get("stage_count", 0)) < 2:
+		return {}
+	if ends_realm:
+		realm["stage_count"] = 1
+		(realm["stages"] as Array).resize(1)
+	ctx.encounter_ctx = null
+	ctx.encounter_machine = null
+	var onboarding: Dictionary = ctx.save_data["onboarding"]
+	onboarding["chapter_one_complete"] = true
+	onboarding["chapter_one_step"] = OnboardingService.STEP_COMPLETE
+	onboarding["keeper_intro_complete"] = true
+	onboarding["keeper_intro_step"] = "complete"
+	(runtime.config_service._balance["data"] as Dictionary)["inventory"] = InventoryServiceTests._cfg(2, 2, 5)
+
+	var fight := SituationModel.make("sit.test_fight", SituationModel.TYPE_COMBAT, 0, 5, 1, true, 0)
+	var situations := [fight]
+	var objectives := [ObjectiveModel.make(0, ObjectiveModel.TYPE_COMBAT, 1, {})]
+	if has_second:
+		situations.append(SituationModel.make("sit.test_second", SituationModel.TYPE_COMBAT, 8, 5, 2, true, 1))
+		objectives.append(ObjectiveModel.make(1, ObjectiveModel.TYPE_COMBAT, 2, {}, false, second_required))
+	stage["explore_map"] = StageExploreModel.make(
+		StageExploreModel.MIN_WIDTH, StageExploreModel.MIN_HEIGHT, situations, {}, fight["pos"])
+	stage["objectives"] = objectives
+	if not second_required:
+		EarningsService.record_item(stage, "sit.test_find", "a", ItemPacksTests._entry("ph_armor_a"))
+	else:
+		ctx.save_data["sanctum"]["active_vow"] = { "vow_id": "tikoro_nko_agyina", "tier": 1 }
+
+	runtime.dispatch({ "type": "flow.select_stage", "stage_id": "stage.0" })
+	var explore := runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.STAGE_EXPLORE })
+	var arrival := runtime.dispatch(explore["actions"]["cta.advance_turn"])
+	var engage: Dictionary = arrival["actions"].get("cta.engage_situation", {})
+	if engage.get("situation_id") != fight["id"]:
+		return {}
+	runtime.dispatch(engage)
+	var encounter := ctx.encounter_ctx
+	if encounter == null:
+		return {}
+	for actor: Dictionary in encounter.actors:
+		var stats: Dictionary = actor["stats"]
+		if actor["faction"] == "echo":
+			stats["atk"] = 50
+			stats["speed"] = 99
+			actor["speed"] = 99
+			actor["morale"] = 80
+			actor["fear"] = 0
+		elif actor["faction"] == "enemy":
+			stats["atk"] = 0
+			stats["def"] = 0
+			actor["current_hp"] = 1
+	FlowFingerprintTests._drive_and_capture(runtime, encounter, 14)
+	return { "runtime": runtime, "card": ctx.last_snapshot }
+
+
+static func _t_final_combat_objective_once() -> Dictionary:
+	var failures: Array[String] = []
+	for slot: String in ["cta.next_stage", "cta.continue", "reload"]:
+		var env := _objective_fight("pr_once_" + slot, false, slot != "cta.next_stage")
+		if env.is_empty():
+			return { "ok": false, "error": "Could not enter the objective fight" }
+		var runtime: FlowRuntime = env["runtime"]
+		var card: Dictionary = env["card"]
+		var stage := _first_stage(runtime.flow_ctx)
+		var pending := PendingResultService.read(runtime.get_save_data())
+		if int(stage["explore_map"]["objectives_found"]) != 1 or not bool(stage["objectives"][0]["completed"]) \
+				or pending.get("outcome") != PendingResultService.OUTCOME_VICTORY:
+			return { "ok": false, "error": "%s did not record one objective and a stage victory" % slot }
+		var has_optional := slot != "cta.next_stage"
+		if slot == "reload":
+			runtime = _reboot(runtime.save_path)
+			(runtime.config_service._balance["data"] as Dictionary)["inventory"] = InventoryServiceTests._cfg(2, 2, 5)
+			card = runtime.dispatch({ "type": "flow.continue" })
+			stage = _first_stage(runtime.flow_ctx)
+			if stage.is_empty() or card.get("type") != FlowStateIds.RESOLVE:
+				return { "ok": false, "error": "Reload did not restore the victory card and stage" }
+		var action_slot := "cta.next_stage" if slot == "reload" else slot
+		var action: Dictionary = card.get("actions", {}).get(action_slot, {})
+		var data := _data_of(card)
+		if action.get("type") != "flow.complete_stage" or int(data.get("objectives_remaining", -1)) != 0 \
+				or (data.get("items", {}).get("kept", []) as Array).size() != 1:
+			return { "ok": false, "error": "%s did not offer stage completion with one item" % slot }
+		var save := runtime.get_save_data()
+		var realm := RealmService.get_active(runtime.flow_ctx)
+		var before := [int(save["economy"]["ase"]), int(save["economy"]["ekwan"]), _save_generation(save)]
+		var out := runtime.dispatch(action)
+		var expected_destination := FlowStateIds.SANCTUM if slot == "cta.continue" else FlowStateIds.STAGE_MAP
+		if out.get("type") != expected_destination or int(realm["current_stage_index"]) != 1:
+			failures.append("%s did not advance one stage and reach %s" % [slot, expected_destination])
+		var map: Dictionary = stage["explore_map"]
+		if int(map["objectives_found"]) != 1 or not bool(map["situations"][0]["resolved"]) \
+				or not bool(map["situations"][0]["revealed"]) or not bool(stage["objectives"][0]["completed"]):
+			failures.append("%s expected count 1 after Resolve, got %s" % [slot, map["objectives_found"]])
+		if has_optional and (bool(stage["objectives"][1]["completed"]) or map["party_state"] == StageExploreModel.STATE_COMPLETE):
+			failures.append("%s marked the unplayed optional objective or full map complete" % slot)
+		if not has_optional and map["party_state"] != StageExploreModel.STATE_COMPLETE:
+			failures.append("%s did not mark the fully cleared map complete" % slot)
+		var rows := EarningsService.rows_of(stage)
+		var item := EarningsService.row_of(stage, "item:sit.test_find:a")
+		if rows.size() != 2 or not EarningsService.has_row(stage, "obj:0:0") or not bool(item.get("settled", false)) \
+				or item["items"][0]["fate"] != "carried" or InventoryService.held_pieces(save).size() != 1:
+			failures.append("%s did not settle one objective row and one item" % slot)
+		if int(save["economy"]["ase"]) != before[0] + int(data["stage_payout_ase"]) \
+				or int(save["economy"]["ekwan"]) != before[1] + int(data["stage_payout_ekwan"]) \
+				or _save_generation(save) != before[2] + 1 or PendingResultService.has_pending(save):
+			failures.append("%s did not pay the preview and clear the result in one save" % slot)
+		var settled := save.duplicate(true)
+		runtime.dispatch(action)
+		if save != settled:
+			failures.append("%s replay changed the save (stage index %s, expected 1)" % [slot, realm["current_stage_index"]])
+	return { "ok": failures.is_empty(), "error": " | ".join(failures) }
+
+
+static func _t_partial_combat_return_once() -> Dictionary:
+	var env := _objective_fight("pr_partial_once", true)
+	if env.is_empty():
+		return { "ok": false, "error": "Could not enter the non-final fight" }
+	var runtime: FlowRuntime = env["runtime"]
+	var card: Dictionary = env["card"]
+	var save := runtime.get_save_data()
+	var pending := PendingResultService.read(save)
+	var actions: Dictionary = card.get("actions", {})
+	var action: Dictionary = actions.get("cta.continue", {})
+	if pending.get("outcome") != PendingResultService.OUTCOME_PARTIAL or actions.has("cta.next_stage") \
+			or action.get("to") != FlowStateIds.STAGE_EXPLORE:
+		return { "ok": false, "error": "Non-final victory did not offer Return to Exploration" }
+	var economy: Dictionary = save["economy"].duplicate(true)
+	var generation := _save_generation(save)
+	var honors_before := int(save["sanctum"].get("vow_stats", {}).get("honors", 0))
+	var explore := runtime.dispatch(action)
+	var stage := _first_stage(runtime.flow_ctx)
+	if explore.get("type") != FlowStateIds.STAGE_EXPLORE or int(_data_of(explore).get("objectives_found", -1)) != 1 \
+			or not bool(stage["objectives"][0]["completed"]) or bool(stage["objectives"][1]["completed"]) \
+			or EarningsService.rows_of(stage).size() != 1 or int(RealmService.get_active(runtime.flow_ctx)["current_stage_index"]) != 0 \
+			or economy != save["economy"] or PendingResultService.has_pending(save) \
+			or _save_generation(save) != generation + 1 or int(save["sanctum"]["vow_stats"]["honors"]) != honors_before + 1:
+		return { "ok": false, "error": "First return did not preserve the objective and apply the Vow in one save" }
+	var returned := save.duplicate(true)
+	runtime.dispatch(action)
+	return { "ok": save == returned, "error": "Repeating Return to Exploration applied the Vow and saved again" }
+
+
+static func _t_realm_end_and_explore_completion_once() -> Dictionary:
+	var env := _objective_fight("pr_end_once", false, false, true)
+	var action: Dictionary = env.get("card", {}).get("actions", {}).get("cta.continue", {})
+	if action.get("type") != "flow.complete_stage":
+		return { "ok": false, "error": "Realm-ending fight did not offer stage completion" }
+	var runtime: FlowRuntime = env["runtime"]
+	var save := runtime.get_save_data()
+	var realm := RealmService.get_active(runtime.flow_ctx)
+	var generation := _save_generation(save)
+	var out := runtime.dispatch(action)
+	if out.get("type") != FlowStateIds.REALM_SELECT or not bool(realm["is_completed"]) \
+			or int(realm["current_stage_index"]) != 1 or _save_generation(save) != generation + 1:
+		return { "ok": false, "error": "The last stage did not complete the Realm in one save" }
+	var completed := save.duplicate(true)
+	runtime.dispatch(action)
+	if save != completed or runtime.flow_ctx.last_snapshot.get("type") != FlowStateIds.REALM_SELECT:
+		return { "ok": false, "error": "Repeating realm completion changed the save or screen" }
+
+	env = VentureCharacterizationTests._setup_stage_env("pr_explore_once")
+	if not bool(env.get("ok", false)):
+		return env
+	runtime = env["runtime"]
+	realm = RealmService.get_active(runtime.flow_ctx)
+	var stage := _first_stage(runtime.flow_ctx)
+	stage["objectives"] = [ObjectiveModel.make(0, ObjectiveModel.TYPE_RECOVER, 1, {}, true)]
+	out = runtime.dispatch({ "type": "flow.go_state", "to": FlowStateIds.STAGE_EXPLORE })
+	action = out.get("actions", {}).get("cta.proceed_to_stage_map", {})
+	if action.get("type") != "flow.complete_stage" or runtime.flow_ctx.encounter_ctx != null:
+		return { "ok": false, "error": "Exploration did not offer Stage Complete without a fight" }
+	save = runtime.get_save_data()
+	generation = _save_generation(save)
+	out = runtime.dispatch(action)
+	if out.get("type") != FlowStateIds.STAGE_MAP or int(realm["current_stage_index"]) != 1 \
+			or not bool(stage["settlement_receipt"]["settled"]) or _save_generation(save) != generation + 1:
+		return { "ok": false, "error": "Stage Complete without a fight did not pay and advance in one save" }
+	completed = save.duplicate(true)
+	runtime.dispatch(action)
+	return { "ok": save == completed, "error": "Repeating Stage Complete without a fight changed the save" }
+
+
+static func _save_generation(save: Dictionary) -> int:
+	return int(save["meta"].get("save_generation", 0))
+
+
+## Stage index 0 of the harness realm, by reference into save_data.
 static func _first_stage(flow_ctx: FlowContext) -> Dictionary:
 	var model := RealmService.get_active(flow_ctx)
 	var stages_v: Variant = model.get("stages", [])
