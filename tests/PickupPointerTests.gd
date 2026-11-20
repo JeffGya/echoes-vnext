@@ -8,12 +8,14 @@ extends RefCounted
 const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 const _DT := 0.05
 const _EPS := 0.001
+const _RADIUS := 20.0
 const _HEAD := 56.0
 const _LATERAL := Vector2(64.0, 32.0)
 
 
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/pointer_mote_hidden_before_pointer0_and_after_the_intro", Callable(PickupPointerTests, "_t_hidden"))
+	runner.register_test("pickup_ui/pointer_mote_values_come_from_the_snapshot", Callable(PickupPointerTests, "_t_look_reaches_the_pose"))
 	runner.register_test("pickup_ui/pointer_mote_fades_in_during_the_lead", Callable(PickupPointerTests, "_t_fade"))
 	runner.register_test("pickup_ui/pointer_mote_is_on_the_path_at_each_knot_time", Callable(PickupPointerTests, "_t_knots"))
 	runner.register_test("pickup_ui/pointer_mote_never_nan_and_alpha_in_range", Callable(PickupPointerTests, "_t_finite"))
@@ -48,11 +50,44 @@ static func _positions(n: int) -> Array:
 
 
 static func _pose(plan: Dictionary, t: float) -> Dictionary:
-	return PickupPointerMote.pose_at(plan, _positions(int(plan["n"])), _LATERAL, t, _HEAD)
+	return PickupPointerMote.pose_at(plan, _positions(int(plan["n"])), _LATERAL, t, _RADIUS)
 
 
 static func _finite(v: Vector2) -> bool:
 	return is_finite(v.x) and is_finite(v.y)
+
+
+static func _mote_look(plan: Dictionary) -> Dictionary:
+	return (plan["pointer"] as Dictionary)["mote"]
+
+
+## A changed `mote` value in the snapshot changes the pose and the node values; the script holds no tunable number.
+static func _t_look_reaches_the_pose() -> Dictionary:
+	var snap := PickupPlannerTests._snap({ "phase": "intro" })
+	var base := PickupEventPlan.build(snap)
+	snap["data"]["pointer_look"]["mote"]["rise"] = 40.0
+	snap["data"]["pointer_look"]["mote"]["above_head"] = 10.0
+	snap["data"]["pointer_look"]["mote"]["halo_alpha"] = 0.9
+	var plan := PickupEventPlan.build(snap)
+	var p0 := float(plan["times"]["pointer0"])
+	# At pointer0 the mote sits `rise` below its rest height: y = base - (radius + above_head) + rise.
+	var dy := ((_pose(plan, p0)["mote"] as Vector2) - (_pose(base, p0)["mote"] as Vector2)).y
+	if absf(dy - ((40.0 - 16.0) + (36.0 - 10.0))) > 0.01:
+		return _fail("rise or above_head from the config does not move the mote (dy %s)" % dy)
+	var land := p0 + float(plan["pointer"]["land_t"])
+	if absf(float(_pose(plan, land + 0.45)["halo_alpha"]) - float(_pose(base, land + 0.45)["halo_alpha"])) < 0.05:
+		return _fail("halo_alpha from the config does not change the halo")
+	var fx := PickupUiHostTests._mount(PickupUiHostTests._pickup("sit_a", 1, "idle"))
+	if fx.is_empty():
+		return _fail("mount failed")
+	var errors: Array = []
+	var pose := _pose(plan, land + 0.45)
+	_mote(fx).apply_pose(pose, _mote_look(plan), 128.0)
+	var halo := _mote(fx).get_node("%Halo") as Sprite2D
+	var want := float(_mote_look(plan)["halo_diameter_tiles"]) * 128.0 * 0.5 * float(pose["halo_scale"]) / PickupPointerMote.TEXTURE_RADIUS
+	if absf(halo.scale.x - want) > 1e-4:
+		errors.append("halo size does not follow halo_diameter_tiles")
+	return PickupBarkTests._done(fx, errors)
 
 
 static func _t_hidden() -> Dictionary:
@@ -64,14 +99,14 @@ static func _t_hidden() -> Dictionary:
 		return _fail("not visible at pointer0")
 	if bool(_pose(plan, float(plan["total"]))["visible"]) or bool(_pose(plan, float(plan["total"]) + 3.0)["visible"]):
 		return _fail("visible after the intro ends")
-	if bool(PickupPointerMote.pose_at({}, [], _LATERAL, 1.0, _HEAD)["visible"]) \
-			or bool(PickupPointerMote.pose_at({}, _positions(5), _LATERAL, 1.0, _HEAD)["visible"]):
+	if bool(PickupPointerMote.pose_at({}, [], _LATERAL, 1.0, _RADIUS)["visible"]) \
+			or bool(PickupPointerMote.pose_at({}, _positions(5), _LATERAL, 1.0, _RADIUS)["visible"]):
 		return _fail("visible with no plan")
 	var no_pointer := plan.duplicate(true)
 	no_pointer.erase("pointer")
-	if bool(PickupPointerMote.pose_at(no_pointer, _positions(5), _LATERAL, p0 + 1.0, _HEAD)["visible"]):
+	if bool(PickupPointerMote.pose_at(no_pointer, _positions(5), _LATERAL, p0 + 1.0, _RADIUS)["visible"]):
 		return _fail("visible with a plan that has no pointer key")
-	if bool(PickupPointerMote.pose_at(plan, _positions(2), _LATERAL, p0 + 1.0, _HEAD)["visible"]):
+	if bool(PickupPointerMote.pose_at(plan, _positions(2), _LATERAL, p0 + 1.0, _RADIUS)["visible"]):
 		return _fail("visible with fewer positions than the chooser index")
 	return { "ok": true }
 
@@ -89,8 +124,8 @@ static func _t_fade() -> Dictionary:
 	if absf(float(c["alpha"]) - 1.0) > 1e-6 or absf(float(c["scale"]) - 1.0) > 1e-6:
 		return _fail("end alpha %s scale %s" % [c["alpha"], c["scale"]])
 	var rise := ((a["mote"] as Vector2) - (c["mote"] as Vector2)).y
-	if absf(rise - PickupPointerMote.RISE) > 0.01 or not (float(b["mote"].y) < float(a["mote"].y)):
-		return _fail("the mote does not rise %s px during the lead (%s)" % [PickupPointerMote.RISE, rise])
+	if absf(rise - float(_mote_look(plan)["rise"])) > 0.01 or not (float(b["mote"].y) < float(a["mote"].y)):
+		return _fail("the mote does not rise %s px during the lead (%s)" % [_mote_look(plan)["rise"], rise])
 	return { "ok": true }
 
 
@@ -103,9 +138,9 @@ static func _t_knots() -> Dictionary:
 		var mv: Dictionary = path[i]
 		var side := 1.0 if i >= 5 and i <= 8 else 0.0
 		var want := PickupPointerMote.path_point(pos, _LATERAL, float(mv["to"]), side) + Vector2(0.0, -_HEAD)
-		var tables: Array = PickupEventPlan.PATH_TABLES["5:2"]
+		var tables: Array = PickupPlannerTests._look()["tables"]["5:2"]
 		if absf(float(mv["t1"]) - float(tables[i])) > 1e-9:
-			return _fail("move %d arrives at %s, PATH_TABLES has %s" % [i, mv["t1"], tables[i]])
+			return _fail("move %d arrives at %s, the table has %s" % [i, mv["t1"], tables[i]])
 		if str(mv["kind"]) == "turn":
 			continue
 		var got: Vector2 = _pose(plan, p0 + float(mv["t1"]) - 1e-9)["mote"]
@@ -163,8 +198,9 @@ static func _t_scene_numbers() -> Dictionary:
 		var tex := (mote.get_node("%" + n) as Sprite2D).texture as GradientTexture2D
 		if tex == null or absf(float(tex.width) * 0.5 - PickupPointerMote.TEXTURE_RADIUS) > 1e-6 or tex.width != tex.height:
 			errors.append("%s texture is not a square with half width %s" % [n, PickupPointerMote.TEXTURE_RADIUS])
-	if absf(PickupEventPlan.LAND_PHASE_LEN - (PickupPointerMote.WIND_UP_LEN + PickupPointerMote.SINK_LEN)) > 1e-9:
-		errors.append("LAND_PHASE_LEN %s differs from WIND_UP_LEN + SINK_LEN" % PickupEventPlan.LAND_PHASE_LEN)
+	var pp: Dictionary = _plan()["pointer"]
+	if absf(float(pp["land_phase_len"]) - (float(pp["mote"]["wind_up_len"]) + float(pp["mote"]["sink_len"]))) > 1e-9:
+		errors.append("land_phase_len %s differs from wind_up_len + sink_len" % pp["land_phase_len"])
 	return PickupBarkTests._done(fx, errors)
 
 
@@ -200,7 +236,7 @@ static func _t_land() -> Dictionary:
 	var h3 := float(_pose(plan, land + 0.38)["halo_scale"])
 	if not (h1 < h2 and h2 < h3 and absf(h3 - 1.0) < 1e-6):
 		return _fail("the halo does not open to full: %s %s %s" % [h1, h2, h3])
-	if float(_pose(plan, land + 0.10)["brighten"]) != 0.0 or absf(float(_pose(plan, land + 0.60)["brighten"]) - PickupPointerMote.BRIGHTEN) > 1e-6:
+	if float(_pose(plan, land + 0.10)["brighten"]) != 0.0 or absf(float(_pose(plan, land + 0.60)["brighten"]) - float(_mote_look(plan)["brighten"])) > 1e-6:
 		return _fail("the chooser brightness lift is wrong")
 	var b1 := float(_pose(plan, land + 0.38 + 0.4)["halo_alpha"])
 	var b2 := float(_pose(plan, land + 0.38 + 1.2)["halo_alpha"])
@@ -311,7 +347,7 @@ static func _t_host_land() -> Dictionary:
 			if bool(e["is_chooser"]):
 				tile = e["tile"]
 		var draw_pos := (combat.get_node("%Board") as TileMapLayer).map_to_local(Vector2i(int(tile["col"]), int(tile["row"]))) + Vector2(0.0, cfg.feet_offset_y)
-		var want := draw_pos - Vector2(0.0, cfg.token_radius + PickupPointerMote.ABOVE_HEAD)
+		var want := draw_pos - Vector2(0.0, cfg.token_radius + float(plan["pointer"]["mote"]["above_head"]))
 		var start := mote.get_node("%Mote") as Sprite2D
 		var seen := { "moved": false, "last": Vector2.INF }
 		_run(fx, float(plan["times"]["pointer0"]) + 1.0, func() -> void:

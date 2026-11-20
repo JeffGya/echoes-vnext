@@ -20,7 +20,7 @@ Written in STE. Keep this file current. Last update: 2026-11-15, after the C12 b
 | The pending result keeps `terrain`, `placement_seed` (String) and `bounds { w, h }` as top-level keys, only when held behind an event. | D-66 |
 | `sense_base` is 0.0 (was 0.3). `worth_weight` stays 6. Probe P2 at full size: M1 17.1%, M3 +0.609, M4 99.0% (a narrow pass). | D-67 |
 | The reaction key for "no effect" is `none`, not "neutral". The design document is fixed. Values: `plus`, `none`, `minus`. | `PickupCase.gd`, C12 |
-| `realm.seed` is a 63-bit int saved as a JSON number. After a reload it can lose digits. Every seeded stream that reads it is affected (finds roll, chooser draw, pointer). Pre-existing and project-wide. Needs an opus determinism check. | register row 17 |
+| `realm.seed` is a 63-bit int saved as a JSON number. After a reload it can lose digits. Every seeded stream that reads it is affected (finds roll, chooser draw; the pointer no longer reads `realm.seed`, D-77). Pre-existing and project-wide. Needs an opus determinism check. | register row 17 |
 | The event opens in the fight-ending dispatch. The win relief (fear -5, morale +10) runs in a LATER dispatch. A chooser therefore freezes on its fear from BEFORE the relief. Built as is. Jeff decides. | register row 18, probe P3 |
 | Probe P3 (100 real fights): a chooser freezes exactly when its status at the event is strained or worse. The rate in a real campaign is not measured. | register row 16 |
 | A reload during the event skips the win steps (emotion drift, vow discovery check, ally field clear), because the machine is then in RESOLVE. Pre-existing for the Resolve card; same for the event. | register row 13 |
@@ -53,7 +53,7 @@ Rows 1 to 18. Every row has a Target cell with a story code, a `NEW "<title>"`, 
 4. Row 13: who owns the skipped win steps after a reload (no story).
 5. What Resolve shows beyond the `data.pickup_result` block (D-16).
 6. The real size of the emotion plus and minus (the reaction story). Open question Q4 in the design document.
-7. Constants `LAPS_MIN`, `LAPS_MAX` and `SEVERE_FROM` are now in `data.inventory.pickup`. An upper bound for laps and a limit for `severe_from_status` are still Jeff's numbers.
+7. `SEVERE_FROM` is now `severe_from_status` in `data.inventory.pickup`. `LAPS_MIN` and `LAPS_MAX` are retired by D-77 (the pointer feel moved to `pointer_look`). A limit for `severe_from_status` is still Jeff's number.
 8. Whether to write short notes on the Notion rows of V2-ITEM-001, V2-ITEM-002 and the other target stories (his yes first).
 9. The end review of ALL player-facing copy (D-56).
 
@@ -61,11 +61,11 @@ Rows 1 to 18. Every row has a Target cell with a story code, a `NEW "<title>"`, 
 The suite `pickup_unwired` prints this list from the markers. Titles marked "proposed" were chosen by the builder; Jeff names them. There are 6 distinct titles with markers.
 | Title | Marker site (file:line at C12) | Register row |
 |---|---|---|
-| `NEW "Pickup reaction effect"` | `PickupEventService.gd:139` | 4 |
+| `NEW "Pickup reaction effect"` | `PickupEventService.gd:148` | 4 |
 | `NEW "Win steps after a reload"` (proposed) | `FlowResolveState.gd:39` | 13 |
-| `NEW "Pickup intro short forms"` (proposed) | `PickupSnapshotBuilder.gd:25` | 12 |
+| `NEW "Pickup intro short forms"` (proposed) | `PickupSnapshotBuilder.gd:28` | 12 |
 | `NEW "Pickup tuning from real play"` | `PickupPick.gd:51` | 16 |
-| `NEW "Realm seed survives a save reload"` | `PickupEventService.gd:78`, `PickupSnapshotBuilder.gd:93` | 17 |
+| `NEW "Realm seed survives a save reload"` | `PickupEventService.gd:87` (the `PickupSnapshotBuilder.gd:93` site is retired by D-77) | 17 |
 | `NEW "Pickup event after the win relief"` | `FlowRuntime.gd:1857` | 18 |
 Proposed title with NO marker (row 14 is exempt, no code site; D-65 lists it): `NEW "Pickup UX redesign"`.
 Real story codes in markers (all found in the CSV): `V2-ITEM-002` (rows 1, 2, 10; row 2 at `PickupSnapshotBuilder.gd:235`), `V2-ITEM-003` (row 5), `V2-ITEM-004` (row 6), `V2-CONTINUITY-002` (row 7), `V2-DIRECTIVE-003` (row 9). Row 8 targets `V2-ECONOMY-003` (no code).

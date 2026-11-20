@@ -14,29 +14,20 @@ extends RefCounted
 ##   walk[]     { find_id, k, is_try, t0, t1, stand }          one per stop; stand = the tile before the find tile
 ##   finds[]    { find_id, index, status, pick_index, tile, reveal, reveal_len, walked, is_try, walk0, arrive,
 ##              lift0, lift1, lift_ease, fly0, fly1, slot }    -1 = no time or no slot
-##   pointer    { n, reduced, start_index, land_index, total, land_t, lead, path[{ kind, from, to, s0, s1, t0, t1, arc_k }], knots }
+##   pointer    { n, reduced, start_index, land_index, total, land_t, lead, land_phase_len, mote, path[{ kind, from, to, s0, s1, t0, t1, arc_k }], knots }
 ##              the racetrack of the drifting mote (D-76): see "Pointer" below. Path times are seconds after `times.pointer0`.
+##              `mote` is the `data.pointer_look.mote` block (the look values for `PickupPointerMote`); `land_phase_len` = wind_up_len + sink_len.
 ##   pack       { before, after, slot_count, unlisted, tone, tone_before, land_end, pulse_at, held_find }
 ##   bark       { text, case, reaction, reason, band, variant, chars, t0, t1 };  emo = reaction name (emo_style)
 ## frame_at(plan, t) / skip_to_idle(snapshot, opts) -> { t, phase, beat, echoes[{ id, chosen, cell, walking, from, to,
 ##   progress }], items{ find_id: { state, cell, rev, p, held, dim, slot } }, pack{ slots, lit, used, pulse, tone },
 ##   pointer{ visible, phase, pos_row, side, arc, arc_k, speed, lt }, bark{ chars, total }, skip_o, cont_o, chooser_end }
 ##   item state: hidden | revealed | lifted | flying | pack.
-## A scene must handle `plan.valid == false` (no chooser, error snapshot, pointer start below 0, a row or find with no
+## A scene must handle `plan.valid == false` (no chooser, error snapshot, no complete `data.pointer_look`, a row or find with no
 ## tile): show no intro.
 
-# Seconds before the pointer starts: the 0.45 s camera tween, then a short rest. Feel value, tune in playtest.
-const POINTER_START := 0.5
-# Seconds the mote rests (fades in) at the start of the path clock before it moves. Feel value, tune in playtest.
-const POINTER_LEAD := 0.30
-# Pause between the pointer landing and the chooser's step out (the mote sinks and the halo opens in it). Feel value, tune in playtest.
-const HOLD := 0.60
-const HOLD_REDUCED := 0.2
 const STEP_LEN := 0.45
 const STEP_LEN_REDUCED := 0.15
-const POINTER_REDUCED := 0.5
-# Length of the landing (wind-up 0.08 s, then the 0.28 s sink) after which the phase reads hold. Feel value, tune in playtest.
-const LAND_PHASE_LEN := 0.36
 # Mockup line 774: reveal length.
 const REVEAL_LEN := 0.25
 const REVEAL_LEN_REDUCED := 0.15
@@ -44,25 +35,14 @@ const REVEAL_LEN_REDUCED := 0.15
 const BARK_AFTER_LAST := 0.15
 const IDLE_AFTER_BARK := 0.3
 const IDLE_AFTER_DEPOSIT := 0.45
-# Racetrack timing for a row that has no authored table (feel values, tune in playtest). `PATH_TABLES` holds the authored ones.
-# Seconds per spacing unit at cruise; the first move takes PATH_FIRST_K times longer; each of the last PATH_SLOW_N moves takes
-# PATH_SLOW_K times the one before, and the final move PATH_FINAL_K times its predecessor; a turn takes 0.26 to 0.64 s.
-const PATH_PACE := 0.19
-const PATH_FIRST_K := 1.5
-const PATH_SLOW_N := 5
-const PATH_SLOW_K := 1.25
-const PATH_FINAL_K := 1.6
-const PATH_TURN_MIN := 0.26
-const PATH_TURN_MAX := 0.64
-# A move that lasts PATH_ARC_FAST s or less is a fast hop, one that lasts PATH_ARC_FAST + PATH_ARC_SPAN s or more a slow one.
-const PATH_ARC_FAST := 0.18
-const PATH_ARC_SPAN := 0.72
-# Authored arrival times (seconds after the path clock starts; the lead-in is the first 0.30 s) by "n:land_index".
-# Moves: n - 1 glides, a half turn, n - 1 glides, a half turn, then the glides to the chooser.
-const PATH_TABLES := {
-	"5:2": [0.58, 0.78, 0.96, 1.14, 1.40, 1.58, 1.77, 2.01, 2.31, 2.81, 3.19, 3.79],
-	"3:1": [0.68, 0.96, 1.42, 1.72, 2.06, 2.70, 3.60],
-}
+# The pointer feel values (timing, law, mote look) come from `data.pointer_look` of the snapshot (D-77); there are no defaults
+# here. A snapshot without a complete `pointer_look` is not playable (`valid` false).
+const LOOK_PATH_KEYS: Array = ["pointer_start", "pointer_lead", "hold", "hold_reduced", "pointer_reduced", "path_pace", "path_first_k",
+	"path_slow_n", "path_slow_k", "path_final_k", "path_turn_min", "path_turn_max", "path_arc_fast", "path_arc_span"]
+const LOOK_MOTE_KEYS: Array = ["rise", "fade_scale_from", "above_head", "arc_min", "arc_max", "trail_count", "trail_dt", "trail_alpha",
+	"trail_scale", "trail_scale_step", "mote_radius", "wind_up", "wind_up_len", "sink", "sink_len", "sink_scale", "sink_fade_from",
+	"halo_diameter_tiles", "halo_alpha", "halo_start_alpha", "halo_open", "halo_breath", "halo_breath_period", "brighten",
+	"brighten_len", "shadow_scale_y", "shadow_alpha_drop", "shadow_scale_drop", "shadow_radius"]
 # Mockup line 619: walk cap, fly time, typing speed.
 const WALK_CAP := 3.4
 const FLY_LEN := 0.34
@@ -128,7 +108,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	for i in n:
 		if bool(_d(row[i]).get("is_chooser", false)):
 			cidx = i
-	var ptr := _d(d.get("pointer", {}))
+	var look := _pointer_look(d)
 	var finds: Array = d.get("finds", []) if d.get("finds", []) is Array else []
 	var row_cells: Array = []
 	var find_cells: Array = []
@@ -136,7 +116,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		row_cells.append(_cell(_d(r_v).get("tile")))
 	for f_v: Variant in finds:
 		find_cells.append(_cell(_d(f_v).get("tile")))
-	if cidx < 0 or str(d.get("error", "")) != "" or int(ptr.get("start", -1)) < 0 or row_cells.has({}) or find_cells.has({}):
+	if cidx < 0 or str(d.get("error", "")) != "" or look.is_empty() or row_cells.has({}) or find_cells.has({}):
 		return _invalid(d, rm)
 
 	var frozen := bool(d.get("frozen", false))
@@ -157,10 +137,10 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 
 	var find_ids: Array = finds.map(func(f: Variant) -> String: return str((f as Dictionary).get("find_id", "")))
 	# World beats (mockup lines 666 to 673): the pointer path, then the hold, then the chooser steps out.
-	var pp := _pointer_path(n, cidx, rm)
-	var t_p0 := POINTER_START
+	var pp := _pointer_path(n, cidx, rm, look)
+	var t_p0 := float(look["path"]["pointer_start"])
 	var t_pend := t_p0 + float(pp["total"])
-	var t_s0 := t_pend + (HOLD_REDUCED if rm else HOLD)
+	var t_s0 := t_pend + float(look["path"]["hold_reduced" if rm else "hold"])
 	var t_s1 := t_s0 + (STEP_LEN_REDUCED if rm else STEP_LEN)
 
 	# Stops in pick order, then the held-up find.
@@ -679,23 +659,44 @@ static func _chooser_at(plan: Dictionary, t: float) -> Dictionary:
 # on a half circle of radius 0.5 spacing to the return leg one spacing toward the camera, runs back to N, turns again, and
 # runs to the chooser's index: N glides, a turn, N glides, a turn, then N - chooser_index glides. Two laps, no wrap, no stop
 # at the ends. The mote moves along the path with a monotone cubic s(t) (tangent 0 at both ends): a lead-in rest, then the
-# knots' arrival times. Rows with an authored table in PATH_TABLES use it exactly. Any other row (n 2, 4, 6, 7, or another
-# chooser index) gets move durations from the slow-down law: cruise PATH_PACE s per spacing unit, the first move x1.5,
-# the last five moves x1.25 on the move before, the final move x1.6 on its predecessor, a turn 0.26 to 0.64 s.
+# knots' arrival times. Rows with an authored table in `pointer_look.tables` use it exactly. Any other row (n 2, 4, 6, 7, or another
+# chooser index) gets move durations from the slow-down law of the `pointer_look.path` keys: cruise `path_pace` s per spacing unit,
+# the first move x `path_first_k`, each of the last `path_slow_n` moves x `path_slow_k` on the move before, the final move x `path_final_k` on its
+# predecessor, a turn between `path_turn_min` and `path_turn_max` s.
 # A row with one Echo has no path: the mote only fades in above it and lands.
 # `pos_row` is the position along the row in row-index units (below 0 or above N on a turn); `side` is the offset toward the
 # camera in spacing units (0 on the row, 1 on the return leg).
+
+## `data.pointer_look` when it holds every key the planner and the mote read as a number, else {} (no defaults in ui, D-77).
+static func _pointer_look(d: Dictionary) -> Dictionary:
+	var look := _d(d.get("pointer_look", {}))
+	var path := _d(look.get("path", {}))
+	var mote := _d(look.get("mote", {}))
+	if not (look.get("tables", null) is Dictionary):
+		return {}
+	for key: String in LOOK_PATH_KEYS:
+		if not (typeof(path.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
+			return {}
+	for key: String in LOOK_MOTE_KEYS:
+		if not (typeof(mote.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
+			return {}
+	return look
+
 
 static func _hidden_pointer() -> Dictionary:
 	return { "visible": false, "phase": "gone", "pos_row": 0.0, "side": 0.0, "arc": 0.0, "arc_k": 0.0, "speed": 0.0, "lt": 0.0 }
 
 
 ## The racetrack for `n` Echoes and the chooser at `land`. Pure and deterministic.
-static func _pointer_path(n: int, land: int, rm: bool) -> Dictionary:
-	var out := { "n": n, "reduced": rm, "start_index": n - 1, "land_index": land, "lead": POINTER_LEAD,
-		"total": POINTER_REDUCED, "land_t": POINTER_REDUCED, "path": [], "knots": { "t": [], "s": [], "m": [] } }
+static func _pointer_path(n: int, land: int, rm: bool, look: Dictionary) -> Dictionary:
+	var cfg: Dictionary = look["path"]
+	var mote: Dictionary = look["mote"]
+	var lead := float(cfg["pointer_lead"])
+	var out := { "n": n, "reduced": rm, "start_index": n - 1, "land_index": land, "lead": lead,
+		"total": float(cfg["pointer_reduced"]), "land_t": float(cfg["pointer_reduced"]), "path": [], "knots": { "t": [], "s": [], "m": [] },
+		"mote": mote.duplicate(true), "land_phase_len": float(mote["wind_up_len"]) + float(mote["sink_len"]) }
 	if rm or n < 2:
-		out["total"] = POINTER_REDUCED if rm else POINTER_LEAD
+		out["total"] = float(cfg["pointer_reduced"]) if rm else lead
 		out["land_t"] = out["total"]
 		return out
 	var last := n - 1
@@ -709,13 +710,13 @@ static func _pointer_path(n: int, land: int, rm: bool) -> Dictionary:
 	moves.append({ "kind": "turn", "from": last, "to": last, "len": half })
 	for i in last - land:
 		moves.append({ "kind": "glide", "from": last - i, "to": last - i - 1, "len": 1.0 })
-	var times: Array = PATH_TABLES.get("%d:%d" % [n, land], []) as Array
+	var times: Array = (look["tables"] as Dictionary).get("%d:%d" % [n, land], []) as Array
 	if times.size() != moves.size():
-		times = _law_times(moves)
-	var knots_t: Array = [0.0, POINTER_LEAD]
+		times = _law_times(moves, cfg)
+	var knots_t: Array = [0.0, lead]
 	var knots_s: Array = [0.0, 0.0]
 	var s_cum := 0.0
-	var t_prev := POINTER_LEAD
+	var t_prev := lead
 	for i in moves.size():
 		var mv: Dictionary = moves[i]
 		mv["s0"] = s_cum
@@ -723,7 +724,7 @@ static func _pointer_path(n: int, land: int, rm: bool) -> Dictionary:
 		mv["s1"] = s_cum
 		mv["t0"] = t_prev
 		mv["t1"] = float(times[i])
-		mv["arc_k"] = clampf((float(mv["t1"]) - t_prev - PATH_ARC_FAST) / PATH_ARC_SPAN, 0.0, 1.0)
+		mv["arc_k"] = clampf((float(mv["t1"]) - t_prev - float(cfg["path_arc_fast"])) / float(cfg["path_arc_span"]), 0.0, 1.0)
 		t_prev = float(times[i])
 		knots_t.append(t_prev)
 		knots_s.append(s_cum)
@@ -735,21 +736,23 @@ static func _pointer_path(n: int, land: int, rm: bool) -> Dictionary:
 
 
 ## Arrival times from the slow-down law (see the section header).
-static func _law_times(moves: Array) -> Array:
+static func _law_times(moves: Array, cfg: Dictionary) -> Array:
 	var times: Array = []
-	var t := POINTER_LEAD
+	var t := float(cfg["pointer_lead"])
 	var count := moves.size()
+	var slow_n := int(cfg["path_slow_n"])
+	var slow_k := float(cfg["path_slow_k"])
 	for j in count:
 		var e := count - 1 - j
 		var k := 1.0
-		if e <= PATH_SLOW_N - 1:
-			k = pow(PATH_SLOW_K, float(PATH_SLOW_N - e)) if e >= 1 else pow(PATH_SLOW_K, float(PATH_SLOW_N - 1)) * PATH_FINAL_K
+		if e <= slow_n - 1:
+			k = pow(slow_k, float(slow_n - e)) if e >= 1 else pow(slow_k, float(slow_n - 1)) * float(cfg["path_final_k"])
 		if j == 0:
-			k *= PATH_FIRST_K
+			k *= float(cfg["path_first_k"])
 		var mv: Dictionary = moves[j]
-		var dur := float(mv["len"]) * PATH_PACE * k
+		var dur := float(mv["len"]) * float(cfg["path_pace"]) * k
 		if str(mv["kind"]) == "turn":
-			dur = clampf(dur, PATH_TURN_MIN, PATH_TURN_MAX)
+			dur = clampf(dur, float(cfg["path_turn_min"]), float(cfg["path_turn_max"]))
 		t += dur
 		times.append(t)
 	return times
@@ -835,7 +838,7 @@ static func pointer_pose(plan: Dictionary, t: float) -> Dictionary:
 	var pp: Dictionary = plan["pointer"]
 	if not tm.has("pointer0"):
 		return _hidden_pointer()
-	for key: String in ["n", "reduced", "land_index", "land_t", "lead", "knots", "path"]:
+	for key: String in ["n", "reduced", "land_index", "land_t", "lead", "knots", "path", "land_phase_len"]:
 		if not pp.has(key):
 			return _hidden_pointer()
 	var tp := t - float(tm["pointer0"])
@@ -860,7 +863,7 @@ static func pointer_pose(plan: Dictionary, t: float) -> Dictionary:
 		out["pos_row"] = land_pos
 		out["side"] = 0.0
 		out["speed"] = 0.0
-		out["phase"] = "land" if tp - float(pp["land_t"]) < LAND_PHASE_LEN else "hold"
+		out["phase"] = "land" if tp - float(pp["land_t"]) < float(pp["land_phase_len"]) else "hold"
 		return out
 	for mv_v: Variant in pp["path"]:
 		var mv: Dictionary = mv_v

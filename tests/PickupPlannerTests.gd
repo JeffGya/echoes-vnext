@@ -20,6 +20,7 @@ const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/planner_beats_are_in_order_with_monotonic_times", Callable(PickupPlannerTests, "_t_beats"))
 	runner.register_test("pickup_ui/planner_pointer_steps_start_end_and_lap", Callable(PickupPlannerTests, "_t_pointer"))
+	runner.register_test("pickup_ui/planner_reads_the_pointer_look_from_the_snapshot", Callable(PickupPlannerTests, "_t_look_config"))
 	runner.register_test("pickup_ui/planner_is_deterministic_and_follows_the_pointer_key", Callable(PickupPlannerTests, "_t_deterministic"))
 	runner.register_test("pickup_ui/planner_walk_follows_pick_order", Callable(PickupPlannerTests, "_t_pick_order"))
 	runner.register_test("pickup_ui/planner_items_stay_hidden_until_picked", Callable(PickupPlannerTests, "_t_reveal"))
@@ -123,7 +124,7 @@ static func _snap(o: Dictionary) -> Dictionary:
 	var data := {
 		"phase": o.get("phase", "idle"), "situation_id": _SIT, "run_count": 1, "return_to": "stage_map",
 		"chooser": { "id": "e%d" % chooser, "name": "Echo %d" % chooser, "standing": int(standing[chooser % standing.size()]) },
-		"row": row, "fallen": [], "pointer": o.get("pointer", { "n": n, "start": 4, "laps": 2 }), "order": order,
+		"row": row, "fallen": [], "order": order,
 		"selected": o.get("selected", {}), "reason": o.get("reason", "identity"), "case": o.get("case", "C1"),
 		"frozen": o.get("frozen", false), "reaction": o.get("reaction", "none"), "finds": finds,
 		"pack": { "slots": slots, "free": 0, "capacity": o.get("capacity", 4), "carried": o.get("carried", slots.size()), "tone": o.get("tone", "plain"),
@@ -134,6 +135,7 @@ static func _snap(o: Dictionary) -> Dictionary:
 		"confirm_leave_items": true,
 		"board_cols": 6, "board_rows": 5, "terrain": {}, "placement_seed": 0, "encounter_id": "enc_u3", "actors": [],
 		"camera_frame": { "floor_zoom": 0.75, "margin_px": 48.0, "tween_seconds": 0.45 },
+		"pointer_look": PickupSnapshotBuilder.pointer_look({}),
 	}
 	var actions := {}
 	match str(data["phase"]):
@@ -267,6 +269,51 @@ static func _t_beats() -> Dictionary:
 
 
 ## The racetrack of the mote (D-76): authored knots, monotone s(t), the end on the chooser, the times it moves in the plan.
+static func _look() -> Dictionary:
+	return PickupSnapshotBuilder.pointer_look({})
+
+
+## Config values reach the plan: a changed `path` value moves the times, a dropped table falls back to the slow-down law,
+## and the whole `mote` block and the derived landing length travel in `plan.pointer`.
+static func _t_look_config() -> Dictionary:
+	var base := PickupEventPlan.build(_snap({ "phase": "intro" }))
+	var moved := _snap({ "phase": "intro" })
+	moved["data"]["pointer_look"]["path"]["hold"] = 1.5
+	moved["data"]["pointer_look"]["path"]["pointer_start"] = 0.8
+	var plan := PickupEventPlan.build(moved)
+	var d_hold := (float(plan["times"]["step0"]) - float(plan["times"]["pointer_end"])) - (float(base["times"]["step0"]) - float(base["times"]["pointer_end"]))
+	if absf(float(plan["times"]["pointer0"]) - 0.8) > _EPS or absf(d_hold - 0.9) > _EPS:
+		return _fail("hold or pointer_start from the config does not move the times: %s" % str(plan["times"]))
+	var tabled := _snap({ "phase": "intro" })
+	tabled["data"]["pointer_look"]["tables"]["5:2"] = [0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8]
+	if absf(float(PickupEventPlan.build(tabled)["pointer"]["total"]) - 2.8) > _EPS:
+		return _fail("a changed table does not set the arrival times")
+	var law := _snap({ "phase": "intro" })
+	(law["data"]["pointer_look"]["tables"] as Dictionary).erase("5:2")
+	var law_plan := PickupEventPlan.build(law)
+	var law_ref := PickupEventPlan._pointer_path(5, 2, false, _look_without_table())
+	if (law_plan["pointer"]["path"] as Array) != (law_ref["path"] as Array) or absf(float(law_plan["pointer"]["total"]) - 3.79) < 0.01:
+		return _fail("a config without the table does not use the slow-down law")
+	var paced := _snap({ "phase": "intro" })
+	(paced["data"]["pointer_look"]["tables"] as Dictionary).erase("5:2")
+	paced["data"]["pointer_look"]["path"]["path_pace"] = 0.3
+	if float(PickupEventPlan.build(paced)["pointer"]["total"]) <= float(law_plan["pointer"]["total"]):
+		return _fail("path_pace does not change the law times")
+	var mote_look := _snap({ "phase": "intro" })
+	mote_look["data"]["pointer_look"]["mote"]["wind_up_len"] = 0.2
+	mote_look["data"]["pointer_look"]["mote"]["sink_len"] = 0.5
+	var mp: Dictionary = PickupEventPlan.build(mote_look)["pointer"]
+	if absf(float(mp["land_phase_len"]) - 0.7) > _EPS or float(mp["mote"]["sink_len"]) != 0.5:
+		return _fail("the mote block or the landing length does not come from the config")
+	return { "ok": true }
+
+
+static func _look_without_table() -> Dictionary:
+	var look := _look()
+	(look["tables"] as Dictionary).erase("5:2")
+	return look
+
+
 static func _t_pointer() -> Dictionary:
 	var exact := { 5: [2, [0.58, 0.78, 0.96, 1.14, 1.40, 1.58, 1.77, 2.01, 2.31, 2.81, 3.19, 3.79]],
 		3: [1, [0.68, 0.96, 1.42, 1.72, 2.06, 2.70, 3.60]] }
@@ -283,16 +330,17 @@ static func _t_pointer() -> Dictionary:
 		if absf(float(p["total"]) - float(want[want.size() - 1])) > 1e-9 or absf(float(p["lead"]) - 0.30) > 1e-9:
 			return _fail("n %d: total %s or lead %s wrong" % [n, p["total"], p["lead"]])
 		var tm: Dictionary = plan["times"]
-		if absf(float(tm["pointer0"]) - 0.5) > _EPS or absf(float(tm["pointer_end"]) - 0.5 - float(p["total"])) > _EPS \
-				or absf(float(tm["step0"]) - float(tm["pointer_end"]) - PickupEventPlan.HOLD) > _EPS:
+		var cfg: Dictionary = _look()["path"]
+		if absf(float(tm["pointer0"]) - float(cfg["pointer_start"])) > _EPS or absf(float(tm["pointer_end"]) - float(cfg["pointer_start"]) - float(p["total"])) > _EPS \
+				or absf(float(tm["step0"]) - float(tm["pointer_end"]) - float(cfg["hold"])) > _EPS:
 			return _fail("n %d: times do not follow the path: %s" % [n, str(tm)])
 	if absf(float(PickupEventPlan.build(_snap({ "phase": "intro" }))["pointer"]["total"]) - 3.8) > 0.05:
 		return _fail("the n 5 total is not about 3.8 s")
 	for n: int in range(2, 8):
 		for land in n:
-			var pp := PickupEventPlan._pointer_path(n, land, false)
+			var pp := PickupEventPlan._pointer_path(n, land, false, _look())
 			var path: Array = pp["path"]
-			var last_t := PickupEventPlan.POINTER_LEAD
+			var last_t: float = _look()["path"]["pointer_lead"]
 			var s_sum := 0.0
 			for mv: Dictionary in path:
 				if float(mv["t1"]) <= last_t or float(mv["s1"]) <= float(mv["s0"]):
@@ -315,7 +363,7 @@ static func _t_pointer() -> Dictionary:
 			if absf(s_prev - s_sum) > 1e-6 or PickupEventPlan._s_at(pp["knots"], float(pp["total"]), true) != 0.0 \
 					or PickupEventPlan._s_at(pp["knots"], 0.0, true) != 0.0 or PickupEventPlan._s_at(pp["knots"], 0.2) != 0.0:
 				return _fail("n %d land %d: s(t) does not rest at both ends" % [n, land])
-			if pp != PickupEventPlan._pointer_path(n, land, false):
+			if pp != PickupEventPlan._pointer_path(n, land, false, _look()):
 				return _fail("n %d land %d: the path is not repeatable" % [n, land])
 	var plan := PickupEventPlan.build(_snap({ "phase": "intro" }))
 	var tm: Dictionary = plan["times"]
@@ -332,7 +380,7 @@ static func _t_pointer() -> Dictionary:
 		return _fail("the phases run %s" % [phases])
 	var rm := PickupEventPlan.build(_snap({ "phase": "intro" }), { "reduced": true })
 	var rp: Dictionary = rm["pointer"]
-	if (rp["path"] as Array).size() != 0 or absf(float(rp["total"]) - PickupEventPlan.POINTER_REDUCED) > _EPS \
+	if (rp["path"] as Array).size() != 0 or absf(float(rp["total"]) - float(_look()["path"]["pointer_reduced"])) > _EPS \
 			or float(PickupEventPlan.pointer_pose(rm, float(rm["times"]["pointer0"]) + 0.1)["pos_row"]) != 2.0:
 		return _fail("reduced motion is not one rest on the chooser")
 	return { "ok": true }
@@ -624,10 +672,20 @@ static func _t_total_and_pure() -> Dictionary:
 	var bad := PickupEventPlan.build({ "type": "flow.pickup", "data": { "error": "no_pickup_event" }, "actions": {} })
 	if bool(bad["valid"]) or not _finite(PickupEventPlan.frame_at(bad, 3.0)) or PickupEventPlan.frame_at(bad, 3.0) != PickupEventPlan.skip_to_idle({}):
 		return _fail("an invalid snapshot does not give the empty frame")
-	var noptr := _case("C1", "intro")
-	noptr["data"]["pointer"] = { "n": 5, "start": -1, "laps": 0 }
-	if bool(PickupEventPlan.build(noptr)["valid"]):
-		return _fail("a pointer with no start should not make a plan")
+	var nolook := _case("C1", "intro")
+	(nolook["data"] as Dictionary).erase("pointer_look")
+	var nolook_plan := PickupEventPlan.build(nolook)
+	if bool(nolook_plan["valid"]) or PickupEventPlan.frame_at(nolook_plan, 3.0) != PickupEventPlan.skip_to_idle({}):
+		return _fail("a snapshot with no pointer_look should give no plan and the empty frame")
+	for broken: String in ["path", "mote", "tables"]:
+		var half := _case("C1", "intro")
+		(half["data"]["pointer_look"] as Dictionary).erase(broken)
+		if bool(PickupEventPlan.build(half)["valid"]):
+			return _fail("a pointer_look with no %s should give no plan" % broken)
+	var nokey := _case("C1", "intro")
+	(nokey["data"]["pointer_look"]["mote"] as Dictionary).erase("rise")
+	if bool(PickupEventPlan.build(nokey)["valid"]):
+		return _fail("a pointer_look with a missing mote key should give no plan")
 	for what: String in ["row", "find"]:
 		var notile := _case("C1", "intro")
 		((notile["data"]["row"] if what == "row" else notile["data"]["finds"])[0] as Dictionary).erase("tile")
@@ -919,11 +977,7 @@ static func _t_unlisted_and_tone() -> Dictionary:
 static func _t_constants() -> Dictionary:
 	var map: Dictionary = (load("res://ui/screens/combat/PickupEventPlan.gd") as GDScript).get_script_constant_map()
 	var table: Array = [
-		["POINTER_START", 0.5],  # feel value (Jeff, D-76): after the 0.45 s camera tween
-		["POINTER_LEAD", 0.30], ["HOLD", 0.60], ["HOLD_REDUCED", 0.2], ["LAND_PHASE_LEN", 0.36],  # feel values (Jeff, D-76)
-		["PATH_PACE", 0.19], ["PATH_FIRST_K", 1.5], ["PATH_SLOW_N", 5], ["PATH_SLOW_K", 1.25], ["PATH_FINAL_K", 1.6],  # feel values (law for rows with no table)
-		["PATH_TURN_MIN", 0.26], ["PATH_TURN_MAX", 0.64], ["PATH_ARC_FAST", 0.18], ["PATH_ARC_SPAN", 0.72],
-		["POINTER_REDUCED", 0.5], ["STEP_LEN", 0.45], ["STEP_LEN_REDUCED", 0.15],  # lines 670, 671
+		["STEP_LEN", 0.45], ["STEP_LEN_REDUCED", 0.15],  # lines 670, 671
 		["REVEAL_LEN", 0.25], ["REVEAL_LEN_REDUCED", 0.15],  # line 774
 		["BARK_AFTER_LAST", 0.15], ["IDLE_AFTER_BARK", 0.3], ["IDLE_AFTER_DEPOSIT", 0.45],  # lines 778, 780
 		["WALK_CAP", 3.4], ["FLY_LEN", 0.34], ["TYPE_CPS", 24.0],  # line 619
@@ -938,7 +992,9 @@ static func _t_constants() -> Dictionary:
 		if not map.has(row[0]) or absf(float(map[row[0]]) - float(row[1])) > 1e-9:
 			return _fail("constant %s is %s, the mockup has %s" % [row[0], str(map.get(row[0])), str(row[1])])
 	for gone: String in ["POINTER_SLOWDOWN", "STEP_GAP", "POINTER_DECEL_DIST", "POINTER_ACCEL", "POINTER_MIN_TRAVEL", "POINTER_MIN_CRUISE",
-			"POINTER_T_STEP", "POINTER_T_BASE", "POINTER_T_VARY", "POINTER_T_STEPS", "POINTER_SAMPLE_DT"]:
+			"POINTER_T_STEP", "POINTER_T_BASE", "POINTER_T_VARY", "POINTER_T_STEPS", "POINTER_SAMPLE_DT",
+			"POINTER_START", "POINTER_LEAD", "HOLD", "HOLD_REDUCED", "POINTER_REDUCED", "LAND_PHASE_LEN", "PATH_PACE", "PATH_FIRST_K",
+			"PATH_SLOW_N", "PATH_SLOW_K", "PATH_FINAL_K", "PATH_TURN_MIN", "PATH_TURN_MAX", "PATH_ARC_FAST", "PATH_ARC_SPAN", "PATH_TABLES"]:
 		if map.has(gone):
 			return _fail("old pointer constant %s is still in the planner" % gone)
 	# The pixel and body constants of the mockup are gone: the plan runs on tiles and paths.

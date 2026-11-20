@@ -14,6 +14,7 @@ extends RefCounted
 ## valid now (a hidden find in the intro, an id of no find and no pack slot).
 ## Board tiles (D-72, `PickupPlacement`, derived on every build, never saved): `row[].tile` and `finds[].tile` are
 ## { col, row }. `finds[].cell` stays the index in the record. `camera_frame` is the camera tunables (D-73).
+## `pointer_look` is the feel values of the pointer mote (D-77): { path, tables, mote }, see `pointer_look`.
 ## `swap.targets` is keyed by BOTH sides: left find id -> legal pack ids, pack id -> legal left find ids.
 ##
 ## Actions (slot-keyed; no `nav.back`, the event has no way out except Continue):
@@ -92,11 +93,6 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		if bool(r["is_chooser"]):
 			chooser = { "id": r["id"], "name": r["name"], "standing": r["standing"] }
 
-	# UNWIRED (target: NEW "Realm seed survives a save reload"): realm.seed can lose digits through JSON; the pointer plan reads it
-	var realm_seed := int(RealmService.get_active(flow_ctx).get("seed", 0))
-	var pointer := PickupChooser.pointer(inv_cfg, realm_seed, flow_ctx.stage_id, int(record.get("run_count", 0)),
-		str(record.get("situation_id", "")), standing.size(), standing.find(chooser_id))
-
 	var directives_cfg := ConfigService.get_directives_cfg(flow_ctx.config_service)
 	var pack := _pack(save, inv_cfg, entries, record, stage)
 	var data := {
@@ -105,7 +101,6 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		"run_count": int(record.get("run_count", 0)),
 		"return_to": str(record.get("return_to", "")),
 		"chooser": chooser, "row": row, "fallen": record.get("fallen_names", []),
-		"pointer": pointer,
 		"order": record.get("order", []),
 		"selected": _selected(str(session.get("selected", "")), phase, record, pack),
 		"reason": str(record.get("reason", "")), "case": str(record.get("case", "")),
@@ -118,6 +113,7 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 			"origin": origin, "target": target, "twins": twins, "targets": targets, "dropped": _dropped(record) },
 		"confirm_leave_items": DirectiveService.confirms_leave_items(directives_cfg, DirectiveService.active_id(save)),
 		"camera_frame": camera_frame(inv_cfg),
+		"pointer_look": pointer_look(inv_cfg),
 	}
 	data.merge(_board(flow_ctx))
 	_add_tiles(data, inv_cfg)
@@ -135,6 +131,86 @@ static func camera_frame(inv_cfg: Dictionary) -> Dictionary:
 	return { "floor_zoom": clampf(float(cam.get("floor_zoom", 0.75)), 0.05, 2.2),
 		"margin_px": maxf(0.0, float(cam.get("margin_px", 48))),
 		"tween_seconds": maxf(0.0, float(cam.get("tween_seconds", 0.45))) }
+
+
+## Rules of `data.inventory.pickup.pointer_look`, group -> key -> [default, lowest, highest, whole]. `ConfigValidator` reads
+## the same table. A lowest of 0.001 means "above 0": the UI divides by the key, or zero means nothing.
+## The `mote` sizes are pixels at 1280x720 with a 128 px wide tile. The scene has five trail sprites: more samples show no more.
+const POINTER_LOOK_RULES := {
+	"path": {
+		"pointer_start": [0.5, 0.0, INF, false], "pointer_lead": [0.30, 0.001, INF, false],
+		"hold": [0.60, 0.0, INF, false], "hold_reduced": [0.2, 0.0, INF, false],
+		"pointer_reduced": [0.5, 0.001, INF, false],
+		"path_pace": [0.19, 0.001, INF, false], "path_first_k": [1.5, 0.001, INF, false],
+		"path_slow_n": [5, 1, INF, true], "path_slow_k": [1.25, 0.001, INF, false],
+		"path_final_k": [1.6, 0.001, INF, false], "path_turn_min": [0.26, 0.001, INF, false],
+		"path_turn_max": [0.64, 0.001, INF, false], "path_arc_fast": [0.18, 0.0, INF, false],
+		"path_arc_span": [0.72, 0.001, INF, false],
+	},
+	"mote": {
+		"rise": [16.0, 0.0, INF, false], "fade_scale_from": [0.5, 0.0, INF, false],
+		"above_head": [36.0, 0.0, INF, false], "arc_min": [6.0, 0.0, INF, false], "arc_max": [14.0, 0.001, INF, false],
+		"trail_count": [5, 0, 16, true], "trail_dt": [0.035, 0.0, INF, false], "trail_alpha": [0.30, 0.0, 1.0, false],
+		"trail_scale": [0.9, 0.0, INF, false], "trail_scale_step": [0.08, 0.0, INF, false],
+		"mote_radius": [30.0, 0.001, INF, false], "wind_up": [4.0, 0.0, INF, false],
+		"wind_up_len": [0.08, 0.001, INF, false], "sink": [20.0, 0.0, INF, false], "sink_len": [0.28, 0.001, INF, false],
+		"sink_scale": [0.4, 0.0, 1.0, false], "sink_fade_from": [0.4, 0.0, 0.99, false],
+		"halo_diameter_tiles": [0.703, 0.001, INF, false], "halo_alpha": [0.55, 0.0, 1.0, false],
+		"halo_start_alpha": [0.2, 0.0, 1.0, false], "halo_open": [0.30, 0.001, INF, false],
+		"halo_breath": [0.08, 0.0, 1.0, false], "halo_breath_period": [1.6, 0.001, INF, false],
+		"brighten": [0.20, 0.0, INF, false], "brighten_len": [0.15, 0.001, INF, false],
+		"shadow_scale_y": [0.4, 0.001, INF, false], "shadow_alpha_drop": [0.4, 0.0, 1.0, false],
+		"shadow_scale_drop": [0.3, 0.0, 1.0, false], "shadow_radius": [14.0, 0.001, INF, false],
+	},
+}
+## Authored arrival times of the racetrack by "n:land_index" (seconds after the path clock starts). A table is used only when
+## its length is the move count, 3n - 1 - land_index; any other row gets the slow-down law of the `path` keys.
+const POINTER_LOOK_TABLES := {
+	"5:2": [0.58, 0.78, 0.96, 1.14, 1.40, 1.58, 1.77, 2.01, 2.31, 2.81, 3.19, 3.79],
+	"3:1": [0.68, 0.96, 1.42, 1.72, 2.06, 2.70, 3.60],
+}
+
+
+## `data.pointer_look` { path, tables, mote } from `inv_cfg.pickup.pointer_look` (D-77). Presentation only. A missing or
+## non-number key reads its default; a number is clamped into its range; whole keys are ints. turn_max and arc_max never
+## read below turn_min and arc_min. A missing `tables` reads the defaults; a given `tables` replaces them, and an entry that
+## is not an Array of numbers, or whose times do not rise from above `pointer_lead`, is dropped.
+static func pointer_look(inv_cfg: Dictionary) -> Dictionary:
+	var pk_v: Variant = inv_cfg.get("pickup", {})
+	var pk: Dictionary = pk_v if pk_v is Dictionary else {}
+	var pl_v: Variant = pk.get("pointer_look", {})
+	var pl: Dictionary = pl_v if pl_v is Dictionary else {}
+	var out := {}
+	for group: String in POINTER_LOOK_RULES:
+		var src_v: Variant = pl.get(group, {})
+		var src: Dictionary = src_v if src_v is Dictionary else {}
+		var vals := {}
+		for key: String in POINTER_LOOK_RULES[group]:
+			var rule: Array = POINTER_LOOK_RULES[group][key]
+			var v: Variant = src.get(key, null)
+			var x := float(v) if (typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT) and is_finite(float(v)) else float(rule[0])
+			x = clampf(x, float(rule[1]), float(rule[2]))
+			vals[key] = int(x) if bool(rule[3]) else x
+		out[group] = vals
+	out["path"]["path_turn_max"] = maxf(out["path"]["path_turn_max"], out["path"]["path_turn_min"])
+	out["mote"]["arc_max"] = maxf(out["mote"]["arc_max"], out["mote"]["arc_min"])
+	var tables: Dictionary = POINTER_LOOK_TABLES.duplicate(true)
+	if pl.get("tables", null) is Dictionary:
+		tables = {}
+		for key: Variant in pl["tables"]:
+			var arr_v: Variant = pl["tables"][key]
+			if arr_v is Array and (arr_v as Array).all(func(x: Variant) -> bool:
+					return (typeof(x) == TYPE_INT or typeof(x) == TYPE_FLOAT) and is_finite(float(x))):
+				var times: Array = (arr_v as Array).map(func(x: Variant) -> float: return float(x))
+				var prev: float = out["path"]["pointer_lead"]
+				var rising := true
+				for t: float in times:
+					rising = rising and t > prev
+					prev = t
+				if rising:
+					tables[str(key)] = times
+	out["tables"] = tables
+	return out
 
 
 ## Adds `row[].tile` and `finds[].tile` (board tiles, `PickupPlacement`; derived on every build, never saved).

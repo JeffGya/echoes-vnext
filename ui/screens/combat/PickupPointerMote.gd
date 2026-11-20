@@ -4,42 +4,14 @@ extends Node2D
 ## The pointer of the pickup intro (D-76): a small ivory mote that drifts above the Echoes' heads along the racetrack of
 ## `PickupEventPlan.pointer_pose`, and sinks into the chooser, where a soft halo opens behind the token. No ring, outline,
 ## stroke or board scrim. The sprites and their soft radial gradients are authored in the scene; this script only sets values.
-## `pose_at` is pure. The nodes are world-space children of BoardRoot, so the camera zoom scales the mote like the tokens.
+## Every look value (sizes, times, alphas) comes from `plan.pointer.mote`, i.e. `data.pointer_look.mote` of the snapshot
+## (`data.inventory.pickup.pointer_look` in balance.json, D-77); this script holds no tunable number. `pose_at` is pure. The nodes are world-space children of BoardRoot, so the camera zoom scales the mote like the tokens.
 ## Order in the tree: the halo layer sits below the token layer (the Echo stands in front of its halo); this node sits above it.
 
 ## Living Grove ivory (`docs/art-direction.md`, #F5F0E8). Not in the theme file, so the constant is tested against the hex.
 const IVORY := Color(0.9607843, 0.9411765, 0.9098039)
 
-# Feel values, tune in playtest (D-76). Pixels are at 1280x720 with a 128 px wide tile.
-const RISE := 16.0
-const FADE_SCALE_FROM := 0.5
-const ABOVE_HEAD := 36.0
-const ARC_MIN := 6.0
-const ARC_MAX := 14.0
-const TRAIL_COUNT := 5
-const TRAIL_DT := 0.035
-const TRAIL_ALPHA := 0.30
-const TRAIL_SCALE := 0.9
-const TRAIL_SCALE_STEP := 0.08
-const MOTE_RADIUS := 30.0
-const WIND_UP := 4.0
-const WIND_UP_LEN := 0.08
-const SINK := 20.0
-const SINK_LEN := 0.28
-const SINK_SCALE := 0.4
-const SINK_FADE_FROM := 0.4
-const HALO_DIAMETER_TILES := 0.703
-const HALO_ALPHA := 0.55
-const HALO_START_ALPHA := 0.2
-const HALO_OPEN := 0.30
-const HALO_BREATH := 0.08
-const HALO_BREATH_PERIOD := 1.6
-const BRIGHTEN := 0.20
-const BRIGHTEN_LEN := 0.15
-const SHADOW_SCALE_Y := 0.4
-const SHADOW_ALPHA_DROP := 0.4
-const SHADOW_SCALE_DROP := 0.3
-const SHADOW_RADIUS := 14.0
+## Radius in pixels of the authored gradient textures (half their width; a test checks it).
 const TEXTURE_RADIUS := 32.0
 
 @export var visual_config: CombatTokenVisualConfig
@@ -90,59 +62,68 @@ static func _hidden(chooser: Vector2) -> Dictionary:
 		"shadow_scale": 1.0, "trail": [], "halo_pos": chooser, "halo_alpha": 0.0, "halo_scale": 0.0, "brighten": 0.0, "phase": "gone" }
 
 
-## Everything the nodes show at time `t`. `positions`: board centre of every row token by row index. `head`: height of the mote
-## above a token centre at rest (token radius plus ABOVE_HEAD). `lateral`: one step toward the camera, in board pixels.
-static func pose_at(plan: Dictionary, positions: Array, lateral: Vector2, t: float, head: float) -> Dictionary:
+## Everything the nodes show at time `t`. `positions`: board centre of every row token by row index. `token_radius`: the token's radius
+## (the mote rests `above_head` above the token's top). `lateral`: one step toward the camera, in board pixels.
+static func pose_at(plan: Dictionary, positions: Array, lateral: Vector2, t: float, token_radius: float) -> Dictionary:
 	var pp := PickupEventPlan.pointer_pose(plan, t)
 	if not bool(pp["visible"]) or positions.is_empty():
 		return _hidden(Vector2.ZERO)
 	var land := int((plan["pointer"] as Dictionary)["land_index"])
 	if land >= positions.size():
 		return _hidden(Vector2.ZERO)
+	var mc: Dictionary = (plan["pointer"] as Dictionary)["mote"]
+	var head := token_radius + float(mc["above_head"])
 	var chooser: Vector2 = positions[land]
 	var lead := float((plan["pointer"] as Dictionary)["lead"])
 	var tp := t - float((plan["times"] as Dictionary)["pointer0"])
 	var fin := _ease_out(tp / lead)
 	var alpha := fin
-	var scale := lerpf(FADE_SCALE_FROM, 1.0, fin)
+	var scale := lerpf(float(mc["fade_scale_from"]), 1.0, fin)
 	var base := path_point(positions, lateral, float(pp["pos_row"]), float(pp["side"]))
-	var arc := (ARC_MIN + (ARC_MAX - ARC_MIN) * float(pp["arc_k"])) * float(pp["arc"])
-	var mote := base + Vector2(0.0, -head - arc + RISE * (1.0 - fin))
+	var arc_min := float(mc["arc_min"])
+	var arc_max := float(mc["arc_max"])
+	var arc := (arc_min + (arc_max - arc_min) * float(pp["arc_k"])) * float(pp["arc"])
+	var mote := base + Vector2(0.0, -head - arc + float(mc["rise"]) * (1.0 - fin))
 	var out := _hidden(chooser)
 	out["visible"] = true
 	out["phase"] = pp["phase"]
 	var lt := float(pp["lt"])
+	var wind_len := float(mc["wind_up_len"])
+	var sink_len := float(mc["sink_len"])
 	if lt > 0.0:
-		var lift := WIND_UP * _ease_out(lt / WIND_UP_LEN)
-		var u := clampf((lt - WIND_UP_LEN) / SINK_LEN, 0.0, 1.0)
-		mote += Vector2(0.0, -lift + SINK * u * u)
-		alpha *= 1.0 - clampf((u - SINK_FADE_FROM) / (1.0 - SINK_FADE_FROM), 0.0, 1.0)
-		scale *= 1.0 - SINK_SCALE * u
-		var opened := _ease_out((lt - WIND_UP_LEN) / HALO_OPEN)
-		if lt > WIND_UP_LEN:
+		var lift := float(mc["wind_up"]) * _ease_out(lt / wind_len)
+		var u := clampf((lt - wind_len) / sink_len, 0.0, 1.0)
+		var fade_from := float(mc["sink_fade_from"])
+		mote += Vector2(0.0, -lift + float(mc["sink"]) * u * u)
+		alpha *= 1.0 - clampf((u - fade_from) / (1.0 - fade_from), 0.0, 1.0)
+		scale *= 1.0 - float(mc["sink_scale"]) * u
+		var open_len := float(mc["halo_open"])
+		var opened := _ease_out((lt - wind_len) / open_len)
+		if lt > wind_len:
 			var breath := 1.0
-			if lt > WIND_UP_LEN + HALO_OPEN:
-				breath += HALO_BREATH * sin(TAU * (lt - WIND_UP_LEN - HALO_OPEN) / HALO_BREATH_PERIOD)
-			out["halo_alpha"] = HALO_ALPHA * minf(1.0, opened + HALO_START_ALPHA) * breath
+			if lt > wind_len + open_len:
+				breath += float(mc["halo_breath"]) * sin(TAU * (lt - wind_len - open_len) / float(mc["halo_breath_period"]))
+			out["halo_alpha"] = float(mc["halo_alpha"]) * minf(1.0, opened + float(mc["halo_start_alpha"])) * breath
 			out["halo_scale"] = maxf(opened, 0.01)
-		out["brighten"] = BRIGHTEN * clampf((lt - WIND_UP_LEN - SINK_LEN) / BRIGHTEN_LEN, 0.0, 1.0)
-	var high := arc / ARC_MAX
+		out["brighten"] = float(mc["brighten"]) * clampf((lt - wind_len - sink_len) / float(mc["brighten_len"]), 0.0, 1.0)
+	var high := arc / arc_max
 	out["mote"] = mote
 	out["alpha"] = alpha
 	out["scale"] = scale
 	out["ground"] = base
-	out["shadow_alpha"] = alpha * (1.0 - SHADOW_ALPHA_DROP * high)
-	out["shadow_scale"] = 1.0 - SHADOW_SCALE_DROP * high
+	out["shadow_alpha"] = alpha * (1.0 - float(mc["shadow_alpha_drop"]) * high)
+	out["shadow_scale"] = 1.0 - float(mc["shadow_scale_drop"]) * high
 	var trail: Array = []
 	if (pp["phase"] == "glide" or pp["phase"] == "turn") and float(pp["speed"]) > 0.01:
-		for k in range(1, TRAIL_COUNT + 1):
-			var q := PickupEventPlan.pointer_pose(plan, t - TRAIL_DT * float(k))
+		var count := int(mc["trail_count"])
+		for k in range(1, count + 1):
+			var q := PickupEventPlan.pointer_pose(plan, t - float(mc["trail_dt"]) * float(k))
 			if not bool(q["visible"]):
 				break
-			var qa := (ARC_MIN + (ARC_MAX - ARC_MIN) * float(q["arc_k"])) * float(q["arc"])
+			var qa := (arc_min + (arc_max - arc_min) * float(q["arc_k"])) * float(q["arc"])
 			trail.append({ "pos": path_point(positions, lateral, float(q["pos_row"]), float(q["side"])) + Vector2(0.0, -head - qa),
-				"alpha": TRAIL_ALPHA * (1.0 - float(k) / float(TRAIL_COUNT + 1)) * alpha,
-				"scale": TRAIL_SCALE - TRAIL_SCALE_STEP * float(k) })
+				"alpha": float(mc["trail_alpha"]) * (1.0 - float(k) / float(count + 1)) * alpha,
+				"scale": float(mc["trail_scale"]) - float(mc["trail_scale_step"]) * float(k) })
 	out["trail"] = trail
 	return out
 
@@ -153,26 +134,27 @@ func hide_all() -> void:
 		_halo_layer.visible = false
 
 
-func apply_pose(pose: Dictionary, tile_width: float) -> void:
+## `look` is `plan.pointer.mote` (sizes in pixels). The scene has five trail sprites: a longer trail shows no more.
+func apply_pose(pose: Dictionary, look: Dictionary, tile_width: float) -> void:
 	visible = bool(pose["visible"])
 	_halo_layer.visible = visible and float(pose["halo_alpha"]) > 0.0
 	if not visible:
 		return
 	var ivory := Color(IVORY, 1.0)
-	var chooser: Vector2 = pose["halo_pos"]
-	_halo.position = chooser
-	_halo.scale = Vector2.ONE * (HALO_DIAMETER_TILES * tile_width * 0.5 * float(pose["halo_scale"]) / TEXTURE_RADIUS)
+	var radius := float(look["mote_radius"])
+	_halo.position = pose["halo_pos"]
+	_halo.scale = Vector2.ONE * (float(look["halo_diameter_tiles"]) * tile_width * 0.5 * float(pose["halo_scale"]) / TEXTURE_RADIUS)
 	_halo.modulate = Color(ivory, float(pose["halo_alpha"]))
 	_shadow.position = (pose["ground"] as Vector2) + visual_config.shadow_offset
-	_shadow.scale = Vector2(1.0, SHADOW_SCALE_Y) * (SHADOW_RADIUS * float(pose["shadow_scale"]) / TEXTURE_RADIUS)
+	_shadow.scale = Vector2(1.0, float(look["shadow_scale_y"])) * (float(look["shadow_radius"]) * float(pose["shadow_scale"]) / TEXTURE_RADIUS)
 	_shadow.modulate = Color(visual_config.shadow_color, visual_config.shadow_color.a * float(pose["shadow_alpha"]))
 	_mote.position = pose["mote"]
-	_mote.scale = Vector2.ONE * (MOTE_RADIUS * float(pose["scale"]) / TEXTURE_RADIUS)
+	_mote.scale = Vector2.ONE * (radius * float(pose["scale"]) / TEXTURE_RADIUS)
 	_mote.modulate = Color(ivory, float(pose["alpha"]))
 	var trail: Array = pose["trail"]
 	for i in _trail.size():
 		_trail[i].visible = i < trail.size()
 		if i < trail.size():
 			_trail[i].position = trail[i]["pos"]
-			_trail[i].scale = Vector2.ONE * (MOTE_RADIUS * float(trail[i]["scale"]) / TEXTURE_RADIUS)
+			_trail[i].scale = Vector2.ONE * (radius * float(trail[i]["scale"]) / TEXTURE_RADIUS)
 			_trail[i].modulate = Color(ivory, float(trail[i]["alpha"]))

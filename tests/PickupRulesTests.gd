@@ -1,8 +1,7 @@
 # res://tests/PickupRulesTests.gd
-# PickupChooser (chooser draw, pointer plan), PickupCase (capacity cases C1 to C5, frozen, reaction class)
+# PickupChooser (chooser draw), PickupCase (capacity cases C1 to C5, frozen, reaction class)
 # and PickupSwapRules (swap legality). Pure: every save, stage and find is built by hand here.
-# The golden tables pin the chooser id and the pointer start and laps per seed and path; each chooser row
-# is also replayed by hand on the literal pick stream.
+# The golden table pins the chooser id per seed and path; each row is also replayed by hand on the literal pick stream.
 
 class_name PickupRulesTests
 extends RefCounted
@@ -28,17 +27,6 @@ const _GOLDEN := [
 	[2024, "stage_06", 0, "sit_a", ["e1", "e2", "e3", "e4", "e5"], [], "e3"],
 ]
 
-# [realm_seed, stage_id, run_count, situation_id, n, chooser index, pinned start, pinned laps].
-const _POINTER_GOLDEN := [
-	[1, "stage_01", 0, "sit_a", 4, 2, 0, 2],
-	[42, "stage_01", 1, "sit_a", 3, 0, 1, 1],
-	[9001, "stage_02", 2, "sit_a", 5, 4, 3, 1],
-	[123456789, "stage_01", 0, "sit_a", 2, 1, 0, 2],
-	[7777777, "stage_05", 0, "sit_f", 1, 0, 0, 2],
-	[555, "stage_01", 0, "sit_z", 4, 0, 3, 2],
-]
-
-
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_rules/standing_keeps_party_order_and_drops_fallen", Callable(PickupRulesTests, "_t_standing"))
 	runner.register_test("pickup_rules/chooser_golden_and_hand_replay", Callable(PickupRulesTests, "_t_chooser_golden"))
@@ -47,11 +35,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_rules/chooser_never_a_fallen_echo", Callable(PickupRulesTests, "_t_never_fallen"))
 	runner.register_test("pickup_rules/chooser_stream_and_situation", Callable(PickupRulesTests, "_t_stream"))
 	runner.register_test("pickup_rules/chooser_no_standing_echo", Callable(PickupRulesTests, "_t_no_standing"))
-	runner.register_test("pickup_rules/pointer_rules", Callable(PickupRulesTests, "_t_pointer"))
-	runner.register_test("pickup_rules/pointer_golden", Callable(PickupRulesTests, "_t_pointer_golden"))
-	runner.register_test("pickup_rules/pointer_laps_follow_config", Callable(PickupRulesTests, "_t_laps_config"))
 	runner.register_test("pickup_rules/severe_band_follows_config", Callable(PickupRulesTests, "_t_severe_config"))
-	runner.register_test("pickup_rules/pointer_laps_clamp_odd_config", Callable(PickupRulesTests, "_t_laps_clamp"))
 	runner.register_test("pickup_rules/pickup_config_validator", Callable(PickupRulesTests, "_t_pickup_validator"))
 	runner.register_test("pickup_rules/pack_room_counts_carried_and_open_rows", Callable(PickupRulesTests, "_t_pack_room"))
 	runner.register_test("pickup_rules/cases_c1_to_c5", Callable(PickupRulesTests, "_t_cases"))
@@ -239,10 +223,8 @@ static func _t_stream() -> Dictionary:
 	if path != "inventory.pick.stage_02.3.sit_x":
 		m.append("stream_path is %s" % path)
 	for bad in ["stage.settle", "inventory.leave", "inventory.finds"]:
-		if path.begins_with(bad) or PickupChooser.pointer_path("stage_02", 3, "sit_x").begins_with(bad):
-			m.append("a path shares the %s namespace" % bad)
-	if CampaignSeed.derive_from(42, path) == CampaignSeed.derive_from(42, PickupChooser.pointer_path("stage_02", 3, "sit_x")):
-		m.append("the pointer hash equals the pick stream seed")
+		if path.begins_with(bad):
+			m.append("the path shares the %s namespace" % bad)
 	for g in _GOLDEN:
 		var standing := PickupChooser.standing_ids(g[4], g[5])
 		var a := PickupChooser.draw(int(g[0]), str(g[1]), int(g[2]), str(g[3]), standing)
@@ -270,88 +252,8 @@ static func _t_no_standing() -> Dictionary:
 	return _result(m)
 
 
-# ---------------------------------------------------------------------------
-# Pointer
-# ---------------------------------------------------------------------------
-
-static func _t_pointer() -> Dictionary:
-	var m: Array = []
-	var laps_seen := {}
-	for n in range(1, 7):
-		for idx in n:
-			var starts := {}
-			for k in range(40):
-				var sit := "sit_%d" % k
-				var p := PickupChooser.pointer(_cfg(), 42, "stage_01", 0, sit, n, idx)
-				if p != PickupChooser.pointer(_cfg(), 42, "stage_01", 0, sit, n, idx):
-					m.append("n %d idx %d %s: not the same twice" % [n, idx, sit])
-				var start := int(p["start"])
-				var laps := int(p["laps"])
-				if int(p["n"]) != n or start < 0 or start >= n or (n >= 2 and start == idx) or (n == 1 and start != 0):
-					m.append("n %d idx %d %s: bad plan %s" % [n, idx, sit, str(p)])
-				if laps < 1 or laps > 2:
-					m.append("n %d idx %d %s: laps %d out of range" % [n, idx, sit, laps])
-				starts[start] = true
-				laps_seen[laps] = true
-			if n >= 3 and starts.size() < 2:
-				m.append("n %d idx %d: the start never varies %s" % [n, idx, str(starts.keys())])
-	if laps_seen.size() != 2 - 1 + 1:
-		m.append("laps seen %s" % str(laps_seen.keys()))
-	for bad in [[0, 0], [3, 3], [3, -1]]:
-		var p := PickupChooser.pointer(_cfg(), 42, "stage_01", 0, "sit_a", int(bad[0]), int(bad[1]))
-		if int(p["start"]) != -1 or int(p["laps"]) != 0:
-			m.append("n %d idx %d: %s, expected no plan" % [int(bad[0]), int(bad[1]), str(p)])
-	return _result(m)
-
-
-static func _t_pointer_golden() -> Dictionary:
-	var m: Array = []
-	for g in _POINTER_GOLDEN:
-		var p := PickupChooser.pointer(_cfg(), int(g[0]), str(g[1]), int(g[2]), str(g[3]), int(g[4]), int(g[5]))
-		if int(p["start"]) != int(g[6]) or int(p["laps"]) != int(g[7]):
-			m.append("%s: %s" % [str(g), str(p)])
-	return _result(m)
-
-
-static func _pickup_cfg(laps_min: int, laps_max: int, severe_from: String = "burdened") -> Dictionary:
-	return { "pickup": { "pointer_laps_min": laps_min, "pointer_laps_max": laps_max, "severe_from_status": severe_from } }
-
-
-static func _t_laps_config() -> Dictionary:
-	var m: Array = []
-	var shipping := ConfigService.get_inventory_cfg(InventorySaveTests._config())
-	for g in _POINTER_GOLDEN:
-		var p := PickupChooser.pointer(shipping, int(g[0]), str(g[1]), int(g[2]), str(g[3]), int(g[4]), int(g[5]))
-		if int(p["laps"]) != int(g[7]):
-			m.append("shipping config: %s gives laps %d" % [str(g), int(p["laps"])])
-	var seen := {}
-	for k in range(60):
-		var p := PickupChooser.pointer(_pickup_cfg(3, 5), 42, "stage_01", 0, "sit_%d" % k, 4, 1)
-		var laps := int(p["laps"])
-		if laps < 3 or laps > 5:
-			m.append("laps 3..5: got %d" % laps)
-		seen[laps] = true
-	if seen.size() != 3:
-		m.append("laps 3..5: saw %s" % str(seen.keys()))
-	for k in range(20):
-		if int(PickupChooser.pointer(_pickup_cfg(4, 4), 42, "stage_01", 0, "sit_%d" % k, 4, 1)["laps"]) != 4:
-			m.append("laps 4..4 is not always 4")
-			break
-	return _result(m)
-
-
-## Odd config values: min 0 reads as 1; max below min reads as min (no modulo by zero); min above 1 holds.
-static func _t_laps_clamp() -> Dictionary:
-	var m: Array = []
-	for c in [[0, 0, 1], [0, 2, -1], [-3, -3, 1], [3, 1, 3], [2, 0, 2]]:
-		for k in range(12):
-			var laps := int(PickupChooser.pointer(_pickup_cfg(c[0], c[1]), 42, "stage_01", 0, "sit_%d" % k, 4, 1)["laps"])
-			var lo := maxi(1, int(c[0]))
-			var hi := maxi(lo, int(c[1]))
-			if laps < lo or laps > hi or (int(c[2]) > 0 and laps != int(c[2])):
-				m.append("min %d max %d: laps %d outside %d..%d" % [c[0], c[1], laps, lo, hi])
-				break
-	return _result(m)
+static func _pickup_cfg(severe_from: String = "burdened") -> Dictionary:
+	return { "pickup": { "severe_from_status": severe_from } }
 
 
 static func _t_severe_config() -> Dictionary:
@@ -369,7 +271,7 @@ static func _t_severe_config() -> Dictionary:
 		["pressed, unknown id", pressed, "no_such_status", "minus"],
 	]
 	for c in cases:
-		var cfg := _pickup_cfg(1, 2, c[2])
+		var cfg := _pickup_cfg(c[2])
 		if PickupCase.resolve(two, two, full, false, c[1], cfg)["reaction"] != c[3]:
 			m.append("%s: reaction is not %s" % [c[0], c[3]])
 	if PickupCase.is_severe(burdened, {}) != true or PickupCase.is_severe(hesitant, {}) != false:
@@ -383,18 +285,11 @@ static func _t_pickup_validator() -> Dictionary:
 	var problems := ConfigValidator.validate_pickup(shipping)
 	if not problems.is_empty():
 		m.append("the shipping config fails: %s" % str(problems))
-	if not ConfigValidator.validate_pickup(_pickup_cfg(2, 2)).is_empty():
-		m.append("min equal to max is refused")
 	var bad := [
 		["no block", {}],
 		["block not a Dictionary", { "pickup": 3 }],
-		["min 0", _pickup_cfg(0, 2)],
-		["min fraction", { "pickup": { "pointer_laps_min": 1.5, "pointer_laps_max": 2, "severe_from_status": "burdened" } }],
-		["max below min", _pickup_cfg(3, 2)],
-		["max fraction", { "pickup": { "pointer_laps_min": 1, "pointer_laps_max": 2.5, "severe_from_status": "burdened" } }],
-		["max missing", { "pickup": { "pointer_laps_min": 1, "severe_from_status": "burdened" } }],
-		["unknown status", _pickup_cfg(1, 2, "tired")],
-		["status missing", { "pickup": { "pointer_laps_min": 1, "pointer_laps_max": 2 } }],
+		["unknown status", _pickup_cfg("tired")],
+		["status missing", { "pickup": {} }],
 	]
 	for b in bad:
 		if ConfigValidator.validate_pickup(b[1]).is_empty():

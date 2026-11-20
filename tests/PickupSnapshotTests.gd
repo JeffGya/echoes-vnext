@@ -10,7 +10,7 @@ const _SIT := "s0"
 const _ACTION_TYPES := { "overlay.skip": "pickup.skip", "cta.continue": "pickup.continue", "cta.swap": "pickup.swap.start",
 	"back": "pickup.swap.cancel", "cta.confirm": "pickup.swap.confirm" }
 const _DATA_KEYS := ["actors", "board_cols", "board_rows", "camera_frame", "case", "chooser", "confirm_leave_items", "destroy_left",
-	"encounter_id", "fallen", "finds", "frozen", "order", "pack", "phase", "placement_seed", "pointer", "reaction",
+	"encounter_id", "fallen", "finds", "frozen", "order", "pack", "phase", "placement_seed", "pointer_look", "reaction",
 	"reason", "return_to", "row", "run_count", "selected", "situation_id", "swap", "swap_left", "terrain"]
 
 
@@ -23,7 +23,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/swap_offered_and_refused_keys", Callable(PickupSnapshotTests, "_t_swap_keys"))
 	runner.register_test("pickup_snapshot/swap_phase_falls_back_when_unsupported", Callable(PickupSnapshotTests, "_t_phase_fallback"))
 	runner.register_test("pickup_snapshot/swap_and_destroy_left_and_leave_flag", Callable(PickupSnapshotTests, "_t_tokens_and_directive"))
-	runner.register_test("pickup_snapshot/row_chooser_fallen_and_pointer", Callable(PickupSnapshotTests, "_t_row_pointer"))
+	runner.register_test("pickup_snapshot/row_chooser_and_fallen", Callable(PickupSnapshotTests, "_t_row_chooser"))
 	runner.register_test("pickup_snapshot/board_keys_and_actors_for_a_redraw", Callable(PickupSnapshotTests, "_t_board"))
 	runner.register_test("pickup_snapshot/build_is_pure_and_repeatable", Callable(PickupSnapshotTests, "_t_pure"))
 	runner.register_test("pickup_snapshot/no_record_gives_the_error_snapshot", Callable(PickupSnapshotTests, "_t_no_record"))
@@ -40,6 +40,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/build_leaves_the_flow_context_alone_and_terrain_is_a_copy", Callable(PickupSnapshotTests, "_t_context_untouched"))
 	PickupPlacementBoardsTests.register(runner)
 	PickupPlacementTests.register(runner)  # D-72: board tiles; no ui/ edit needed, the suite name stays pickup_snapshot
+	PickupPointerLookTests.register(runner)
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +352,7 @@ static func _t_tokens_and_directive() -> Dictionary:
 	return _result(m)
 
 
-static func _t_row_pointer() -> Dictionary:
+static func _t_row_chooser() -> Dictionary:
 	var m: Array = []
 	var ev := _event("C1", ["e1"])
 	var ctx: FlowContext = ev["ctx"]
@@ -372,13 +373,8 @@ static func _t_row_pointer() -> Dictionary:
 			if str(a["id"]) == str(r["id"]) and (str(r["status"]) != EmotionStatusLean.status_of(a) or str(r["name"]) != str(a["name"])
 					or int(r["standing"]) != int(a["rank"])):
 				m.append("row %s: status/name/standing differ from the actor" % r["id"])
-	var inv_cfg := ConfigService.get_inventory_cfg(ctx.config_service)
-	var seed_v := int(RealmService.get_active(ctx).get("seed", 0))
-	var want := PickupChooser.pointer(inv_cfg, seed_v, ctx.stage_id, int(rec["run_count"]), _SIT, 4,
-		(rec["standing_ids"] as Array).find(rec["chooser"]))
-	var pt: Dictionary = d["pointer"]
-	if str(pt) != str(want) or int(pt["n"]) != 4 or int(pt["start"]) == ids.find(str(rec["chooser"])):
-		m.append("pointer %s, expected %s (start must not be the chooser)" % [str(pt), str(want)])
+	if d.has("pointer"):
+		m.append("the retired pointer plan is still published (D-77)")
 	return _result(m)
 
 
@@ -601,8 +597,8 @@ static func _t_json_ints() -> Dictionary:
 	var ints: Array = []
 	for k in ["run_count", "swap_left", "destroy_left", "board_cols", "board_rows", "placement_seed"]:
 		ints.append([k, d[k]])
-	for k in ["n", "start", "laps"]:
-		ints.append(["pointer." + k, d["pointer"][k]])
+	ints.append(["pointer_look.path.path_slow_n", d["pointer_look"]["path"]["path_slow_n"]])
+	ints.append(["pointer_look.mote.trail_count", d["pointer_look"]["mote"]["trail_count"]])
 	for k in ["free", "capacity", "carried"]:
 		ints.append(["pack." + k, d["pack"][k]])
 	ints.append(["chooser.standing", d["chooser"]["standing"]])

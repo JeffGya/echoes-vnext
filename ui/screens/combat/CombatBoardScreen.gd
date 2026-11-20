@@ -355,8 +355,12 @@ func _on_pickup_clock(t: float) -> void:
 	if not _pickup_stage.visible:
 		return
 	var cfg: CombatTokenVisualConfig = _token_layer.visual_config
-	var pose := PickupPointerMote.pose_at(_pickup_stage.plan(), _pickup_row_positions, _pickup_lateral, t, cfg.token_radius + PickupPointerMote.ABOVE_HEAD)
-	_pickup_mote.apply_pose(pose, float(_board.tile_set.tile_size.x))
+	var plan := _pickup_stage.plan()
+	var pose := PickupPointerMote.pose_at(plan, _pickup_row_positions, _pickup_lateral, t, cfg.token_radius)
+	if bool(pose["visible"]):
+		_pickup_mote.apply_pose(pose, (plan["pointer"] as Dictionary)["mote"], float(_board.tile_set.tile_size.x))
+	else:
+		_pickup_mote.hide_all()
 	_token_layer.set_brighten(_pickup_chooser_id, float(pose["brighten"]))
 
 
