@@ -19,19 +19,23 @@ extends RefCounted
 ##              `mote` is the `data.pointer_look.mote` block (the look values for `PickupPointerMote`); `land_phase_len` = wind_up_len + sink_len;
 ##              `fade_t` = when the mote, halo and brightness start to fade: the start of the chooser's first leg, else `times.step0`.
 ## chooser_target_at(plan, t) -> { started, cell }          the tile the chooser has been sent to by `t` (the end of the last leg started)
+## chooser_walking(plan, t) -> bool                         true while a leg is running at `t` (the chooser is between two tiles)
+##   items_look { arc_px, shadow_scale_drop, reveal_len, carry_len, carry_hold, carry_above, fly_len, step_gap }  the `data.pointer_look.items` block
+##              the find beats (reveal, carry to the chooser's head, hold, flight, pause before the next stop) and the finds layer look;
+##              `carry_above` is the height of the card CENTRE above the token top
+##   walk_ease  `data.pointer_look.path.walk_ease`: 0 = the chooser's legs are walked at constant speed, 1 = eased out (the token layer reads it)
 ##   pack       { before, after, slot_count, unlisted, tone, tone_before, land_end, pulse_at, held_find }
 ##   bark       { text, case, reaction, reason, band, variant, chars, t0, t1 };  emo = reaction name (emo_style)
 ## frame_at(plan, t) / skip_to_idle(snapshot, opts) -> { t, phase, beat, echoes[{ id, chosen, cell, walking, from, to,
 ##   progress }], items{ find_id: { state, cell, rev, p, held, dim, slot } }, pack{ slots, lit, used, pulse, tone },
 ##   pointer{ visible, phase, pos_row, side, arc, arc_k, speed, lt, fade }, bark{ chars, total }, skip_o, cont_o, chooser_end }
-##   item state: hidden | revealed | lifted | flying | pack.
+##   item state: hidden | revealed | lifted (carried up to the chooser's head, then held there) | flying | pack.
 ## A scene must handle `plan.valid == false` (no chooser, error snapshot, no complete `data.pointer_look`, a row or find with no
 ## tile): show no intro.
 
 const STEP_LEN := 0.45
 const STEP_LEN_REDUCED := 0.15
-# Mockup line 774: reveal length.
-const REVEAL_LEN := 0.25
+# Mockup line 774: reveal length in reduced motion (the normal reveal length is `items.reveal_len` of `data.pointer_look`).
 const REVEAL_LEN_REDUCED := 0.15
 # Mockup line 778 and 780: emotion beat and idle times.
 const BARK_AFTER_LAST := 0.15
@@ -39,15 +43,15 @@ const IDLE_AFTER_BARK := 0.3
 const IDLE_AFTER_DEPOSIT := 0.45
 # The pointer feel values (timing, law, mote look) come from `data.pointer_look` of the snapshot (D-77); there are no defaults
 # here. A snapshot without a complete `pointer_look` is not playable (`valid` false).
-const LOOK_PATH_KEYS: Array = ["pointer_start", "pointer_lead", "hold", "hold_reduced", "pointer_reduced", "path_pace", "path_first_k",
+const LOOK_PATH_KEYS: Array = ["pointer_start", "pointer_lead", "hold", "hold_reduced", "pointer_reduced", "walk_time_scale", "walk_ease", "path_pace", "path_first_k",
 	"path_slow_n", "path_slow_k", "path_final_k", "path_turn_min", "path_turn_max", "path_arc_fast", "path_arc_span"]
 const LOOK_MOTE_KEYS: Array = ["rise", "fade_scale_from", "above_head", "arc_min", "arc_max", "trail_count", "trail_dt", "trail_alpha",
 	"trail_scale", "trail_scale_step", "mote_radius", "wind_up", "wind_up_len", "sink", "sink_len", "sink_scale", "sink_fade_from",
 	"halo_diameter_tiles", "halo_alpha", "halo_start_alpha", "halo_open", "halo_breath", "halo_breath_period", "halo_fade_out", "brighten",
 	"brighten_len", "shadow_scale_y", "shadow_alpha_drop", "shadow_scale_drop", "shadow_radius"]
+const LOOK_ITEMS_KEYS: Array = ["arc_px", "shadow_scale_drop", "reveal_len", "carry_len", "carry_hold", "carry_above", "fly_len", "step_gap"]
 # Mockup line 619: walk cap, fly time, typing speed.
 const WALK_CAP := 3.4
-const FLY_LEN := 0.34
 const TYPE_CPS := 24.0
 # Mockup line 688 gave the reference distances in pixels (90 and 60); here they are tiles (30 px a tile). Feel values, tune in playtest.
 const REF_TILES_FIRST := 3.0
@@ -71,14 +75,14 @@ const STATUS_AFRAID_MAX := "burdened"
 const STATUS_LADDER: Array = ["hollow", "fraying", "strained", "pressed", "burdened", "hesitant", "uncertain",
 	"grounded", "whole", "radiant"]
 
-# Reason table: walk seconds for the first and later picks, touch, lift, hold before the pack, lift ease.
-# Mockup lines 612 to 618 (froze is not ported: a frozen chooser has no stops; build maps it to likes).
+# Reason table: walk seconds for the first and later picks, touch, carry ease. Mockup lines 612 to 618 (froze is not ported: a frozen
+# chooser has no stops; build maps it to likes). The lift and the hold of the mockup table are `items.carry_len` and `items.carry_hold`.
 const RS: Dictionary = {
-	"likes": { "w": [0.70, 0.60], "touch": 0.10, "lift": 0.25, "ease": "back", "hold": 0.20 },
-	"worth": { "w": [0.60, 0.60], "touch": 0.10, "lift": 0.40, "ease": "smooth", "hold": 0.20 },
-	"safe": { "w": [0.95, 0.70], "touch": 0.10, "lift": 0.20, "ease": "smooth", "hold": 0.20 },
-	"bold": { "w": [0.50, 0.40], "touch": 0.10, "lift": 0.15, "ease": "back", "hold": 0.20 },
-	"fit": { "w": [0.45, 0.45], "touch": 0.0, "lift": 0.20, "ease": "smooth", "hold": 0.12 },
+	"likes": { "w": [0.70, 0.60], "touch": 0.10, "ease": "back" },
+	"worth": { "w": [0.60, 0.60], "touch": 0.10, "ease": "smooth" },
+	"safe": { "w": [0.95, 0.70], "touch": 0.10, "ease": "smooth" },
+	"bold": { "w": [0.50, 0.40], "touch": 0.10, "ease": "back" },
+	"fit": { "w": [0.45, 0.45], "touch": 0.0, "ease": "smooth" },
 }
 
 
@@ -129,6 +133,8 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	var tp := tempo(standing)
 	# A frozen chooser has no stops, so the table is read only for its lift ease; likes is the explicit choice.
 	var rs: Dictionary = RS["likes" if reason == "froze" else reason]
+	var items: Dictionary = look["items"]
+	var walk_scale := 1.0 if rm else float(look["path"]["walk_time_scale"])
 	var sit := str(d.get("situation_id", ""))
 
 	# Board for the paths: `{}` walkable = the whole board (StageTerrain.is_walkable), cut by the board bounds.
@@ -198,7 +204,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		var fid := str(s["find_id"])
 		var is_try: bool = s["is_try"]
 		var cells: Array = s["cells"]
-		var w: float = float(s["w"]) * w_scale
+		var w: float = float(s["w"]) * w_scale * walk_scale
 		var r := { "walk0": trk["t"] }
 		if cells.size() > 1:
 			if rm:
@@ -212,21 +218,30 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 			else:
 				_emit(trk, cells, "walk", w)
 		r["arrive"] = trk["t"]
+		# Normal motion: the flip ends before the carry starts; the chooser touches the find, carries it up to its head, holds it, and it
+		# flies. Reduced motion keeps the old overlap (no wait for the flip).
+		var reveal_len := REVEAL_LEN_REDUCED if rm else float(items["reveal_len"])
+		if not rm:
+			_wait(trk, reveal_len)
 		var touch := 0.0 if rm else float(rs["touch"])
 		_wait(trk, touch)
-		var lift := 0.15 if rm else (float(rs["lift"]) + TRY_LIFT_EXTRA if is_try else float(rs["lift"]))
-		# A pick next to the last one must not fly before that one has landed.
-		if not is_try:
-			_wait(trk, maxf(0.0, prev_fly1 - float(trk["t"]) - lift - (0.0 if rm else float(rs["hold"]))))
+		var lift := 0.15 if rm else float(items["carry_len"]) + (TRY_LIFT_EXTRA if is_try else 0.0)
+		# Reduced motion keeps the old rule: a pick next to the last one must not fly before that one has landed.
+		if rm and not is_try:
+			_wait(trk, maxf(0.0, prev_fly1 - float(trk["t"]) - lift))
 		r["lift0"] = trk["t"]
 		r["lift1"] = float(trk["t"]) + lift
 		if not is_try:
-			r["fly0"] = float(r["lift1"]) + (0.0 if rm else float(rs["hold"]))
-			r["fly1"] = float(r["fly0"]) + (0.15 if rm else FLY_LEN)
+			r["fly0"] = float(r["lift1"]) + (0.0 if rm else float(items["carry_hold"]))
+			r["fly1"] = float(r["fly0"]) + (0.15 if rm else float(items["fly_len"]))
 			slot_of[fid] = next_slot
 			next_slot += 1
 			prev_fly1 = float(r["fly1"])
-		_wait(trk, maxf(0.0, lift - (0.0 if rm else 0.1)))
+		if is_try or rm:
+			_wait(trk, maxf(0.0, lift - (0.0 if rm else 0.1)))
+		else:
+			# The chooser stands still while the find is carried and flies, then pauses before the next stop.
+			trk["t"] = float(r["fly1"]) + float(items["step_gap"])
 		recs[fid] = r
 		walk.append({ "find_id": fid, "k": k, "is_try": is_try, "t0": r["walk0"], "t1": r["arrive"],
 			"stand": (trk["cell"] as Dictionary).duplicate() })
@@ -259,7 +274,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 			"find_id": fid, "index": i, "status": str(f.get("status", "")), "pick_index": int(f.get("pick_index", -1)),
 			"tile": find_cells[i],
 			"reveal": float(r["arrive"]) if walked else t_a,
-			"reveal_len": REVEAL_LEN_REDUCED if rm else REVEAL_LEN,
+			"reveal_len": REVEAL_LEN_REDUCED if rm else float(items["reveal_len"]),
 			"walked": walked, "is_try": fid == try_id,
 			"walk0": float(r["walk0"]) if walked else -1.0,
 			"arrive": float(r["arrive"]) if walked else -1.0,
@@ -305,6 +320,8 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		"chooser_cell": start_cell, "out_cell": out_cell, "chooser_end_cell": (trk["cell"] as Dictionary).duplicate(),
 		"legs": trk["legs"],
 		"pointer": pp,
+		"walk_ease": float(look["path"]["walk_ease"]),
+		"items_look": (look["items"] as Dictionary).duplicate(true),
 		"finds": out_finds,
 		"walk": walk,
 		"pack": { "before": pack_before, "after": pack_after, "slot_count": slot_count, "unlisted": unlisted,
@@ -652,6 +669,15 @@ static func chooser_target_at(plan: Dictionary, t: float) -> Dictionary:
 	return out
 
 
+## True while a leg of the chooser runs at `t`: its token is between two tiles. Pure.
+static func chooser_walking(plan: Dictionary, t: float) -> bool:
+	for l_v: Variant in plan.get("legs", []):
+		var l: Dictionary = l_v
+		if t >= float(l["t0"]) and t < float(l["t1"]):
+			return true
+	return false
+
+
 ## Where the chooser is at `t`: on a tile, or between two tiles of a leg.
 static func _chooser_at(plan: Dictionary, t: float) -> Dictionary:
 	var cur: Dictionary = plan["chooser_cell"]
@@ -689,8 +715,12 @@ static func _pointer_look(d: Dictionary) -> Dictionary:
 	var look := _d(d.get("pointer_look", {}))
 	var path := _d(look.get("path", {}))
 	var mote := _d(look.get("mote", {}))
+	var items := _d(look.get("items", {}))
 	if not (look.get("tables", null) is Dictionary):
 		return {}
+	for key: String in LOOK_ITEMS_KEYS:
+		if not (typeof(items.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
+			return {}
 	for key: String in LOOK_PATH_KEYS:
 		if not (typeof(path.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
 			return {}

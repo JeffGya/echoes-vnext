@@ -21,6 +21,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/walk_invalid_plan_draws_the_row_tile_and_no_walk", Callable(PickupWalkTests, "_t_invalid_plan"))
 	runner.register_test("pickup_ui/walk_clock_jump_snaps_the_chooser_to_the_plan_tile", Callable(PickupWalkTests, "_t_snap"))
 	runner.register_test("pickup_ui/walk_other_echoes_never_move_and_the_camera_stays_free", Callable(PickupWalkTests, "_t_others"))
+	runner.register_test("pickup_ui/walk_move_ease_is_optional_eases_the_whole_path_and_ends_exactly", Callable(PickupWalkTests, "_t_move_ease"))
 	runner.register_test("pickup_ui/walk_token_move_duration_override_is_additive", Callable(PickupWalkTests, "_t_duration_override"))
 
 
@@ -375,6 +376,55 @@ static func _t_others() -> Dictionary:
 			errors.append("a telegraph is showing")
 		PickupUiHostTests._free(fx)
 	return { "ok": errors.is_empty(), "error": "; ".join(errors.slice(0, 3)) }
+
+
+## A 2-segment walk of 1 s on the presentation state, sampled every 0.05 s. `extra` is merged into the moved token.
+static func _ease_samples(extra: Dictionary) -> Array:
+	var state: Object = preload("res://ui/screens/combat/CombatTokenPresentationState.gd").new()
+	var path: Array[Vector2] = [Vector2(100.0, 0.0), Vector2(100.0, 100.0)]
+	var base: Array[Dictionary] = [{ "actor_id": "a", "grid_pos": { "col": 0, "row": 0 }, "draw_pos": Vector2.ZERO, "move_duration": 1.0 }]
+	state.call("apply_snapshot", base, {}, 0.0)
+	var moved := { "actor_id": "a", "grid_pos": { "col": 2, "row": 0 }, "draw_pos": Vector2(100.0, 100.0), "move_duration": 1.0 }
+	moved.merge(extra)
+	var next: Array[Dictionary] = [moved]
+	state.call("apply_snapshot", next, { "action_type": "pickup.walk", "source_id": "a" }, 0.0, path)
+	var out: Array = []
+	for _i in 20:
+		state.call("advance", 0.05)
+		out.append(state.call("get_display_position", "a", Vector2.INF))
+	return out
+
+
+## `move_ease`: absent = the plain walk (and 0 is the same); 1 eases the progress along the whole path length (a speed that only
+## falls, also across the segment boundary) and ends exactly on the target.
+static func _t_move_ease() -> Dictionary:
+	var errors: Array = []
+	var plain := _ease_samples({})
+	var zero := _ease_samples({ "move_ease": 0.0 })
+	var eased := _ease_samples({ "move_ease": 1.0 })
+	if plain != zero:
+		errors.append("move_ease 0 differs from the key being absent")
+	# Linear: half the time is half of the 200 px path, the corner of the L (100, 0).
+	if (plain[9] as Vector2).distance_to(Vector2(100.0, 0.0)) > 0.01:
+		errors.append("the plain walk at half time is at %s" % plain[9])
+	var travelled := func(p: Vector2) -> float: return p.x + p.y
+	if float(travelled.call(eased[9])) < 110.0:
+		errors.append("with move_ease 1 the token is not past half the path at half time (%s)" % eased[9])
+	var prev := 0.0
+	var prev_step := INF
+	for p: Vector2 in eased:
+		var d: float = float(travelled.call(p)) - prev
+		if d > prev_step + 1e-6:
+			errors.append("the eased walk speeds up (step %s after %s)" % [d, prev_step])
+			break
+		prev_step = d
+		prev = float(travelled.call(p))
+	if eased[19] != Vector2(100.0, 100.0) or plain[19] != Vector2(100.0, 100.0):
+		errors.append("a walk does not end exactly on the end tile (%s, %s)" % [eased[19], plain[19]])
+	var half := _ease_samples({ "move_ease": 0.5 })
+	if not (float(travelled.call(half[9])) > float(travelled.call(plain[9])) and float(travelled.call(half[9])) < float(travelled.call(eased[9]))):
+		errors.append("move_ease 0.5 is not between the plain and the eased walk")
+	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
 
 
 ## The per-token `move_duration` is read before the layer's own value; without it the layer value stands.

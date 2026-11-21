@@ -141,6 +141,7 @@ const POINTER_LOOK_RULES := {
 		"pointer_start": [0.5, 0.0, INF, false], "pointer_lead": [0.30, 0.001, INF, false],
 		"hold": [0.60, 0.0, INF, false], "hold_reduced": [0.2, 0.0, INF, false],
 		"pointer_reduced": [0.5, 0.001, INF, false],
+		"walk_time_scale": [1.13, 0.001, INF, false], "walk_ease": [0.7, 0.0, 1.0, false],
 		"path_pace": [0.19, 0.001, INF, false], "path_first_k": [1.5, 0.001, INF, false],
 		"path_slow_n": [5, 1, INF, true], "path_slow_k": [1.25, 0.001, INF, false],
 		"path_final_k": [1.6, 0.001, INF, false], "path_turn_min": [0.26, 0.001, INF, false],
@@ -162,6 +163,11 @@ const POINTER_LOOK_RULES := {
 		"brighten": [0.20, 0.0, INF, false], "brighten_len": [0.15, 0.001, INF, false],
 		"shadow_scale_y": [0.4, 0.001, INF, false], "shadow_alpha_drop": [0.4, 0.0, 1.0, false],
 		"shadow_scale_drop": [0.3, 0.0, 1.0, false], "shadow_radius": [14.0, 0.001, INF, false],
+	},
+	"items": {
+		"reveal_len": [0.34, 0.001, INF, false], "carry_len": [0.34, 0.001, INF, false], "carry_hold": [0.19, 0.0, INF, false],
+		"carry_above": [28.0, 0.0, INF, false], "fly_len": [0.49, 0.001, INF, false], "step_gap": [0.26, 0.0, INF, false],
+		"arc_px": [34.0, 0.0, INF, false], "shadow_scale_drop": [0.3, 0.0, 1.0, false],
 	},
 }
 ## Authored arrival times of the racetrack by "n:land_index" (seconds after the path clock starts). A table is used only when

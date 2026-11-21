@@ -197,6 +197,9 @@ func apply_snapshot(tokens: Array[Dictionary], last_actor_action: Dictionary, te
 				# animation time is invariant to path length, so the board's step
 				# timer margins are preserved exactly.
 				entry["seg_duration"] = next_duration / float(queue.size())
+				# Optional per-token ease of the whole walk (the pickup chooser): 0 or absent = the constant-speed walk below.
+				entry["walk_ease"] = clampf(float(token.get("move_ease", 0.0)), 0.0, 1.0)
+				entry["walk_elapsed"] = 0.0
 			else:
 				entry["path_queue"] = [] as Array[Vector2]
 				entry["seg_duration"] = next_duration
@@ -266,6 +269,34 @@ func advance(delta: float) -> bool:
 		var current_display: Vector2 = entry.get("display_pos", start_pos)
 		var duration: float = max(float(entry.get("move_duration", 0.0)), 0.001)
 		var queue: Array = entry.get("path_queue", []) as Array
+
+		if not queue.is_empty() and float(entry.get("walk_ease", 0.0)) > 0.0:
+			# Eased walk: the progress along the whole path length (all segments together) is eased, so segment
+			# boundaries cause no speed jump. It ends exactly on the target like the plain walk.
+			var total: float = max(float(entry.get("seg_duration", duration)) * float(queue.size()), 0.0001)
+			var elapsed: float = float(entry.get("walk_elapsed", 0.0)) + remaining_delta
+			if elapsed >= total:
+				entry["path_queue"] = [] as Array[Vector2]
+				entry["path_index"] = 0
+				entry["seg_elapsed"] = 0.0
+				entry["start_pos"] = target_pos
+				entry["move_elapsed"] = duration
+				entry["walk_ease"] = 0.0
+				entry["walk_elapsed"] = 0.0
+				if target_pos != current_display:
+					entry["display_pos"] = target_pos
+					changed = true
+			else:
+				var u: float = elapsed / total
+				var k: float = float(entry["walk_ease"])
+				var progress: float = lerpf(u, 1.0 - pow(1.0 - u, 3.0), k)
+				var shown: Vector2 = _point_along(start_pos, queue, progress)
+				entry["walk_elapsed"] = elapsed
+				if shown != current_display:
+					entry["display_pos"] = shown
+					changed = true
+			_entries[actor_id] = entry
+			continue
 
 		if not queue.is_empty():
 			# Slice 6D: sequential waypoint walk. Leftover delta from a completed
@@ -339,6 +370,27 @@ func advance(delta: float) -> bool:
 	for entry_v in _entries.values():
 		changed = _tick_pose(entry_v as Dictionary, delta) or changed
 	return changed
+
+
+## The point at `fraction` (0..1) of the polyline start -> waypoints, by length.
+func _point_along(start: Vector2, waypoints: Array, fraction: float) -> Vector2:
+	var total := 0.0
+	var prev := start
+	for w_v in waypoints:
+		total += prev.distance_to(w_v as Vector2)
+		prev = w_v as Vector2
+	if total <= 0.0:
+		return start
+	var left := clampf(fraction, 0.0, 1.0) * total
+	prev = start
+	for w_v in waypoints:
+		var w: Vector2 = w_v
+		var seg := prev.distance_to(w)
+		if left <= seg:
+			return prev.lerp(w, left / maxf(seg, 0.0001))
+		left -= seg
+		prev = w
+	return prev
 
 
 ## The pose follows the stop-short status, not the step: it rises after the landing and falls

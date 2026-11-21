@@ -194,6 +194,8 @@ var _pickup_plan: Dictionary = {}
 var _pickup_plan_identity: String = ""
 var _pickup_legs_started: int = 0
 var _pickup_base_actors: Array = []
+# The snapshot of the event on show: the intro finds and the pack strip are drawn from it at the clock time.
+var _pickup_snap: Dictionary = {}
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
@@ -356,9 +358,13 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_stall_panel.visible = false
 	_speed_bar.visible = false
 	_pickup_stage.visible = true
+	_pickup_snap = snap
 	_pickup_stage.apply_snapshot(snap)
 	_place_pickup_strip()
 	call_deferred("_place_pickup_strip")
+	if phase == "intro":
+		# The finds and the strip show the intro at the clock time: a repeat snapshot must not reset them.
+		_advance_pickup_items(0.0 if new_event else _pickup_stage.clock_time())
 	if new_event:
 		_pickup_frame_due = true
 		call_deferred("frame_pickup_camera", true)
@@ -371,19 +377,61 @@ func _on_pickup_clock(t: float) -> void:
 	if not _pickup_stage.visible:
 		return
 	_advance_pickup_walk(t)
+	_advance_pickup_items(t)
 	var cfg: CombatTokenVisualConfig = _token_layer.visual_config
 	var plan := _pickup_stage.plan()
 	var pose := PickupPointerMote.pose_at(plan, _pickup_row_positions, _pickup_lateral, t, cfg.token_radius)
 	if bool(pose["visible"]):
 		if t >= float((plan["pointer"] as Dictionary)["fade_t"]):
 			# The chooser walks away: the halo goes with the token while it fades.
-			var drawn := _token_layer.display_cell_position(_pickup_chooser_id)
-			if drawn != Vector2.INF:
-				pose["halo_pos"] = drawn + Vector2(0.0, cfg.feet_offset_y)
+			var centre := _pickup_chooser_centre(t)
+			if centre != Vector2.INF:
+				pose["halo_pos"] = centre
 		_pickup_mote.apply_pose(pose, (plan["pointer"] as Dictionary)["mote"], float(_board.tile_set.tile_size.x))
 	else:
 		_pickup_mote.hide_all()
 	_token_layer.set_brighten(_pickup_chooser_id, float(pose["brighten"]))
+
+
+## The chooser's token centre at clock time `t` (board px). While the chooser stands, it is the planned tile: the token layer moves a
+## token on its next frame, so after a jump of the clock its live position is still the old one. While a leg runs the token is
+## between two tiles and only the live position is right. INF when there is no plan.
+func _pickup_chooser_centre(t: float) -> Vector2:
+	if not bool(_pickup_plan.get("valid", false)):
+		return Vector2.INF
+	var feet := Vector2(0.0, _token_layer.visual_config.feet_offset_y)
+	if PickupEventPlan.chooser_walking(_pickup_plan, t):
+		var drawn := _token_layer.display_cell_position(_pickup_chooser_id)
+		if drawn != Vector2.INF:
+			return drawn + feet
+	var cell: Dictionary = PickupEventPlan.chooser_target_at(_pickup_plan, t)["cell"]
+	return _board.map_to_local(Vector2i(int(cell["col"]), int(cell["row"]))) + feet
+
+
+## The finds and the pack strip at clock time `t`: a pure function of the plan and `t` (the chooser's place comes from the plan while
+## it stands), so a jump of the clock shows the same state as stepping to it. The plan is the one the board keeps for the event;
+## with no valid plan the intro stays the still picture.
+func _advance_pickup_items(t: float) -> void:
+	if not bool(_pickup_plan.get("valid", false)) or _pickup_snap.is_empty():
+		return
+	var frame := PickupEventPlan.frame_at(_pickup_plan, t)
+	var items: Dictionary = frame["items"]
+	var landed: Array = []
+	for find_id: Variant in items:
+		if str((items[find_id] as Dictionary)["state"]) == "pack":
+			landed.append(str(find_id))
+	_pickup_stage.pack_strip().apply_intro_frame(_pickup_snap, landed, str((frame["pack"] as Dictionary)["tone"]))
+	_finds_layer.show_intro(_pickup_snap["data"] as Dictionary, _board, items, _pickup_plan["items_look"] as Dictionary, _pickup_slot_target,
+		_pickup_chooser_centre(t))
+
+
+## Where a find lands: the centre of its strip slot and the slot's edge, in viewport px. {} when the find has no slot.
+func _pickup_slot_target(find_id: String) -> Dictionary:
+	var strip := _pickup_stage.pack_strip()
+	var slot := strip.slot_index_of_find(find_id)
+	if slot < 0:
+		return {}
+	return { "center": strip.get_canvas_transform() * strip.slot_global_center(slot), "bed": strip.bed_size() }
 
 
 ## Plays the chooser's legs in step with the clock. A leg that starts on this tick walks on the token layer's own path walk for
@@ -405,7 +453,8 @@ func _advance_pickup_walk(t: float) -> void:
 	var seconds := float(leg["t1"]) - float(leg["t0"])
 	var animate := next - first == 1 and t < float(leg["t1"]) and cells.size() > 1
 	var end_cell: Dictionary = cells[cells.size() - 1]
-	var actors := pickup_actors_at(_pickup_base_actors, _pickup_chooser_id, { "cell": end_cell, "snap": not animate, "seconds": seconds })
+	var actors := pickup_actors_at(_pickup_base_actors, _pickup_chooser_id, { "cell": end_cell, "snap": not animate, "seconds": seconds,
+		"ease": float(_pickup_plan["walk_ease"]) })
 	_last_actors = actors
 	var action := {}
 	if animate:
@@ -437,6 +486,8 @@ static func pickup_actors_at(base: Array, chooser_id: String, where: Dictionary)
 				actor["move_duration"] = 0.001
 			elif where.has("seconds"):
 				actor["move_duration"] = float(where["seconds"])
+				if where.has("ease"):
+					actor["move_ease"] = float(where["ease"])
 		out.append(actor)
 	return out
 
@@ -619,6 +670,7 @@ static func pickup_chooser_id(data: Dictionary) -> String:
 
 func _leave_pickup() -> void:
 	_pickup_bark_key = ""
+	_pickup_snap = {}
 	_pickup_plan = {}
 	_pickup_plan_identity = ""
 	_pickup_legs_started = 0
@@ -1288,6 +1340,8 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 		# The pickup chooser's walk time (a leg of the plan). Absent in combat: the layer then reads the speed-bar duration.
 		if actor.has("move_duration"):
 			descriptor["move_duration"] = float(actor["move_duration"])
+		if actor.has("move_ease"):
+			descriptor["move_ease"] = float(actor["move_ease"])
 		tokens.append(descriptor)
 
 	var telegraph_event: Dictionary = _token_layer.apply_snapshot(

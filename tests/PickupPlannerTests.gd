@@ -706,6 +706,20 @@ static func _t_total_and_pure() -> Dictionary:
 		(half["data"]["pointer_look"] as Dictionary).erase(broken)
 		if bool(PickupEventPlan.build(half)["valid"]):
 			return _fail("a pointer_look with no %s should give no plan" % broken)
+	var noitems := _case("C1", "intro")
+	(noitems["data"]["pointer_look"] as Dictionary).erase("items")
+	if bool(PickupEventPlan.build(noitems)["valid"]):
+		return _fail("a pointer_look with no items group should give no plan")
+	for key: String in PickupEventPlan.LOOK_ITEMS_KEYS:
+		var one := _case("C1", "intro")
+		(one["data"]["pointer_look"]["items"] as Dictionary).erase(key)
+		if bool(PickupEventPlan.build(one)["valid"]):
+			return _fail("a pointer_look with no items.%s should give no plan" % key)
+	for key: String in ["walk_time_scale", "walk_ease"]:
+		var no_path := _case("C1", "intro")
+		(no_path["data"]["pointer_look"]["path"] as Dictionary).erase(key)
+		if bool(PickupEventPlan.build(no_path)["valid"]):
+			return _fail("a pointer_look with no path.%s should give no plan" % key)
 	var nokey := _case("C1", "intro")
 	(nokey["data"]["pointer_look"]["mote"] as Dictionary).erase("rise")
 	if bool(PickupEventPlan.build(nokey)["valid"]):
@@ -1002,9 +1016,9 @@ static func _t_constants() -> Dictionary:
 	var map: Dictionary = (load("res://ui/screens/combat/PickupEventPlan.gd") as GDScript).get_script_constant_map()
 	var table: Array = [
 		["STEP_LEN", 0.45], ["STEP_LEN_REDUCED", 0.15],  # lines 670, 671
-		["REVEAL_LEN", 0.25], ["REVEAL_LEN_REDUCED", 0.15],  # line 774
+		["REVEAL_LEN_REDUCED", 0.15],  # line 774 (reduced motion)
 		["BARK_AFTER_LAST", 0.15], ["IDLE_AFTER_BARK", 0.3], ["IDLE_AFTER_DEPOSIT", 0.45],  # lines 778, 780
-		["WALK_CAP", 3.4], ["FLY_LEN", 0.34], ["TYPE_CPS", 24.0],  # line 619
+		["WALK_CAP", 3.4], ["TYPE_CPS", 24.0],  # line 619
 		["DIST_SCALE_MIN", 0.6], ["DIST_SCALE_MAX", 1.35],  # line 688
 		["WORTH_DWELL", 0.45], ["SAFE_PRE_EXTRA", 0.25],  # lines 716, 679
 		["FROZEN_STEP", 0.35], ["FROZEN_WAIT", 1.35],  # lines 757 to 760
@@ -1018,23 +1032,24 @@ static func _t_constants() -> Dictionary:
 	for gone: String in ["POINTER_SLOWDOWN", "STEP_GAP", "POINTER_DECEL_DIST", "POINTER_ACCEL", "POINTER_MIN_TRAVEL", "POINTER_MIN_CRUISE",
 			"POINTER_T_STEP", "POINTER_T_BASE", "POINTER_T_VARY", "POINTER_T_STEPS", "POINTER_SAMPLE_DT",
 			"POINTER_START", "POINTER_LEAD", "HOLD", "HOLD_REDUCED", "POINTER_REDUCED", "LAND_PHASE_LEN", "PATH_PACE", "PATH_FIRST_K",
-			"PATH_SLOW_N", "PATH_SLOW_K", "PATH_FINAL_K", "PATH_TURN_MIN", "PATH_TURN_MAX", "PATH_ARC_FAST", "PATH_ARC_SPAN", "PATH_TABLES"]:
+			"PATH_SLOW_N", "PATH_SLOW_K", "PATH_FINAL_K", "PATH_TURN_MIN", "PATH_TURN_MAX", "PATH_ARC_FAST", "PATH_ARC_SPAN", "PATH_TABLES",
+			"REVEAL_LEN", "FLY_LEN"]:
 		if map.has(gone):
 			return _fail("old pointer constant %s is still in the planner" % gone)
 	# The pixel and body constants of the mockup are gone: the plan runs on tiles and paths.
 	for gone: String in ["DESIGN_W", "DESIGN_H", "ROW_SPACING", "ROW_Y", "OUT_STEP", "HEAD", "STAND_OFF", "SLOT_X0", "SLOT_Y", "FIELD_STEP"]:
 		if map.has(gone):
 			return _fail("design-space constant %s is still in the planner" % gone)
-	# RS rows, mockup lines 612 to 618: walk first, walk next, touch, lift, lift ease, hold.
+	# RS rows, mockup lines 612 to 618: walk first, walk next, touch, carry ease. The lift and hold are config now (`items`).
 	var rs := {
-		"likes": [0.70, 0.60, 0.10, 0.25, "back", 0.20], "worth": [0.60, 0.60, 0.10, 0.40, "smooth", 0.20],
-		"safe": [0.95, 0.70, 0.10, 0.20, "smooth", 0.20], "bold": [0.50, 0.40, 0.10, 0.15, "back", 0.20],
-		"fit": [0.45, 0.45, 0.0, 0.20, "smooth", 0.12] }
+		"likes": [0.70, 0.60, 0.10, "back"], "worth": [0.60, 0.60, 0.10, "smooth"],
+		"safe": [0.95, 0.70, 0.10, "smooth"], "bold": [0.50, 0.40, 0.10, "back"],
+		"fit": [0.45, 0.45, 0.0, "smooth"] }
 	for k: String in rs:
 		var r: Dictionary = PickupEventPlan.RS[k]
 		var w: Array = rs[k]
 		if absf(float(r["w"][0]) - float(w[0])) > 1e-9 or absf(float(r["w"][1]) - float(w[1])) > 1e-9 or absf(float(r["touch"]) - float(w[2])) > 1e-9 \
-				or absf(float(r["lift"]) - float(w[3])) > 1e-9 or r["ease"] != w[4] or absf(float(r["hold"]) - float(w[5])) > 1e-9:
+				or r["ease"] != w[3] or r.has("lift") or r.has("hold"):
 			return _fail("RS row %s differs from the mockup" % k)
 	if PickupEventPlan.RS.size() != 5:
 		return _fail("RS has a row the mockup does not")

@@ -222,6 +222,15 @@ func _fixtures() -> Dictionary:
 		"pickup_intro_pointer_land": ["real_pickup:many:intro:seed=0", "pointer_at:4.49"],
 		"pickup_intro_pointer_hold": ["real_pickup:many:intro:seed=0", "pointer_at:4.89"],
 		# R6b stills (seed 0): end of the first leg (the out leg), and the plan total, where the chooser stands on chooser_end_cell. Both read the plan.
+		# R6c stills: the first taken find at its reveal, mid-flight, and the intro end (strip filled, tone changed). `empty` has two taken finds.
+		"pickup_intro_reveal": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:reveal"],
+		"pickup_intro_carry": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:lift"],
+		"pickup_intro_hold": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:hold"],
+		"pickup_intro_flight": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:flight"],
+		"pickup_intro_end": ["real_pickup:empty:intro:seed=0", "pointer_at_total"],
+		"pickup_intro_reveal_many": ["real_pickup:many:intro:seed=0", "pointer_at_find:0:reveal"],
+		"pickup_intro_flight_many": ["real_pickup:many:intro:seed=0", "pointer_at_find:0:flight"],
+		"pickup_intro_end_many": ["real_pickup:many:intro:seed=0", "pointer_at_total"],
 		"pickup_intro_walk_out": ["real_pickup:many:intro:seed=0", "pointer_at_leg_end"],
 		"pickup_intro_walk_end": ["real_pickup:many:intro:seed=0", "pointer_at_total"],
 		"pickup_intro_empty": ["real_pickup:empty:intro"],
@@ -405,6 +414,31 @@ func _run_step(harness: Node, step: String) -> void:
 		if board_camera != null and board_camera.owner != null and parts[0] == "cam_frame":
 			board_camera.owner.call("frame_pickup_camera", false)
 			print("CAM zoom after reframe: %s" % board_camera.zoom.x)
+	if parts[0] == "pointer_at_find":
+		# pointer_at_find:<k>:<phase> moves the intro clock to a moment of the k-th taken find (in the order the chooser takes them) and
+		# stops it. phase: reveal (middle of the flip), lift (middle of the carry), hold (middle of the hold at the head), flight (middle), landed (the end of the flight). Reads the plan.
+		var find_stage := harness.find_child("PickupEventStage", true, false)
+		if find_stage != null:
+			var find_plan: Dictionary = find_stage.call("plan")
+			var taken: Array = (find_plan.get("finds", []) as Array).filter(func(f: Dictionary) -> bool: return bool(f["walked"]) and not bool(f["is_try"]))
+			taken.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["lift0"]) < float(b["lift0"]))
+			var k := int(parts[1])
+			if k < taken.size():
+				var f: Dictionary = taken[k]
+				var at := 0.0
+				match parts[2]:
+					"reveal":
+						at = float(f["reveal"]) + float(f["reveal_len"]) * 0.5
+					"lift":
+						at = (float(f["lift0"]) + float(f["lift1"])) * 0.5
+					"hold":
+						at = (float(f["lift1"]) + float(f["fly0"])) * 0.5
+					"flight":
+						at = (float(f["fly0"]) + float(f["fly1"])) * 0.5
+					_:
+						at = float(f["fly1"])
+				find_stage.call("advance", maxf(at - float(find_stage.call("clock_time")), 0.0))
+				find_stage.set_process(false)
 	if parts[0] in ["pointer_advance", "pointer_at", "pointer_at_leg_end", "pointer_at_total"]:
 		# pointer_advance:<s> moves the intro clock on by <s> in one tick; pointer_at:<t> moves it to the intro time <t> and then
 		# stops it, so the PNG shows that exact moment (later frames would add time). pointer_at_leg_end moves it to the end of the

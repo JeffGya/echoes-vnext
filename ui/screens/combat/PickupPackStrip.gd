@@ -2,9 +2,9 @@ class_name PickupPackStrip
 extends Control
 
 ## The Travel pack on the pickup event (V2-ITEM-001b U4). Reads `data.pack`, `swap_left`, `destroy_left`, `phase`.
-## Static: no motion (U6) and no tappable tiles (U7). Slots are authored in the scene (eight at most); the script
+## No tappable tiles (U7). Slots are authored in the scene (eight at most); the script
 ## shows `capacity` of them. Reuses ItemSlot and ItemTile from the 001a pack. No strap line (D-59).
-## `phase == intro` shows only the pre-event contents: the taken finds fly in later (U6).
+## `phase == intro` shows only the pre-event contents; `apply_intro_frame` fills a slot when its find has landed.
 ## Position: bottom edge GAP_ABOVE_BAR above the EchoBar top (D-69). `place` gets that top from the board.
 ## Root `modulate.a` is the fade hook of U6.
 
@@ -37,6 +37,8 @@ var _sig := ""
 var _bed: int = BED_DEFAULT
 var _bar_top: float = NAN
 var _renders := 0
+var _slot_of_find: Dictionary = {}
+var _frame_key := ""
 
 
 func _ready() -> void:
@@ -50,10 +52,53 @@ func _ready() -> void:
 
 ## Idempotent: the same content draws nothing again.
 func apply_snapshot(snapshot: Dictionary) -> void:
+	_frame_key = ""
 	_view = view_of(snapshot)
 	if is_node_ready():
 		_render()
 		_place()
+
+
+## The intro as a function of the clock: `landed` = the find ids whose flight has ended, `tone` = the plan's tone at that time.
+## A gathered slot shows its item once its find has landed; before that the slot is empty, in the place it has in the idle strip, so
+## the strip at the end of the intro equals the strip of the idle snapshot. Idempotent.
+func apply_intro_frame(snapshot: Dictionary, landed: Array, tone: String) -> void:
+	var data := _dict(snapshot.get("data", {}))
+	var key := "%s#%d|%s|%s" % [str(data.get("situation_id", "")), int(data.get("run_count", 0)), ",".join(PackedStringArray(landed)), tone]
+	if key == _frame_key:
+		return
+	_frame_key = key
+	_view = view_of(snapshot, { "landed": landed, "tone": tone })
+	_slot_of_find = slot_map_of(snapshot)
+	if is_node_ready():
+		_render()
+		_place()
+
+
+## The strip slot a find lands in (-1 when it has none): the slot the idle strip gives its item.
+func slot_index_of_find(find_id: String) -> int:
+	return int(_slot_of_find.get(find_id, -1))
+
+
+## The edge in screen px of the bed of a strip slot tile.
+func bed_size() -> float:
+	return float(_bed)
+
+
+## Pure: find id -> slot index of its item in the idle strip of this snapshot.
+static func slot_map_of(snapshot: Dictionary) -> Dictionary:
+	var idle := snapshot.duplicate(false)
+	var data := _dict(snapshot.get("data", {})).duplicate(false)
+	data["phase"] = "idle"
+	idle["data"] = data
+	var out := {}
+	var cells: Array = _arr(view_of(idle).get("cells", []))
+	for i in cells.size():
+		var cell: Dictionary = _dict(cells[i])
+		var fid := str(_dict(cell.get("row", {})).get("find_id", ""))
+		if str(cell.get("kind", "")) == "item" and not fid.is_empty():
+			out[fid] = i
+	return out
 
 
 func set_profile(profile: StringName) -> void:
@@ -96,7 +141,9 @@ func view() -> Dictionary:
 
 
 ## Pure: snapshot -> { count, tone, cells[{kind: item|unlisted|empty, row}], swap_left, destroy_left }.
-static func view_of(snapshot: Dictionary) -> Dictionary:
+## `frame` ({ landed, tone }, optional) is the intro at a time: a gathered slot whose find has not landed is an empty cell
+## in its idle place, and the tone is the frame's.
+static func view_of(snapshot: Dictionary, frame: Dictionary = {}) -> Dictionary:
 	var data: Dictionary = _dict(snapshot.get("data", {}))
 	var pack: Dictionary = _dict(data.get("pack", {}))
 	var intro: bool = str(data.get("phase", "")) == "intro"
@@ -105,7 +152,11 @@ static func view_of(snapshot: Dictionary) -> Dictionary:
 	for s_v: Variant in listed:
 		var s: Dictionary = _dict(s_v)
 		if intro and not str(s.get("find_id", "")).is_empty():
-			continue
+			if frame.is_empty():
+				continue
+			if not _arr(frame.get("landed", [])).has(str(s.get("find_id", ""))):
+				cells.append({ "kind": "empty", "row": {} })
+				continue
 		cells.append({ "kind": "item", "row": s })
 	var unlisted: int = maxi(0, int(pack.get("carried", 0)) - listed.size())
 	for _i in unlisted:
@@ -117,7 +168,7 @@ static func view_of(snapshot: Dictionary) -> Dictionary:
 	cells.resize(count)
 	var tone: String = str(pack.get("tone", "plain"))
 	if intro:
-		tone = str(pack.get("tone_before", "plain"))
+		tone = str(frame["tone"]) if frame.has("tone") else str(pack.get("tone_before", "plain"))
 	return { "count": count, "tone": tone, "cells": cells,
 		"swap_left": int(data.get("swap_left", 0)), "destroy_left": int(data.get("destroy_left", 0)) }
 
