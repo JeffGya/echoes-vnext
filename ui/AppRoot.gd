@@ -48,11 +48,8 @@ var _modal_owner: Control = null
 ## dispatches this action and nothing else (register D78).
 const BACK_SLOT: String = "nav.back"
 
-## The snapshot currently on screen. Read only by the Android Back handler, which needs to know
-## whether the live screen offers a back action.
+## The snapshot on screen. Used by the Android Back handler and the bank timer.
 var _last_snapshot: Dictionary = {}
-
-var _econ_timer_started: bool = false
 
 var logger: StructuredLogger
 var config_service: ConfigService
@@ -115,15 +112,11 @@ func _ready():
 	config_service = ConfigService.new()
 	runtime = FlowRuntime.new(logger, config_service, runtime_save_path)
 	var snap := runtime.boot()
-	_render_snapshot(snap)
-	_show_save_recovery_notice(snap)
-	
-	var interval := _get_sanctum_bank_interval_seconds()
-	econ_bank_timer.wait_time = float(interval)
+	econ_bank_timer.wait_time = float(_get_sanctum_bank_interval_seconds())
 	econ_bank_timer.timeout.connect(_on_econ_bank_timer_timeout)
 	save_recovery_timer.timeout.connect(_hide_save_recovery_notice)
-	_maybe_start_econ_timer_from_snapshot(snap)
-	_maybe_stop_econ_timer_from_snapshot(snap)
+	_render_snapshot(snap)
+	_show_save_recovery_notice(snap)
 	
 	# Connect debug panel to AppRoot
 	debug_panel.command_submitted.connect(_on_debug_command)
@@ -154,6 +147,9 @@ func _hide_save_recovery_notice() -> void:
 
 # Economy bank timer.
 func _on_econ_bank_timer_timeout() -> void:
+	if not _can_run_econ_bank_timer():
+		return
+
 	# Capture authoritative balance BEFORE settle
 	var save_ref: Dictionary = runtime.get_save_data()
 	var econ_before := EconomyService.new(save_ref)
@@ -190,9 +186,6 @@ func _flush_logs_to_console() -> void:
 func _on_ui_action_selected(action: Dictionary) -> void:
 	var snap := runtime.dispatch(action)
 	_render_snapshot(snap)
-	
-	_maybe_start_econ_timer_from_snapshot(snap)
-	_maybe_stop_econ_timer_from_snapshot(snap)
 	_flush_logs_to_console()
 
 func _on_layout_changed(layout: Dictionary) -> void:
@@ -206,31 +199,26 @@ func _on_layout_changed(layout: Dictionary) -> void:
 	if _realm_shell != null and _realm_shell.has_method("set_layout"):
 		_realm_shell.set_layout(_current_layout)
 	
-func _maybe_start_econ_timer_from_snapshot(snap: Dictionary) -> void:
-	if _econ_timer_started:
+func _can_run_econ_bank_timer() -> bool:
+	var snap_type := str(_last_snapshot.get("type", ""))
+	return runtime != null and runtime.has_ready_campaign() and snap_type not in [
+		"", FlowStateIds.SPLASH, FlowStateIds.MAIN_MENU, "flow.config_error", "flow.save_error",
+	]
+
+func _sync_econ_bank_timer() -> void:
+	var should_run := _can_run_econ_bank_timer()
+	var is_running := not econ_bank_timer.is_stopped()
+	if should_run == is_running:
 		return
 
-	var snap_type := str(snap.get("type", ""))
-
-	# Only start once we’re past splash/menu.
-	if snap_type == "flow.splash" or snap_type == "flow.main_menu" or snap_type == "":
-		return
-
-	_econ_timer_started = true
-	econ_bank_timer.start()
-
-	logger.debug(-1, "economy.bank_timer.started", "Bank timer started", {
-		"snapshot_type": snap_type,
-		"interval_seconds": econ_bank_timer.wait_time
-	})
-	
-func _maybe_stop_econ_timer_from_snapshot(snap: Dictionary) -> void:
-	if not _econ_timer_started:
-		return
-
-	var snap_type := str(snap.get("type", ""))
-	if snap_type == "flow.main_menu" or snap_type == "flow.splash":
-		_econ_timer_started = false
+	var snap_type := str(_last_snapshot.get("type", ""))
+	if should_run:
+		econ_bank_timer.start()
+		logger.debug(-1, "economy.bank_timer.started", "Bank timer started", {
+			"snapshot_type": snap_type,
+			"interval_seconds": econ_bank_timer.wait_time,
+		})
+	else:
 		econ_bank_timer.stop()
 		logger.debug(-1, "economy.bank_timer.stopped", "Bank timer stopped", { "snapshot_type": snap_type })
 	
@@ -1456,6 +1444,7 @@ const ONBOARDING_FAMILY: Array = [
 
 func _render_snapshot(snap: Dictionary) -> void:
 	_last_snapshot = snap
+	_sync_econ_bank_timer()
 	var snap_type := str(snap.get("type", ""))
 	if snap_type == "flow.save_error":
 		if _save_error_screen == null:

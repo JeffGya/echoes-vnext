@@ -1918,6 +1918,10 @@ func _find_next_living_actor_idx(ectx: EncounterContext) -> int:
 # V2-INFRA-003 Phase 4 Slice 7: _get_max_online_settle_delta_seconds moved to
 # EconomySettlementService._max_online_settle_delta_seconds (its only caller).
 
+func has_ready_campaign() -> bool:
+	# Boot installs the campaign and economy before starting Flow on this context.
+	return flow_ctx != null and flow_ctx.flow_machine != null
+
 func get_save_data() -> Dictionary:
 	return flow_ctx.save_data
 
