@@ -339,6 +339,28 @@ static func stage_lost_echo_names(flow_ctx_arg: FlowContext) -> Array:
 	return (stored_v as Array).duplicate() if stored_v is Array else []
 
 
+## Ids of the party Echoes that died in the active stage's EARLIER fights, in order of death. Names can repeat (two
+## Echoes may share a name), ids cannot, so the pickup chooser reads these. A lazy field: old stages read empty.
+static func stage_lost_echo_ids(flow_ctx_arg: FlowContext) -> Array:
+	var stored_v: Variant = FlowStageExploreStateScript._get_current_stage(flow_ctx_arg).get("lost_echo_ids", [])
+	return (stored_v as Array).duplicate() if stored_v is Array else []
+
+
+## The stored ids plus the dead party Echoes of `actors` (same filter as `RewardCalc.echo_tally`), unique.
+static func lost_echo_ids_with(flow_ctx_arg: FlowContext, actors: Array) -> Array:
+	var ids := stage_lost_echo_ids(flow_ctx_arg)
+	for a_v in actors:
+		if not (a_v is Dictionary):
+			continue
+		var a: Dictionary = a_v
+		if str(a.get("faction", "")) != "echo" or bool(a.get("is_ally", false)) or bool(a.get("is_spirit", false)):
+			continue
+		var id := str(a.get("id", ""))
+		if bool(a.get("is_dead", false)) and not id.is_empty() and not ids.has(id):
+			ids.append(id)
+	return ids
+
+
 ## The ONE answer to "which Echoes died in this stage": the stored names plus the dead party Echoes
 ## of `actors` (the fight just played), unique, in order of death. The Thread flag (D-50) and the
 ## stipend row (D-81) both read it. The permadeath story (D-66) changes only this function.
@@ -360,9 +382,11 @@ func record_fight_deaths(t: int) -> void:
 	if stage.is_empty():
 		return
 	var names := lost_echo_names_with(flow_ctx, ectx.actors)
-	if names.size() == stage_lost_echo_names(flow_ctx).size():
+	var ids := lost_echo_ids_with(flow_ctx, ectx.actors)
+	if names.size() == stage_lost_echo_names(flow_ctx).size() and ids.size() == stage_lost_echo_ids(flow_ctx).size():
 		return
 	stage["lost_echo_names"] = names
+	stage["lost_echo_ids"] = ids
 	flow_ctx.request_save("stage.echo_lost")
 	logger.info(t, "stage.echo_lost", "Party Echoes died in this fight", {
 		"stage_id": flow_ctx.stage_id, "lost_count": names.size(),
@@ -450,15 +474,17 @@ static func record_fight_earnings(flow_ctx_arg: FlowContext, claimant: bool, t: 
 ## (realm scale of the active Realm) is refused with `over_cap` and logged. So a repeat in any order writes
 ## nothing. No cap key (test configs) means no cap.
 ## `take` false: nothing is written and every fresh valid find is `left` (a frozen chooser, D-39).
+## `cap_override` (debug only, `PickupEventService` debug options): replaces the realm cap; NO_OVERRIDE keeps it.
 ## Requests the save when it writes a row.
 static func record_found_items(flow_ctx_arg: FlowContext, situation_id: String, finds: Array, t: int,
-		take: bool = true) -> Dictionary:
+		take: bool = true, cap_override: int = FindsRules.NO_OVERRIDE) -> Dictionary:
 	var out := { "taken": [], "left": [], "refused": [] }
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx_arg)
 	if stage.is_empty() or situation_id.is_empty():
 		return out
 	var cfg := ConfigService.get_inventory_cfg(flow_ctx_arg.config_service)
-	var cap := FindsRules.cap_for_scale(cfg, float(get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service)["realm_scale"]))
+	var cap := cap_override if cap_override != FindsRules.NO_OVERRIDE else FindsRules.cap_for_scale(cfg,
+		float(get_payout_factors(flow_ctx_arg, flow_ctx_arg.config_service)["realm_scale"]))
 	var checks: Array = []
 	var rowed := {}
 	for f_v in finds:

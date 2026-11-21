@@ -21,7 +21,8 @@
 # -------------------
 #   capture_or_consume()  ONE call, at the end of every dispatch, before the save flush.
 #                         Publishing a `flow.resolve` snapshot that carries a run outcome
-#                         WRITES the durable result. Publishing anything else CONSUMES it.
+#                         WRITES the durable result. Publishing anything else CONSUMES it,
+#                         except `flow.pickup`, which HOLDS it (and captures the held card).
 #   build_snapshot()      Producer G — rebuilds the resolve card from the durable result,
 #                         composing through ResolveSnapshotBuilder's existing block library.
 #
@@ -221,7 +222,16 @@ static func classify(snapshot: Dictionary) -> String:
 ## `flow_ctx.realm_id = ""` (KeeperIntroService.gd:318) and so does the fallback scaffold's
 ## situation, which is what keeps producer B and the onboarding path out of this entirely —
 ## no save write, no routing change, nothing moved in the onboarding suites.
+##
+## THE PICKUP HOLD (V2-ITEM-001b, D-58). A `flow.pickup` snapshot never consumes: the Resolve card waits behind
+## the event. It captures the held card (`ectx.final_snapshot`) instead, plus the board keys a reload needs (D-66),
+## so a win with no event keeps its result byte-identical. With no live card (after a reload) it does nothing.
 static func capture_or_consume(flow_ctx: FlowContext, snapshot: Dictionary, t: int) -> String:
+	var pickup := str(snapshot.get("type", "")) == FlowStateIds.PICKUP
+	if pickup:
+		snapshot = flow_ctx.encounter_ctx.final_snapshot if flow_ctx.encounter_ctx != null else {}
+		if classify(snapshot).is_empty():
+			return ""
 	var outcome := classify(snapshot)
 
 	if outcome.is_empty():
@@ -243,7 +253,10 @@ static func capture_or_consume(flow_ctx: FlowContext, snapshot: Dictionary, t: i
 	if has_pending(flow_ctx.save_data):
 		return ""
 
-	_flow_dict(flow_ctx.save_data)["pending_result"] = _build_result(flow_ctx, snapshot, outcome, t)
+	var result := _build_result(flow_ctx, snapshot, outcome, t)
+	if pickup:
+		result.merge(_board_keys(flow_ctx))
+	_flow_dict(flow_ctx.save_data)["pending_result"] = result
 	flow_ctx.request_save("flow.pending_result")
 	if flow_ctx.logger != null:
 		flow_ctx.logger.info(t, "flow.pending_result.captured", "Run result made durable", {
@@ -366,6 +379,36 @@ static func _build_result(
 	}
 
 
+## The board of the live fight, as `EncounterSnapshotBuilder.build_round_snapshot` sizes it: { terrain,
+## placement_seed (a String: a 64-bit seed does not survive a JSON float), bounds { w, h } }. Only a result held
+## behind a pickup event carries these keys.
+static func _board_keys(flow_ctx: FlowContext) -> Dictionary:
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var grid_v: Variant = ConfigService.get_balance_data(flow_ctx.config_service).get("grid", {})
+	var grid_cfg: Dictionary = grid_v if grid_v is Dictionary else {}
+	var b_v: Variant = ectx.terrain.get("bounds", {})
+	var b: Dictionary = b_v if b_v is Dictionary else {}
+	return {
+		"terrain": ectx.terrain.duplicate(true),
+		"placement_seed": str(ectx.placement_seed),
+		"bounds": { "w": int(b["w"]) if b.has("w") else GridService.get_board_cols(grid_cfg),
+			"h": int(b["h"]) if b.has("h") else GridService.get_board_rows(grid_cfg) },
+	}
+
+
+## Writes the final items of a pickup event into the pending result of the same win (`created_t == win_t`), and
+## rebuilds its stage payout and `items` blocks (`StageSettlementService.refresh_card`), so producer G replays the
+## same card that `pickup.continue` publishes. No-op when no such result is pending.
+static func attach_pickup_result(flow_ctx: FlowContext, win_t: int, pickup_result: Dictionary) -> void:
+	var result := read(flow_ctx.save_data)
+	var data_v: Variant = result.get("resolve_data", null)
+	if pickup_result.is_empty() or not (data_v is Dictionary) or int(result.get("created_t", -2)) != win_t:
+		return
+	(data_v as Dictionary)["pickup_result"] = pickup_result.duplicate(true)
+	StageSettlementService.refresh_card(flow_ctx, data_v)
+	flow_ctx.request_save("flow.pending_result.pickup")
+
+
 ## The recovery segment recorded for `stage_index`, or {} when this run contributed none.
 ## The track holds at most one entry per stage (RealmService.contribute_segment's receipt).
 static func _segment_for_stage(segments: Array, stage_index: int) -> Dictionary:
@@ -437,7 +480,7 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 	var snap: Dictionary = ResolveSnapshotBuilder.build(t, actions, str(stored.get("run_type", "")))
 	var data: Dictionary = snap["data"]
 
-	# Blocks 1–17, in the spec's numbering. Each gated on the key(s) that block writes.
+	# Blocks 1–18, in the spec's numbering. Each gated on the key(s) that block writes.
 	if stored.has("surface"):
 		ResolveSnapshotBuilder.add_banner(data, str(stored.get("surface", "")), str(stored.get("summary_line", "")))
 	if stored.has("victory"):
@@ -527,6 +570,8 @@ static func build_snapshot(flow_ctx: FlowContext, t: int) -> Dictionary:
 			_copy_array(stored.get("calmed_names", [])),
 			bool(stored.get("fight_returns", true))
 		)
+	if stored.has("pickup_result"):
+		ResolveSnapshotBuilder.add_pickup_result(data, _copy_dict(stored.get("pickup_result", {})))
 	if stored.has("role"):
 		ResolveSnapshotBuilder.add_contact_outcome(
 			data,

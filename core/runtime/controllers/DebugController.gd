@@ -15,12 +15,13 @@
 #     FlowRuntime.dispatch() via flow_ctx.request_save().
 #   - No UI or scene-tree reference.
 #
-# Owns 13 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
+# Owns 15 actions: debug.seed.show, debug.seed.set, debug.seed.reset, debug.echo.gen_test,
 # debug.ally.spawn, debug.claimant.force_combat, debug.charge_pressure.set, debug.guidance.set,
 # debug.progression.force_rank_up (temporary instrumentation for the progress.rank_up bark
 # rewrite — see handle_force_rank_up below), debug.emotion.set, debug.stop_short.set and
 # debug.inventory.produce (V2-ITEM-001a play-test producer — see handle_inventory_produce below) and
-# debug.recipe.run (recipe price check and payment — see handle_recipe_run below).
+# debug.recipe.run (recipe price check and payment — see handle_recipe_run below) and
+# debug.pickup.scene.check and debug.pickup.scene.apply (pickup scenes — see PickupDebug).
 # All but debug.guidance.set, debug.progression.force_rank_up, debug.inventory.produce and debug.recipe.run were moved
 # verbatim (behaviour unchanged) from FlowRuntime.gd: _handle_debug_seed_show, _handle_debug_seed_set,
 # _handle_debug_echo_gen_test, _echo_fingerprint, _handle_debug_spawn_ally,
@@ -565,7 +566,8 @@ func handle_force_rank_up(action: Dictionary, t: int) -> FlowActionOutcome:
 ## only: it never writes balance.json and keeps nothing. Every id is checked first; one bad id denies the
 ## whole call and changes nothing. `direct` runs InventoryService.intake (mode direct) per id in the order
 ## given. `gather` writes item rows through ActiveStageService.record_found_items and needs a live path
-## (realm, stage id and stage record). A missing fixture is denied with a log. One save request.
+## (realm, stage id and stage record). `event` and `arm` open the pickup event now or at the next real won fight
+## (`PickupDebug`). A missing fixture is denied with a log. One save request.
 ## Only the F1 debug console (ui/AppRoot.gd) sends this action; no code in core/ calls this handler.
 const _PRODUCE_FIXTURE := "res://tests/fixtures/inventory_placeholders.json"
 const _PRODUCE_DEFAULT_IDS: Array = ["ph_weapon_a", "ph_charm_a", "ph_relic_a", "ph_consumable_a"]
@@ -577,26 +579,18 @@ func handle_inventory_produce(action: Dictionary, t: int) -> FlowActionOutcome:
 	var payload_v: Variant = action.get("payload", {})
 	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
 	var mode := str(payload.get("mode", "direct"))
-	if mode != "direct" and mode != "gather":
+	if not ["direct", "gather", "event", "arm"].has(mode):
 		return _produce_denied(t, "bad_mode", { "mode": mode })
+	if mode == "event" or mode == "arm":
+		return _produce_pickup(payload, PickupDebug.SCENE_EVENT_NOW if mode == "event" else PickupDebug.SCENE_ARM, t)
 	var ids_v: Variant = payload.get("ids", null)
 	var ids: Array = ids_v if ids_v is Array and not (ids_v as Array).is_empty() else _PRODUCE_DEFAULT_IDS
 
-	if not FileAccess.file_exists(produce_fixture_path):
-		return _produce_denied(t, "fixture_missing", { "path": produce_fixture_path })
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(produce_fixture_path))
-	var fixture_defs_v: Variant = (parsed as Dictionary).get("definitions", null) if parsed is Dictionary else null
-	if not (fixture_defs_v is Dictionary):
-		return _produce_denied(t, "fixture_bad", { "path": produce_fixture_path })
-	var fixture_defs: Dictionary = fixture_defs_v
-
-	# The overlay lives in this local copy only.
-	var cfg: Dictionary = ConfigService.get_inventory_cfg(config_service).duplicate(true)
-	var defs_v: Variant = cfg.get("definitions", {})
-	var defs: Dictionary = defs_v if defs_v is Dictionary else {}
-	for key in fixture_defs:
-		defs[key] = (fixture_defs[key] as Dictionary).duplicate(true) if fixture_defs[key] is Dictionary else fixture_defs[key]
-	cfg["definitions"] = defs
+	var overlay := _overlay_cfg()
+	if not bool(overlay["ok"]):
+		return _produce_denied(t, str(overlay["reason_key"]), overlay["extra"])
+	var cfg: Dictionary = overlay["cfg"]
+	var fixture_defs: Dictionary = overlay["defs"]
 
 	var entries: Array = []
 	for id_v in ids:
@@ -639,6 +633,89 @@ func handle_inventory_produce(action: Dictionary, t: int) -> FlowActionOutcome:
 	else:
 		outcome = FlowActionOutcome.handled_outcome()
 	return outcome.with_save_reason("debug.inventory.produce")
+
+
+## The inventory cfg COPY with the placeholder definitions laid over it, for one call. { ok, cfg, defs } or
+## { ok: false, reason_key, extra } when the fixture is missing or has no definitions block.
+func _overlay_cfg() -> Dictionary:
+	if not FileAccess.file_exists(produce_fixture_path):
+		return { "ok": false, "reason_key": "fixture_missing", "extra": { "path": produce_fixture_path } }
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(produce_fixture_path))
+	var fixture_defs_v: Variant = (parsed as Dictionary).get("definitions", null) if parsed is Dictionary else null
+	if not (fixture_defs_v is Dictionary):
+		return { "ok": false, "reason_key": "fixture_bad", "extra": { "path": produce_fixture_path } }
+	var fixture_defs: Dictionary = fixture_defs_v
+	var cfg: Dictionary = ConfigService.get_inventory_cfg(config_service).duplicate(true)
+	var defs_v: Variant = cfg.get("definitions", {})
+	var defs: Dictionary = defs_v if defs_v is Dictionary else {}
+	for key in fixture_defs:
+		defs[key] = (fixture_defs[key] as Dictionary).duplicate(true) if fixture_defs[key] is Dictionary else fixture_defs[key]
+	cfg["definitions"] = defs
+	return { "ok": true, "cfg": cfg, "defs": fixture_defs }
+
+
+## Modes `event` and `arm` (V2-ITEM-001b C10): `PickupDebug` checks every input first; any error denies the call and
+## changes nothing. Payload keys: see `PickupDebug`.
+func _produce_pickup(payload: Dictionary, scene: String, t: int) -> FlowActionOutcome:
+	if payload.has("frozen") or payload.has("full_pack"):
+		return _produce_denied(t, "scene_only_option", { "scene": scene, "text": "frozen and full_pack belong to the pickup scene actions." })
+	var overlay := _overlay_cfg()
+	if not bool(overlay["ok"]):
+		return _produce_denied(t, str(overlay["reason_key"]), overlay["extra"])
+	var prep := PickupDebug.prepare(flow_ctx, overlay["cfg"], overlay["defs"], _PRODUCE_DEFAULT_IDS, payload, scene, t)
+	if not (prep["errors"] as Array).is_empty():
+		var first: Dictionary = (prep["errors"] as Array)[0]
+		return _produce_denied(t, str(first["key"]), { "scene": scene, "text": str(first["text"]) })
+	logger.info(t, "debug.inventory.produce", "Dev pickup scene run", { "mode": "event" if scene == PickupDebug.SCENE_EVENT_NOW else "arm" })
+	return PickupDebug.run(flow_ctx, logger, prep, t)
+
+
+## debug.pickup.scene.check — payload { scene: "event_now"|"arm", options: {} }. Changes nothing. The answer is
+## the log line `debug.pickup.scene.check` with data { scene, ok, errors: [String], keys: [String], setup: [row] }.
+func handle_pickup_scene_check(action: Dictionary, t: int) -> FlowActionOutcome:
+	var scene_prep := _scene_prep(action, t)
+	if scene_prep.has("denied"):
+		return scene_prep["denied"]
+	logger.info(t, "debug.pickup.scene.check", "Pickup scene check", PickupDebug.report(flow_ctx, scene_prep))
+	return FlowActionOutcome.handled_outcome()
+
+
+## debug.pickup.scene.apply — the same payload plus `confirm`. Without `confirm: true` it changes nothing and
+## logs the same answer (`applied: false`). With it, a scene with errors changes nothing; a clean scene runs through
+## the same producer (which also writes the frozen fear and morale). Log line `debug.pickup.scene.apply`.
+func handle_pickup_scene_apply(action: Dictionary, t: int) -> FlowActionOutcome:
+	var scene_prep := _scene_prep(action, t)
+	if scene_prep.has("denied"):
+		return scene_prep["denied"]
+	var payload_v: Variant = action.get("payload", {})
+	var confirm_v: Variant = (payload_v as Dictionary).get("confirm", false) if payload_v is Dictionary else false
+	var confirmed: bool = confirm_v is bool and confirm_v
+	var rep := PickupDebug.report(flow_ctx, scene_prep)
+	var go := confirmed and bool(rep["ok"])
+	rep["applied"] = go
+	rep["confirmed"] = confirmed
+	logger.info(t, "debug.pickup.scene.apply", "Pickup scene apply", rep)
+	if not go:
+		return FlowActionOutcome.error_outcome(str((rep["keys"] as Array)[0])) if confirmed else FlowActionOutcome.handled_outcome()
+	var outcome := PickupDebug.run(flow_ctx, logger, scene_prep, t)
+	return outcome.with_save_reason("debug.pickup.scene.apply") if outcome.error_code == "" and not outcome.save_reasons.is_empty() else outcome
+
+
+## The prepared scene of a scene action, or { denied: outcome } for an unknown scene or a missing fixture.
+func _scene_prep(action: Dictionary, t: int) -> Dictionary:
+	var payload_v: Variant = action.get("payload", {})
+	var payload: Dictionary = payload_v if payload_v is Dictionary else {}
+	var scene := str(payload.get("scene", ""))
+	if not PickupDebug.SCENES.has(scene):
+		logger.info(t, "debug.pickup.scene.denied", "Unknown pickup scene", { "reason_key": "bad_scene", "scene": scene })
+		return { "denied": FlowActionOutcome.error_outcome("bad_scene") }
+	var overlay := _overlay_cfg()
+	if not bool(overlay["ok"]):
+		logger.info(t, "debug.pickup.scene.denied", "Pickup scene fixture problem", { "reason_key": overlay["reason_key"] })
+		return { "denied": FlowActionOutcome.error_outcome(str(overlay["reason_key"])) }
+	var options_v: Variant = payload.get("options", {})
+	return PickupDebug.prepare(flow_ctx, overlay["cfg"], overlay["defs"], _PRODUCE_DEFAULT_IDS,
+		options_v if options_v is Dictionary else {}, scene, t)
 
 
 func _produce_denied(t: int, reason_key: String, extra: Dictionary) -> FlowActionOutcome:

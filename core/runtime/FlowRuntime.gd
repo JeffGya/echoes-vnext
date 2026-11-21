@@ -643,6 +643,13 @@ func dispatch(action: Dictionary) -> Dictionary:
 			# Recipe price check and payment for the play test.
 			"debug.recipe.run":
 				_apply_action_outcome(_debug_controller().handle_recipe_run(action, t), t)
+
+			# Pickup debug scenes: the check changes nothing; the apply needs `confirm: true`.
+			"debug.pickup.scene.check":
+				_apply_action_outcome(_debug_controller().handle_pickup_scene_check(action, t), t)
+
+			"debug.pickup.scene.apply":
+				_apply_action_outcome(_debug_controller().handle_pickup_scene_apply(action, t), t)
 	
 			# ---- Directives (DIRECTIVE-001) ----
 			"directive.select":
@@ -722,7 +729,7 @@ func dispatch(action: Dictionary) -> Dictionary:
 	#
 	# Publishing a flow.resolve card that represents a run outcome (victory / partial / defeat /
 	# withdrawal) captures it into save.flow.pending_result; publishing anything else consumes
-	# a pending one. Both branches are no-ops in the common case, so the great majority of
+	# a pending one. The exception is flow.pickup: it holds the result and captures the held card. Both branches are no-ops in the common case, so the great majority of
 	# dispatches queue no extra save.
 	PendingResultService.capture_or_consume(flow_ctx, flow_ctx.last_snapshot, t)
 
@@ -835,7 +842,8 @@ func dispatch(action: Dictionary) -> Dictionary:
 	# the actual "shown once" granularity, which is per published snapshot, not per round.
 	if str(out.get("type", "")) == FlowStateIds.ENCOUNTER \
 			or str(out.get("type", "")) == FlowStateIds.KEEPER_TRIAL \
-			or str(out.get("type", "")) == FlowStateIds.RESOLVE:
+			or str(out.get("type", "")) == FlowStateIds.RESOLVE \
+			or str(out.get("type", "")) == FlowStateIds.PICKUP:
 		var _bark_clear_ectx: EncounterContext = flow_ctx.encounter_ctx
 		if _bark_clear_ectx != null:
 			for _bark_clear_actor_v in _bark_clear_ectx.actors:
@@ -927,6 +935,9 @@ func _handle_new_game(t: int) -> void:
 	flow_ctx.campaign_seed = CampaignSeed.new(legacy_root_seed)
 	# New game always starts with no active realm
 	flow_ctx.realm_id = ""
+	flow_ctx.pickup_session = {}
+	flow_ctx.pickup_armed = []
+	flow_ctx.pickup_armed_opts = {}
 
 	econ = EconomyService.new(flow_ctx.save_data)
 	directive_service = DirectiveService.new(flow_ctx.save_data)  # DIRECTIVE-001
@@ -1827,12 +1838,43 @@ func _end_round(t: int) -> void:
 					RealmService.contribute_segment(
 						flow_ctx, str(_d84_data.get("rank", "F")), _d84_thread_cfg, t
 					)
+			# AFTER the bond and Thread block: the chooser's composure and freeze read the bonds and emotion it wrote.
+			_open_pickup_event(final_snap, t)
 	else:
 		# RoundSnapshot — emits type "flow.encounter"; stored on ectx.last_round_snapshot.
 		var round_snap: Dictionary = EncounterSnapshotBuilder.build_round_snapshot(flow_ctx, t)
 		ectx.last_round_snapshot = round_snap
 		flow_ctx.last_snapshot   = round_snap
 	flow_machine.refresh_snapshot(flow_ctx, logger, t)
+
+
+## The pickup event of a won fight (D-16, D-58). With an event, `flow.pickup` (intro) is published and the Resolve
+## card stays in `ectx.final_snapshot` until the event's Continue; `PendingResultService` holds the result. With
+## no event nothing changes. Armed debug finds are spent only when an event opens: a win where nothing opens
+## (count 0, a loss rank, nobody standing) keeps them armed and logs `inventory.pickup.armed_kept`. A path end
+## does not clear them. The real rank and the real fallen Echoes are always used.
+func _open_pickup_event(final_snap: Dictionary, t: int) -> void:
+	# UNWIRED (target: NEW "Pickup event after the win relief"): the event opens before the win relief (fear -5, morale +10) runs, so a chooser freezes on its fear from before the relief
+	var armed := flow_ctx.pickup_armed
+	var final_data_v: Variant = final_snap.get("data", {})
+	var final_data: Dictionary = final_data_v if final_data_v is Dictionary else {}
+	var record := PickupEventService.open_after_win(flow_ctx,
+		ActiveStageService.last_situation_id(FlowStageExploreState._get_current_stage(flow_ctx)),
+		str(final_data.get("rank", "")), PickupEventService.fallen_party_ids(flow_ctx, flow_ctx.encounter_ctx.actors),
+		FlowStateIds.STAGE_EXPLORE, armed, t, flow_ctx.pickup_armed_opts)
+	if record.is_empty() or PickupEventService.is_ended(record):
+		if not armed.is_empty():
+			var reason := "ended" if not record.is_empty() else "no_event"
+			if record.is_empty() and flow_ctx.pickup_armed_opts.has("count") \
+					and not FindsRules.is_win_rank(ConfigService.get_inventory_cfg(config_service), str(final_data.get("rank", ""))):
+				reason = "loss_rank"
+			logger.info(t, "inventory.pickup.armed_kept", "Armed finds kept: no event opened", {
+				"armed": armed.size(), "rank": str(final_data.get("rank", "")), "reason": reason })
+		return
+	flow_ctx.pickup_armed = []
+	flow_ctx.pickup_armed_opts = {}
+	flow_ctx.pickup_session = { "phase": PickupSnapshotBuilder.PHASE_INTRO }
+	flow_ctx.last_snapshot = PickupSnapshotBuilder.build(flow_ctx, t, flow_ctx.pickup_session)
 
 
 ## COMBAT-SEQ: scans initiative_order from current_actor_index forward.

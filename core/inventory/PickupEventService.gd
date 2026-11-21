@@ -11,10 +11,12 @@ extends RefCounted
 ## grade, quantity, cell }], order, taken, left, tried, free, swap }. `order`, `taken`, `left` hold find ids.
 ## `free` = free pack slots before the seam call, saved in the record (the swap gate needs it).
 ## `swap` = {} until a swap commits, then { find_id, dropped_id, dropped_type_id, dropped, t }.
+## `phase` = "idle" while the event is open, "done" after Continue (the durable end mark: no action, no resume).
 
 const STAGE_KEY := "pickup"
 const SWAP_KEY := "swap_used"
 const PHASE_IDLE := "idle"
+const PHASE_DONE := "done"
 
 
 static func record_of(stage: Dictionary) -> Dictionary:
@@ -26,29 +28,76 @@ static func swap_used(stage: Dictionary) -> bool:
 	return bool(stage.get(SWAP_KEY, false))
 
 
+static func is_ended(record: Dictionary) -> bool:
+	return str(record.get("phase", "")) == PHASE_DONE
+
+
+## True when `stage` holds an open event of the win that made `pending` (`win_t == created_t`, D-58). Ints are
+## cast: a JSON reload turns them into floats.
+static func is_open_for(stage: Dictionary, pending: Dictionary) -> bool:
+	var record := record_of(stage)
+	return not record.is_empty() and not pending.is_empty() and not is_ended(record) \
+		and int(record.get("win_t", -1)) == int(pending.get("created_t", -2))
+
+
+## Party Echo ids that fell in this stage: the stage's stored ids (`lost_echo_ids_with`) over the active party, so an
+## Echo that fell in an earlier fight and is still in the party counts as fallen. Names can repeat, so ids decide.
+## A stage saved before the id field has names only: then a party Echo counts as fallen only when its name is
+## unique in the party (no save repair; an ambiguous name is not guessed).
+static func fallen_party_ids(flow_ctx: FlowContext, actors: Array) -> Array:
+	var ids := ActiveStageService.lost_echo_ids_with(flow_ctx, actors)
+	var names := ActiveStageService.lost_echo_names_with(flow_ctx, actors)
+	var legacy := ActiveStageService.stage_lost_echo_ids(flow_ctx).is_empty() and not names.is_empty()
+	var party: Array = SanctumService.get_party_actors_static(flow_ctx.save_data)
+	var out: Array = []
+	for a: Dictionary in party:
+		var id := str(a.get("id", ""))
+		var name := str(a.get("name", ""))
+		if ids.has(id):
+			out.append(id)
+		elif legacy and names.has(name) and party.filter(func(b: Dictionary) -> bool: return str(b.get("name", "")) == name).size() == 1:
+			out.append(id)
+	return out
+
+
 ## Opens the event of one won fight and returns a copy of its record; {} when no event opens (no stage, no
 ## situation, a loss, no finds, nobody standing, every find refused). Order (plan, "Determinism and RNG"):
 ## stamp gate -> roll count -> standing list -> chooser draw -> freeze check -> pick order -> pack room ->
 ## seam call -> case, tried, reaction -> write the record. A record with the same (run_count, situation_id)
 ## is the stamp: it is returned as stored, nothing is drawn or written. `armed`: debug finds (`PickupFinds`).
+## `debug` (debug producer only; empty in play): `count` forces the count (not clamped here: the seam refuses finds
+## past the cap with `over_cap`; a loss rank still opens nothing), `cap` replaces the realm cap, `chooser_id`
+## replaces the drawn chooser (the draw still happens), `names` {type_id: name} fills blank row names,
+## `event_now` marks the record `debug_event` (no fight card behind it).
 static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: String, fallen_ids: Array,
-		return_to: String, armed: Array, t: int) -> Dictionary:
+		return_to: String, armed: Array, t: int, debug: Dictionary = {}) -> Dictionary:
 	var stage := FlowStageExploreState._get_current_stage(flow_ctx)
 	if stage.is_empty() or situation_id.is_empty():
 		return {}
 	var realm := RealmService.get_active(flow_ctx)
 	var run_count := int(realm.get("run_count", 0))
 	var stored := record_of(stage)
-	# `stage.pickup` holds only the LAST event. C9 must call this only for `last_situation_id`: a later event
-	# replaces the stamp, so reopening an older situation would offer its left finds again.
+	# `stage.pickup` holds only the LAST event: call this only for `last_situation_id`. A later event replaces the
+	# stamp, so reopening an older situation would offer its left finds again.
 	if int(stored.get("run_count", -1)) == run_count and str(stored.get("situation_id", "")) == situation_id:
 		return stored.duplicate(true)
 
 	var data := ConfigService.get_balance_data(flow_ctx.config_service)
 	var inv_cfg := ConfigService.get_inventory_cfg(flow_ctx.config_service)
+	# UNWIRED (target: NEW "Realm seed survives a save reload"): realm.seed can lose digits through JSON; the finds roll and chooser draw read it
 	var realm_seed := int(realm.get("seed", 0))
 	var realm_scale := float(ActiveStageService.get_payout_factors(flow_ctx, flow_ctx.config_service)["realm_scale"])
-	var count := FindsRules.roll_count(inv_cfg, realm_seed, flow_ctx.stage_id, run_count, situation_id, realm_scale, rank)
+	var cap := int(debug["cap"]) if debug.has("cap") else FindsRules.cap_for_scale(inv_cfg, realm_scale)
+	var count: int
+	if debug.has("count"):
+		if not FindsRules.is_win_rank(inv_cfg, rank):
+			return {}
+		count = maxi(0, int(debug["count"]))
+	elif debug.has("cap"):
+		count = FindsRules.roll_count_with(inv_cfg, CampaignSeed.get_rng_from(realm_seed,
+			FindsRules.stream_path(flow_ctx.stage_id, run_count, situation_id)), cap, rank)
+	else:
+		count = FindsRules.roll_count(inv_cfg, realm_seed, flow_ctx.stage_id, run_count, situation_id, realm_scale, rank)
 	var finds := PickupFinds.finds_for_win(count, armed)
 	if finds.is_empty():
 		return {}
@@ -60,13 +109,18 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 		return {}
 	var drawn := PickupChooser.draw(realm_seed, flow_ctx.stage_id, run_count, situation_id, standing)
 	var chooser_id := str(drawn["chooser_id"])
+	if debug.has("chooser_id"):
+		if not standing.has(str(debug["chooser_id"])):
+			return {}
+		chooser_id = str(debug["chooser_id"])
 	var chooser := _chooser_view(flow_ctx.save_data, data, party, standing, chooser_id)
 	var pctx := PickupPick.ctx_from(data)
 	var frozen := PickupPick.frozen(chooser, pctx)
 	var order := PickupPick.order(chooser, finds, pctx)
 
 	var room := PickupCase.pack_room(flow_ctx.save_data, inv_cfg)
-	var got := ActiveStageService.record_found_items(flow_ctx, situation_id, finds if frozen else order, t, not frozen)
+	var got := ActiveStageService.record_found_items(flow_ctx, situation_id, finds if frozen else order, t, not frozen,
+		int(debug["cap"]) if debug.has("cap") else FindsRules.NO_OVERRIDE)
 	var offered := {}
 	for fid in (got["taken"] as Array) + (got["left"] as Array):
 		offered[str(fid)] = true
@@ -87,10 +141,11 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 	for i in kept_finds.size():
 		var f: Dictionary = kept_finds[i]
 		var type_id := str(f.get("type_id", ""))
-		# Simple row (D-52 b): real board placement belongs to the placement story (seam S2).
+		# UNWIRED (target: NEW "Pickup placement on the board"): real placement of finds on the board (a simple row today)
 		rows.append({ "find_id": str(f.get("find_id", "")), "type_id": type_id,
-			"name": InventoryService.name_of(inv_cfg, type_id), "kind": str(f.get("kind", "")),
+			"name": _row_name(inv_cfg, type_id, debug), "kind": str(f.get("kind", "")),
 			"grade": str(f.get("grade", "")), "quantity": int(f.get("quantity", 1)), "cell": i })
+	# UNWIRED (target: NEW "Pickup reaction effect"): the reaction class is stored; no EmotionService call applies it
 	var record := {
 		"situation_id": situation_id, "run_count": run_count, "win_t": t, "phase": PHASE_IDLE,
 		"return_to": return_to, "chooser": chooser_id, "standing_ids": standing, "fallen_names": fallen_names,
@@ -102,6 +157,8 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 			func(id: String) -> bool: return not (got["taken"] as Array).has(id)),
 		"tried": ev["tried"], "free": ev["free"], "swap": {},
 	}
+	if bool(debug.get("event_now", false)):
+		record["debug_event"] = true
 	stage[STAGE_KEY] = record.duplicate(true)
 	flow_ctx.request_save("inventory.pickup.open")
 	if flow_ctx.logger != null:
@@ -109,6 +166,12 @@ static func open_after_win(flow_ctx: FlowContext, situation_id: String, rank: St
 			"stage_id": flow_ctx.stage_id, "situation_id": situation_id, "chooser": chooser_id, "frozen": frozen,
 			"case": ev["case"], "finds": rows.size(), "taken": (record["taken"] as Array).size() })
 	return record
+
+
+static func _row_name(inv_cfg: Dictionary, type_id: String, debug: Dictionary) -> String:
+	var n := InventoryService.name_of(inv_cfg, type_id)
+	var names_v: Variant = debug.get("names", {})
+	return n if not n.is_empty() or not (names_v is Dictionary) else str((names_v as Dictionary).get(type_id, ""))
 
 
 ## The one swap of a path (D-27, D-28): field find `find_id` from the open event goes into the pack, pack entry

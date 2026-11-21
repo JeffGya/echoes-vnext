@@ -34,7 +34,7 @@ freeze:  if afraid >= freeze_at, the chooser takes NOTHING (D-39; D-07 is supers
 | `quantity_gain` | 0.5 per extra unit |
 | `quantity_cap` | 3 units counted |
 | `worth_weight` | 6 |
-| `sense_base` | 0.3 |
+| `sense_base` | 0.0 (was 0.3; changed by D-67 after probe P2) |
 | `freeze_at` | 0.5 |
 
 ## calling_pick (points)
@@ -111,5 +111,5 @@ freeze:  if afraid >= freeze_at, the chooser takes NOTHING (D-39; D-07 is supers
 Tables live under `data.inventory.pick` in the style of the `data.inventory` block (`_xxx_comment` keys). `afraid_pick_signature` lives in `maturity_expression.calling_behavior.<calling>`. `ConfigValidator` rules: every row has exactly the four kinds; values are finite; one row per Calling, archetype, vector, trait and stat; `afraid_pick`, `bold_pick` and signature values stay within an absolute limit (proposed 30).
 
 ## Status
-- The Judgment, composure and status values used in the proposal's character table were illustrative, not measured. The rate probe P2 measures the real difference between a Standing 1 and a Standing 9 chooser. Its pass line is still OPEN (D-09).
+- The Judgment, composure and status values used in the proposal's character table were illustrative, not measured. The rate probe P2 measures the real difference between a Standing 1 and a Standing 9 chooser. Its pass line is closed by D-63 (M1 15 to 60%, M3 at least +0.5, M4 at least 70%, asserted at full size).
 - Vector scores are about 60 at birth and nothing in play grows them today. If a later story grows them into the hundreds, the vector term will outweigh sense. Re-check then.

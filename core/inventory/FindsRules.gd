@@ -10,6 +10,8 @@ extends RefCounted
 ## key (shipping has it; the `finds_rules` suite runs `ConfigValidator.validate_finds`, which requires it).
 ## The seam will read it as "no cap" (V2-ITEM-001b C6).
 const NO_CAP := -1
+## Debug only: "no cap override" for `ActiveStageService.record_found_items` (-1 is NO_CAP, a real answer).
+const NO_OVERRIDE := -2
 ## A realm scale is a float sum of steps. A step such as 0.1 is not exact in binary, so the sum can land a
 ## hair under a band edge; the tolerance keeps it on that band.
 const SCALE_EPS := 0.000001
@@ -18,6 +20,8 @@ const SCALE_EPS := 0.000001
 ## The cap of the highest band whose scale is at or below `realm_scale`. A scale below the first band
 ## uses the first band. NO_CAP when the band list is missing or empty.
 static func cap_for_scale(inv_cfg: Dictionary, realm_scale: float) -> int:
+	# UNWIRED (target: V2-ITEM-002): the bands above realm.02 (1.75, 2.5, 3.5) are placeholders until realm 3 exists
+	# UNWIRED (target: NEW "Pickup placement on the board"): the cap has no limit by free board cells and no piles rule
 	var bands_v: Variant = inv_cfg.get("finds_cap_by_realm_scale", null)
 	if not (bands_v is Array) or (bands_v as Array).is_empty():
 		return NO_CAP
@@ -66,6 +70,11 @@ static func roll_count_with(inv_cfg: Dictionary, rng: RandomNumberGenerator, cap
 		if rng.randi_range(0, 99) < slot_chance_pct(inv_cfg, slot, rank):
 			hits += 1
 	return hits
+
+
+## True when `rank` is a winning rank (has a chance modifier). A loss rank (F, unknown) has none.
+static func is_win_rank(inv_cfg: Dictionary, rank: String) -> bool:
+	return _is_win_rank(inv_cfg, rank)
 
 
 static func _is_win_rank(inv_cfg: Dictionary, rank: String) -> bool:
