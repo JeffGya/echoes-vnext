@@ -106,6 +106,10 @@ static func pose_at(plan: Dictionary, positions: Array, lateral: Vector2, t: flo
 			out["halo_alpha"] = float(mc["halo_alpha"]) * minf(1.0, opened + float(mc["halo_start_alpha"])) * breath
 			out["halo_scale"] = maxf(opened, 0.01)
 		out["brighten"] = float(mc["brighten"]) * clampf((lt - wind_len - sink_len) / float(mc["brighten_len"]), 0.0, 1.0)
+	var fade := float(pp["fade"])
+	out["halo_alpha"] = float(out["halo_alpha"]) * fade
+	out["brighten"] = float(out["brighten"]) * fade
+	alpha *= fade
 	var high := arc / arc_max
 	out["mote"] = mote
 	out["alpha"] = alpha

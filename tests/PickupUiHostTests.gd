@@ -383,8 +383,14 @@ static func _t_real_snapshot() -> Dictionary:
 	var errors: Array = []
 	if row.is_empty():
 		errors.append("the real snapshot has an empty row")
-	_row_errors(fx, row, errors)
-	_drawn_cell_errors(fx["combat"], row, errors)
+	# The idle picture has the chooser on its end tile (R6b); the others stand on their row tiles.
+	var drawn: Array = row.duplicate(true)
+	var end_cell: Dictionary = PickupEventPlan.build(snap)["chooser_end_cell"]
+	for e: Dictionary in drawn:
+		if bool(e["is_chooser"]):
+			e["tile"] = end_cell
+	_row_errors(fx, drawn, errors)
+	_drawn_cell_errors(fx["combat"], drawn, errors)
 	_free(fx)
 	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
 

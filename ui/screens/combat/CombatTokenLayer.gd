@@ -62,12 +62,13 @@ func apply_snapshot(tokens: Array[Dictionary], active_actor_id: String = "", las
 
 
 func set_brighten(actor_id: String, amount: float) -> void:
+	if amount <= 0.0:
+		if _brighten.erase(actor_id):
+			queue_redraw()
+		return
 	if is_equal_approx(float(_brighten.get(actor_id, 0.0)), amount):
 		return
-	if amount <= 0.0:
-		_brighten.erase(actor_id)
-	else:
-		_brighten[actor_id] = amount
+	_brighten[actor_id] = amount
 	queue_redraw()
 
 

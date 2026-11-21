@@ -188,6 +188,12 @@ var _pickup_bark_key: String = ""
 var _pickup_row_positions: Array = []
 var _pickup_lateral: Vector2 = Vector2.ZERO
 var _pickup_chooser_id: String = ""
+# The pickup plan of the event on show (built once per identity), how many of its chooser legs the board already played, and the
+# row Echoes as the snapshot gives them (the chooser on its row tile). Presentation only; none of it is saved.
+var _pickup_plan: Dictionary = {}
+var _pickup_plan_identity: String = ""
+var _pickup_legs_started: int = 0
+var _pickup_base_actors: Array = []
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
@@ -295,7 +301,8 @@ func set_layout(layout: Dictionary) -> void:
 
 
 ## The pickup event keeps the board drawn from the snapshot (terrain, size) and shows no combat HUD. Only the standing
-## Echoes get a token, on their row tiles, with no active actor (no selection ring; the intro pointer is the mote).
+## Echoes get a token, on their row tiles (the chooser on the tile its legs have reached; on `chooser_end_cell` in idle), with no
+## active actor (no selection ring; the intro pointer is the mote).
 ## The snapshot has no nav.back slot, so Back stays hidden and AppRoot's Back does nothing.
 func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_flush_held_barks()
@@ -319,7 +326,17 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	var terrain_v: Variant = data.get("terrain", {})
 	_draw_board(_current_cols, _current_rows, terrain_v if terrain_v is Dictionary else {})
 	_center_board(_current_cols, _current_rows)
-	var actors: Array = pickup_row_actors(data)
+	var identity := PickupEventStage.identity_of(data)
+	if identity != _pickup_plan_identity:
+		_pickup_plan = PickupEventPlan.build(snap)
+		_pickup_plan_identity = identity
+		_pickup_legs_started = 0
+	_pickup_base_actors = pickup_row_actors(data)
+	_pickup_chooser_id = pickup_chooser_id(data)
+	var phase := str(data.get("phase", ""))
+	var chooser_now := pickup_chooser_cell(_pickup_plan, phase, 0.0 if new_event else _pickup_stage.clock_time())
+	_pickup_legs_started = int(chooser_now["started"])
+	var actors: Array = pickup_actors_at(_pickup_base_actors, _pickup_chooser_id, chooser_now)
 	_last_actors = actors
 	if actors.is_empty():
 		_token_layer.reset_presentation()
@@ -328,8 +345,7 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		_draw_tokens(actors, "", {})
 	_pickup_row_positions = pickup_row_positions(data)
 	_pickup_lateral = pickup_lateral(data, _pickup_row_positions)
-	_pickup_chooser_id = pickup_chooser_id(data)
-	if str(data.get("phase", "")) != "intro":
+	if phase != "intro":
 		_hide_pickup_mote()
 	_finds_layer.show_finds(data, _board)
 	_show_pickup_bark(data, actors)
@@ -350,18 +366,79 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		_pickup_debug.apply_actions(snap.get("actions", {}))
 
 
-## The pointer mote follows the intro clock. No token is drawn again, no ring, no camera move.
+## The intro clock drives the chooser's walk and the pointer mote. No ring, no camera move.
 func _on_pickup_clock(t: float) -> void:
 	if not _pickup_stage.visible:
 		return
+	_advance_pickup_walk(t)
 	var cfg: CombatTokenVisualConfig = _token_layer.visual_config
 	var plan := _pickup_stage.plan()
 	var pose := PickupPointerMote.pose_at(plan, _pickup_row_positions, _pickup_lateral, t, cfg.token_radius)
 	if bool(pose["visible"]):
+		if t >= float((plan["pointer"] as Dictionary)["fade_t"]):
+			# The chooser walks away: the halo goes with the token while it fades.
+			var drawn := _token_layer.display_cell_position(_pickup_chooser_id)
+			if drawn != Vector2.INF:
+				pose["halo_pos"] = drawn + Vector2(0.0, cfg.feet_offset_y)
 		_pickup_mote.apply_pose(pose, (plan["pointer"] as Dictionary)["mote"], float(_board.tile_set.tile_size.x))
 	else:
 		_pickup_mote.hide_all()
 	_token_layer.set_brighten(_pickup_chooser_id, float(pose["brighten"]))
+
+
+## Plays the chooser's legs in step with the clock. A leg that starts on this tick walks on the token layer's own path walk for
+## the leg's time (`pickup.walk`: no telegraph, no hop). If the clock jumped over a leg (or several), the token snaps to the end
+## of the last one at once.
+func _advance_pickup_walk(t: float) -> void:
+	if not bool(_pickup_plan.get("valid", false)) or _pickup_chooser_id.is_empty():
+		return
+	var legs: Array = _pickup_plan["legs"]
+	var first := _pickup_legs_started
+	var next := first
+	while next < legs.size() and t >= float((legs[next] as Dictionary)["t0"]):
+		next += 1
+	if next == first:
+		return
+	_pickup_legs_started = next
+	var leg: Dictionary = legs[next - 1]
+	var cells: Array = leg["cells"]
+	var seconds := float(leg["t1"]) - float(leg["t0"])
+	var animate := next - first == 1 and t < float(leg["t1"]) and cells.size() > 1
+	var end_cell: Dictionary = cells[cells.size() - 1]
+	var actors := pickup_actors_at(_pickup_base_actors, _pickup_chooser_id, { "cell": end_cell, "snap": not animate, "seconds": seconds })
+	_last_actors = actors
+	var action := {}
+	if animate:
+		action = { "action_type": "pickup.walk", "source_id": _pickup_chooser_id, "path": cells.slice(1) }
+	_draw_tokens(actors, "", { "last_actor_action": action } if animate else {})
+
+
+## The chooser's tile for a render: `chooser_end_cell` in idle, the tile its legs have reached at clock time `t` in the intro,
+## the row tile when the plan is not valid. { cell ({} = the row tile), started, snap }.
+static func pickup_chooser_cell(plan: Dictionary, phase: String, t: float) -> Dictionary:
+	if not bool(plan.get("valid", false)):
+		return { "cell": {}, "started": 0, "snap": false }
+	if phase != "intro":
+		return { "cell": plan["chooser_end_cell"], "started": (plan["legs"] as Array).size(), "snap": true }
+	var target := PickupEventPlan.chooser_target_at(plan, t)
+	return { "cell": target["cell"], "started": int(target["started"]), "snap": false }
+
+
+## `base` (the row Echoes, the chooser on its row tile) with the chooser moved to `where.cell`. A snap, or a walk of
+## `where.seconds`, is set as the chooser's `move_duration`; the other Echoes are never touched.
+static func pickup_actors_at(base: Array, chooser_id: String, where: Dictionary) -> Array:
+	var out: Array = []
+	var cell: Dictionary = where.get("cell", {})
+	for actor_v in base:
+		var actor: Dictionary = (actor_v as Dictionary).duplicate(true)
+		if not cell.is_empty() and str(actor.get("id", "")) == chooser_id:
+			actor["grid_pos"] = { "col": int(cell.get("col", 0)), "row": int(cell.get("row", 0)) }
+			if bool(where.get("snap", false)):
+				actor["move_duration"] = 0.001
+			elif where.has("seconds"):
+				actor["move_duration"] = float(where["seconds"])
+		out.append(actor)
+	return out
 
 
 func _hide_pickup_mote() -> void:
@@ -509,7 +586,7 @@ static func pickup_bark_text(data: Dictionary) -> String:
 	return ""
 
 
-## The bark stays over the chooser's row token in the finished picture (not in the intro, which U6 plays). It shows once per
+## The bark stays over the chooser's token (on its end tile) in the finished picture (not in the intro, which U6 plays). It shows once per
 ## event, chooser and text; a repeat snapshot keeps the same popup.
 func _show_pickup_bark(data: Dictionary, actors: Array) -> void:
 	if _bark_popup_layer == null:
@@ -542,6 +619,10 @@ static func pickup_chooser_id(data: Dictionary) -> String:
 
 func _leave_pickup() -> void:
 	_pickup_bark_key = ""
+	_pickup_plan = {}
+	_pickup_plan_identity = ""
+	_pickup_legs_started = 0
+	_pickup_base_actors = []
 	_hide_pickup_mote()
 	_speed_bar.visible = true
 	_finds_layer.clear()
@@ -1183,7 +1264,7 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 		var cur_hp: float   = float(actor.get("hp", max_hp))
 		var hp_ratio: float = clampf(cur_hp / max(max_hp, 1.0), 0.0, 1.0)
 
-		tokens.append({
+		var descriptor := {
 			"actor_id":           actor_id,
 			"grid_pos":           gp.duplicate(),
 			"cell_pos":           cell_center,
@@ -1203,7 +1284,11 @@ func _draw_tokens(actors: Array, current_actor_id: String, data: Dictionary = {}
 			"hop_lift":           hop_lift if step_shown and actor_id == _step_actor_id else 0.0,
 			"cause_badge":        stop_short_badge(_step_stop_short) if step_shown and actor_id == _step_actor_id else "",
 			"observe_target":     str(_step_stop_short.get("subject_actor_id", "")) if step_shown and actor_id == _step_actor_id and str(_step_stop_short.get("benefit", "")) == "observe" else "",
-		})
+		}
+		# The pickup chooser's walk time (a leg of the plan). Absent in combat: the layer then reads the speed-bar duration.
+		if actor.has("move_duration"):
+			descriptor["move_duration"] = float(actor["move_duration"])
+		tokens.append(descriptor)
 
 	var telegraph_event: Dictionary = _token_layer.apply_snapshot(
 		tokens,

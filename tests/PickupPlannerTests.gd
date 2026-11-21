@@ -20,6 +20,7 @@ const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/planner_beats_are_in_order_with_monotonic_times", Callable(PickupPlannerTests, "_t_beats"))
 	runner.register_test("pickup_ui/planner_pointer_steps_start_end_and_lap", Callable(PickupPlannerTests, "_t_pointer"))
+	runner.register_test("pickup_ui/planner_fade_starts_when_the_chooser_starts_to_walk", Callable(PickupPlannerTests, "_t_fade_t"))
 	runner.register_test("pickup_ui/planner_reads_the_pointer_look_from_the_snapshot", Callable(PickupPlannerTests, "_t_look_config"))
 	runner.register_test("pickup_ui/planner_is_deterministic_and_follows_the_pointer_key", Callable(PickupPlannerTests, "_t_deterministic"))
 	runner.register_test("pickup_ui/planner_walk_follows_pick_order", Callable(PickupPlannerTests, "_t_pick_order"))
@@ -269,6 +270,29 @@ static func _t_beats() -> Dictionary:
 
 
 ## The racetrack of the mote (D-76): authored knots, monotone s(t), the end on the chooser, the times it moves in the plan.
+## The mote fades when the chooser starts to walk: at the first leg's start, else at `times.step0`.
+static func _t_fade_t() -> Dictionary:
+	var none := PickupEventPlan.build(_snap({ "phase": "intro" }))
+	if not (none["legs"] as Array).is_empty() or absf(float(none["pointer"]["fade_t"]) - float(none["times"]["step0"])) > _EPS:
+		return _fail("a chooser that stays should fade from step0 (legs %d, fade_t %s)" % [(none["legs"] as Array).size(), none["pointer"]["fade_t"]])
+	var normal := PickupEventPlan.build(_snap({ "phase": "intro", "finds": [["f0", "t_a", "taken", 0]] }))
+	if (normal["legs"] as Array).is_empty() or absf(float(normal["pointer"]["fade_t"]) - float(normal["legs"][0]["t0"])) > _EPS:
+		return _fail("with an out leg the fade should start at the first leg")
+	# A find on the only free tile beside the chooser: no out tile, so the first leg is the walk, later than step0.
+	var blocked := _snap({ "phase": "intro", "finds": [["f0", "t_a", "taken", 0]] })
+	blocked["data"]["finds"][0]["tile"] = { "col": 2, "row": 3 }
+	var plan := PickupEventPlan.build(blocked)
+	var legs: Array = plan["legs"]
+	if not (plan["out_cell"] as Dictionary).is_empty() or legs.is_empty() or str(legs[0]["kind"]) != "walk":
+		return _fail("the fixture should have no out tile and a walk leg (out %s, %d legs)" % [plan["out_cell"], legs.size()])
+	if float(plan["pointer"]["fade_t"]) <= float(plan["times"]["step0"]) + _EPS or absf(float(plan["pointer"]["fade_t"]) - float(legs[0]["t0"])) > _EPS:
+		return _fail("the fade did not wait for the first leg: fade_t %s, step0 %s, leg %s" % [plan["pointer"]["fade_t"], plan["times"]["step0"], legs[0]["t0"]])
+	var before := PickupEventPlan.pointer_pose(plan, float(plan["times"]["step0"]) + 0.1)
+	if float(before["fade"]) != 1.0 or str(before["phase"]) != "hold":
+		return _fail("the pointer fades before the chooser walks: %s" % [before])
+	return { "ok": true }
+
+
 static func _look() -> Dictionary:
 	return PickupSnapshotBuilder.pointer_look({})
 
@@ -371,12 +395,12 @@ static func _t_pointer() -> Dictionary:
 	var t := 0.0
 	while t < float(plan["total"]):
 		var pose := PickupEventPlan.pointer_pose(plan, t)
-		if bool(pose["visible"]) != (t >= float(tm["pointer0"])):
+		if bool(pose["visible"]) != (t >= float(tm["pointer0"]) and t < float(plan["pointer"]["fade_t"]) + float(plan["pointer"]["mote"]["halo_fade_out"])):
 			return _fail("the pointer is visible at the wrong time (t %s)" % t)
 		if str(pose["phase"]) != "" and (phases.is_empty() or phases[phases.size() - 1] != pose["phase"]):
 			phases.append(str(pose["phase"]))
 		t += 0.01
-	if phases != ["gone", "lead", "glide", "turn", "glide", "turn", "glide", "land", "hold"]:
+	if phases != ["gone", "lead", "glide", "turn", "glide", "turn", "glide", "land", "hold", "fade", "gone"]:
 		return _fail("the phases run %s" % [phases])
 	var rm := PickupEventPlan.build(_snap({ "phase": "intro" }), { "reduced": true })
 	var rp: Dictionary = rm["pointer"]

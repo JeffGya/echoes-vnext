@@ -22,6 +22,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/pointer_mote_lands_with_no_overshoot_then_sinks_and_the_halo_opens", Callable(PickupPointerTests, "_t_land"))
 	runner.register_test("pickup_ui/pointer_pose_is_total_and_finite", Callable(PickupPointerTests, "_t_pose_total"))
 	runner.register_test("pickup_ui/pointer_mote_textures_and_landing_length_match_the_scene_and_the_planner", Callable(PickupPointerTests, "_t_scene_numbers"))
+	runner.register_test("pickup_ui/pointer_halo_breathes_inside_a_long_hold", Callable(PickupPointerTests, "_t_breath"))
 	runner.register_test("pickup_ui/pointer_mote_trail_and_shadow", Callable(PickupPointerTests, "_t_trail_shadow"))
 	runner.register_test("pickup_ui/pointer_mote_colour_is_the_living_grove_ivory_and_no_stroke_is_drawn", Callable(PickupPointerTests, "_t_ivory_and_scan"))
 	runner.register_test("pickup_ui/pointer_mote_follows_the_clock_and_lands_above_the_chooser", Callable(PickupPointerTests, "_t_host_land"))
@@ -180,6 +181,22 @@ static func _t_pose_total() -> Dictionary:
 				for k: String in ["pos_row", "side", "arc", "arc_k", "speed", "lt"]:
 					if not is_finite(float(pose[k])) and not (k == "lt" and not bool(pose["visible"])):
 						return _fail("n %d reduced %s t %s: %s is %s" % [n, reduced, tt, k, pose[k]])
+	# A partial plan (a missing key, a mote with no halo_fade_out, no fade_t) gives the hidden pose and no error.
+	var whole := PickupEventPlan.build(PickupPlannerTests._snap({ "phase": "intro" }))
+	var partials: Array = []
+	for key: String in ["mote", "fade_t", "knots", "path", "lead", "land_t", "land_phase_len", "land_index", "n", "reduced"]:
+		var cut := whole.duplicate(true)
+		(cut["pointer"] as Dictionary).erase(key)
+		partials.append(cut)
+	var no_fade := whole.duplicate(true)
+	(no_fade["pointer"]["mote"] as Dictionary).erase("halo_fade_out")
+	partials.append(no_fade)
+	var no_times := whole.duplicate(true)
+	(no_times["times"] as Dictionary).erase("pointer0")
+	partials.append(no_times)
+	for cut: Dictionary in partials:
+		if bool(PickupEventPlan.pointer_pose(cut, 1.5)["visible"]):
+			return _fail("a partial plan shows the pointer")
 	for bad: Dictionary in [{}, { "valid": false }, { "valid": true, "times": { "pointer0": 0.5 }, "total": 9.0, "pointer": {} }]:
 		if bool(PickupEventPlan.pointer_pose(bad, 1.0)["visible"]) and bad.get("pointer", null) == null:
 			return _fail("visible for a plan with no pointer")
@@ -238,10 +255,27 @@ static func _t_land() -> Dictionary:
 		return _fail("the halo does not open to full: %s %s %s" % [h1, h2, h3])
 	if float(_pose(plan, land + 0.10)["brighten"]) != 0.0 or absf(float(_pose(plan, land + 0.60)["brighten"]) - float(_mote_look(plan)["brighten"])) > 1e-6:
 		return _fail("the chooser brightness lift is wrong")
-	var b1 := float(_pose(plan, land + 0.38 + 0.4)["halo_alpha"])
-	var b2 := float(_pose(plan, land + 0.38 + 1.2)["halo_alpha"])
-	if b1 == b2:
-		return _fail("the halo does not breathe")
+	return { "ok": true }
+
+
+## The breath needs a hold longer than the breath period, or the fade ends it first: a fixture with a 2.0 s hold.
+static func _t_breath() -> Dictionary:
+	var snap := PickupPlannerTests._snap({ "phase": "intro" })
+	snap["data"]["pointer_look"]["path"]["hold"] = 2.0
+	var plan := PickupEventPlan.build(snap)
+	var land := float(plan["times"]["pointer0"]) + float(plan["pointer"]["land_t"])
+	var fade_t := float(plan["pointer"]["fade_t"])
+	var open_end := 0.08 + float(_mote_look(plan)["halo_open"])
+	var t1 := land + open_end + 0.4
+	var t2 := land + open_end + 1.2
+	if t2 >= fade_t:
+		return _fail("the samples are not inside the hold")
+	var a1 := float(_pose(plan, t1)["halo_alpha"])
+	var a2 := float(_pose(plan, t2)["halo_alpha"])
+	if a1 <= 0.0 or a2 <= 0.0 or absf(a1 - a2) < 0.005:
+		return _fail("the halo does not breathe inside the hold (%s, %s)" % [a1, a2])
+	if float(PickupEventPlan.pointer_pose(plan, t1)["fade"]) != 1.0:
+		return _fail("the samples are inside the fade")
 	return { "ok": true }
 
 
@@ -359,7 +393,7 @@ static func _t_host_land() -> Dictionary:
 		_run(fx, float(plan["times"]["pointer0"]) + float(plan["pointer"]["land_t"]))
 		if not mote.visible or start.position.distance_to(want) > 0.5:
 			errors.append("seed %s: the mote is at %s at the landing, the chooser head is %s" % [seed_text, start.position, want])
-		_run(fx, float(plan["times"]["step0"]) + 0.5)
+		_run(fx, float(plan["pointer"]["fade_t"]) - 0.05)
 		var halo := mote.get_node("%Halo") as Sprite2D
 		if not (halo.get_parent() as Node2D).visible or halo.modulate.a <= 0.0 or halo.position.distance_to(draw_pos) > 0.5:
 			errors.append("seed %s: the halo is not open behind the chooser" % seed_text)
@@ -453,11 +487,12 @@ static func _t_nothing_else_moves() -> Dictionary:
 	var layer := combat.get_node("%TokenLayer") as CombatTokenLayer
 	var ids := _ids(snap)
 	var rest: Array = ids.map(func(id: String) -> Vector2: return layer.display_cell_position(id))
+	var chooser := str(PickupEventPlan.build(snap)["chooser_id"])
 	var cam_pos := combat.camera.position
 	var errors: Array = []
 	_run(fx, 8.0, func() -> void:
 		for k in ids.size():
-			if layer.display_cell_position(ids[k]) != rest[k]:
+			if ids[k] != chooser and layer.display_cell_position(ids[k]) != rest[k]:
 				errors.append("token %s moved" % ids[k])
 		if combat.camera.mode != BoardCameraController.Mode.FREE or combat.camera.target_id != "":
 			errors.append("camera left FREE"))

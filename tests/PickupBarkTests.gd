@@ -25,6 +25,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/bark_new_event_with_a_new_chooser_clears_the_old_popup", Callable(PickupBarkTests, "_t_new_chooser"))
 	runner.register_test("pickup_ui/bark_follows_the_chooser_when_the_view_changes", Callable(PickupBarkTests, "_t_follow"))
 	runner.register_test("pickup_ui/bark_line_depends_on_the_chooser_standing_band", Callable(PickupBarkTests, "_t_band"))
+	runner.register_test("pickup_ui/bark_real_plan_anchors_above_the_chooser_end_tile_in_idle_and_none_in_intro", Callable(PickupBarkTests, "_t_real_end_tile"))
 	runner.register_test("pickup_ui/bark_real_snapshots_use_the_planner_line", Callable(PickupBarkTests, "_t_real_text"))
 
 
@@ -259,6 +260,55 @@ static func _t_empty_and_changed() -> Dictionary:
 	if not _popups(fx).is_empty():
 		errors.append("text that became empty left a popup")
 	return _done(fx, errors)
+
+
+## The production path: a real snapshot with a valid plan. In idle the bark sits above the chooser's END tile, not its row tile;
+## the intro shows none. The reference is the same snapshot with no `pointer_look` (no plan: the chooser stays on its row tile): the
+## popup must move by exactly the screen distance between the two tiles.
+static func _t_real_end_tile() -> Dictionary:
+	var snap := PickupRealBoard.snapshot("many", "idle", "plus")
+	var intro := PickupRealBoard.snapshot("many", "intro")
+	if snap.is_empty() or intro.is_empty():
+		return { "ok": false, "error": "the fixture fight did not reach the event" }
+	var plan := PickupEventPlan.build(snap)
+	var chooser := str(plan["chooser_id"])
+	var no_plan := snap.duplicate(true)
+	(no_plan["data"] as Dictionary).erase("pointer_look")
+	var fx_row := _mounted(no_plan)
+	var row_pos := Vector2.INF
+	if _popups(fx_row).has(chooser):
+		row_pos = (_popups(fx_row)[chooser]["node"] as Control).position
+	_free_fx(fx_row)
+	var fx := _mounted(snap)
+	var combat := fx["combat"] as CombatBoardScreen
+	var errors: Array = []
+	if not _popups(fx).has(chooser) or row_pos == Vector2.INF:
+		return _done(fx, ["no bark popup for the chooser (plan %s, no plan %s)" % [_popups(fx).has(chooser), row_pos != Vector2.INF]])
+	var actors := CombatBoardScreen.pickup_row_actors(snap["data"])
+	var at_end := CombatBoardScreen.pickup_actors_at(actors, chooser, { "cell": plan["chooser_end_cell"] })
+	var end_screen := Vector2.ZERO
+	var row_screen := Vector2.ZERO
+	for a: Dictionary in at_end:
+		if str(a["id"]) == chooser:
+			end_screen = combat._actor_screen_pos(a)
+	for a: Dictionary in actors:
+		if str(a["id"]) == chooser:
+			row_screen = combat._actor_screen_pos(a)
+	var popup := _popups(fx)[chooser]["node"] as Control
+	if end_screen.distance_to(row_screen) < 1.0:
+		errors.append("the fixture's end tile is on the row tile: the test proves nothing")
+	# The popup is clamped or sized by the bark layer, so the shift matches within a few pixels (the tiles are about 245 px apart).
+	if ((popup.position - row_pos) - (end_screen - row_screen)).length() > 15.0:
+		errors.append("the popup moved by %s, the end tile is %s from the row tile" % [popup.position - row_pos, end_screen - row_screen])
+	_free_fx(fx)
+	var fx2 := _mounted(intro)
+	if not _popups(fx2).is_empty():
+		errors.append("the intro shows a bark")
+	return _done(fx2, errors)
+
+
+static func _free_fx(fx: Dictionary) -> void:
+	PickupUiHostTests._free(fx)
 
 
 static func _t_real_text() -> Dictionary:

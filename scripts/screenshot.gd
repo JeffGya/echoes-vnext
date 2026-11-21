@@ -221,6 +221,9 @@ func _fixtures() -> Dictionary:
 		"pickup_intro_pointer_turn": ["real_pickup:many:intro:seed=0", "pointer_at:1.7"],
 		"pickup_intro_pointer_land": ["real_pickup:many:intro:seed=0", "pointer_at:4.49"],
 		"pickup_intro_pointer_hold": ["real_pickup:many:intro:seed=0", "pointer_at:4.89"],
+		# R6b stills (seed 0): end of the first leg (the out leg), and the plan total, where the chooser stands on chooser_end_cell. Both read the plan.
+		"pickup_intro_walk_out": ["real_pickup:many:intro:seed=0", "pointer_at_leg_end"],
+		"pickup_intro_walk_end": ["real_pickup:many:intro:seed=0", "pointer_at_total"],
 		"pickup_intro_empty": ["real_pickup:empty:intro"],
 		"pickup_intro_near": ["real_pickup:near:intro"],
 		"pickup_intro_full": ["real_pickup:full:intro"],
@@ -402,14 +405,26 @@ func _run_step(harness: Node, step: String) -> void:
 		if board_camera != null and board_camera.owner != null and parts[0] == "cam_frame":
 			board_camera.owner.call("frame_pickup_camera", false)
 			print("CAM zoom after reframe: %s" % board_camera.zoom.x)
-	if parts[0] == "pointer_advance" or parts[0] == "pointer_at":
+	if parts[0] in ["pointer_advance", "pointer_at", "pointer_at_leg_end", "pointer_at_total"]:
 		# pointer_advance:<s> moves the intro clock on by <s> in one tick; pointer_at:<t> moves it to the intro time <t> and then
-		# stops it, so the PNG shows that exact moment (later frames would add time).
+		# stops it, so the PNG shows that exact moment (later frames would add time). pointer_at_leg_end moves it to the end of the
+		# chooser's first leg and pointer_at_total to the plan total: both read the plan, so the stills follow the config.
 		var stage := harness.find_child("PickupEventStage", true, false)
 		if stage != null:
-			var delta := float(parts[1]) if parts[0] == "pointer_advance" else maxf(float(parts[1]) - float(stage.call("clock_time")), 0.0)
+			var plan: Dictionary = stage.call("plan")
+			var now := float(stage.call("clock_time"))
+			var delta := 0.0
+			match parts[0]:
+				"pointer_advance":
+					delta = float(parts[1])
+				"pointer_at":
+					delta = maxf(float(parts[1]) - now, 0.0)
+				"pointer_at_leg_end":
+					delta = maxf(float((plan["legs"] as Array)[0]["t1"]) - now, 0.0) if not (plan.get("legs", []) as Array).is_empty() else 0.0
+				"pointer_at_total":
+					delta = maxf(float(plan.get("total", now)) - now, 0.0)
 			stage.call("advance", delta)
-			if parts[0] == "pointer_at":
+			if parts[0] != "pointer_advance":
 				stage.set_process(false)
 	if parts[0] == "freeze_motion":
 		for node in harness.find_children("*", "Control", true, false):

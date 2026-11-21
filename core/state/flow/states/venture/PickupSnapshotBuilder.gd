@@ -158,6 +158,7 @@ const POINTER_LOOK_RULES := {
 		"halo_diameter_tiles": [0.703, 0.001, INF, false], "halo_alpha": [0.55, 0.0, 1.0, false],
 		"halo_start_alpha": [0.2, 0.0, 1.0, false], "halo_open": [0.30, 0.001, INF, false],
 		"halo_breath": [0.08, 0.0, 1.0, false], "halo_breath_period": [1.6, 0.001, INF, false],
+		"halo_fade_out": [0.30, 0.001, INF, false],
 		"brighten": [0.20, 0.0, INF, false], "brighten_len": [0.15, 0.001, INF, false],
 		"shadow_scale_y": [0.4, 0.001, INF, false], "shadow_alpha_drop": [0.4, 0.0, 1.0, false],
 		"shadow_scale_drop": [0.3, 0.0, 1.0, false], "shadow_radius": [14.0, 0.001, INF, false],

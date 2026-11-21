@@ -14,14 +14,16 @@ extends RefCounted
 ##   walk[]     { find_id, k, is_try, t0, t1, stand }          one per stop; stand = the tile before the find tile
 ##   finds[]    { find_id, index, status, pick_index, tile, reveal, reveal_len, walked, is_try, walk0, arrive,
 ##              lift0, lift1, lift_ease, fly0, fly1, slot }    -1 = no time or no slot
-##   pointer    { n, reduced, start_index, land_index, total, land_t, lead, land_phase_len, mote, path[{ kind, from, to, s0, s1, t0, t1, arc_k }], knots }
+##   pointer    { n, reduced, start_index, land_index, total, land_t, lead, land_phase_len, fade_t, mote, path[{ kind, from, to, s0, s1, t0, t1, arc_k }], knots }
 ##              the racetrack of the drifting mote (D-76): see "Pointer" below. Path times are seconds after `times.pointer0`.
-##              `mote` is the `data.pointer_look.mote` block (the look values for `PickupPointerMote`); `land_phase_len` = wind_up_len + sink_len.
+##              `mote` is the `data.pointer_look.mote` block (the look values for `PickupPointerMote`); `land_phase_len` = wind_up_len + sink_len;
+##              `fade_t` = when the mote, halo and brightness start to fade: the start of the chooser's first leg, else `times.step0`.
+## chooser_target_at(plan, t) -> { started, cell }          the tile the chooser has been sent to by `t` (the end of the last leg started)
 ##   pack       { before, after, slot_count, unlisted, tone, tone_before, land_end, pulse_at, held_find }
 ##   bark       { text, case, reaction, reason, band, variant, chars, t0, t1 };  emo = reaction name (emo_style)
 ## frame_at(plan, t) / skip_to_idle(snapshot, opts) -> { t, phase, beat, echoes[{ id, chosen, cell, walking, from, to,
 ##   progress }], items{ find_id: { state, cell, rev, p, held, dim, slot } }, pack{ slots, lit, used, pulse, tone },
-##   pointer{ visible, phase, pos_row, side, arc, arc_k, speed, lt }, bark{ chars, total }, skip_o, cont_o, chooser_end }
+##   pointer{ visible, phase, pos_row, side, arc, arc_k, speed, lt, fade }, bark{ chars, total }, skip_o, cont_o, chooser_end }
 ##   item state: hidden | revealed | lifted | flying | pack.
 ## A scene must handle `plan.valid == false` (no chooser, error snapshot, no complete `data.pointer_look`, a row or find with no
 ## tile): show no intro.
@@ -41,7 +43,7 @@ const LOOK_PATH_KEYS: Array = ["pointer_start", "pointer_lead", "hold", "hold_re
 	"path_slow_n", "path_slow_k", "path_final_k", "path_turn_min", "path_turn_max", "path_arc_fast", "path_arc_span"]
 const LOOK_MOTE_KEYS: Array = ["rise", "fade_scale_from", "above_head", "arc_min", "arc_max", "trail_count", "trail_dt", "trail_alpha",
 	"trail_scale", "trail_scale_step", "mote_radius", "wind_up", "wind_up_len", "sink", "sink_len", "sink_scale", "sink_fade_from",
-	"halo_diameter_tiles", "halo_alpha", "halo_start_alpha", "halo_open", "halo_breath", "halo_breath_period", "brighten",
+	"halo_diameter_tiles", "halo_alpha", "halo_start_alpha", "halo_open", "halo_breath", "halo_breath_period", "halo_fade_out", "brighten",
 	"brighten_len", "shadow_scale_y", "shadow_alpha_drop", "shadow_scale_drop", "shadow_radius"]
 # Mockup line 619: walk cap, fly time, typing speed.
 const WALK_CAP := 3.4
@@ -288,6 +290,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		{ "name": "idle", "t": t_idle },
 	]
 	var pk := _d(d.get("pack", {}))
+	pp["fade_t"] = float((trk["legs"] as Array)[0]["t0"]) if not (trk["legs"] as Array).is_empty() else t_s0
 	return {
 		"valid": true, "reduced": rm, "situation_id": sit,
 		"chooser_id": str(chooser.get("id", "")), "chooser_index": cidx, "n": n,
@@ -635,6 +638,20 @@ static func _standing(cell: Variant) -> Dictionary:
 	return { "cell": cell, "walking": false, "from": cell, "to": cell, "progress": 0.0 }
 
 
+## The chooser's destination at `t`: { started, cell }. `started` counts the legs whose `t0` has passed; `cell` is the end tile of
+## the last of them (the tile the chooser is walking to or stands on), or `chooser_cell` before the first leg. Pure.
+static func chooser_target_at(plan: Dictionary, t: float) -> Dictionary:
+	var out := { "started": 0, "cell": (plan["chooser_cell"] as Dictionary).duplicate() }
+	for l_v: Variant in plan["legs"]:
+		var l: Dictionary = l_v
+		if t < float(l["t0"]):
+			break
+		out["started"] = int(out["started"]) + 1
+		var cells: Array = l["cells"]
+		out["cell"] = (cells[cells.size() - 1] as Dictionary).duplicate()
+	return out
+
+
 ## Where the chooser is at `t`: on a tile, or between two tiles of a leg.
 static func _chooser_at(plan: Dictionary, t: float) -> Dictionary:
 	var cur: Dictionary = plan["chooser_cell"]
@@ -684,7 +701,7 @@ static func _pointer_look(d: Dictionary) -> Dictionary:
 
 
 static func _hidden_pointer() -> Dictionary:
-	return { "visible": false, "phase": "gone", "pos_row": 0.0, "side": 0.0, "arc": 0.0, "arc_k": 0.0, "speed": 0.0, "lt": 0.0 }
+	return { "visible": false, "phase": "gone", "pos_row": 0.0, "side": 0.0, "arc": 0.0, "arc_k": 0.0, "speed": 0.0, "lt": 0.0, "fade": 0.0 }
 
 
 ## The racetrack for `n` Echoes and the chooser at `land`. Pure and deterministic.
@@ -829,7 +846,8 @@ static func path_at(n: int, s: float) -> Dictionary:
 
 
 ## The mote's path state at `t` seconds of the intro. Hidden before `times.pointer0` and from `total` (the intro end).
-## phase: lead (fading in at rest), glide, turn, land (the landing), hold (after the landing), gone.
+## phase: lead (fading in at rest), glide, turn, land (the landing), hold (after the landing), fade (from `pointer.fade_t`, the chooser walks
+## away: `fade` falls from 1 to 0 over `mote.halo_fade_out`), gone. Hidden from `total` (the intro end) and once the fade is over.
 ## `lt` is the seconds since the mote reached the chooser (negative before). `arc` is sin(pi u) in the current move.
 static func pointer_pose(plan: Dictionary, t: float) -> Dictionary:
 	if not bool(plan.get("valid", false)) or is_nan(t) or not plan.has("pointer") or not plan.has("times") or not plan.has("total"):
@@ -838,18 +856,25 @@ static func pointer_pose(plan: Dictionary, t: float) -> Dictionary:
 	var pp: Dictionary = plan["pointer"]
 	if not tm.has("pointer0"):
 		return _hidden_pointer()
-	for key: String in ["n", "reduced", "land_index", "land_t", "lead", "knots", "path", "land_phase_len"]:
+	for key: String in ["n", "reduced", "land_index", "land_t", "lead", "knots", "path", "land_phase_len", "fade_t", "mote"]:
 		if not pp.has(key):
 			return _hidden_pointer()
+	if not (pp["mote"] is Dictionary) or not (pp["mote"] as Dictionary).has("halo_fade_out"):
+		return _hidden_pointer()
 	var tp := t - float(tm["pointer0"])
-	if tp < 0.0 or t >= float(plan["total"]):
+	var fade_t := float(pp["fade_t"])
+	var fade_len := maxf(float((pp["mote"] as Dictionary)["halo_fade_out"]), 0.0001)
+	var fade := 1.0 - clampf((t - fade_t) / fade_len, 0.0, 1.0)
+	if tp < 0.0 or t >= float(plan["total"]) or fade <= 0.0:
 		return _hidden_pointer()
 	var n := int(pp["n"])
 	var land_pos := float(pp["land_index"])
 	var out := { "visible": true, "phase": "lead", "pos_row": land_pos, "side": 0.0, "arc": 0.0, "arc_k": 0.0, "speed": 0.0,
-		"lt": tp - float(pp["land_t"]) }
+		"lt": tp - float(pp["land_t"]), "fade": fade }
 	if bool(pp["reduced"]) or n < 2:
 		out["phase"] = "lead" if tp < float(pp["land_t"]) else "land"
+		if t >= fade_t:
+			out["phase"] = "fade"
 		return out
 	var knots: Dictionary = pp["knots"]
 	var s := _s_at(knots, tp)
@@ -864,6 +889,8 @@ static func pointer_pose(plan: Dictionary, t: float) -> Dictionary:
 		out["side"] = 0.0
 		out["speed"] = 0.0
 		out["phase"] = "land" if tp - float(pp["land_t"]) < float(pp["land_phase_len"]) else "hold"
+		if t >= fade_t:
+			out["phase"] = "fade"
 		return out
 	for mv_v: Variant in pp["path"]:
 		var mv: Dictionary = mv_v
