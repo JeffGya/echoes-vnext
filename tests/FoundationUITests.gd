@@ -27,6 +27,10 @@ const RankUpOverlayScene := preload("res://ui/overlays/RankUpOverlay.tscn")
 const SummonRevealOverlayScene := preload("res://ui/overlays/SummonRevealOverlay.tscn")
 const ResolveScene := preload("res://ui/screens/venture/ResolveScreen.tscn")
 
+class InvalidActorConfig extends ConfigService:
+	func load_actors(_logger: StructuredLogger = null, _t: int = -1) -> bool:
+		return false
+
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("foundation_ui/desktop_scale_profile_matrix", Callable(FoundationUITests, "_t_desktop_scale_profile_matrix"))
 	runner.register_test("foundation_ui/mobile_profile_caps", Callable(FoundationUITests, "_t_mobile_profile_caps"))
@@ -45,6 +49,229 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("foundation_ui/realm_modal_living_tree_contrast_and_buttons", Callable(FoundationUITests, "_t_realm_modal_living_tree_contrast_and_buttons"))
 	runner.register_test("foundation_ui/blocking_modal_living_tree_cta_styles", Callable(FoundationUITests, "_t_blocking_modal_living_tree_cta_styles"))
 	runner.register_test("foundation_ui/resolve_modal_geometry_compact_and_wide", Callable(FoundationUITests, "_t_resolve_modal_geometry_compact_and_wide"))
+	runner.register_test("foundation_ui/bank_timer_stays_off_on_boot_failure", _t_bank_timer_stays_off_on_boot_failure)
+	runner.register_test("foundation_ui/bank_timer_starts_and_stops_with_play", _t_bank_timer_starts_and_stops_with_play)
+	runner.register_test("foundation_ui/bank_timer_on_loaded_and_recovered_campaigns", _t_bank_timer_on_loaded_and_recovered_campaigns)
+
+static func _t_bank_timer_stays_off_on_boot_failure() -> Dictionary:
+	return _with_bank_timer_app(func(app: Node, timer: Timer) -> String:
+		for failure in ["configuration", "corrupt", "unsupported", "first_write"]:
+			var path := TestSaveHarness.fresh_save_path(failure + ".json", "bank_timer")
+			var config := ConfigService.new()
+			var blocked_pending := path + ".pending_a"
+			var expected_type := "flow.save_error"
+			match failure:
+				"configuration":
+					config = InvalidActorConfig.new()
+					expected_type = "flow.config_error"
+				"corrupt":
+					if not _write_bank_test_file(path, "{truncated"):
+						return "Could not prepare corrupt save"
+				"unsupported":
+					var unsupported := SaveService.make_new_save(12346)
+					unsupported["schema_version"] = SaveSchema.SCHEMA_VERSION + 1
+					if not _write_bank_test_file(path, JSON.stringify(unsupported)):
+						return "Could not prepare unsupported save"
+				"first_write":
+					if DirAccess.make_dir_absolute(blocked_pending) != OK:
+						return "Could not block the first write"
+
+			var runtime := _bank_test_runtime(config, path)
+			var snapshot := runtime.boot()
+			app.set("runtime", runtime)
+			app.call("_render_snapshot", snapshot)
+			var error := _expect_bank_timer_off(app, timer, runtime, failure)
+			if error.is_empty() and snapshot.get("type") != expected_type:
+				error = "%s fixture did not reach %s" % [failure, expected_type]
+			if error.is_empty() and runtime.has_ready_campaign():
+				error = "%s was marked ready despite failing boot" % failure
+			if error.is_empty():
+				# Screen type alone is insufficient. The runtime must have opened a campaign.
+				app.call("_render_snapshot", {"type": "test.bank_play", "data": {}, "actions": {}})
+				error = _expect_bank_timer_off(app, timer, runtime, failure + " with a play screen")
+			if DirAccess.dir_exists_absolute(blocked_pending):
+				DirAccess.remove_absolute(blocked_pending)
+			TestSaveHarness.remove_save_artifacts(path)
+			if not error.is_empty():
+				return error
+		return ""
+	)
+
+static func _t_bank_timer_starts_and_stops_with_play() -> Dictionary:
+	var path := TestSaveHarness.fresh_save_path("new.json", "bank_timer")
+	var result := _with_bank_timer_app(func(app: Node, timer: Timer) -> String:
+		var runtime := _bank_test_runtime(ConfigService.new(), path)
+		var splash := runtime.boot()
+		app.set("runtime", runtime)
+		app.call("_render_snapshot", splash)
+		var error := _expect_bank_timer_off(app, timer, runtime, "splash")
+		if not error.is_empty():
+			return error
+		app.call("_on_ui_action_selected", splash["actions"]["main.cta_primary"])
+		var play: Dictionary = app.get("_last_snapshot")
+		if play.get("type") != FlowStateIds.ONBOARDING_INVOCATION or timer.is_stopped():
+			return "New game did not start the timer in onboarding"
+
+		var menu := runtime.dispatch({"type": "flow.go_state", "to": FlowStateIds.MAIN_MENU})
+		var config_error := FlowRuntime._build_config_error_snapshot(runtime.get_tick())
+		var save_error := config_error.duplicate(true)
+		save_error["type"] = "flow.save_error"
+		for blocked in [splash, menu, config_error, save_error, {}]:
+			app.call("_render_snapshot", play)
+			if timer.is_stopped():
+				return "Timer failed to start before testing stop"
+			app.call("_render_snapshot", blocked)
+			error = _expect_bank_timer_off(app, timer, runtime, str(blocked.get("type", "empty response")))
+			if not error.is_empty():
+				return error
+		return ""
+	)
+	TestSaveHarness.remove_save_artifacts(path)
+	return result
+
+static func _t_bank_timer_on_loaded_and_recovered_campaigns() -> Dictionary:
+	return _with_bank_timer_app(func(app: Node, timer: Timer) -> String:
+		for mode in ["primary", "backup", "backup_retry"]:
+			var path := TestSaveHarness.fresh_save_path(mode + ".json", "bank_timer")
+			var error := _check_bank_timer_on_continue(app, timer, path, mode)
+			if DirAccess.dir_exists_absolute(path + ".pending_a"):
+				DirAccess.remove_absolute(path + ".pending_a")
+			TestSaveHarness.remove_save_artifacts(path)
+			if not error.is_empty():
+				return "%s: %s" % [mode, error]
+		return ""
+	)
+
+static func _check_bank_timer_on_continue(app: Node, timer: Timer, path: String, mode: String) -> String:
+	var save := SaveService.make_new_save(12346)
+	save["first_boot"] = false
+	save["sanctum"]["name"] = "Bank Test House"
+	save["onboarding"]["chapter_one_complete"] = true
+	save["onboarding"]["keeper_intro_complete"] = true
+	save["sanctum"]["ase_flame"]["awakened"] = true
+	save["economy"]["last_offline_unix"] = int(Time.get_unix_time_from_system()) - 8 * 3600
+	var target := path if mode == "primary" else path + ".bak1"
+	if not _write_bank_test_file(target, JSON.stringify(save)):
+		return "Could not prepare campaign"
+	if mode != "primary" and not _write_bank_test_file(path, "{truncated"):
+		return "Could not prepare corrupt primary"
+	if mode == "backup_retry" and DirAccess.make_dir_absolute(path + ".pending_a") != OK:
+		return "Could not block backup promotion"
+	var runtime := _bank_test_runtime(ConfigService.new(), path)
+	var splash := runtime.boot()
+	if splash.get("type") != FlowStateIds.SPLASH or not runtime.has_ready_campaign():
+		return "Boot did not open the campaign"
+	if splash["meta"].has("save_recovery") != (mode != "primary"):
+		return "Unexpected recovery notice"
+	if runtime.flow_ctx.save_request != (mode == "backup_retry"):
+		return "Unexpected save retry state on boot"
+
+	app.set("runtime", runtime)
+	app.call("_render_snapshot", splash)
+	app.call("_on_ui_action_selected", splash["actions"]["main.cta_primary"])
+	var menu: Dictionary = app.get("_last_snapshot")
+	if menu.get("type") != FlowStateIds.MAIN_MENU or not timer.is_stopped():
+		return "Expected the timer to stay off in Main Menu"
+	var ase_before := runtime.econ.get_ase()
+	app.call("_on_ui_action_selected", menu["actions"]["main.cta_primary"])
+	var sanctum: Dictionary = app.get("_last_snapshot")
+	if sanctum.get("type") != FlowStateIds.SANCTUM or timer.is_stopped():
+		return "Continue did not reach the Sanctum and start the timer"
+	if runtime.get_save_data()["sanctum"]["name"] != "Bank Test House" or runtime.econ.get_ase() <= ase_before:
+		return "Continue did not retain the campaign and apply offline earnings"
+
+	var interval := timer.wait_time
+	var economy_config := ConfigService.get_economy_cfg(runtime.config_service)
+	if interval != float(economy_config["sanctum_bank_interval_seconds"]):
+		return "The bank timer did not use the configured interval"
+	timer.start(37.0)
+	timer.wait_time = interval
+	app.call("_on_ui_action_selected", {"type": "flow.go_state", "to": FlowStateIds.REALM_SELECT})
+	var realm: Dictionary = app.get("_last_snapshot")
+	if realm.get("type") != FlowStateIds.REALM_SELECT or not is_equal_approx(timer.time_left, 37.0):
+		return "Navigation restarted or stopped the running countdown"
+
+	runtime.get_save_data()["economy"]["last_settle_unix"] = int(Time.get_unix_time_from_system()) - int(interval)
+	ase_before = runtime.econ.get_ase()
+	var tick := runtime.get_tick()
+	timer.timeout.emit()
+	var settlements := runtime.logger.get_logs().filter(func(event: Dictionary) -> bool:
+		return event["type"] == "economy.settle" and event["data"].get("source") == "bank.interval"
+	)
+	if runtime.get_tick() != tick + 1 or settlements.size() != 1:
+		return "Timeout did not dispatch exactly one bank settlement"
+	var elapsed: int = settlements[0]["data"]["delta_seconds_used"]
+	var rate := float(economy_config["ase_online_per_min_base"]) / 60.0
+	var expected_gain := EconomyAccrualService.compute_online_settle_gain(elapsed, rate, 1.0)
+	if expected_gain <= 0 or runtime.econ.get_ase() != ase_before + expected_gain or timer.is_stopped():
+		return "The timeout did not credit Ase once and keep the timer running"
+	return ""
+
+static func _expect_bank_timer_off(app: Node, timer: Timer, runtime: FlowRuntime, label: String) -> String:
+	if not timer.is_stopped():
+		return "%s left the bank timer running" % label
+	var tick := runtime.get_tick()
+	var save_before := runtime.get_save_data().duplicate(true)
+	var log_count := runtime.logger.get_logs().size()
+	var screen_before: Dictionary = app.get("_last_snapshot")
+	var files_before := _bank_test_save_files(runtime.save_path)
+	timer.timeout.emit()
+	if runtime.get_tick() != tick or runtime.get_save_data() != save_before:
+		return "%s accepted a late bank timeout" % label
+	if runtime.logger.get_logs().size() != log_count or app.get("_last_snapshot") != screen_before:
+		return "%s changed the runtime or screen after a late bank timeout" % label
+	if _bank_test_save_files(runtime.save_path) != files_before:
+		return "%s changed save files after a late bank timeout" % label
+	return ""
+
+static func _with_bank_timer_app(check: Callable) -> Dictionary:
+	# Use the running AppRoot so the test emits the production signal connection.
+	var tree := Engine.get_main_loop() as SceneTree
+	var app := tree.current_scene
+	var timer := app.get_node_or_null("EconBankTimer") as Timer if app != null else null
+	if timer == null or not timer.timeout.is_connected(app._on_econ_bank_timer_timeout):
+		return {"ok": false, "error": "Running AppRoot bank timer missing"}
+	var previous_runtime: FlowRuntime = app.get("runtime")
+	var previous_screen: Dictionary = app.get("_last_snapshot")
+	var previous_time_left := timer.time_left
+	var previous_wait_time := timer.wait_time
+	var previous_screens: Dictionary = {}
+	for field in ["_save_error_screen", "_active_onboarding_screen", "_sanctum_shell", "_realm_shell"]:
+		previous_screens[field] = app.get(field)
+		app.set(field, null)
+	var error: String = check.call(app, timer)
+	for field in previous_screens:
+		var test_screen: Control = app.get(field)
+		if is_instance_valid(test_screen):
+			test_screen.free()
+		app.set(field, previous_screens[field])
+	app.set("runtime", previous_runtime)
+	app.call("_render_snapshot", previous_screen)
+	if previous_time_left > 0.0:
+		timer.start(previous_time_left)
+	else:
+		timer.stop()
+	timer.wait_time = previous_wait_time
+	return {"ok": error.is_empty(), "error": error}
+
+static func _bank_test_runtime(config: ConfigService, path: String) -> FlowRuntime:
+	var logger := StructuredLogger.new()
+	logger.set_level("debug")
+	return FlowRuntime.new(logger, config, path)
+
+static func _write_bank_test_file(path: String, contents: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		return false
+	file.store_string(contents)
+	return true
+
+static func _bank_test_save_files(path: String) -> Dictionary:
+	var files: Dictionary = {}
+	for suffix in TestSaveHarness.artifact_suffixes():
+		if FileAccess.file_exists(path + suffix):
+			files[suffix] = FileAccess.get_sha256(path + suffix)
+	return files
 
 static func _t_desktop_scale_profile_matrix() -> Dictionary:
 	var cases := [
