@@ -20,6 +20,7 @@ const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/planner_beats_are_in_order_with_monotonic_times", Callable(PickupPlannerTests, "_t_beats"))
 	runner.register_test("pickup_ui/planner_pointer_steps_start_end_and_lap", Callable(PickupPlannerTests, "_t_pointer"))
+	runner.register_test("pickup_ui/planner_timing_config_reaches_the_plan", Callable(PickupPlannerTests, "_t_timing_config_reaches_plan"))
 	runner.register_test("pickup_ui/planner_bark_comes_after_the_last_landing_for_every_standing", Callable(PickupPlannerTests, "_t_bark_after_last"))
 	runner.register_test("pickup_ui/planner_missing_look_key_gives_no_plan", Callable(PickupPlannerTests, "_t_missing_look_keys"))
 	runner.register_test("pickup_ui/planner_fade_starts_when_the_chooser_starts_to_walk", Callable(PickupPlannerTests, "_t_fade_t"))
@@ -290,14 +291,20 @@ static func _t_bark_after_last() -> Dictionary:
 ## Every key of the look that the planner reads: a snapshot without one of them is not playable.
 static func _t_missing_look_keys() -> Dictionary:
 	var groups := { "reduced": PickupEventPlan.LOOK_REDUCED_KEYS, "items": PickupEventPlan.LOOK_ITEMS_KEYS, "buttons": PickupEventPlan.LOOK_BUTTONS_KEYS,
-		"mote": PickupEventPlan.LOOK_MOTE_KEYS, "path": PickupEventPlan.LOOK_PATH_KEYS }
+		"mote": PickupEventPlan.LOOK_MOTE_KEYS, "path": PickupEventPlan.LOOK_PATH_KEYS, "timing": PickupEventPlan.LOOK_TIMING_KEYS,
+		"tempo": PickupEventPlan.LOOK_TEMPO_KEYS }
+	var reason_keys: Array = []
+	for reason: String in PickupEventPlan.REASONS:
+		for field: String in PickupEventPlan.LOOK_REASON_FIELDS:
+			reason_keys.append("%s_%s" % [reason, field])
+	groups["reasons"] = reason_keys
 	for group: String in groups:
 		for key: String in groups[group]:
 			var snap := _case("C1", "intro")
 			((snap["data"]["pointer_look"] as Dictionary)[group] as Dictionary).erase(key)
 			if bool(PickupEventPlan.build(snap)["valid"]):
 				return _fail("a pointer_look with no %s.%s should give no plan" % [group, key])
-	for gone: String in ["reduced", "buttons"]:
+	for gone: String in ["reduced", "buttons", "timing", "tempo", "reasons"]:
 		var snap := _case("C1", "intro")
 		(snap["data"]["pointer_look"] as Dictionary).erase(gone)
 		if bool(PickupEventPlan.build(snap)["valid"]):
@@ -548,7 +555,7 @@ static func _t_frozen() -> Dictionary:
 	for rm in [false, true]:
 		var fp := PickupEventPlan.build(snap, { "reduced": rm })
 		var wait := float(fp["times"]["deposit_end"]) - float(fp["times"]["walk0"])
-		var want := 0.4 if rm else PickupEventPlan.FROZEN_STEP + PickupEventPlan.FROZEN_WAIT
+		var want: float = float(_look()["reduced"]["frozen_wait"]) if rm else float(_look()["timing"]["frozen_step"]) + float(_look()["timing"]["frozen_wait"])
 		if absf(wait - want) > _EPS:
 			return _fail("the frozen wait is %s s (reduced=%s), expected %s" % [str(wait), str(rm), str(want)])
 	if plan["chooser_end_cell"] != (plan["out_cell"] if not (plan["out_cell"] as Dictionary).is_empty() else plan["chooser_cell"]):
@@ -590,12 +597,17 @@ static func _t_cases() -> Dictionary:
 
 
 static func _t_tempo() -> Dictionary:
-	var low := PickupEventPlan.tempo(1)
-	var mid := PickupEventPlan.tempo(5)
-	var high := PickupEventPlan.tempo(9)
-	if absf(float(low["pre"]) - 0.6) > _EPS or absf(float(mid["pre"]) - 0.35) > _EPS or absf(float(high["pre"]) - 0.1) > _EPS:
-		return _fail("tempo pre does not hit the anchors 0.6, 0.35, 0.1")
-	if float(low["pace"]) >= float(high["pace"]) or PickupEventPlan.tempo(-3) != low or PickupEventPlan.tempo(40) != high:
+	var cfg: Dictionary = _look()["tempo"]
+	var low := PickupEventPlan.tempo(1, cfg)
+	var mid := PickupEventPlan.tempo(5, cfg)
+	var high := PickupEventPlan.tempo(9, cfg)
+	for anchor: Array in [[low, "1"], [mid, "5"], [high, "9"]]:
+		for key: String in ["pre", "hitch", "delay"]:
+			if absf(float((anchor[0] as Dictionary)[key]) - snappedf(float(cfg["%s_%s" % [key, anchor[1]]]), 0.01)) > _EPS:
+				return _fail("tempo %s does not hit the config anchor of Standing %s" % [key, anchor[1]])
+		if absf(float((anchor[0] as Dictionary)["pace"]) - float(cfg["pace_%s" % anchor[1]])) > _EPS:
+			return _fail("tempo pace does not hit the config anchor of Standing %s" % anchor[1])
+	if PickupEventPlan.tempo(-3, cfg) != low or PickupEventPlan.tempo(40, cfg) != high:
 		return _fail("pace or clamp is wrong")
 	var a := _snap({ "case": "C1", "phase": "intro", "standing": [1, 1, 1, 1, 1], "reaction": "plus", "reason": "identity",
 		"finds": [["f0", "t_a", "taken", 0], ["f1", "t_b", "taken", 1]] })
@@ -1046,56 +1058,76 @@ static func _t_unlisted_and_tone() -> Dictionary:
 	return { "ok": true }
 
 
-## Literals copied from pickup-event-playable.html; the line of each is in the comment.
+## The mockup constants are in the config now (D-83): no tunable literal is left in the planner, the planner's key lists equal the rules
+## table, and the pixel constants of the mockup are gone. This test pins no shipping value.
 static func _t_constants() -> Dictionary:
 	var map: Dictionary = (load("res://ui/screens/combat/PickupEventPlan.gd") as GDScript).get_script_constant_map()
-	var table: Array = [
-		["STEP_LEN", 0.45],  # line 670
-		["IDLE_AFTER_BARK", 0.3], ["IDLE_AFTER_DEPOSIT", 0.45],  # lines 778, 780
-		["WALK_CAP", 3.4], ["TYPE_CPS", 24.0],  # line 619
-		["DIST_SCALE_MIN", 0.6], ["DIST_SCALE_MAX", 1.35],  # line 688
-		["WORTH_DWELL", 0.45], ["SAFE_PRE_EXTRA", 0.25],  # lines 716, 679
-		["FROZEN_STEP", 0.35], ["FROZEN_WAIT", 1.35],  # lines 757 to 760
-		["PACK_SLOTS_DEFAULT", 4],  # line 312
-		["REF_TILES_FIRST", 3.0], ["REF_TILES_NEXT", 2.0],  # provisional feel values: 90 and 60 px at 30 px a tile (D-75)
-	]
-	for row: Array in table:
-		if not map.has(row[0]) or absf(float(map[row[0]]) - float(row[1])) > 1e-9:
-			return _fail("constant %s is %s, the mockup has %s" % [row[0], str(map.get(row[0])), str(row[1])])
 	for gone: String in ["POINTER_SLOWDOWN", "STEP_GAP", "POINTER_DECEL_DIST", "POINTER_ACCEL", "POINTER_MIN_TRAVEL", "POINTER_MIN_CRUISE",
 			"POINTER_T_STEP", "POINTER_T_BASE", "POINTER_T_VARY", "POINTER_T_STEPS", "POINTER_SAMPLE_DT",
 			"POINTER_START", "POINTER_LEAD", "HOLD", "HOLD_REDUCED", "POINTER_REDUCED", "LAND_PHASE_LEN", "PATH_PACE", "PATH_FIRST_K",
 			"PATH_SLOW_N", "PATH_SLOW_K", "PATH_FINAL_K", "PATH_TURN_MIN", "PATH_TURN_MAX", "PATH_ARC_FAST", "PATH_ARC_SPAN", "PATH_TABLES",
-			"REVEAL_LEN", "FLY_LEN", "STEP_LEN_REDUCED", "REVEAL_LEN_REDUCED", "TRY_LIFT_EXTRA", "BARK_AFTER_LAST"]:
+			"REVEAL_LEN", "FLY_LEN", "STEP_LEN_REDUCED", "REVEAL_LEN_REDUCED", "TRY_LIFT_EXTRA", "BARK_AFTER_LAST",
+			"STEP_LEN", "WALK_CAP", "TYPE_CPS", "DIST_SCALE_MIN", "DIST_SCALE_MAX", "WORTH_DWELL", "SAFE_PRE_EXTRA", "FROZEN_STEP", "FROZEN_WAIT",
+			"IDLE_AFTER_BARK", "IDLE_AFTER_DEPOSIT", "PULSE_LEN", "REF_TILES_FIRST", "REF_TILES_NEXT", "RS",
+			"DESIGN_W", "DESIGN_H", "ROW_SPACING", "ROW_Y", "OUT_STEP", "HEAD", "STAND_OFF", "SLOT_X0", "SLOT_Y", "FIELD_STEP"]:
 		if map.has(gone):
-			return _fail("old pointer constant %s is still in the planner" % gone)
-	# The pixel and body constants of the mockup are gone: the plan runs on tiles and paths.
-	for gone: String in ["DESIGN_W", "DESIGN_H", "ROW_SPACING", "ROW_Y", "OUT_STEP", "HEAD", "STAND_OFF", "SLOT_X0", "SLOT_Y", "FIELD_STEP"]:
-		if map.has(gone):
-			return _fail("design-space constant %s is still in the planner" % gone)
-	# RS rows, mockup lines 612 to 618: walk first, walk next, touch, carry ease. The lift and hold are config now (`items`).
-	var rs := {
-		"likes": [0.70, 0.60, 0.10, "back"], "worth": [0.60, 0.60, 0.10, "smooth"],
-		"safe": [0.95, 0.70, 0.10, "smooth"], "bold": [0.50, 0.40, 0.10, "back"],
-		"fit": [0.45, 0.45, 0.0, "smooth"] }
-	for k: String in rs:
-		var r: Dictionary = PickupEventPlan.RS[k]
-		var w: Array = rs[k]
-		if absf(float(r["w"][0]) - float(w[0])) > 1e-9 or absf(float(r["w"][1]) - float(w[1])) > 1e-9 or absf(float(r["touch"]) - float(w[2])) > 1e-9 \
-				or r["ease"] != w[3] or r.has("lift") or r.has("hold"):
-			return _fail("RS row %s differs from the mockup" % k)
-	if PickupEventPlan.RS.size() != 5:
-		return _fail("RS has a row the mockup does not")
-	# Tempo anchors, mockup lines 606 to 610: Standing 1, 5, 9 -> pre, hitch, pace, delay.
-	var anchors := { 1: [0.6, 0.12, 0.8, 0.2], 5: [0.35, 0.06, 0.95, 0.1], 9: [0.1, 0.0, 1.0, 0.0] }
-	for st: int in anchors:
-		var t := PickupEventPlan.tempo(st)
-		var a: Array = anchors[st]
-		for i in 4:
-			if absf(float(t[["pre", "hitch", "pace", "delay"][i]]) - float(a[i])) > 1e-9:
-				return _fail("tempo(%d) key %d differs from the mockup" % [st, i])
-	if (PickupEventPlan.tempo(5) as Dictionary).size() != 4:
-		return _fail("tempo has a body key (lean) the plan does not play")
+			return _fail("constant %s is still in the planner" % gone)
+	var rules: Dictionary = PickupSnapshotBuilder.POINTER_LOOK_RULES
+	var keys := { "path": PickupEventPlan.LOOK_PATH_KEYS, "mote": PickupEventPlan.LOOK_MOTE_KEYS, "items": PickupEventPlan.LOOK_ITEMS_KEYS,
+		"buttons": PickupEventPlan.LOOK_BUTTONS_KEYS, "reduced": PickupEventPlan.LOOK_REDUCED_KEYS, "timing": PickupEventPlan.LOOK_TIMING_KEYS,
+		"tempo": PickupEventPlan.LOOK_TEMPO_KEYS }
+	var reason_keys: Array = []
+	for reason: String in PickupEventPlan.REASONS:
+		for field: String in PickupEventPlan.LOOK_REASON_FIELDS:
+			reason_keys.append("%s_%s" % [reason, field])
+	keys["reasons"] = reason_keys
+	for group: String in rules:
+		if not keys.has(group):
+			return _fail("the rules table has the group %s that the planner does not read" % group)
+		var want: Array = (rules[group] as Dictionary).keys()
+		var got: Array = (keys[group] as Array).duplicate()
+		want.sort()
+		got.sort()
+		if want != got:
+			return _fail("the planner keys of %s differ from the rules table: %s against %s" % [group, got, want])
+	for group: String in keys:
+		if not rules.has(group):
+			return _fail("the planner reads the group %s that the rules table does not have" % group)
+	return { "ok": true }
+
+
+## Every moved constant now comes from the snapshot: changing one value moves the plan output it governs.
+static func _t_timing_config_reaches_plan() -> Dictionary:
+	var base := PickupEventPlan.build(_snap({ "phase": "intro", "finds": [["f0", "t_a", "taken", 0]] }))
+	var cases := [
+		["timing", "step_len", 1.0, func(p: Dictionary) -> float: return float(p["times"]["step1"])],
+		["timing", "idle_after_deposit", 3.0, func(p: Dictionary) -> float: return float(p["total"])],
+		["timing", "type_cps", 2.0, func(p: Dictionary) -> float: return float(p["times"]["bark_end"])],
+		["reasons", "*_touch", 0.8, func(p: Dictionary) -> float: return float(p["finds"][0]["lift0"])],
+		["tempo", "pre_5", 1.5, func(p: Dictionary) -> float: return float(p["times"]["walk0"])],
+		["tempo", "delay_5", 1.0, func(p: Dictionary) -> float: return float(p["times"]["bark"])],
+	]
+	for c: Array in cases:
+		var snap := _snap({ "phase": "intro", "finds": [["f0", "t_a", "taken", 0]] })
+		var before: float = (c[3] as Callable).call(base)
+		var group_cfg: Dictionary = (snap["data"]["pointer_look"] as Dictionary)[c[0]]
+		if str(c[1]).begins_with("*"):
+			for reason: String in PickupEventPlan.REASONS:
+				group_cfg[reason + str(c[1]).substr(1)] = c[2]
+		else:
+			group_cfg[c[1]] = c[2]
+		var after: float = (c[3] as Callable).call(PickupEventPlan.build(snap))
+		if is_equal_approx(before, after):
+			return _fail("%s.%s from the config does not move the plan (%s)" % [c[0], c[1], before])
+	# The walk cap and the frozen wait are checked with the fixtures that use them.
+	var capped := _snap({ "phase": "intro", "finds": [["f0", "t_a", "taken", 0], ["f1", "t_b", "taken", 1]] })
+	var open_look: Dictionary = (capped["data"]["pointer_look"] as Dictionary)["timing"]
+	open_look["walk_cap"] = 100.0
+	var wide := PickupEventPlan.build(capped)
+	(capped["data"]["pointer_look"]["timing"] as Dictionary)["walk_cap"] = 0.2
+	var tight := PickupEventPlan.build(capped)
+	if float(tight["times"]["deposit_end"]) >= float(wide["times"]["deposit_end"]):
+		return _fail("walk_cap from the config does not shorten the walks")
 	return { "ok": true }
 
 
@@ -1269,7 +1301,7 @@ static func _t_pulse_ends_before_total() -> Dictionary:
 			snap["data"]["row"][2]["standing"] = 9
 			snap["data"]["chooser"]["standing"] = 9
 			var plan := PickupEventPlan.build(snap, { "reduced": rm })
-			if float(plan["total"]) < float(plan["pack"]["pulse_at"]) + PickupEventPlan.PULSE_LEN - _EPS:
+			if float(plan["total"]) < float(plan["pack"]["pulse_at"]) + float(_look()["timing"]["pulse_len"]) - _EPS:
 				return _fail("%s reduced=%s: the plan ends at %s, before the pulse ends" % [key, str(rm), str(plan["total"])])
 			var diff := _first_diff(PickupEventPlan.skip_to_idle(snap, { "reduced": rm }), PickupEventPlan.frame_at(plan, float(plan["total"])))
 			if diff != "":

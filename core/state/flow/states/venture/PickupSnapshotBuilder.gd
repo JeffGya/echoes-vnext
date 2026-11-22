@@ -14,7 +14,7 @@ extends RefCounted
 ## valid now (a hidden find in the intro, an id of no find and no pack slot).
 ## Board tiles (D-72, `PickupPlacement`, derived on every build, never saved): `row[].tile` and `finds[].tile` are
 ## { col, row }. `finds[].cell` stays the index in the record. `camera_frame` is the camera tunables (D-73).
-## `pointer_look` is the feel values of the pointer mote (D-77): { path, tables, mote, items, reduced, buttons }, see `pointer_look`.
+## `pointer_look` is the feel values of the pointer mote (D-77): { path, tables, mote, items, reduced, buttons, timing, reasons, tempo }, see `pointer_look`.
 ## `swap.targets` is keyed by BOTH sides: left find id -> legal pack ids, pack id -> legal left find ids.
 ##
 ## Actions (slot-keyed; no `nav.back`, the event has no way out except Continue):
@@ -175,6 +175,43 @@ const POINTER_LOOK_RULES := {
 		"skip_in_from": [0.2, 0.0, INF, false], "skip_in_to": [0.35, 0.0, INF, false], "skip_out_len": [0.1, 0.0, INF, false],
 		"cont_in_len": [0.25, 0.0, INF, false],
 	},
+	"timing": {
+		"step_len": [0.45, 0.001, INF, false],
+		"walk_cap": [3.4, 0.001, INF, false],
+		"type_cps": [24.0, 0.001, INF, false],
+		"dist_scale_min": [0.6, 0.001, INF, false],
+		"dist_scale_max": [1.35, 0.001, INF, false],
+		"worth_dwell": [0.45, 0.0, INF, false],
+		"safe_pre_extra": [0.25, 0.0, INF, false],
+		"frozen_step": [0.35, 0.0, INF, false],
+		"frozen_wait": [1.35, 0.0, INF, false],
+		"idle_after_bark": [0.3, 0.0, INF, false],
+		"idle_after_deposit": [0.45, 0.0, INF, false],
+		"pulse_len": [0.4, 0.001, INF, false],
+		"ref_tiles_first": [3.0, 0.001, INF, false],
+		"ref_tiles_next": [2.0, 0.001, INF, false],
+	},
+	"reasons": {
+		"likes_walk_first": [0.7, 0.001, INF, false], "likes_walk_next": [0.6, 0.001, INF, false], "likes_touch": [0.1, 0.0, INF, false], "likes_ease_back": [1, 0, 1, true],
+		"worth_walk_first": [0.6, 0.001, INF, false], "worth_walk_next": [0.6, 0.001, INF, false], "worth_touch": [0.1, 0.0, INF, false], "worth_ease_back": [0, 0, 1, true],
+		"safe_walk_first": [0.95, 0.001, INF, false], "safe_walk_next": [0.7, 0.001, INF, false], "safe_touch": [0.1, 0.0, INF, false], "safe_ease_back": [0, 0, 1, true],
+		"bold_walk_first": [0.5, 0.001, INF, false], "bold_walk_next": [0.4, 0.001, INF, false], "bold_touch": [0.1, 0.0, INF, false], "bold_ease_back": [1, 0, 1, true],
+		"fit_walk_first": [0.45, 0.001, INF, false], "fit_walk_next": [0.45, 0.001, INF, false], "fit_touch": [0.0, 0.0, INF, false], "fit_ease_back": [0, 0, 1, true],
+	},
+	"tempo": {
+		"pre_1": [0.6, 0.0, INF, false],
+		"pre_5": [0.35, 0.0, INF, false],
+		"pre_9": [0.1, 0.0, INF, false],
+		"hitch_1": [0.12, 0.0, INF, false],
+		"hitch_5": [0.06, 0.0, INF, false],
+		"hitch_9": [0.0, 0.0, INF, false],
+		"pace_1": [0.8, 0.001, INF, false],
+		"pace_5": [0.95, 0.001, INF, false],
+		"pace_9": [1.0, 0.001, INF, false],
+		"delay_1": [0.2, 0.0, INF, false],
+		"delay_5": [0.1, 0.0, INF, false],
+		"delay_9": [0.0, 0.0, INF, false],
+	},
 	"reduced": {
 		"step_len": [0.15, 0.001, INF, false], "reveal_len": [0.15, 0.001, INF, false], "leg_len": [0.15, 0.001, INF, false],
 		"carry_len": [0.15, 0.001, INF, false], "fly_len": [0.15, 0.001, INF, false], "frozen_wait": [0.4, 0.0, INF, false],
@@ -188,7 +225,7 @@ const POINTER_LOOK_TABLES := {
 }
 
 
-## `data.pointer_look` { path, tables, mote, items, reduced, buttons } from `inv_cfg.pickup.pointer_look` (D-77). Presentation only. A missing or
+## `data.pointer_look` { path, tables, mote, items, reduced, buttons, timing, reasons, tempo } from `inv_cfg.pickup.pointer_look` (D-77). Presentation only. A missing or
 ## non-number key reads its default; a number is clamped into its range; whole keys are ints. turn_max and arc_max never
 ## read below turn_min and arc_min. A missing `tables` reads the defaults; a given `tables` replaces them, and an entry that
 ## is not an Array of numbers, or whose times do not rise from above `pointer_lead`, is dropped.
@@ -211,6 +248,7 @@ static func pointer_look(inv_cfg: Dictionary) -> Dictionary:
 		out[group] = vals
 	out["path"]["path_turn_max"] = maxf(out["path"]["path_turn_max"], out["path"]["path_turn_min"])
 	out["mote"]["arc_max"] = maxf(out["mote"]["arc_max"], out["mote"]["arc_min"])
+	out["timing"]["dist_scale_max"] = maxf(out["timing"]["dist_scale_max"], out["timing"]["dist_scale_min"])
 	var tables: Dictionary = POINTER_LOOK_TABLES.duplicate(true)
 	if pl.get("tables", null) is Dictionary:
 		tables = {}

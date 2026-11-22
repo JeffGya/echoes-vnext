@@ -34,10 +34,6 @@ extends RefCounted
 ## A scene must handle `plan.valid == false` (no chooser, error snapshot, no complete `data.pointer_look`, a row or find with no
 ## tile): show no intro.
 
-const STEP_LEN := 0.45
-# Mockup line 778 and 780: emotion beat and idle times.
-const IDLE_AFTER_BARK := 0.3
-const IDLE_AFTER_DEPOSIT := 0.45
 # The pointer feel values (timing, law, mote look) come from `data.pointer_look` of the snapshot (D-77); there are no defaults
 # here. A snapshot without a complete `pointer_look` is not playable (`valid` false).
 const LOOK_PATH_KEYS: Array = ["pointer_start", "pointer_lead", "hold", "hold_reduced", "pointer_reduced", "walk_time_scale", "walk_ease", "path_pace", "path_first_k",
@@ -50,22 +46,14 @@ const LOOK_ITEMS_KEYS: Array = ["arc_px", "shadow_scale_drop", "reveal_len", "ca
 	"try_bark_gap", "bark_after_last", "lit_fade"]
 const LOOK_BUTTONS_KEYS: Array = ["skip_in_from", "skip_in_to", "skip_out_len", "cont_in_len"]
 const LOOK_REDUCED_KEYS: Array = ["step_len", "reveal_len", "leg_len", "carry_len", "fly_len", "frozen_wait"]
-# Mockup line 619: walk cap, fly time, typing speed.
-const WALK_CAP := 3.4
-const TYPE_CPS := 24.0
-# Mockup line 688 gave the reference distances in pixels (90 and 60); here they are tiles (30 px a tile). Feel values, tune in playtest.
-const REF_TILES_FIRST := 3.0
-const REF_TILES_NEXT := 2.0
-const DIST_SCALE_MIN := 0.6
-const DIST_SCALE_MAX := 1.35
-# Mockup lines 716 and 679: worth pauses before the last tile of the first walk; safe waits longer before the first step.
-const WORTH_DWELL := 0.45
-const SAFE_PRE_EXTRA := 0.25
-# A frozen chooser waits FROZEN_STEP + FROZEN_WAIT after its step out (the mockup's step, tremble and wait; no tremble is played).
-const FROZEN_STEP := 0.35
-const FROZEN_WAIT := 1.35
+const LOOK_TIMING_KEYS: Array = ["step_len", "walk_cap", "type_cps", "dist_scale_min", "dist_scale_max", "worth_dwell", "safe_pre_extra", "frozen_step",
+	"frozen_wait", "idle_after_bark", "idle_after_deposit", "pulse_len", "ref_tiles_first", "ref_tiles_next"]
+const LOOK_TEMPO_KEYS: Array = ["pre_1", "pre_5", "pre_9", "hitch_1", "hitch_5", "hitch_9", "pace_1", "pace_5", "pace_9", "delay_1", "delay_5", "delay_9"]
+# Pick reasons with a row in `pointer_look.reasons` (keys `<reason>_walk_first`, `_walk_next`, `_touch`, `_ease_back`). A frozen chooser has no
+# stops and reads the `likes` row.
+const REASONS: Array = ["likes", "worth", "safe", "bold", "fit"]
+const LOOK_REASON_FIELDS: Array = ["walk_first", "walk_next", "touch", "ease_back"]
 const PACK_SLOTS_DEFAULT := 4
-const PULSE_LEN := 0.4
 # Presentation constant: the pick rule never reads it. It copies the config default
 # `data.inventory.pickup.severe_from_status`; Jeff reviews it. The safe / bold reading of the `state` reason is a
 # presentation choice: the mockup gives each Echo a manner trait that the core does not have.
@@ -73,15 +61,6 @@ const STATUS_AFRAID_MAX := "burdened"
 const STATUS_LADDER: Array = ["hollow", "fraying", "strained", "pressed", "burdened", "hesitant", "uncertain",
 	"grounded", "whole", "radiant"]
 
-# Reason table: walk seconds for the first and later picks, touch, carry ease. Mockup lines 612 to 618 (froze is not ported: a frozen
-# chooser has no stops; build maps it to likes). The lift and the hold of the mockup table are `items.carry_len` and `items.carry_hold`.
-const RS: Dictionary = {
-	"likes": { "w": [0.70, 0.60], "touch": 0.10, "ease": "back" },
-	"worth": { "w": [0.60, 0.60], "touch": 0.10, "ease": "smooth" },
-	"safe": { "w": [0.95, 0.70], "touch": 0.10, "ease": "smooth" },
-	"bold": { "w": [0.50, 0.40], "touch": 0.10, "ease": "back" },
-	"fit": { "w": [0.45, 0.45], "touch": 0.0, "ease": "smooth" },
-}
 
 
 # ---------------------------------------------------------------------------
@@ -133,9 +112,10 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	var chooser := row[cidx] as Dictionary
 	var standing := int(chooser.get("standing", 1))
 	var reason := _tempo_reason(case_key, frozen, str(d.get("reason", "")), str(chooser.get("status", "")))
-	var tp := tempo(standing)
+	var tp := tempo(standing, look["tempo"])
+	var tm_look: Dictionary = look["timing"]
 	# A frozen chooser has no stops, so the table is read only for its lift ease; likes is the explicit choice.
-	var rs: Dictionary = RS["likes" if reason == "froze" else reason]
+	var rs: Dictionary = _reason_row(look["reasons"], "likes" if reason == "froze" else reason)
 	var items: Dictionary = look["items"]
 	var red: Dictionary = look["reduced"]
 	var walk_scale := 1.0 if rm else float(look["path"]["walk_time_scale"])
@@ -153,7 +133,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	var t_p0 := float(look["path"]["pointer_start"])
 	var t_pend := t_p0 + float(pp["total"])
 	var t_s0 := t_pend + float(look["path"]["hold_reduced" if rm else "hold"])
-	var t_s1 := t_s0 + (float(look["reduced"]["step_len"]) if rm else STEP_LEN)
+	var t_s1 := t_s0 + (float(look["reduced"]["step_len"]) if rm else float(tm_look["step_len"]))
 
 	# Stops in pick order, then the held-up find.
 	var picked: Array = finds.filter(func(f: Variant) -> bool: return str((f as Dictionary).get("status", "")) == "taken")
@@ -173,7 +153,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 	if not out_cell.is_empty():
 		_emit(trk, [start_cell, out_cell], "out", t_s1 - t_s0)
 	trk["t"] = t_s1
-	_wait(trk, float(tp["pre"]) + (SAFE_PRE_EXTRA if reason == "safe" else 0.0))
+	_wait(trk, float(tp["pre"]) + (float(tm_look["safe_pre_extra"]) if reason == "safe" else 0.0))
 	var t_w0: float = trk["t"]
 	var cur: Dictionary = trk["cell"]
 	var sum_w := 0.0
@@ -182,8 +162,8 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		var cells := _stand_path(cur, find_cells[_index_of(find_ids, str(s["find_id"]))], find_cells, row_cells, walkable, bounds, sit)
 		var steps := cells.size() - 1
 		var first := k == 0
-		var base := float((rs["w"] as Array)[0 if first else 1]) * clampf(float(steps) / (REF_TILES_FIRST if first else REF_TILES_NEXT),
-			DIST_SCALE_MIN, DIST_SCALE_MAX)
+		var base := float((rs["w"] as Array)[0 if first else 1]) * clampf(float(steps) / (float(tm_look["ref_tiles_first"]) if first else float(tm_look["ref_tiles_next"])),
+			float(tm_look["dist_scale_min"]), float(tm_look["dist_scale_max"]))
 		var w := 0.0
 		if steps > 0:
 			w = float((rs["w"] as Array)[0]) if reason == "fit" else base / float(tp["pace"]) + float(tp["hitch"])
@@ -191,7 +171,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		s["w"] = w
 		sum_w += w
 		cur = cells[cells.size() - 1]
-	var w_scale := WALK_CAP / sum_w if sum_w > WALK_CAP else 1.0
+	var w_scale := float(tm_look["walk_cap"]) / sum_w if sum_w > float(tm_look["walk_cap"]) else 1.0
 
 	var recs := {}
 	var walk: Array = []
@@ -217,7 +197,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 				# Pause before the last tile (the mockup's glance at the find).
 				var steps := cells.size() - 1
 				_emit(trk, cells.slice(0, steps), "walk", w * float(steps - 1) / float(steps))
-				_wait(trk, WORTH_DWELL)
+				_wait(trk, float(tm_look["worth_dwell"]))
 				_emit(trk, cells.slice(steps - 1), "walk", w / float(steps))
 			else:
 				_emit(trk, cells, "walk", w)
@@ -250,7 +230,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		walk.append({ "find_id": fid, "k": k, "is_try": is_try, "t0": r["walk0"], "t1": r["arrive"],
 			"stand": (trk["cell"] as Dictionary).duplicate() })
 	if frozen and not finds.is_empty():
-		_wait(trk, float(red["frozen_wait"]) if rm else FROZEN_STEP + FROZEN_WAIT)
+		_wait(trk, float(red["frozen_wait"]) if rm else float(tm_look["frozen_step"]) + float(tm_look["frozen_wait"]))
 
 	var t_a: float = trk["t"]
 	for fid: Variant in recs:
@@ -265,11 +245,11 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		else (t_a if frozen else t_a + float(items["bark_after_last"]))) + float(tp["delay"])
 	var band := PickupUiText.standing_band(standing)
 	var bark_text := PickupUiText.bark(case_key, str(d.get("reaction", "")), str(d.get("reason", "")), band, cidx)
-	var typed := 0.0 if rm else float(bark_text.length()) / TYPE_CPS
+	var typed := 0.0 if rm else float(bark_text.length()) / float(tm_look["type_cps"])
 	var t_bark_end := t_b + typed
-	var t_idle := maxf(t_bark_end + IDLE_AFTER_BARK, t_a + IDLE_AFTER_DEPOSIT)
+	var t_idle := maxf(t_bark_end + float(tm_look["idle_after_bark"]), t_a + float(tm_look["idle_after_deposit"]))
 	if try_id != "":
-		t_idle = maxf(t_idle, float((recs[try_id] as Dictionary)["lift1"]) + PULSE_LEN)
+		t_idle = maxf(t_idle, float((recs[try_id] as Dictionary)["lift1"]) + float(tm_look["pulse_len"]))
 
 	var out_finds: Array = []
 	for i in finds.size():
@@ -331,6 +311,7 @@ static func build(snapshot: Dictionary, opts: Dictionary = {}) -> Dictionary:
 		"reduced_look": (look["reduced"] as Dictionary).duplicate(true),
 		"items_look": (look["items"] as Dictionary).duplicate(true),
 		"buttons_look": (look["buttons"] as Dictionary).duplicate(true),
+		"timing_look": (look["timing"] as Dictionary).duplicate(true),
 		"finds": out_finds,
 		"walk": walk,
 		"pack": { "before": pack_before, "after": pack_after, "slot_count": slot_count, "unlisted": unlisted,
@@ -379,11 +360,11 @@ static func frame_at(plan: Dictionary, t_in: float) -> Dictionary:
 	for s_v: Variant in slots:
 		used += 1 if str(s_v) != "" else 0
 	var pulse_at := float(pk["pulse_at"])
-	var pulse := sin(PI * _pr(t, pulse_at, pulse_at + PULSE_LEN)) if pulse_at >= 0.0 else 0.0
+	var pulse := sin(PI * _pr(t, pulse_at, pulse_at + float(_d(plan["timing_look"])["pulse_len"]))) if pulse_at >= 0.0 else 0.0
 
 	var bark: Dictionary = plan["bark"]
 	var chars := int(bark["chars"])
-	var typed := chars if rm else clampi(int(floor((t - float(bark["t0"])) * TYPE_CPS)), 0, chars)
+	var typed := chars if rm else clampi(int(floor((t - float(bark["t0"])) * float(_d(plan["timing_look"])["type_cps"]))), 0, chars)
 	var t_idle := float(tm["idle"])
 	var bl: Dictionary = plan["buttons_look"]
 	return {
@@ -446,14 +427,23 @@ static func skip_to_idle(snapshot: Dictionary, opts: Dictionary = {}) -> Diction
 	}
 
 
-## Speed table by Standing (mockup lines 606 to 610): pre-walk pause, hitch (added to a walk), pace, reaction delay.
-static func tempo(standing: int) -> Dictionary:
+## Speed table by Standing: pre-walk pause, hitch (added to a walk), pace, reaction delay. `cfg` is `pointer_look.tempo`: values for Standing 1, 5 and
+## 9, interpolated between them.
+static func tempo(standing: int, cfg: Dictionary) -> Dictionary:
 	var s := clampi(standing, 1, 9)
 	var k := float(s - 1) / 4.0 if s <= 5 else 1.0 + float(s - 5) / 4.0
 	return {
-		"pre": snappedf(_at3(k, 0.6, 0.35, 0.1), 0.01), "hitch": snappedf(_at3(k, 0.12, 0.06, 0.0), 0.01),
-		"pace": _at3(k, 0.8, 0.95, 1.0), "delay": snappedf(_at3(k, 0.2, 0.1, 0.0), 0.01),
+		"pre": snappedf(_at3(k, float(cfg["pre_1"]), float(cfg["pre_5"]), float(cfg["pre_9"])), 0.01),
+		"hitch": snappedf(_at3(k, float(cfg["hitch_1"]), float(cfg["hitch_5"]), float(cfg["hitch_9"])), 0.01),
+		"pace": _at3(k, float(cfg["pace_1"]), float(cfg["pace_5"]), float(cfg["pace_9"])),
+		"delay": snappedf(_at3(k, float(cfg["delay_1"]), float(cfg["delay_5"]), float(cfg["delay_9"])), 0.01),
 	}
+
+
+## The row of a pick reason from `pointer_look.reasons`: { w: [first, next], touch, ease }.
+static func _reason_row(cfg: Dictionary, reason: String) -> Dictionary:
+	return { "w": [float(cfg["%s_walk_first" % reason]), float(cfg["%s_walk_next" % reason])], "touch": float(cfg["%s_touch" % reason]),
+		"ease": "back" if int(cfg["%s_ease_back" % reason]) == 1 else "smooth" }
 
 
 ## "plus", "minus", "lean" (afraid or frozen) or "neutral" (some fit). A name for the reaction; the plan plays no body style.
@@ -736,6 +726,19 @@ static func _pointer_look(d: Dictionary) -> Dictionary:
 	for key: String in LOOK_REDUCED_KEYS:
 		if not (typeof(reduced.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
 			return {}
+	var timing := _d(look.get("timing", {}))
+	for key: String in LOOK_TIMING_KEYS:
+		if not (typeof(timing.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
+			return {}
+	var tempo_cfg := _d(look.get("tempo", {}))
+	for key: String in LOOK_TEMPO_KEYS:
+		if not (typeof(tempo_cfg.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
+			return {}
+	var reasons := _d(look.get("reasons", {}))
+	for reason: String in REASONS:
+		for field: String in LOOK_REASON_FIELDS:
+			if not (typeof(reasons.get("%s_%s" % [reason, field], null)) in [TYPE_INT, TYPE_FLOAT]):
+				return {}
 	for key: String in LOOK_ITEMS_KEYS:
 		if not (typeof(items.get(key, null)) in [TYPE_INT, TYPE_FLOAT]):
 			return {}
