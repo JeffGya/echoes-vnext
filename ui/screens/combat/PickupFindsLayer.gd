@@ -2,7 +2,9 @@ class_name PickupFindsLayer
 extends Node2D
 
 ## The finds that lie on the board during the pickup event. `show_finds` draws a still picture; `show_intro` draws the intro at one
-## time (reveal flip, carry to the chooser's head, flight into the pack strip). No tags, no hit areas.
+## time (reveal flip, carry to the chooser's head, flight into the pack strip). No tags. The marks take no mouse and no focus: the board
+## taps through `PickupHitRules` on the `screen_centers`, and the keyboard focus is `set_focus_index` (U7). A mark shows the cream ring when it
+## is the selected find or the focused one.
 ## Each mark is an ItemTile centred on its tile like a token, with a ground ellipse from the token shadow config.
 ## In the intro every find lies on its tile, taken or not (nothing is in the pack yet). After the intro only the
 ## finds still on the ground get a mark; taken finds are in the Travel pack. A hidden find (not revealed) shows the
@@ -26,6 +28,13 @@ var _faces: Array[String] = []
 var _shadows: Array[float] = []
 # find id -> where its flight started (the carried place at that time), kept until it lands.
 var _fly_from: Dictionary = {}
+var _ids: Array[String] = []
+var _statuses: Array[String] = []
+var _selected := ""
+var _focus := -1
+# The find the keyboard focus is on, so a changed list moves the focus with it or drops it.
+var _focus_id := ""
+var _ring_key := ""
 
 
 func _ready() -> void:
@@ -60,12 +69,15 @@ static func ground_finds(data: Dictionary) -> Array:
 ## `board` maps a tile to its board-local centre, the call every token uses. The same finds draw nothing again.
 func show_finds(data: Dictionary, board: TileMapLayer) -> void:
 	var finds := ground_finds(data)
+	var sel_v: Variant = data.get("selected", {})
+	_selected = str((sel_v as Dictionary).get("id", "")) if sel_v is Dictionary and str((sel_v as Dictionary).get("side", "")) == "find" else ""
 	var centers: Array[Vector2] = []
 	for f: Dictionary in finds:
 		var t: Dictionary = f["tile"]
 		centers.append(board.map_to_local(Vector2i(int(t.get("col", 0)), int(t.get("row", 0)))) + Vector2(0.0, visual_config.feet_offset_y))
 	var sig := JSON.stringify([finds, centers], "", true)
 	if sig == _sig:
+		_paint_rings()
 		return
 	_sig = sig
 	_centers = centers
@@ -108,7 +120,7 @@ func show_intro(data: Dictionary, board: TileMapLayer, items: Dictionary, look: 
 		var face := "real" if bool(pose["face_real"]) else "empty"
 		if _faces[i] != face:
 			_faces[i] = face
-			tile.call("setup", f if face == "real" else {}, { "bed": edge })
+			tile.call("setup", f if face == "real" else {}, { "bed": edge, "ring": true })
 		tile.size = Vector2(edge, edge)
 		tile.pivot_offset = tile.size * 0.5
 		tile.scale = Vector2(float(pose["flip"]) * float(pose["scale"]), float(pose["scale"]))
@@ -173,6 +185,8 @@ func clear() -> void:
 		return
 	_sig = ""
 	_centers = []
+	_selected = ""
+	_focus_id = ""
 	_apply([], false)
 
 
@@ -180,6 +194,44 @@ func clear() -> void:
 func bed() -> float:
 	var radius: float = visual_config.token_radius if visual_config != null else CombatTokenVisualConfig.new().token_radius
 	return radius * 2.0
+
+
+## The screen centre of every mark in draw order (the canvas transform holds camera pan and zoom).
+func screen_centers() -> Array:
+	var xf := get_global_transform_with_canvas()
+	return _centers.map(func(c: Vector2) -> Vector2: return xf * c)
+
+
+func find_id_at(index: int) -> String:
+	return _ids[index] if index >= 0 and index < _ids.size() else ""
+
+
+func status_at(index: int) -> String:
+	return _statuses[index] if index >= 0 and index < _statuses.size() else ""
+
+
+func index_of_find(find_id: String) -> int:
+	return _ids.find(find_id)
+
+
+## The mark the keyboard has reached, or -1. It shows the same cream ring as a selected find.
+func set_focus_index(index: int) -> void:
+	_focus = index if index >= 0 and index < _ids.size() else -1
+	_focus_id = _ids[_focus] if _focus >= 0 else ""
+	_paint_rings()
+
+
+func focus_index() -> int:
+	return _focus
+
+
+func _paint_rings() -> void:
+	var key := "%s|%d" % [_selected, _focus]
+	if key == _ring_key:
+		return
+	_ring_key = key
+	for i in _ids.size():
+		_marks[i].set_selected(i == _focus or (not _selected.is_empty() and _ids[i] == _selected))
 
 
 # Test accessors.
@@ -205,6 +257,16 @@ func _apply(finds: Array, shown: bool) -> void:
 	_faces.clear()
 	_shadows.clear()
 	_fly_from.clear()
+	_ids.clear()
+	_statuses.clear()
+	_ring_key = ""
+	_focus = -1
+	for f: Dictionary in finds:
+		_ids.append(str(f.get("find_id", "")))
+		_statuses.append(str(f.get("status", "")))
+	_focus = _ids.find(_focus_id) if not _focus_id.is_empty() else -1
+	if _focus < 0:
+		_focus_id = ""
 	for _i in _marks.size():
 		_faces.append("")
 		_shadows.append(1.0)
@@ -215,12 +277,13 @@ func _apply(finds: Array, shown: bool) -> void:
 		if i >= finds.size():
 			continue
 		var f: Dictionary = finds[i]
-		tile.call("setup", f if bool(f.get("revealed", false)) else {}, { "bed": edge })
+		tile.call("setup", f if bool(f.get("revealed", false)) else {}, { "bed": edge, "ring": true })
 		tile.size = Vector2(edge, edge)
 		tile.scale = Vector2.ONE
 		tile.z_index = 0
 		tile.modulate.a = 1.0
 		tile.position = _centers[i] - Vector2(edge, edge) * 0.5
+	_paint_rings()
 	queue_redraw()
 
 

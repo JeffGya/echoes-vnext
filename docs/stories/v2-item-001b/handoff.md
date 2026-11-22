@@ -1,14 +1,14 @@
 # V2-ITEM-001b: running handoff
 
-Written in STE. Keep this file current. Last update: 2026-11-15, after the C12 build (not committed; the main chat runs the suites and the shard map check).
+Written in STE. Keep this file current. Last update: 2026-11-22, after the U7 build and its QA fixes (not committed; the main chat runs the long suites).
 
 ## Where things are
-- Backend steps C0 to C12 are DONE after C12 is verified and committed. C0 to C8 are in PR 131 (merged). C9 to C11 are committed locally. C12 is built and waits for the main chat (import, suite run, shard map check) and for QA.
-- Branch: `claude/echoes-v2-item-001b-pr2`. It is LOCAL: Jeff keeps it unpushed. Worktree: `/Users/jeffreygyamfi/Sites/echoes-vnext/.claude/worktrees/v2-economy-004-item-costs-f68f4c` (the folder name says economy-004; the story is 001b). Jeff says when to push or open PR 2.
-- Next: the UI steps U1 to U12 (`ui-ux-designer`). PR 2 = C9 to C12 and U1 to U7. PR 3 = U8 to U12 and the end copy review (D-56).
+- Backend steps C0 to C12 are DONE (C0 to C8 are in PR 131, merged). UI steps U1 to U7 are built; U7 (taps, keys, details card, camera floor) is in QA. U8 to U12 are not started.
+- Branch: `claude/echoes-v2-item-001b-ui`. It is LOCAL: Jeff keeps it unpushed. Worktree: `/Users/jeffreygyamfi/Sites/echoes-vnext/.claude/worktrees/v2-economy-004-item-costs-f68f4c` (the folder name says economy-004; the story is 001b). Jeff says when to push or open a PR (D-86 l).
+- Next: the UI steps (`ui-ux-designer`). U1 to U7 are built (U7 is in QA). PR split (D-86 l): PR 3 = the UI through U7; PR 4 = U8 to U12 and the end copy review (D-56). Push only when Jeff says.
 - Real play never opens the event until V2-ITEM-002 gives real finds. Only the debug producer (`inventory produce event` and `arm`) and the debug scenes reach it. One test (`pickup_flow`) drives a real won fight with armed finds.
-- The approved plan: `/Users/jeffreygyamfi/.claude/plans/atomic-snacking-cat.md` (rows C0 to C12, U1 to U12, test plan, three-PR split). It can be stale in two places: the plan says U8 uses `pickup.swap.apply`; the real actions are `pickup.swap.start`, `pickup.swap.pick`, `pickup.swap.confirm` and `pickup.swap.cancel`. The plan also names `PickupEventPlan.gd` for register row 12; the real file is `PickupSnapshotBuilder.gd`.
-- Records: `decisions.md` (D-01 to D-67; later decisions win), `pick-numbers.md`, `follow-ups.md` (the unwired register), `docs/inventory-and-items-design.md` (status tags now BUILT for the backend), `CONVENTIONS.md` section "Pickup event (V2-ITEM-001b)" (the contract), `docs/resolve-snapshot-block-spec.md` (block 18), `ANSWERS.md` #91 and #92.
+- The approved plan: `/Users/jeffreygyamfi/.claude/plans/atomic-snacking-cat.md` (rows C0 to C12, U1 to U12, test plan, three-PR split; replaced by the four-PR split of D-86 l). It can be stale in two places: the plan says U8 uses `pickup.swap.apply`; the real actions are `pickup.swap.start`, `pickup.swap.pick`, `pickup.swap.confirm` and `pickup.swap.cancel`. The plan also names `PickupEventPlan.gd` for register row 12; the real file is `PickupSnapshotBuilder.gd`.
+- Records: `decisions.md` (D-01 to D-86; later decisions win), `pick-numbers.md`, `follow-ups.md` (the unwired register), `docs/inventory-and-items-design.md` (status tags now BUILT for the backend), `CONVENTIONS.md` section "Pickup event (V2-ITEM-001b)" (the contract), `docs/resolve-snapshot-block-spec.md` (block 18), `ANSWERS.md` #91 and #92.
 - The UI contract: `docs/visual-plans/pickup-event/pickup-event-playable.html` (approved by playtest, D-36). The art kit is `art-kit.html` in the same folder.
 
 ## Corrected facts (use these; older notes in the history are wrong)

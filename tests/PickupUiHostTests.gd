@@ -2,7 +2,7 @@
 # V2-ITEM-001b step U1: the combat board hosts the pickup event.
 # flow.pickup routes to the combat board scene through the real RealmShell. The board stays drawn
 # from the snapshot, the encounter HUD is hidden, one PickupEventStage sits on top, and the
-# debug placeholder sends the slot actions of the snapshot.
+# debug placeholder sends the slot actions of the snapshot. U7: the stage relays one action (a chosen pack tile or Close); snapshots alone send none.
 # The fixture is a hand-built dictionary in the shape of PickupSnapshotBuilder: board keys, actors,
 # situation_id, run_count and the slot-keyed actions.
 
@@ -35,7 +35,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/real_won_fight_snapshot_draws_its_row", Callable(PickupUiHostTests, "_t_real_snapshot"))
 	runner.register_test("pickup_ui/debug_placeholder_sends_slot_actions", Callable(PickupUiHostTests, "_t_placeholder"))
 	runner.register_test("pickup_ui/placeholder_exists_only_in_debug_builds", Callable(PickupUiHostTests, "_t_placeholder_gate"))
-	runner.register_test("pickup_ui/stage_nodes_send_no_action", Callable(PickupUiHostTests, "_t_stage_sends_nothing"))
+	runner.register_test("pickup_ui/stage_relays_actions_and_nodes_below_it_send_none", Callable(PickupUiHostTests, "_t_stage_relays_only"))
 	runner.register_test("pickup_ui/new_ui_files_pass_the_source_scan", Callable(PickupUiHostTests, "_t_source_scan"))
 	runner.register_test("pickup_ui/back_slot_is_absent_so_back_does_nothing", Callable(PickupUiHostTests, "_t_no_back_slot"))
 
@@ -175,8 +175,11 @@ static func _t_stage_mounts_once() -> Dictionary:
 		errors.append("stage blocks the mouse")
 	if stage.anchor_right != 1.0 or stage.anchor_bottom != 1.0:
 		errors.append("stage is not full rect")
-	if stage.get_child_count() != 1 or not (stage.get_child(0) is PickupPackStrip):
-		errors.append("the stage holds anything but the pack strip (U4)")
+	# The stage holds the strip (U4) and, since U7, the CauseTooltip and the card layer (a CanvasLayer that holds the card).
+	var kinds: Array = stage.get_children().map(func(n: Node) -> String: return n.get_class() if not (n is PickupPackStrip or n is CauseTooltip) else n.name)
+	if stage.get_child_count() != 3 or not (stage.get_child(0) is PickupPackStrip) or not (stage.get_child(1) is CauseTooltip) \
+			or not (stage.get_child(2) is CanvasLayer):
+		errors.append("the stage holds anything but the pack strip, the tooltip and the card layer (U4, U7): %s" % [kinds])
 	if stage.name != &"PickupEventStage":
 		errors.append("stage name changed")
 	_free(fx)
@@ -439,14 +442,14 @@ static func _t_placeholder_gate() -> Dictionary:
 	return { "ok": errors.is_empty(), "error": "; ".join(errors) }
 
 
-static func _t_stage_sends_nothing() -> Dictionary:
+static func _t_stage_relays_only() -> Dictionary:
 	var fx := _mount(_pickup())
 	if fx.is_empty():
 		return { "ok": false, "error": "mount failed" }
 	var stage := _stage(fx)
 	var errors: Array = []
-	var nodes: Array = [stage]
-	nodes.append_array(stage.find_children("*", "", true, false))
+	# U7: the stage itself relays the one action of a chosen pack tile or a closed card; no node below it declares one.
+	var nodes: Array = stage.find_children("*", "", true, false)
 	for node: Node in nodes:
 		for sig in node.get_signal_list():
 			if str(sig["name"]) == "action_requested":

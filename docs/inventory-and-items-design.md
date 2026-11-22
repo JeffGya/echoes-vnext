@@ -377,6 +377,7 @@ D-34: a severe-band Echo "may still get the plus when everything fits".
 |---|---|
 | Items on the board | Only after the win, at the start of the event (D-31). |
 | Snapshot keys | `row[].tile = {col,row}` for each standing Echo and `finds[].tile = {col,row}` for each find. `finds[].cell` stays the index in the record. The tiles are derived on every build and are not saved. |
+| Stack limit (D-85) | `finds[]` and `pack.slots[]` rows of a stack kind (consumable, material) carry `stack_limit`, from `InventoryService.stack_limit_of`: the value a 001a stack row reports. Piece rows have no such key, as in 001a. The details card reads "x1 of N". |
 | Walkable tiles | The largest connected walkable region of the terrain. The sentinel terrain (`{}`) means every cell of the board. |
 | Echo row | A straight line of N adjacent region tiles along the col axis or the row axis. The line centre is as near as possible to the party anchor: the board centre (cols / 2, rows / 2) plus `entry_offset`, clamped into the board rectangle. The Echoes' fight cells are not used, so the lineup always forms near the board centre, as if the Echoes enter from the screen bottom-left. Ties: a seeded hash that includes the axis (so the hash picks the axis), then axis, then numeric col and row. Fallback: a connected chain of N region tiles (each touches the next by Chebyshev distance 1, no tile twice), grown from the tile nearest the anchor by always adding the unused neighbour of the last tile that is nearest the anchor; a start that dead-ends is skipped. Last: each Echo keeps its own tile. Echoes take the tiles in snapshot `row` order, screen-left to screen-right. |
 | Finds | Region tiles that are not row tiles (only drawn tokens occupy a tile: dead enemies, fallen Echoes and the old start tiles of the row Echoes are free) at Chebyshev distance `near` to `far` from the row centre. Per find, in snapshot order: the lowest hash at least `spacing` from every earlier find. Fallbacks in order: spacing 1, wider `far`, any other non-row region tile, then a pile on the nearest taken tile. Every find has a tile. |
@@ -394,7 +395,7 @@ D-34: a severe-band Echo "may still get the plus when everything fits".
 
 ### 9.1 Tiles and panels — BUILT (001a)
 
-**Decisions:** 001a D-32, D-39, D-44, D-48, D-49, D-51. **Code:** `ui/components/ItemTile.*`, `ItemTileGlyphs.gd`, `ItemSlot.*`, `ItemResultRow.*`, `ItemLoadMark.gd`, `InventoryPanels.*`, `PartyPackButton.*`. The approved UI contract is `docs/visual-plans/inventory-ui-mockup-v2.html` (001a D-44).
+**Decisions:** 001a D-32, D-39, D-44, D-48, D-49, D-51. **Code:** `ui/components/ItemTile.*`, `ItemTileGlyphs.gd`, `ItemSlot.*`, `ItemResultRow.*`, `ItemLoadMark.gd`, `ItemDetailsBlock.*` (shared by `InventoryPanels` and the pickup details card, 001b U7), `InventoryPanels.*`, `PartyPackButton.*`. The approved UI contract is `docs/visual-plans/inventory-ui-mockup-v2.html` (001a D-44).
 
 | Rule | Detail |
 |---|---|

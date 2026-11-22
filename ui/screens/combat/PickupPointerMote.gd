@@ -138,6 +138,7 @@ func hide_all() -> void:
 		_halo_layer.visible = false
 
 
+# UNWIRED (target: NEW "Pickup sound pass"): a sound tick on each hop of the mote and one on the landing; no audio exists in the pickup event
 ## `look` is `plan.pointer.mote` (sizes in pixels). The scene has five trail sprites: a longer trail shows no more.
 func apply_pose(pose: Dictionary, look: Dictionary, tile_width: float) -> void:
 	visible = bool(pose["visible"])

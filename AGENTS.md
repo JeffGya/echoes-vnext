@@ -627,7 +627,7 @@ production code to make its own test pass.
 - AppRoot owns the single layer-40 blocking `ModalHost`; shell screens request modals by id and payload
 - Blocking modal roots cover all chrome, stop underlying input, contain focus, and restore prior focus on dismissal
 - Minimum target 48×48; primary CTA height 56; adjacent targets keep at least 8 units separation
-- Canonical layers: world 0, screen 10, persistent chrome 20, non-modal transient 30, blocking modal 40, recovery/debug 128
+- Canonical layers: world 0, screen 10, persistent chrome 20, non-modal transient 30, pickup details card 31 (inside the combat board during the pickup event; above the bark layer, below the modal), blocking modal 40, recovery/debug 128
 - Every shell-owned `CanvasLayer` must mirror inherited shell visibility so hidden Realm/Sanctum layers cannot draw or intercept input
 - No IDs in player-facing display — show names, standings, callings only
 

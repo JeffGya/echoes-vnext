@@ -819,6 +819,14 @@ border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.8314, 0.6863, 0.2157, 1)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pickup_card_arrow"]
+bg_color = Color(0.9608, 0.9020, 0.8275, 1.0)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.4706, 0.3608, 0.1686, 1.0)
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_item_bed"]
 bg_color = Color(0.8627, 0.8078, 0.7098, 1.0)
 border_width_left = 1
@@ -1401,26 +1409,6 @@ corner_radius_top_left = 14
 corner_radius_top_right = 14
 corner_radius_bottom_right = 14
 corner_radius_bottom_left = 14
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pickup_details_card"]
-content_margin_left = 14.0
-content_margin_top = 12.0
-content_margin_right = 14.0
-content_margin_bottom = 12.0
-bg_color = Color(0.9608, 0.9020, 0.8275, 1.0)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.4706, 0.3608, 0.1686, 1.0)
-corner_radius_top_left = 16
-corner_radius_top_right = 16
-corner_radius_bottom_right = 16
-corner_radius_bottom_left = 16
-corner_detail = 1
-shadow_color = Color(0.2392, 0.1569, 0.0902, 0.5)
-shadow_size = 12
-shadow_offset = Vector2(0, 6)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pickup_bar"]
 content_margin_left = 12.0
@@ -2153,6 +2141,8 @@ PayoutTooltip/base_type = &"PanelContainer"
 PayoutTooltip/styles/panel = SubResource("StyleBoxFlat_payout_tooltip")
 PayoutTooltipArrow/base_type = &"Panel"
 PayoutTooltipArrow/styles/panel = SubResource("StyleBoxFlat_payout_tooltip_arrow")
+PickupCardArrow/base_type = &"Panel"
+PickupCardArrow/styles/panel = SubResource("StyleBoxFlat_pickup_card_arrow")
 PayoutTooltipBody/base_type = &"Label"
 PayoutTooltipBody/colors/font_color = Color(0.9607843, 0.9019608, 0.827451, 1)
 PayoutTooltipBody/font_sizes/font_size = 15
@@ -2406,8 +2396,6 @@ PickupSlotEmpty/base_type = &"Panel"
 PickupSlotEmpty/styles/panel = SubResource("StyleBoxFlat_pickup_slot_empty")
 PickupSlotNew/base_type = &"Panel"
 PickupSlotNew/styles/panel = SubResource("StyleBoxFlat_pickup_slot_new")
-PickupDetailsCard/base_type = &"PanelContainer"
-PickupDetailsCard/styles/panel = SubResource("StyleBoxFlat_pickup_details_card")
 PickupBar/base_type = &"PanelContainer"
 PickupBar/styles/panel = SubResource("StyleBoxFlat_pickup_bar")
 PickupBarText/base_type = &"Label"

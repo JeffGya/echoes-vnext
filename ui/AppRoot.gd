@@ -677,6 +677,7 @@ func _run_tests(parts: Array) -> void:
 	PickupFindsLayerTests.register(runner)  # V2-ITEM-001b R3: finds on their board tiles during the pickup event
 	PickupBarkTests.register(runner)  # V2-ITEM-001b R4: the chooser bark over the row token in the idle picture
 	PickupIntroTests.register(runner)  # V2-ITEM-001b R6d: the intro bark, the skip transition and reduced motion
+	PickupInputTests.register(runner)  # V2-ITEM-001b U7: taps, keys, the details card, the camera floor, the allowance tooltips (suite pickup_ui, `input_*`; two tests in inventory_ui)
 	PickupItemsTests.register(runner)  # V2-ITEM-001b R6c: the finds reveal, are carried to the chooser's head and fly into the pack strip (suite pickup_ui, `items_*`)
 	PickupWalkTests.register(runner)  # V2-ITEM-001b R6b: the chooser walks its legs on the token layer; the idle picture
 	PickupPointerTests.register(runner)  # V2-ITEM-001b R6a: the intro clock and the drifting pointer mote (no selection ring)

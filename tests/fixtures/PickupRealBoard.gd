@@ -15,7 +15,7 @@ const SCENES := {
 
 
 ## `kind`: empty (pack empty, two finds taken), near (two held pieces, one find taken), full (pack full, one find left), many (pack full, three finds left on the ground).
-## `phase`: "idle" (the intro is skipped) or "intro" (the first publish). {} when the fight did not reach the event.
+## `phase`: "idle" (the intro is skipped), "intro" (the first publish) or "resolve" (Continue was pressed: the held Resolve card). {} when the fight did not reach the event.
 ## `variant`: "" keeps the real event. "plus" sets reaction plus on the real event. "none" sets reaction none. "frozen" turns
 ## the chooser frozen: every find lost, nothing in the pack from this event. Only the event keys change (U5 screenshots);
 ## board, actors, terrain and the rest stay real.
@@ -41,12 +41,14 @@ static func snapshot(kind: String, phase: String = "idle", variant: String = "",
 	var fc: FlowContext = env["fc"]
 	if phase != "intro":
 		rt.dispatch({ "type": "pickup.skip", "payload": {} })
+	if phase == "resolve":
+		rt.dispatch({ "type": "pickup.continue", "payload": {} })
 	if seed_text != "" and fc.encounter_ctx != null:
 		fc.encounter_ctx.placement_seed = seed_text.to_int()
 		fc.last_snapshot = PickupSnapshotBuilder.build(fc, int((fc.last_snapshot.get("meta", {}) as Dictionary).get("t", 0)), fc.pickup_session)
 	var snap: Dictionary = fc.last_snapshot.duplicate(true)
 	PickupFlowTests._done(env)
-	if str(snap.get("type", "")) != FlowStateIds.PICKUP:
+	if str(snap.get("type", "")) != (FlowStateIds.RESOLVE if phase == "resolve" else FlowStateIds.PICKUP):
 		return {}
 	_vary(snap, variant)
 	return snap

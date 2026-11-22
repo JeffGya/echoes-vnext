@@ -21,10 +21,7 @@ static func frame(points: PackedVector2Array, tile_size: Vector2, view_size: Vec
 		and is_finite(usable.position.x) and is_finite(usable.position.y) and is_finite(view_size.x) and is_finite(view_size.y)
 	if kept.is_empty() or not sizes_ok:
 		return { "valid": false, "zoom": clampf(current, lo, hi), "position": Vector2.ZERO }
-	var box := Rect2(kept[0], Vector2.ZERO)
-	for p in kept:
-		box = box.expand(p)
-	box = box.grow_individual(tile_size.x * 0.5, tile_size.y * 0.5, tile_size.x * 0.5, tile_size.y * 0.5)
+	var box := _box(kept, tile_size)
 	var margin := maxf(margin_px if is_finite(margin_px) else 0.0, 0.0)
 	var fit := minf((usable.size.x - 2.0 * margin) / box.size.x, (usable.size.y - 2.0 * margin) / box.size.y)
 	if not is_finite(fit) or fit <= 0.0:
@@ -37,3 +34,21 @@ static func frame(points: PackedVector2Array, tile_size: Vector2, view_size: Vec
 	if not is_finite(zoom) or not is_finite(position.x) or not is_finite(position.y):
 		return { "valid": false, "zoom": clampf(current, lo, hi), "position": Vector2.ZERO }
 	return { "valid": true, "zoom": zoom, "position": position }
+
+
+## The zoom at which the box of `points` just fits inside `usable` minus `margin_px`; 0 when it cannot be worked out.
+static func fit_zoom(points: PackedVector2Array, tile_size: Vector2, usable: Rect2, margin_px: float) -> float:
+	if points.is_empty() or tile_size.x <= 0.0 or tile_size.y <= 0.0:
+		return 0.0
+	var box := _box(points, tile_size)
+	var margin := maxf(margin_px if is_finite(margin_px) else 0.0, 0.0)
+	var fit := minf((usable.size.x - 2.0 * margin) / box.size.x, (usable.size.y - 2.0 * margin) / box.size.y)
+	return fit if is_finite(fit) and fit > 0.0 else 0.0
+
+
+## The points grown by half a tile on each side.
+static func _box(points: PackedVector2Array, tile_size: Vector2) -> Rect2:
+	var box := Rect2(points[0], Vector2.ZERO)
+	for p in points:
+		box = box.expand(p)
+	return box.grow_individual(tile_size.x * 0.5, tile_size.y * 0.5, tile_size.x * 0.5, tile_size.y * 0.5)

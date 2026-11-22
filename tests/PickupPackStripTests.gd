@@ -189,13 +189,15 @@ static func _t_tokens() -> Dictionary:
 	var destroy := strip.get_node("%DestroyToken") as PanelContainer
 	if (strip.get_node("%SwapCount") as Label).text != "1" or (strip.get_node("%DestroyCount") as Label).text != "0":
 		errors.append("counts read %s and %s" % [(strip.get_node("%SwapCount") as Label).text, (strip.get_node("%DestroyCount") as Label).text])
-	if swap.tooltip_text != PickupUiText.line("allow.swap_left") or destroy.tooltip_text != ItemUiText.PATH_USED:
-		errors.append("lines '%s' / '%s'" % [swap.tooltip_text, destroy.tooltip_text])
+	if strip.token_line(true) != PickupUiText.line("allow.swap_left") or strip.token_line(false) != ItemUiText.PATH_USED:
+		errors.append("lines '%s' / '%s'" % [strip.token_line(true), strip.token_line(false)])
+	if not swap.tooltip_text.is_empty() or not destroy.tooltip_text.is_empty():
+		errors.append("a native tooltip would show beside the CauseTooltip")
 	if swap.theme_type_variation != &"PickupAllowance" or destroy.theme_type_variation != &"PickupAllowanceSpent":
 		errors.append("token styles %s / %s" % [swap.theme_type_variation, destroy.theme_type_variation])
 	(fx["realm"] as RealmShell).set_snapshot(_snap("idle", [], 4, "plain", 0, 1))
-	if swap.tooltip_text != PickupUiText.line("allow.swap_none") or destroy.tooltip_text != ItemUiText.PATH_LEFT:
-		errors.append("after the swap: '%s' / '%s'" % [swap.tooltip_text, destroy.tooltip_text])
+	if strip.token_line(true) != PickupUiText.line("allow.swap_none") or strip.token_line(false) != ItemUiText.PATH_LEFT:
+		errors.append("after the swap: '%s' / '%s'" % [strip.token_line(true), strip.token_line(false)])
 	if swap.theme_type_variation != &"PickupAllowanceSpent" or destroy.theme_type_variation != &"PickupAllowance":
 		errors.append("styles after the swap %s / %s" % [swap.theme_type_variation, destroy.theme_type_variation])
 	return _done(fx, errors)

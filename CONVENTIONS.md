@@ -204,6 +204,7 @@ bounded long-content regions where content can genuinely exceed the available sp
 | 10 | Active screen content |
 | 20 | Persistent EchoBar, Sanctum rail, and navigation chrome |
 | 30 | Non-modal transients: barks, transitions, placement controls, notifications |
+| 31 | Pickup details card (`CardLayer` in `PickupEventStage`): above the bark layer, below the modal |
 | 40 | AppRoot blocking `ModalHost` |
 | 128 | Recovery, debug, and emergency UI |
 

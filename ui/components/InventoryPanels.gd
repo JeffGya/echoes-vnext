@@ -61,12 +61,7 @@ const COLUMN_WIDE := 400.0
 @onready var _empty_label: Label = %EmptyLabel
 @onready var _hint_label: Label = %HintLabel
 @onready var _details_full: VBoxContainer = %DetailsFull
-@onready var _big_tile: Button = %BigTile
-@onready var _name_label: Label = %NameLabel
-@onready var _kind_label: Label = %KindLabel
-@onready var _grade_label: Label = %GradeLabel
-@onready var _count_label: Label = %CountLabel
-@onready var _where_label: Label = %WhereLabel
+@onready var _details_block: ItemDetailsBlock = %DetailsBlock
 @onready var _move_button: Button = %MoveButton
 @onready var _letgo_button: Button = %LetGoButton
 @onready var _move_reason: Label = %MoveReason
@@ -421,21 +416,8 @@ func _refresh_selection() -> void:
 		_letgo_blocked = ""
 		return
 	var in_pack := _sel_box == PACK
-	var stack := ItemMovePlan.is_stack(row)
-	_big_tile.setup(row, { "box": _sel_box, "bed": 88 if not _wide else 96 })
-	_big_tile.set_selected(false)
-	_name_label.text = ItemUiText.display_name(row)
-	_kind_label.text = "%s: %s" % [ItemUiText.KIND_LABEL, ItemUiText.kind_name(str(row.get("kind", "")))]
-	var pips: int = _big_tile.pips_of(row)
-	_grade_label.visible = not stack and pips > 0
-	_grade_label.text = "%s: %d" % [ItemUiText.GRADE_LABEL, pips]
-	if stack:
-		var limit_text := ItemUiText.stack_count(int(row.get("count", 0)), int(row.get("stack_limit", 0)))
-		_count_label.text = "%s: %s%s" % [ItemUiText.COUNT_LABEL, limit_text,
-			(" " + ItemUiText.AT_LIMIT) if bool(row.get("at_limit", false)) else ""]
-	else:
-		_count_label.text = "%s: 1" % ItemUiText.COUNT_LABEL
-	_where_label.text = ItemUiText.WHERE_PACK if in_pack else ItemUiText.WHERE_SANCT
+	_details_block.show_row(row, ItemUiText.WHERE_PACK if in_pack else ItemUiText.WHERE_SANCT,
+		{ "box": _sel_box, "bed": 88 if not _wide else 96 })
 	var to_box := SANCT if in_pack else PACK
 	_move_button.text = ItemUiText.BTN_MOVE_SANCT if in_pack else ItemUiText.BTN_MOVE_PACK
 	var move_plan := ItemMovePlan.plan(_inv, _sel_box, _sel_slot, to_box, -1)

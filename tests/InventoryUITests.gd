@@ -1498,7 +1498,7 @@ static func _t_count_line() -> Dictionary:
 	var panels: Node = m[1]
 	panels.toggle_sanctum()
 	panels._on_slot_chosen("sanctum", 0)
-	var count: Label = panels.get_node("%CountLabel")
+	var count: Label = panels.get_node("%DetailsBlock").get_node("%CountLabel")
 	if count.text != "%s: 1" % ItemUiText.COUNT_LABEL or count.text.to_lower().contains("piece"):
 		return _fail(m, "a single piece shows '%s', wanted 'Count: 1'" % count.text)
 	panels._on_slot_chosen("sanctum", 3)

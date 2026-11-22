@@ -93,6 +93,9 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 				push_error("real_pickup fixture %s did not reach the pickup event" % real_parts[1])
 			else:
 				shell.call("set_snapshot", real_snap)
+		elif snap is String and (snap as String).begins_with("wait:"):
+			for _w in range(int((snap as String).substr(5))):
+				await process_frame
 		elif snap is String:
 			_run_step(harness, snap)
 		else:
@@ -250,6 +253,21 @@ func _fixtures() -> Dictionary:
 		"pickup_idle_axis_a": ["real_pickup:empty:idle:plus:seed=0"],
 		"pickup_idle_axis_b": ["real_pickup:empty:idle:plus:seed=1"],
 		"pickup_idle_zoomed_out": ["real_pickup:empty:idle:plus", "cam_zoom:0.3", "cam_frame"],
+		"pickup_select_find": ["real_pickup:many:idle:none", "select_find:0"],
+		"pickup_select_find_last": ["real_pickup:many:idle:none", "select_find:2"],
+		"pickup_select_pack": ["real_pickup:many:idle:none", "select_pack:0"],
+		"pickup_select_pack_last": ["real_pickup:many:idle:none", "select_pack:last"],
+		"pickup_select_pack_2": ["real_pickup:many:idle:none", "select_pack:1"],
+		"pickup_select_pack_3": ["real_pickup:many:idle:none", "select_pack:2"],
+		"pickup_select_find_row": ["real_pickup:many:idle:none", "select_find:row"],
+		"pickup_select_pack_gathered": ["real_pickup:empty:idle:plus", "select_pack:0"],
+		"pickup_focus_find": ["real_pickup:many:idle:none", "focus_at:find:0"],
+		"pickup_focus_pack": ["real_pickup:many:idle:none", "focus_at:pack:0"],
+		"pickup_focus_token": ["real_pickup:many:idle:none", "focus_at:token:swap"],
+		"pickup_hit_overlay": ["real_pickup:many:idle:none", "hit_overlay"],
+		"pickup_hit_overlay_floor": ["real_pickup:many:idle:none", "cam_zoom_by:0.05", "hit_overlay"],
+		"pickup_select_clip": ["real_pickup:many:idle:none", "wait:20", "select_find:0", "wait:40", "select_find:1", "wait:40", "select_pack:0", "wait:40",
+			"focus_at:find:2", "wait:40", "select_none"],
 		"warning_level_1": [_combat_stall(1, "")],
 		"warning_level_2": [_combat_stall(2, "Ama")],
 		"prebattle_stalled": [_prebattle({ "stalled_before": true })],
@@ -398,6 +416,90 @@ func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pac
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
 
 
+## U7 steps on the pickup board. select_find:<k> / select_pack:<k> (or last) / select_none set `data.selected` the way the builder writes it and
+## publish the snapshot again; focus_at:find:<k>, focus_at:pack:<k> or focus_at:token:swap puts the keyboard focus there; cam_zoom_by:<f>
+## zooms the camera by a factor (it stops at the minimum); hit_overlay draws the hit targets (circles of the real hit radius, `_pickup_find_half`) and the 8 px gap rings over
+## the finds. The overlay exists only here, in the harness.
+func _run_pickup_input_step(harness: Node, parts: PackedStringArray) -> void:
+	var stage := harness.find_child("PickupEventStage", true, false)
+	var board := stage.get_parent() if stage != null else null
+	if board == null:
+		push_error("step %s: no pickup board" % parts[0])
+		return
+	var layer := board.get_node("%PickupFindsLayer") as PickupFindsLayer
+	var strip := (stage as PickupEventStage).pack_strip()
+	var snap: Dictionary = (board.get("_pickup_snap") as Dictionary).duplicate(true)
+	var data: Dictionary = snap["data"]
+	match parts[0]:
+		"select_find":
+			var k := int(parts[1]) if parts[1] != "row" else _find_nearest_row(board, layer)
+			data["selected"] = { "id": layer.find_id_at(k), "side": "find" }
+			board.call("set_snapshot", snap)
+		"select_pack":
+			var slots: Array = (data["pack"] as Dictionary)["slots"]
+			var at := slots.size() - 1 if parts[1] == "last" else int(parts[1])
+			data["selected"] = { "id": str(slots[at]["id"]), "side": "pack" }
+			board.call("set_snapshot", snap)
+		"select_none":
+			data["selected"] = {}
+			board.call("set_snapshot", snap)
+		"focus_at":
+			match parts[1]:
+				"find":
+					layer.set_focus_index(int(parts[2]))
+				"pack":
+					strip.focus_targets()[2 + int(parts[2])].grab_focus()
+				"token":
+					(strip.get_node("%SwapToken") as Control).grab_focus()
+		"cam_zoom_by":
+			var cam := board.get("camera") as Camera2D
+			cam.call("_zoom_by", float(parts[1]), Vector2(root.size) * 0.5)
+			print("CAM zoom now %s (minimum %s)" % [cam.zoom.x, cam.get("_min_zoom")])
+			# Probe: why the minimum is what it is. The floor is (48 + 8) / the nearest pair of ground finds in board px.
+			var tiles := board.get("_board") as TileMapLayer
+			var pts: Array = []
+			for f: Dictionary in PickupFindsLayer.ground_finds(data):
+				pts.append(tiles.map_to_local(Vector2i(int(f["tile"]["col"]), int(f["tile"]["row"]))))
+			var pairs: Array = []
+			for i in pts.size():
+				for j in range(i + 1, pts.size()):
+					pairs.append("%d-%d: %.1f" % [i, j, (pts[i] as Vector2).distance_to(pts[j] as Vector2)])
+			print("FLOOR _pickup_zoom_floor %s, board-fit minimum %s, pair distances (board px) %s" % [board.get("_pickup_zoom_floor"),
+				board.call("_min_zoom_for_span", board.get("_board_span_px")), pairs])
+		"hit_overlay":
+			var overlay := Control.new()
+			overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+			overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			stage.add_child(overlay)
+			overlay.draw.connect(func() -> void:
+				var half := float(board.call("_pickup_find_half"))
+				for c: Vector2 in layer.screen_centers():
+					overlay.draw_arc(c, half, 0.0, TAU, 48, Color(1.0, 0.25, 0.25, 0.95), 2.0)
+					overlay.draw_arc(c, half + PickupHitRules.GAP, 0.0, TAU, 48, Color(0.3, 0.8, 1.0, 0.8), 1.0))
+			overlay.queue_redraw()
+
+
+## The find whose screen centre lies nearest to the middle of the Echo tokens (select_find:row).
+func _find_nearest_row(board: Node, layer: PickupFindsLayer) -> int:
+	var tokens := board.get_node("%TokenLayer") as CombatTokenLayer
+	var xf := tokens.get_global_transform_with_canvas()
+	var sum := Vector2.ZERO
+	var n := 0
+	for a: Dictionary in board.get("_last_actors"):
+		var at := tokens.display_cell_position(str(a["id"]))
+		if at != Vector2.INF:
+			sum += xf * at
+			n += 1
+	var middle := sum / maxf(float(n), 1.0)
+	var best := 0
+	var centers := layer.screen_centers()
+	for i in centers.size():
+		if (centers[i] as Vector2).distance_to(middle) < (centers[best] as Vector2).distance_to(middle):
+			best = i
+	print("ROW middle %s, find %d at %s" % [middle, best, centers[best]])
+	return best
+
+
 ## A fixture step that is a String acts on the live scene. "focus_cause:N" focuses the Nth (i) button.
 func _run_step(harness: Node, step: String) -> void:
 	var parts := step.split(":")
@@ -421,6 +523,8 @@ func _run_step(harness: Node, step: String) -> void:
 		if board_camera != null and board_camera.owner != null and parts[0] == "cam_frame":
 			board_camera.owner.call("frame_pickup_camera", false)
 			print("CAM zoom after reframe: %s" % board_camera.zoom.x)
+	if parts[0] in ["select_find", "select_pack", "select_none", "focus_at", "hit_overlay", "cam_zoom_by"]:
+		_run_pickup_input_step(harness, parts)
 	if parts[0] == "reduced":
 		# reduced:1 sets the project's reduced-motion flag (before the snapshot, so the plan is built reduced); it is cleared after the shot.
 		StopMarkMotion.reduced = parts[1] == "1"

@@ -102,6 +102,17 @@ func update_actor_positions(positions: Dictionary) -> void:
 		_kill_popup(actor_id)
 
 
+## The screen rect of every live popup (the layer does not follow the camera, so these are screen px).
+func popup_rects() -> Array[Rect2]:
+	var out: Array[Rect2] = []
+	for entry: Dictionary in _active_popups.values():
+		var popup := entry.get("node") as Control
+		if popup != null and is_instance_valid(popup):
+			var sz := popup.size if popup.size != Vector2.ZERO else popup.get_combined_minimum_size()
+			out.append(Rect2(popup.get_global_transform_with_canvas().origin, sz * popup.get_global_transform_with_canvas().get_scale()))
+	return out
+
+
 ## True while a popup for this actor is alive.
 func has_popup(actor_id: String) -> bool:
 	return _active_popups.has(actor_id)

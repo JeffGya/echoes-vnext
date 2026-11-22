@@ -2,11 +2,18 @@ class_name PickupPackStrip
 extends Control
 
 ## The Travel pack on the pickup event (V2-ITEM-001b U4). Reads `data.pack`, `swap_left`, `destroy_left`, `phase`.
-## No tappable tiles (U7). Slots are authored in the scene (eight at most); the script
+## In `idle` a held or gathered tile can be chosen (it sends `pack_chosen`), takes focus and shows the cream ring when selected (U7).
+## The two allowance tokens ask the stage for the CauseTooltip (hover, focus, tap). Slots are authored in the scene (eight at most); the script
 ## shows `capacity` of them. Reuses ItemSlot and ItemTile from the 001a pack. No strap line (D-59).
 ## `phase == intro` shows only the pre-event contents; `apply_intro_frame` fills a slot when its find has landed.
 ## Position: bottom edge GAP_ABOVE_BAR above the EchoBar top (D-69). `place` gets that top from the board.
 ## Root `modulate.a` is the fade hook of U6.
+
+## The id of the pack item whose tile was chosen; "" closes the details.
+signal pack_chosen(pack_id: String)
+## A token asks for its line: `token_shown(token, title, body, pinned)`; `token_hidden(token, force)` lets it go.
+signal token_shown(token: Control, title: String, body: String, pinned: bool)
+signal token_hidden(token: Control, force: bool)
 
 const ItemUiText := preload("res://ui/components/ItemUiText.gd")
 
@@ -39,12 +46,25 @@ var _bar_top: float = NAN
 var _renders := 0
 var _slot_of_find: Dictionary = {}
 var _frame_key := ""
+var _phase := ""
+var _selected_id := ""
+# The tile whose mouse release is being handled now (see _on_tile_input).
+var _released_tile: Control = null
 
 
 func _ready() -> void:
 	for child in _slots_box.get_children():
 		_slots.append(child as Control)
 	_title.text = ItemUiText.PACK_TITLE
+	for slot in _slots:
+		slot.connect("chosen", _on_slot_chosen)
+		(slot.call("tile") as Button).gui_input.connect(_on_tile_input.bind(slot.call("tile")))
+	for token: PanelContainer in [_swap_token, _destroy_token]:
+		token.mouse_entered.connect(_show_token.bind(token, false))
+		token.mouse_exited.connect(token_hidden.emit.bind(token, false))
+		token.focus_entered.connect(_show_token.bind(token, false))
+		token.focus_exited.connect(token_hidden.emit.bind(token, true))
+		token.gui_input.connect(_on_token_input.bind(token))
 	if not _view.is_empty():
 		_render()
 	_place()
@@ -53,6 +73,10 @@ func _ready() -> void:
 ## Idempotent: the same content draws nothing again.
 func apply_snapshot(snapshot: Dictionary) -> void:
 	_frame_key = ""
+	var data := _dict(snapshot.get("data", {}))
+	_phase = str(data.get("phase", ""))
+	var sel := _dict(data.get("selected", {}))
+	_selected_id = str(sel.get("id", "")) if str(sel.get("side", "")) == "pack" else ""
 	_view = view_of(snapshot)
 	if is_node_ready():
 		_render()
@@ -69,6 +93,8 @@ func apply_intro_frame(snapshot: Dictionary, landed: Array, tone: String, appear
 	if key == _frame_key:
 		return
 	_frame_key = key
+	_phase = "intro"
+	_selected_id = ""
 	_view = view_of(snapshot, { "landed": landed, "tone": tone, "appear": appear })
 	_slot_of_find = slot_map_of(snapshot)
 	if is_node_ready():
@@ -127,6 +153,38 @@ func slot_global_center(index: int) -> Vector2:
 	if _slots.is_empty() or slot_count() <= 0:
 		return Vector2.ZERO
 	return _slots[clampi(index, 0, slot_count() - 1)].get_global_rect().get_center()
+
+
+## The slot index of a pack item id, or -1.
+func slot_index_of_pack(pack_id: String) -> int:
+	var cells: Array = _arr(_view.get("cells", []))
+	for i in cells.size():
+		if str(_dict(_dict(cells[i]).get("row", {})).get("id", "")) == pack_id and not pack_id.is_empty():
+			return i
+	return -1
+
+
+## Whether the slot is the first or the last of the strip (a card on the left needs the first, on the right the last).
+func is_first_slot(index: int) -> bool:
+	return index == 0
+
+
+func is_last_slot(index: int) -> bool:
+	return index == slot_count() - 1
+
+
+func slot_global_rect(index: int) -> Rect2:
+	return _slots[clampi(index, 0, _slots.size() - 1)].get_global_rect() if not _slots.is_empty() else Rect2()
+
+
+## The focusable controls in tab order: the two tokens, then the tiles that can be chosen.
+func focus_targets() -> Array[Control]:
+	var out: Array[Control] = [_swap_token, _destroy_token]
+	for slot in _slots:
+		var tile := slot.call("tile") as Button
+		if tile.visible and tile.focus_mode == Control.FOCUS_ALL:
+			out.append(tile)
+	return out
 
 
 func panel_global_rect() -> Rect2:
@@ -192,7 +250,7 @@ static func _arr(v: Variant) -> Array:
 
 
 func _render() -> void:
-	var sig := JSON.stringify([_view, _bed], "", true)
+	var sig := JSON.stringify([_view, _bed, _phase, _selected_id], "", true)
 	if sig == _sig:
 		return
 	_sig = sig
@@ -220,8 +278,10 @@ func _render() -> void:
 			var row: Dictionary = _dict(cell.get("row", {}))
 			var source: String = str(SOURCE_TILE.get(str(row.get("source", "")), ""))
 			back.theme_type_variation = &"ItemSlotPack"
-			slot.call("set_content", row, { "bed": _bed, "source": source })
-			(slot.call("tile") as Button).focus_mode = Control.FOCUS_NONE
+			slot.call("set_content", row, { "bed": _bed, "source": source, "ring": true })
+			var tile := slot.call("tile") as Button
+			tile.focus_mode = Control.FOCUS_ALL if PickupHitRules.can_select(_phase, "pack", "") else Control.FOCUS_NONE
+			tile.call("set_selected", str(row.get("id", "")) == _selected_id)
 		else:
 			back.theme_type_variation = &"ItemSlotPack" if kind == "unlisted" else &"PickupSlotEmpty"
 			slot.call("set_content", {}, {})
@@ -231,10 +291,47 @@ func _render() -> void:
 
 func _token(token: PanelContainer, count_label: Label, left: int, line: String) -> void:
 	count_label.text = str(left)
-	token.tooltip_text = line
 	token.theme_type_variation = &"PickupAllowance" if left > 0 else &"PickupAllowanceSpent"
 	if "accessibility_name" in token:
 		token.set("accessibility_name", line)
+
+
+func _on_slot_chosen(_box: String, index: int) -> void:
+	if index >= 0 and index < _slots.size() and _released_tile == _slots[index].call("tile"):
+		_released_tile.release_focus()
+	_released_tile = null
+	if not PickupHitRules.can_select(_phase, "pack", ""):
+		return
+	var cells := _arr(_view.get("cells", []))
+	var id := str(_dict(_dict(cells[index] if index >= 0 and index < cells.size() else {}).get("row", {})).get("id", ""))
+	if id.is_empty() and _selected_id.is_empty():
+		return
+	pack_chosen.emit("" if id == _selected_id else id)
+
+
+## The line of an allowance token: the swap token when `swap`, else the destroy token.
+func token_line(swap: bool) -> String:
+	var left := int(_view.get("swap_left" if swap else "destroy_left", 0))
+	return PickupUiText.swap_allowance(left) if swap else PickupUiText.destroy_allowance(left)
+
+
+## A mouse click selects; it must not leave the keyboard focus ring on the tile. The press has grabbed the focus. Letting it go before the
+## button handles the release would cancel the click, so the release only marks the tile and `_on_slot_chosen` lets the focus go.
+func _on_tile_input(event: InputEvent, tile: Control) -> void:
+	if event is InputEventMouseButton and not (event as InputEventMouseButton).pressed:
+		_released_tile = tile
+	elif event is InputEventKey:
+		_released_tile = null
+
+
+func _show_token(token: Control, pinned: bool) -> void:
+	var swap := token == _swap_token
+	token_shown.emit(token, PickupUiText.line("btn.swap") if swap else ItemUiText.BTN_LET_GO, token_line(swap), pinned)
+
+
+func _on_token_input(event: InputEvent, token: Control) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		_show_token(token, true)
 
 
 func _place() -> void:

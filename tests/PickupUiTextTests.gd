@@ -11,7 +11,7 @@ const _FIXTURE := "res://tests/fixtures/PickupUiProposedCopy.json"
 # Length limits are layout guards chosen by U2 (no decision record).
 const _BARK_MAX := 60
 const _LINE_MAX := 120
-const _NEW_VARIATIONS: Array = ["PickupSlotEmpty", "PickupSlotNew", "PickupDetailsCard", "PickupBar", "PickupBarText",
+const _NEW_VARIATIONS: Array = ["PickupSlotEmpty", "PickupSlotNew", "PickupBar", "PickupBarText",
 	"PickupNameTag", "PickupWhereGround", "PickupWhereCarried", "PickupWherePack", "PickupAllowance",
 	"PickupAllowanceSpent", "PickupControlButton"]
 const _REUSED_VARIATIONS: Array = ["ItemPanelPack", "ItemPanelPackNear", "ItemPanelPackHeavy", "ItemSlotPack",
@@ -143,7 +143,7 @@ static func _t_theme() -> Dictionary:
 	for vname: String in _NEW_VARIATIONS + _REUSED_VARIATIONS:
 		if not types.has(vname):
 			return _fail("theme variation %s is missing" % vname)
-	for sname: String in ["PickupSlotEmpty", "PickupSlotNew", "PickupDetailsCard", "PickupBar", "PickupNameTag",
+	for sname: String in ["PickupSlotEmpty", "PickupSlotNew", "PickupBar", "PickupNameTag",
 			"PickupWhereGround", "PickupWhereCarried", "PickupWherePack", "PickupAllowance", "PickupAllowanceSpent"]:
 		if not (theme.get_stylebox("panel", sname) is StyleBoxFlat):
 			return _fail("%s has no StyleBoxFlat panel" % sname)
@@ -154,7 +154,7 @@ static func _t_theme() -> Dictionary:
 	if g.border_width_left == c.border_width_left or g.corner_radius_top_left == c.corner_radius_top_left \
 			or p.corner_radius_top_left == c.corner_radius_top_left:
 		return _fail("the where tags do not differ by border and corner shape")
-	var base_types := { "PickupSlotEmpty": "Panel", "PickupSlotNew": "Panel", "PickupDetailsCard": "PanelContainer",
+	var base_types := { "PickupSlotEmpty": "Panel", "PickupSlotNew": "Panel",
 		"PickupBar": "PanelContainer", "PickupBarText": "Label", "PickupNameTag": "PanelContainer",
 		"PickupWhereGround": "PanelContainer", "PickupWhereCarried": "PanelContainer", "PickupWherePack": "PanelContainer",
 		"PickupAllowance": "PanelContainer", "PickupAllowanceSpent": "PanelContainer", "PickupControlButton": "Button" }
@@ -228,9 +228,9 @@ static func _t_contrast() -> Dictionary:
 		pairs.append(["slot new edge on %s" % t, _edge(theme, "PickupSlotNew"), _bg(theme, t), 3.0])
 		pairs.append(["allowance edge on %s" % t, _edge(theme, "PickupAllowance"), _bg(theme, t), 3.0])
 		pairs.append(["spent allowance edge on %s" % t, _over(_edge(theme, "PickupAllowanceSpent"), _bg(theme, t)), _bg(theme, t), 3.0])
-	pairs.append(["details text on card", _ink(theme, "ItemTextLight"), _bg(theme, "PickupDetailsCard"), 4.5])
-	pairs.append(["details muted text on card", _ink(theme, "ItemTextLightMuted"), _bg(theme, "PickupDetailsCard"), 4.5])
-	pairs.append(["details card edge", _edge(theme, "PickupDetailsCard"), _bg(theme, "PickupDetailsCard"), 3.0])
+	pairs.append(["details text on card", _ink(theme, "ItemTextLight"), _bg(theme, "ItemDetailsPanel"), 4.5])
+	pairs.append(["details muted text on card", _ink(theme, "ItemTextLightMuted"), _bg(theme, "ItemDetailsPanel"), 4.5])
+	pairs.append(["details card edge", _edge(theme, "ItemDetailsPanel"), _bg(theme, "ItemDetailsPanel"), 3.0])
 	pairs.append(["bar text on bar", _ink(theme, "PickupBarText"), _bg(theme, "PickupBar"), 4.5])
 	pairs.append(["bar edge", _edge(theme, "PickupBar"), _bg(theme, "PickupBar"), 3.0])
 	pairs.append(["Keep button text on bar", _ink(theme, "ItemButtonOutline"), _bg(theme, "PickupBar"), 4.5])

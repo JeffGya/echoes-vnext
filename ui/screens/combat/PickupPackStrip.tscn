@@ -31,7 +31,7 @@ theme_type_variation = &"ItemPanelPack"
 [node name="Box" type="VBoxContainer" parent="Panel"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 6
+theme_override_constants/separation = 8
 
 [node name="Header" type="HBoxContainer" parent="Panel/Box"]
 layout_mode = 2

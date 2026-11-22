@@ -41,3 +41,15 @@ func apply_actions(actions: Dictionary) -> void:
 func _send(action: Dictionary) -> void:
 	if not action.is_empty():
 		action_requested.emit(action)
+
+
+## True when the Continue button took the focus. Gone with this node in U9.
+func focus_continue() -> bool:
+	if not _continue_button.visible:
+		return false
+	_continue_button.grab_focus()
+	return true
+
+
+func continue_button() -> Button:
+	return _continue_button

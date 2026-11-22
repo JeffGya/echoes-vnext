@@ -201,6 +201,19 @@ var _pickup_intro_on: bool = false
 var _pickup_last_pose: Dictionary = {}
 var _pickup_skip_left: float = -1.0
 var _pickup_skip_total: float = 0.0
+# Input of the event (U7). The lowest zoom that keeps the finds apart (0 = none); the last input was a key or pad (focus moves to the
+# card only then); where the focus goes back when the card closes; a close the board already asked for.
+var _pickup_zoom_floor: float = 0.0
+# The floor the finds ask for, and the zoom at which the framed box just fits (INF when it fits at the floor). The fit wins (D-73): the
+# camera floor is the lower of the two.
+var _pickup_floor_derived: float = 0.0
+var _pickup_fit_cap: float = INF
+var _pickup_key_input: bool = false
+# What opened the current card by keyboard, so closing returns the focus there: an int is a find index, a Control is a pack tile, null is none.
+var _pickup_opener: Variant = null
+var _pickup_close_sent: bool = false
+# Continue was sent: the Resolve card is over the board, so the event takes no input until a new pickup snapshot arrives.
+var _pickup_ended: bool = false
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
@@ -249,6 +262,7 @@ func _ready() -> void:
 	_recenter_button.pressed.connect(_on_recenter_pressed)
 	_pickup_debug.action_requested.connect(_on_action)
 	_pickup_stage.clock_ticked.connect(_on_pickup_clock)
+	_pickup_stage.action_requested.connect(_on_action)
 
 	# CanvasLayer visibility and Camera2D.enabled do not follow this Control. A hidden screen must
 	# neither draw its board nor drive the viewport canvas transform.
@@ -300,7 +314,7 @@ func set_layout(layout: Dictionary) -> void:
 	if _current_cols > 0 and _current_rows > 0:
 		_center_board(_current_cols, _current_rows)
 		# The viewport may have changed, and min_zoom depends on it. Keep the player's zoom.
-		var min_zoom := _min_zoom_for_span(_board_span_px)
+		var min_zoom := _current_min_zoom()
 		camera.configure_zoom_range(min_zoom, _ZOOM_MAX, clampf(camera.zoom.x, min_zoom, _ZOOM_MAX))
 		camera.reclamp()
 		if is_instance_valid(_pickup_stage) and _pickup_stage.visible and not camera.has_manual_override:
@@ -313,8 +327,10 @@ func set_layout(layout: Dictionary) -> void:
 ## The snapshot has no nav.back slot, so Back stays hidden and AppRoot's Back does nothing.
 func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_flush_held_barks()
+	_pickup_ended = false
 	var new_event := PickupEventStage.identity_of(data) != _pickup_stage.identity()
 	if new_event:
+		_pickup_fit_cap = INF
 		camera.deselect()
 		camera.has_manual_override = false
 		_pickup_bark_key = ""
@@ -378,6 +394,9 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_pickup_stage.apply_snapshot(snap)
 	_place_pickup_strip()
 	call_deferred("_place_pickup_strip")
+	_apply_pickup_zoom_floor(data)
+	_pickup_close_sent = false
+	_update_pickup_card(true)
 	if phase == "intro":
 		# The finds and the strip show the intro at the clock time: a repeat snapshot must not reset them.
 		_advance_pickup_items(0.0 if new_event else _pickup_stage.clock_time())
@@ -582,6 +601,31 @@ func _place_pickup_strip() -> void:
 	_pickup_stage.place_pack_strip(_echo_bar_top())
 
 
+## The lowest zoom now: the board fit, raised during the event so that two finds keep a 48 px target and an 8 px gap (B1).
+func _current_min_zoom() -> float:
+	return maxf(_min_zoom_for_span(_board_span_px), _pickup_zoom_floor)
+
+
+## The floor comes from the finds the snapshot puts on the board, so it needs no config: it is (48 + 8) / the nearest pair of finds in
+## board px. A floor that changed moves the zoom range; the zoom stays where it is unless it is below the new floor.
+func _apply_pickup_zoom_floor(data: Dictionary) -> void:
+	var points: Array = []
+	for f: Dictionary in PickupFindsLayer.ground_finds(data):
+		var t: Dictionary = f["tile"]
+		points.append(_board.map_to_local(Vector2i(int(t.get("col", 0)), int(t.get("row", 0)))))
+	_pickup_floor_derived = PickupHitRules.min_zoom(points)
+	_update_pickup_floor()
+
+
+func _update_pickup_floor() -> void:
+	var next := minf(_pickup_floor_derived, _pickup_fit_cap)
+	if is_equal_approx(next, _pickup_zoom_floor):
+		return
+	_pickup_zoom_floor = next
+	var min_zoom := _current_min_zoom()
+	camera.configure_zoom_range(min_zoom, _ZOOM_MAX, clampf(camera.zoom.x, min_zoom, _ZOOM_MAX))
+
+
 ## Moves the camera so every row and find tile is in view, clear of the pack strip, the EchoBar and the safe areas.
 ## Does nothing without `camera_frame` in the snapshot. The tween copies the Sanctum camera tween.
 func frame_pickup_camera(animated: bool) -> void:
@@ -603,8 +647,12 @@ func frame_pickup_camera(animated: bool) -> void:
 	var points := PackedVector2Array()
 	for cell in _pickup_cells:
 		points.append(_board_root.position + _board.map_to_local(cell))
+	# When the box does not fit at the finds' floor, the fit wins and the floor gives way to it (spacing 1 or a small screen).
+	var fit := PickupCameraFrame.fit_zoom(points, Vector2(_board.tile_set.tile_size), usable, float(_pickup_camera_cfg.get("margin_px", 0.0)))
+	_pickup_fit_cap = fit if fit > 0.0 and fit < _pickup_floor_derived - 0.0001 else INF
+	_update_pickup_floor()
 	var framed := PickupCameraFrame.frame(points, Vector2(_board.tile_set.tile_size), view, usable, camera.zoom.x,
-		_min_zoom_for_span(_board_span_px), _ZOOM_MAX, float(_pickup_camera_cfg["floor_zoom"]),
+		_current_min_zoom(), _ZOOM_MAX, float(_pickup_camera_cfg["floor_zoom"]),
 		float(_pickup_camera_cfg.get("margin_px", 0.0)))
 	if not bool(framed["valid"]):
 		return
@@ -739,6 +787,14 @@ func _leave_pickup() -> void:
 	_hide_pickup_mote()
 	_speed_bar.visible = true
 	_finds_layer.clear()
+	_pickup_opener = null
+	mouse_default_cursor_shape = Control.CURSOR_ARROW
+	_pickup_floor_derived = 0.0
+	_pickup_fit_cap = INF
+	if _pickup_zoom_floor > 0.0:
+		_pickup_zoom_floor = 0.0
+		var min_zoom := _min_zoom_for_span(_board_span_px)
+		camera.configure_zoom_range(min_zoom, _ZOOM_MAX, clampf(camera.zoom.x, min_zoom, _ZOOM_MAX))
 	if _pickup_stage.visible:
 		_kill_pickup_camera_tween()
 		_token_layer.reset_presentation()
@@ -1336,6 +1392,11 @@ func _on_manual_toggle_pressed(enabled: bool) -> void:
 
 
 func _on_action(action: Dictionary) -> void:
+	# Continue ends the event: the held Resolve card opens over this board, which stays mounted. The event takes no more input and its card closes.
+	if str(action.get("type", "")) == "pickup.continue":
+		_pickup_ended = true
+		_pickup_stage.card().hide_card()
+		_finds_layer.set_focus_index(-1)
 	action_requested.emit(action)
 
 
@@ -1839,6 +1900,8 @@ static func _objective_instruction_text(obj_type: String, obj_state: Dictionary)
 func _process(delta: float) -> void:
 	if _pickup_skip_left >= 0.0:
 		_step_pickup_skip_fade(delta)
+	if _pickup_active() and _pickup_stage.card().is_open():
+		_update_pickup_card(false)
 	# A locked actor's token animates between cells, so the target follows the drawn token each frame.
 	if camera.mode == BoardCameraController.Mode.FOLLOW_ACTOR and is_visible_in_tree():
 		_push_camera_follow_target()
@@ -1953,6 +2016,9 @@ func _actors_on_cell(cell: Vector2i) -> Array:
 # Empty board releases the camera to FREE (ANSWERS.md #76), not to a party follow. A cell that
 # holds only dead actors changes nothing: a dead actor cannot be locked (ANSWERS.md #78).
 func _on_board_tap(viewport_point: Vector2) -> void:
+	if _pickup_active():
+		_on_pickup_tap(viewport_point)
+		return
 	var on_cell := _actors_on_cell(_cell_at_viewport_point(viewport_point))
 	if on_cell.is_empty():
 		camera.deselect()
@@ -1969,6 +2035,9 @@ func _on_board_tap(viewport_point: Vector2) -> void:
 # only sees presses on open board. Pinch and two-finger pan are not handled here; they reach
 # BoardCameraController._unhandled_input.
 func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and _pickup_active():
+		var over := _pickup_find_at(get_global_transform_with_canvas() * (event as InputEventMouseMotion).position)
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if over >= 0 else Control.CURSOR_ARROW
 	if _pointer.handle_event(event):
 		accept_event()
 
@@ -1977,6 +2046,236 @@ func _gui_input(event: InputEvent) -> void:
 ## still get their taps.
 func _input(event: InputEvent) -> void:
 	_pointer.note_touch(event)
+	if _pickup_active():
+		_pickup_input(event)
+
+
+## The pickup event is on show, this board is visible in the tree and Continue was not sent (a hidden board or an ended event takes no pickup input).
+func _pickup_active() -> bool:
+	return is_instance_valid(_pickup_stage) and _pickup_stage.visible and is_visible_in_tree() and not _pickup_ended
+
+
+## The half size of a find on screen in px: the drawn find, but never under half the 48 px target. The hit test and the card anchor use it.
+func _pickup_find_half() -> float:
+	return maxf(_finds_layer.bed() * _finds_layer.get_global_transform_with_canvas().get_scale().x * 0.5, PickupHitRules.TARGET * 0.5)
+
+
+## The mark under a viewport point that can be selected now, or -1. Only a selectable find counts, so the cursor and the tap agree.
+func _pickup_find_at(viewport_point: Vector2) -> int:
+	var i := PickupHitRules.hit(viewport_point, _finds_layer.screen_centers(), _pickup_find_half())
+	if i < 0 or not PickupHitRules.can_select(_pickup_phase(), "find", _finds_layer.status_at(i)):
+		return -1
+	return i
+
+
+func _pickup_phase() -> String:
+	return str((_pickup_snap.get("data", {}) as Dictionary).get("phase", ""))
+
+
+func _pickup_selected_id() -> String:
+	return str(PickupHitRules.selection(_pickup_snap.get("data", {}) as Dictionary).get("id", ""))
+
+
+## A tap in the event: a find that can be selected opens its card (a second tap closes it). Any other tap, on open board or on an Echo,
+## closes an open card and does nothing else (D-73). The camera is never released here.
+func _on_pickup_tap(viewport_point: Vector2) -> void:
+	_pickup_key_input = false
+	_finds_layer.set_focus_index(-1)
+	var i := _pickup_find_at(viewport_point)
+	if i >= 0:
+		_pickup_choose_find(i)
+	elif not _pickup_selected_id().is_empty():
+		action_requested.emit(PickupHitRules.close_action())
+
+
+func _pickup_choose_find(index: int) -> void:
+	var id := _finds_layer.find_id_at(index)
+	action_requested.emit(PickupHitRules.close_action() if id == _pickup_selected_id() else PickupHitRules.select_action("find", id))
+
+
+## Keyboard and pad. Focus enters only after a key or a joypad button press: Tab, or the D-pad right or down (`ui_right`, `ui_down`), with no
+## focus owner. The marks are reached by `_finds_layer.focus_index` (they are no Controls in the focus tree); the strip and the buttons use the
+## engine focus. Tab order: finds, tokens, slots, buttons. A Control outside the pickup event that owns the focus (the F1 debug field)
+## keeps all keys. The sticks (`InputEventJoypadMotion`) are not read.
+func _pickup_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton or event is InputEventScreenTouch:
+		_pickup_key_input = false
+		_finds_layer.set_focus_index(-1)
+		return
+	if not (event is InputEventKey or event is InputEventJoypadButton) or not event.is_pressed() or event.is_echo():
+		return
+	var owner_control := get_viewport().gui_get_focus_owner()
+	if owner_control != null and not _pickup_owns_focus(owner_control):
+		return
+	_pickup_key_input = true
+	if _pickup_phase() != "idle":
+		return
+	var at := _finds_layer.focus_index()
+	var step := 0
+	# Shift+Tab also matches ui_focus_next (the match ignores extra modifiers), so the backward action is read first.
+	if event.is_action_pressed("ui_focus_prev") or (at >= 0 and (event.is_action_pressed("ui_left") or event.is_action_pressed("ui_up"))):
+		step = -1
+	elif event.is_action_pressed("ui_focus_next") or ((at >= 0 or owner_control == null) and (event.is_action_pressed("ui_right") or event.is_action_pressed("ui_down"))):
+		step = 1
+	var targets := _pickup_stage.pack_strip().focus_targets()
+	var count := _finds_layer.mark_count()
+	if at >= 0 and event.is_action_pressed("ui_accept"):
+		_pickup_opener = at
+		_pickup_choose_find(at)
+		get_viewport().set_input_as_handled()
+	elif step == 0:
+		return
+	elif at >= 0:
+		var next := at + step
+		if next >= 0 and next < count:
+			_finds_layer.set_focus_index(next)
+		else:
+			_finds_layer.set_focus_index(-1)
+			_pickup_focus_end(step, targets)
+		get_viewport().set_input_as_handled()
+	elif owner_control == null:
+		# Entry: the first find on the ground, else the Continue button.
+		if count > 0:
+			_finds_layer.set_focus_index(0 if step > 0 else count - 1)
+		else:
+			_pickup_focus_end(-1, targets)
+		get_viewport().set_input_as_handled()
+	elif step < 0 and count > 0 and not targets.is_empty() and owner_control == targets[0]:
+		owner_control.release_focus()
+		_finds_layer.set_focus_index(count - 1)
+		get_viewport().set_input_as_handled()
+	elif step > 0 and count > 0 and owner_control == _pickup_last_target(targets):
+		# Forward from the last target wraps to the first find.
+		owner_control.release_focus()
+		_finds_layer.set_focus_index(0)
+		get_viewport().set_input_as_handled()
+
+
+## True for a Control that belongs to the pickup event: the stage (strip, card) or the debug buttons.
+func _pickup_owns_focus(control: Control) -> bool:
+	return _pickup_stage.is_ancestor_of(control) or (is_instance_valid(_pickup_debug) and _pickup_debug.is_ancestor_of(control))
+
+
+## The last focus target: the Continue button while it shows, else the last pack tile.
+func _pickup_last_target(targets: Array[Control]) -> Control:
+	if is_instance_valid(_pickup_debug) and _pickup_debug.visible and _pickup_debug.continue_button().visible:
+		return _pickup_debug.continue_button()
+	return targets[targets.size() - 1] if not targets.is_empty() else null
+
+
+## Leaves the marks: forward to the first token, back to the Continue button (else the last tile).
+func _pickup_focus_end(step: int, targets: Array[Control]) -> void:
+	if step > 0:
+		if not targets.is_empty():
+			targets[0].grab_focus()
+	elif not (is_instance_valid(_pickup_debug) and _pickup_debug.focus_continue()) and not targets.is_empty():
+		targets[targets.size() - 1].grab_focus()
+
+
+## Shows, moves or closes the details card. `from_snapshot` is true when a new snapshot arrived: the card then takes the selected row.
+## Every frame it follows its item; an item that left the screen closes the card (B11).
+func _update_pickup_card(from_snapshot: bool) -> void:
+	var card := _pickup_stage.card()
+	var sel := PickupHitRules.selection(_pickup_snap.get("data", {}) as Dictionary)
+	if from_snapshot:
+		if sel.is_empty():
+			_close_pickup_card()
+			return
+		var fresh := card.current_id() != str(sel["id"])
+		card.show_selection(sel)
+		if fresh:
+			# A card that opens or switches item replaces the opener: a find the keyboard chose keeps it, a pack tile takes it, a mouse tap clears it.
+			if not _pickup_key_input:
+				_pickup_opener = null
+			elif str(sel["side"]) == "pack":
+				_pickup_opener = get_viewport().gui_get_focus_owner()
+		if fresh and _pickup_key_input:
+			_finds_layer.set_focus_index(-1)
+			card.close_button().grab_focus()
+	if not card.is_open():
+		return
+	var anchor := _pickup_anchor_rect(sel)
+	if anchor.size == Vector2.ZERO or not get_viewport_rect().has_point(anchor.get_center()):
+		if not _pickup_close_sent:
+			_pickup_close_sent = true
+			action_requested.emit(PickupHitRules.close_action())
+		return
+	var pack := str(sel["side"]) == "pack"
+	# A pack card sits close above its tile, over the strip header (Jeff, D-84 n); the strip only tells which tile is first or last.
+	var slot := _pickup_stage.pack_strip().slot_index_of_pack(str(sel["id"])) if pack else -1
+	card.place(anchor, _pickup_usable_rect(), _pickup_obstacles(str(sel["id"]), pack), "pack" if pack else "find",
+		not pack or _pickup_stage.pack_strip().is_first_slot(slot), not pack or _pickup_stage.pack_strip().is_last_slot(slot))
+
+
+## Where the card may lie: the viewport inside the safe insets and a 16 px margin, above the EchoBar.
+func _pickup_usable_rect() -> Rect2:
+	var view := get_viewport_rect()
+	var insets: Vector4 = _layout.get("safe_insets", Vector4.ZERO)
+	var bottom := _echo_bar_top()
+	if is_nan(bottom):
+		bottom = view.end.y - ceilf(insets.w) - _ECHO_BAR_HEIGHT
+	# The 16 unit safe zone of ui/AGENTS.md.
+	var margin := 16.0
+	var left := view.position.x + ceilf(insets.x) + margin
+	var top := view.position.y + ceilf(insets.y) + margin
+	return Rect2(left, top, view.end.x - ceilf(insets.z) - margin - left, bottom - margin - top)
+
+
+## What the card should not cover, in screen px. A find card: the Echo tokens as drawn now, the other finds, the pack strip with its tokens,
+## the EchoBar, the debug buttons and the bark popups (weighted by `PickupDetailsPlan.BARK_WEIGHT`); `own_find` is its find id. A pack card
+## covers the board, the barks and the strip header on purpose (Jeff, D-84 n, D-86 g): only the EchoBar and the debug buttons count.
+func _pickup_obstacles(own_find: String, pack_card: bool = false) -> Array:
+	var out: Array = []
+	if not pack_card:
+		var xf := _token_layer.get_global_transform_with_canvas()
+		var radius: float = _token_layer.visual_config.token_radius * xf.get_scale().x
+		for actor_v in _last_actors:
+			var id := str((actor_v as Dictionary).get("id", ""))
+			var at := _token_layer.display_cell_position(id)
+			if at != Vector2.INF:
+				var c := xf * (at + Vector2(0.0, _token_layer.visual_config.feet_offset_y))
+				out.append(PickupDetailsPlan.obstacle(Rect2(c - Vector2(radius, radius), Vector2(radius, radius) * 2.0)))
+		var centers := _finds_layer.screen_centers()
+		var half := _pickup_find_half()
+		for i in centers.size():
+			if _finds_layer.find_id_at(i) != own_find:
+				out.append(PickupDetailsPlan.obstacle(Rect2((centers[i] as Vector2) - Vector2(half, half), Vector2(half, half) * 2.0)))
+		out.append(PickupDetailsPlan.obstacle(_pickup_stage.pack_strip().panel_global_rect()))
+	var bar := _echo_bar_top()
+	if not is_nan(bar):
+		out.append(PickupDetailsPlan.obstacle(Rect2(get_viewport_rect().position.x, bar, get_viewport_rect().size.x, get_viewport_rect().end.y - bar)))
+	if is_instance_valid(_pickup_debug) and _pickup_debug.visible:
+		out.append(PickupDetailsPlan.obstacle(_pickup_debug.get_global_rect()))
+	if _bark_popup_layer != null and not pack_card:
+		for r in _bark_popup_layer.popup_rects():
+			out.append(PickupDetailsPlan.obstacle(r, PickupDetailsPlan.BARK_WEIGHT))
+	return out
+
+
+func _close_pickup_card() -> void:
+	var card := _pickup_stage.card()
+	var had_focus := card.close_button().has_focus()
+	card.hide_card()
+	if had_focus:
+		if typeof(_pickup_opener) == TYPE_INT:
+			_finds_layer.set_focus_index(int(_pickup_opener))
+		elif _pickup_opener is Control and is_instance_valid(_pickup_opener):
+			(_pickup_opener as Control).grab_focus()
+	_pickup_opener = null
+
+
+## The screen rect of the selected item, or an empty rect when it has none on screen.
+func _pickup_anchor_rect(sel: Dictionary) -> Rect2:
+	if sel.is_empty():
+		return Rect2()
+	if str(sel["side"]) == "find":
+		var i := _finds_layer.index_of_find(str(sel["id"]))
+		if i < 0:
+			return Rect2()
+		var half := _pickup_find_half()
+		return Rect2(_finds_layer.screen_centers()[i] - Vector2(half, half), Vector2(half, half) * 2.0)
+	var slot := _pickup_stage.pack_strip().slot_index_of_pack(str(sel["id"]))
+	return _pickup_stage.pack_strip().slot_global_rect(slot) if slot >= 0 else Rect2()
 
 
 func _on_pointer_tap(pos: Vector2) -> void:
