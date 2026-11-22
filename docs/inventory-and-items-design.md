@@ -101,7 +101,7 @@ Player words follow ANSWERS #86. The code words never appear in player text.
 
 ---
 
-## 3. Where a find comes from — BUILT (seam) + DESIGNED (chance and cap)
+## 3. Where a find comes from — BUILT (seam, chance and cap); real drops OPEN
 
 ### 3.1 The source contract — BUILT
 
@@ -126,7 +126,7 @@ Player words follow ANSWERS #86. The code words never appear in player text.
 
 Nothing in the game calls `record_found_items` except the debug producer. V2-ITEM-002 builds real drops and the item catalogue (names, grades, images, descriptions). Who calls the seam for real drops is OPEN (001b "Open"; section 14 Q2). 001b D-49: ITEM-002 calls the same chance function as the debug producer. ITEM-002 may tune the numbers. It may not remove the key.
 
-### 3.3 Finds cap and finds chance — DESIGNED (built by 001b)
+### 3.3 Finds cap and finds chance — BUILT (001b C1, C6, C10)
 
 **Decisions:** 001b D-40, D-46 to D-51.
 
@@ -160,11 +160,11 @@ Config key: `data.inventory.finds_cap_by_realm_scale` (an ordered list of bands)
 | Stored | The result is stored at the first draw. | D-49 |
 | Loss or retreat | No rank, no finds roll, no event. | D-49 |
 
-Config keys are not in `data/balance.json` yet (checked: only `unique_cap`, `pack_capacity`, `stack_limit_default`, `mark_count`, `grades`, `recycle_yield_ekwan`, `definitions`, `recipes` and others of 001a exist).
+The finds config keys are in `data/balance.json` (`data.inventory.finds_cap_by_realm_scale` and `data.inventory.finds_chance`; built by 001b C1).
 
 ---
 
-## 4. Who takes it: the chooser and the pick rule — DESIGNED
+## 4. Who takes it: the chooser and the pick rule — BUILT (001b C4, C5)
 
 **Story:** V2-ITEM-001b. **Decisions:** 001b D-05, D-06, D-09, D-12, D-39, D-43; ANSWERS #91. D-07 (freeze gate took finds in find order) is SUPERSEDED by D-39 and D-43.
 
@@ -219,11 +219,11 @@ Headline values approved by Jeff (D-12). The columns are gear / relic / consumab
 | empathic | -4, 0, 6, -2 |
 | reflective | -4, 4, -2, 2 |
 | `kind_weight` | gear 3, relic 4, consumable 2, material 1 |
-| Scalars | `grade_step` 1.5, `quantity_gain` 0.5 (cap 3), `worth_weight` 6, `sense_base` 0.3, `freeze_at` 0.5 |
+| Scalars | `grade_step` 1.5, `quantity_gain` 0.5 (cap 3), `worth_weight` 6, `sense_base` 0.0 (D-67: was 0.3; probe P2 failed the D-63 pass line at 0.3 and passed at 0.0; `worth_weight` stays 6), `freeze_at` 0.5 |
 | `afraid_pick` | 4, -8, 16, -12 |
 | `bold_pick` | 6, 10, -8, -8 |
 
-Not copied here: `vector_pick_muls` (ten rows), `trait_pick_muls`, `stat_pick_muls` (six stats, no speed), `afraid_pick_signature` per Calling. D-12 says they are written to `data/balance.json` under `data.inventory.pick` in the backend step. The full tables are in the 001b numbers proposal in the chat. **They are not in the repo today** (see section 14, Q1). Treat all values as PROPOSED DEFAULT until the rate probe passes (D-09, LESSONS #38): a Standing 1 chooser and a Standing 9 chooser must show a measurable difference.
+Not copied here: `vector_pick_muls` (ten rows), `trait_pick_muls`, `stat_pick_muls` (six stats, no speed), `afraid_pick_signature` per Calling. The full tables are in `docs/stories/v2-item-001b/pick-numbers.md` and in `data.inventory.pick` (`data/balance.json`). Probe P2 ran at full size (D-67): with `sense_base` 0.0 it passes the D-63 pass line (M1 17.1%, M3 +0.609, M4 99.0%), a narrow pass.
 
 Vector and trait sums scale by Judgment "as in combat" (D-12). `freeze_at` compares with the curved afraid value (D-12).
 
@@ -237,7 +237,7 @@ Whether Standing 6 and 9 Callings resolve to a Calling family: OPEN (001b "Open"
 
 ---
 
-## 5. The pickup event — DESIGNED
+## 5. The pickup event — BUILT (backend, 001b C6 to C10); UI DESIGNED
 
 **Story:** V2-ITEM-001b. **Decisions:** 001b D-16, D-20 to D-22, D-25, D-31, D-32, D-36, D-37, D-38, D-45. The spec for the playable mockup is `design-rules-v2.md` (session scratchpad, not in the repo). Where it conflicts with `decisions.md`, `decisions.md` wins.
 
@@ -282,9 +282,19 @@ Whether Standing 6 and 9 Callings resolve to a Calling family: OPEN (001b "Open"
 
 **Continue guard.** See section 6.
 
+**Built in 001b C9 (backend) — BUILT.** Files: `FlowRuntime._open_pickup_event`, `PendingResultService`, `PickupController`, `FlowResolveState`, `ResolveSnapshotBuilder`, `StageSettlementService.refresh_card`. Decisions: D-16, D-58, D-66.
+
+| Part | Rule |
+|---|---|
+| Hook | `FlowRuntime._end_round`, win branch, after the bond and Thread block, before `refresh_snapshot`. With an event, the dispatch publishes `flow.pickup` (intro). The Resolve card waits in `ectx.final_snapshot`. Without an event nothing changes. |
+| Hold | A `flow.pickup` snapshot never consumes the pending result. It captures the held card, plus the top-level keys `terrain`, `placement_seed` (a String) and `bounds { w, h }`. |
+| End mark | Continue sets `stage.pickup.phase` to "done" and requests a save. After it, every pickup action is refused with `ended`. |
+| Continue | Publishes the held card with `data.pickup_result` (block 18). A stage-clearing card also gets a fresh stage payout and `items` block, because the event adds and loses item rows. The same keys go into the pending result. |
+| Resume | After a reload the machine is in RESOLVE. If the saved event of the pending result's win (`win_t == created_t`) is not ended, `flow.pickup` resumes at idle. Otherwise Resolve shows. |
+
 ---
 
-## 6. Capacity cases and the swap — DESIGNED
+## 6. Capacity cases and the swap — BUILT (backend, 001b C5, C6, C8); UI DESIGNED
 
 **Story:** V2-ITEM-001b. **Decisions:** 001b D-24, D-27, D-28, D-35, D-41 to D-44, D-54, D-55. SUPERSEDED: D-03 ("one left find in, one gathered find out; never a held piece"): changed by D-15, then D-24, D-27, D-28. D-15 ("swap in any event"): narrowed by D-24 to "only when the pack is full".
 
@@ -336,7 +346,7 @@ The rule is one data field per Directive (name proposed: `confirm_leave_items`).
 
 ---
 
-## 7. The Echo reaction — DESIGNED (effect OPEN)
+## 7. The Echo reaction — BUILT (class only, 001b C5); effect OPEN
 
 **Decisions:** 001b D-23, D-29, D-33, D-34. D-23 is changed by D-33 (the plus applies in the partly-full case too).
 
@@ -345,10 +355,10 @@ The rule is one data field per Directive (name proposed: `confirm_leave_items`).
 | Case | Class | Source |
 |---|---|---|
 | Everything the Echo picks fits (empty or partly full pack) | plus | D-33 (Option Y) |
-| Only some picks fit | neutral | D-23 |
+| Only some picks fit | none (the code key; earlier drafts said "neutral") | D-23 |
 | Full pack, nothing fits | minus | D-23 |
 | Full pack, Echo in a severe band (burdened or worse, or frozen) | no extra minus | D-34 |
-| Frozen chooser | neutral. No minus. Items revealed and lost. | D-39, D-34 |
+| Frozen chooser | none. No minus. Items revealed and lost. | D-39, D-34 |
 
 D-34: a severe-band Echo "may still get the plus when everything fits".
 
@@ -476,7 +486,7 @@ I checked the constants named above in the code. I did not check each UI rule ag
 | Fingerprint | The Sanctum fingerprint test erases `data.inventory` before it hashes. | 001a D-27 |
 | No repair | No repairs or bridges for old saves until Jeff says a 1.0 version is live. | ANSWERS #88 |
 
-### 11.2 Designed for 001b — DESIGNED
+### 11.2 Built in 001b — BUILT (C1 to C10)
 
 | Item | Rule | Source |
 |---|---|---|
@@ -484,7 +494,7 @@ I checked the constants named above in the code. I did not check each UI rule ag
 | Draw order | Finds chance: all `cap` slot draws, always. Chooser: one draw. The pick rule makes no further draw. | D-49, D-05, D-06 |
 | Stamps | Finds result stored at the first draw. A saved pick stamp for the chooser. The saved field names are OPEN (section 14 Q6). 001a `decisions.md` section 8 names `stage.pick_stamps`. 001b `decisions.md` D-05 says "a saved pick stamp" without a name. | D-05, D-49 |
 | Swap flag | Saved stage flag, proposed name `swap_used`. | D-03, D-27 |
-| Event state | The event must resume at idle after a quit (mockup spec). What is saved to rebuild the field (left finds, the chosen Echo, picks) is OPEN. | Section 14, Q6 |
+| Event state | BUILT (C6, C9): the record `stage.pickup` (with `phase` "idle" or "done") rebuilds the field; the pending result holds the board keys. The event resumes at idle after a quit. | D-58, D-66 |
 | Exactly once | The find row id stamp (section 3.1) and the pick stamp. A reload, retry or replay gives the same chooser, picks and finds. | ANSWERS #87 |
 | Core vs UI | The UI never reads the save. It reads `snapshot` data only. | AGENTS.md |
 | Config | All tunables in `data/balance.json` (ANSWERS #83). | D-09, D-46 |
@@ -516,7 +526,7 @@ Story codes below come from `docs/Echoes vNext V2 Story Backlog ..._all.csv`. Th
 |---|---|---|
 | V2-ITEM-001a | Done, merged | Containers, slots, moves, destroy, early-leave rules, item rows, panels, approved text (sections 2, 3.1, 9.1, 10) |
 | V2-ECONOMY-004 Part B | Done, merged | Recipe price contract, `pay_cost`, removal of the definition `cost` (section 10.3) |
-| V2-ITEM-001b | Designed (D-01 to D-56), not built | Finds chance and cap, chooser, pick rule, event state before Resolve, pointer, pack panel and details in the event, swap, reaction class (not the effect), debug producer growth, path pack view of gathered finds (sections 3.3 to 7, 9.2) |
+| V2-ITEM-001b | Backend built (C0 to C12, D-01 to D-67); UI steps U1 to U12 not built | Finds chance and cap, chooser, pick rule, event state before Resolve, pointer, pack panel and details in the event, swap, reaction class (not the effect), debug producer growth, path pack view of gathered finds (sections 3.3 to 7, 9.2) |
 | V2-ITEM-002 (unverified) | Draft | Real drops, item catalogue, definitions, grades, images and descriptions. Calls the finds function. Seam S1. |
 | V2-ITEM-003 (unverified) | Draft | Equipment, the four slots (GDD 19.3), pack size per Echo. Seams S4, S5. |
 | V2-ITEM-004 (unverified) | Draft | Recycle (Ekwan only), recycle of a dropped item, the yield key. Seam S4. |
@@ -534,7 +544,7 @@ Source: Jeff's acceptance of the split as a working draft (001b D-29, 2026-11-12
 |---|---|---|---|---|
 | S1 | Finds source | The call `record_found_items(finds)` (exists from 001a) and the pick function (chooser draw and pick rule, section 4). The finds chance and cap function (D-49) is built with the pick function. | No drop table, no loot source, no item catalogue. | V2-ITEM-002 |
 | S2 | Placement | One function that returns a cell per find, with a simple row layout (D-52 b). | No fall-cell logic, no objective anchors, no spill logic, no seeded placement stream. | The new "Pickup placement on the board" story |
-| S3 | Reaction | A reaction class on the pick result (plus, neutral, minus; section 7). | No `EmotionService` call. No emotion value changes. | The new "Pickup reaction effect" story |
+| S3 | Reaction | A reaction class on the pick result (plus, none, minus; section 7). | No `EmotionService` call. No emotion value changes. | The new "Pickup reaction effect" story |
 | S4 | Swap legality | One function `swap_is_legal` (section 6.2). | No rules for equipped or in-use items. No recycle route for the dropped item. | V2-ITEM-003 (equipped items); V2-ITEM-004 (recycle of a dropped item) |
 | S5 | Capacity | Reads the pack size from config and the pack service (`InventoryService.box_size`, `pack_free`). | No hard-coded 4. No pack size by progression or per Echo. | V2-CONTINUITY-002 (by progression); V2-ITEM-003 (per Echo) |
 | S6 | Material use | Materials show as items only. | No use of materials. | V2-ECONOMY-003 |
@@ -547,12 +557,12 @@ The function names `swap_is_legal` and the S1 pick function are names from the s
 
 | No | Question | Who decides |
 |---|---|---|
-| Q1 | The full numeric tables of the pick rule (`vector_pick_muls`, `trait_pick_muls`, `stat_pick_muls`, `afraid_pick_signature`) are not in the repo. Where is the approved copy? They must be saved as a record. | Jeff, main chat |
+| Q1 | CLOSED (001b C4). The full tables are in `docs/stories/v2-item-001b/pick-numbers.md` and in `data.inventory.pick`. | none (decided) |
 | Q2 | Who calls `record_found_items` for real drops, and where does the rule live? | Jeff (ITEM-002) |
 | Q3 | Do Standing 6 and 9 Callings resolve to a Calling family? | Jeff |
 | Q4 | The size of the emotion plus and minus. Which `EmotionService` values? Does the plus stack with the +10 win lift without a cap? | Jeff (Pickup reaction effect story) |
 | Q5 | CLOSED. `swap_used` clears at an early leave, at defeat and at the path end, as `discard_used` does. Decided by 001b D-04 (Jeff approved it in the interview). The left-list part of D-04 is superseded by D-14. Kept here so the numbering holds. | none (decided) |
-| Q6 | What does the save keep so the event resumes at idle after a quit? Names of the pick stamp and the finds result. | Jeff, `mechanics-developer` |
+| Q6 | CLOSED (001b C6, C9). The saved record is `stage.pickup` (with `phase` idle or done); the saved swap flag is `stage.swap_used`. A reload resumes at idle. | none (decided) |
 | Q7 | Does the pack grow with the finds cap? Is there a limit by free board cells? | Jeff (D-46, D-52) |
 | Q8 | Are slot rolls for finds independent or is it one count roll? (Assumed independent from D-50.) | Jeff |
 | Q9 | The leftover rule for a stack larger than one stack. | Jeff (ITEM-002) |
@@ -575,3 +585,5 @@ One line per story. Newest last.
 | 2026-11-08 | V2-ITEM-001a | Built the containers, slots, moves, destroy, item rows and the early-leave rules. Approved item text and panels. |
 | 2026-11-09 | V2-ECONOMY-004 Part B | Added the recipe price contract. Removed the definition `cost`. Added `EconomyService.pay_cost`. |
 | 2026-11-10 to 2026-11-13 | V2-ITEM-001b design | Recorded D-01 to D-56 as DESIGNED: finds chance and cap, chooser, pick rule, pickup event, swap, reaction class. Defined seams S1 to S6 in section 13.2. |
+| 2026-11-15 | V2-ITEM-001b C9 | Wired the pickup event into a won fight (backend): hook, pending-result hold, end mark, resume, Resolve block 18. |
+| 2026-11-15 | V2-ITEM-001b C10 to C12 | Built the debug producer modes and scene check and apply (C10), probes P1 to P3 (C11) and the unwired-register test `pickup_unwired` (C12). `sense_base` 0.3 to 0.0 (D-67). Section tags moved to BUILT for the backend; the UI steps stay DESIGNED. The reaction key is `none`, not "neutral". |

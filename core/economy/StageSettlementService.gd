@@ -233,6 +233,20 @@ func preview() -> Dictionary:
 	return out
 
 
+## Rebuilds the stage payout and `items` blocks of a win card `data` that carries them, from a fresh `preview()`.
+## A pickup event adds and loses item rows after the card was built, so the card must be read again at its end.
+## No-op on a card without `stage_payout_rows` and when the preview is empty (stage gone or settled).
+static func refresh_card(flow_ctx: FlowContext, data: Dictionary) -> void:
+	if not data.has("stage_payout_rows"):
+		return
+	var p := StageSettlementService.new(flow_ctx, flow_ctx.config_service, null, null).preview()
+	if p.is_empty():
+		return
+	ResolveSnapshotBuilder.add_stage_payout(data, p["rows"], int(p["ase"]), int(p["ekwan"]))
+	data.erase("items")
+	ResolveSnapshotBuilder.add_items(data, p.get("items", {}))
+
+
 ## The inputs of the stage payout, shared by `settle()` and `preview()`. Pure apart from the
 ## unknown-type log inside `RewardCalc.realm_scale` and friends (only when `log` is given). The base and
 ## Ekwan come from the unsettled earnings rows (D-105); the counts still include settled objectives.

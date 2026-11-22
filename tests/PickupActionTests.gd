@@ -409,16 +409,28 @@ static func _t_cancel() -> Dictionary:
 static func _t_continue() -> Dictionary:
 	var m: Array = []
 	var ctx := _mixed()
+	var rec := _record(ctx).duplicate(true)
 	var save := _norm(ctx.save_data)
-	var rec := _norm(_record(ctx))
 	ctx.pickup_session = { "phase": "idle", "selected": "f0" }
+	# The fixture has no fight and no pending result: there is no held Resolve card, so nothing is published.
 	var o := _run(ctx, "pickup.continue")
 	if o.error_code != "" or o.has_replacement_snapshot or o.transition_to != "" or not o.save_reasons.is_empty():
 		m.append("continue outcome: error '%s', snapshot %s, transition '%s'" % [o.error_code, str(o.has_replacement_snapshot), o.transition_to])
 	if not ctx.pickup_session.is_empty():
 		m.append("session not cleared: %s" % str(ctx.pickup_session))
-	if _norm(ctx.save_data) != save or _norm(_record(ctx)) != rec or ctx.save_request:
-		m.append("continue wrote")
+	# C9: the only write is the durable end mark.
+	rec["phase"] = PickupEventService.PHASE_DONE
+	if _norm(_record(ctx)) != _norm(rec) or not ctx.save_request or not ctx.save_request_reason.contains("inventory.pickup.finish"):
+		m.append("continue: record %s, save request %s '%s'" % [_norm(_record(ctx)), str(ctx.save_request), ctx.save_request_reason])
+	# The whole save differs only by the end mark: undo it, compare, put it back.
+	_record(ctx)["phase"] = PickupEventService.PHASE_IDLE
+	if _norm(ctx.save_data) != save:
+		m.append("continue wrote more than the end mark")
+	_record(ctx)["phase"] = PickupEventService.PHASE_DONE
+	for a: Array in _ALL:
+		var ended := _refused(ctx, a[0], a[1], "ended")
+		if not ended.is_empty():
+			m.append("after the end: " + ended)
 	if _count(ctx, "inventory.pickup.finish") != 1:
 		m.append("finish logs: %d" % _count(ctx, "inventory.pickup.finish"))
 	var fin := PickupController.new(ctx, ctx.config_service, ctx.logger).finish(8)

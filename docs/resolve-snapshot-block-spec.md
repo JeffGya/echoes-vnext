@@ -141,6 +141,7 @@ it to `""`, so the sentinel is safe).
 | 16 | `pace` | `pace_state`, `pace_changed_rank` | A (pace-mode win only), G | Round line colour + rank-cause note (speed pays no Ase, D-49) |
 | 14f | `ase_gathered` | `ase_gathered` (only when above 0) | A (fight win), E (money), D (good Claimant), G | Found line and the gathered total; Ase that waits in the packs, never in `ase_awarded` |
 | 17 | `standoff` | `standoff_outcome`, `standoff_count`, `can_go_sanctum`, `cause`, `froze_names`, `calmed_names`, `fight_returns` | standoff card (`run_type` `standoff`), G | Standoff renderer: words and names only |
+| 18 | `pickup_result` | `pickup_result` (only when a pickup event ran) | A (published by `pickup.continue`), G | Final items of the pickup event: taken, left, lost, dropped, swap used |
 
 ### 2.3 Blocks that are partial or forced
 
@@ -239,6 +240,7 @@ but it still has to hold, because `FlowFingerprintTests` pins A's exact `data_ke
 | 15 `contact_outcome` | yes | banner text + banner colour + `%ReasonLabel` |
 | 14f `ase_gathered` | yes | the "found" outcome line (money, good Claimant) and the gathered part of the card total |
 | 17 `standoff` | yes | the standoff renderer (`run_type` `standoff`): outcome line, cause line, the buttons |
+| 18 `pickup_result` | yes (UI step U10) | the item row of the win card: what the party carries away from the pickup event |
 
 ---
 
@@ -295,6 +297,7 @@ Dictionaries are references). Every one returns `void`.
 | 16 | `static func add_pace(data: Dictionary, pace_state: String, pace_changed_rank: bool) -> void` |
 | 14f | `static func add_ase_gathered(data: Dictionary, gathered: int) -> void` (and the helper `fight_rows_ase(rows: Array) -> int`) |
 | 17 | `static func add_standoff(data: Dictionary, standoff_count: int, can_go_sanctum: bool, cause: String, froze_names: Array, calmed_names: Array, fight_returns: bool = true) -> void` |
+| 18 | `static func add_pickup_result(data: Dictionary, pickup_result: Dictionary) -> void` |
 
 ### 4.3 How a producer declares its blocks
 
@@ -351,6 +354,23 @@ The rows above are unchanged. The rules:
    from the stored result when it has `standoff_outcome`.
 3. Numbers 16 and 17 name these blocks now. The deleted `title` and `note` blocks of the same numbers
    (Q3 below) are gone.
+
+Block 18 `pickup_result` was added by V2-ITEM-001b step C9. The rows above are unchanged. The rules:
+
+1. The call is the gate. `add_pickup_result` writes the key only when the result is not empty. A win with no
+   pickup event carries no `pickup_result` key, so its card is byte-identical to the card before C9.
+2. Shape: `{ taken: [row], left: [row], lost: [row], dropped: row or {}, swap_used: bool }`. A row is
+   `{ type_id, name, kind, grade, quantity }`, with no id. `PickupSnapshotBuilder.result_of` builds it from the
+   saved event record when the player presses Continue in the event, so it shows the state after a swap. A tried
+   find is `left`. Every find of a frozen chooser is `lost` (D-43). `dropped` is the pack item that the swap lost.
+3. Producer A: `PickupController.handle_continue` publishes the held card (`ectx.final_snapshot`) with this
+   block. It also writes the key into the pending result's `resolve_data`. Producer G replays it when the stored
+   result has `pickup_result`. On a card with block 7c `stage_payout` (a stage-clearing win), Continue also
+   rebuilds blocks 7c and 14g `items` from a fresh `StageSettlementService.preview()`
+   (`StageSettlementService.refresh_card`), in the published card and in the pending result. The event adds and
+   loses item rows after producer A built the card.
+4. The pending result of a win with an event also has three top-level keys (D-66): `terrain`, `placement_seed` and
+   `bounds { w, h }`. They are not card keys. `PickupSnapshotBuilder._board` reads them after a reload.
 
 ### 4.4 Purity contract
 

@@ -1,27 +1,29 @@
 # V2-ITEM-001b: follow-ups and unwired register
 
-Written in STE. Jeff's rule: no loose ends. Every part that 001b builds but does not wire has a clear note and a target story here. Each row has a code marker `# UNWIRED (target: <story code>): <what>` at the seam. The test `pickup_unwired` (backend step C12) fails if a marker names no story code, or if a row here has no marker. Story codes come from the backlog CSV. The CSV can lag Notion. Check each code in Notion before any row is changed. Nothing is written to Notion without Jeff's yes.
+Written in STE. Jeff's rule: no loose ends. Every part that 001b builds but does not wire has a clear note and a target here. A code marker at the seam has the form `# UNWIRED (target: <T>): <what>`. <T> is a story code from the backlog CSV or `NEW "<title>"` (D-65). The test `pickup_unwired` (suite in `tests/PickupUnwiredTests.gd`) scans `core/` and `ui/`. It fails when a marker is malformed or is not a comment line, when a table line is not a row, when a Target cell has no story code, `NEW "title"` or `none` and a reason, when a marker has no row (match by file name and target), when a `.gd` file named in "Marker site" has no marker with the row target, and when a story code or title in a Target cell is carried by no marker of the row. A row is EXEMPT only when its "Marker site" cell starts with `none` and a reason (rows 8, 14 and 15). The CSV can lag Notion: check each code in Notion before any row changes. Nothing is written to Notion without Jeff's yes.
 
 The design record is `decisions.md` (D-01 onward). The cross-story design is `docs/inventory-and-items-design.md`. The seams S1 to S6 are defined in its section 13.2.
 
 | # | What is unwired | What exists in 001b | Target story | Wire it when | Marker site |
 |---|---|---|---|---|---|
 | 1 | Real finds in real fights | `PickupFinds.finds_for_win` returns none in shipping. Only debug `event` and `arm` produce finds. | V2-ITEM-002 (seam S1) | real drops exist | `PickupFinds.gd` |
-| 2 | Real item names, grades, images, descriptions | placeholder definitions in the test fixture. Details show placeholders. | V2-ITEM-002 | the catalogue exists | details card, `ItemUiText` |
-| 3 | Real placement (where enemies fell) and no-kill objective anchors | a simple row (`finds[].cell`) | new story "Pickup placement on the board" (S2) | the placement story starts | the placement function |
-| 4 | The emotion effect (plus and minus) | a reaction class only. No `EmotionService` call. | new story "Pickup reaction effect" (S3) | that story starts | `PickupCase.gd` |
+| 2 | Real item names, grades, images, descriptions | placeholder definitions in the test fixture. Details show placeholders. | V2-ITEM-002 | the catalogue exists | `PickupSnapshotBuilder.gd` (`name_of` for the find rows). The pack strip names come from `ItemUiText` in `ui/`; it has no marker (`ui/` is not edited in the backend) |
+| 3 | Real placement (where enemies fell) and no-kill objective anchors | a simple row (`finds[].cell`) | new story "Pickup placement on the board" (S2); marker `NEW "Pickup placement on the board"` (D-65) | the placement story starts | `PickupEventService.gd` (`open_after_win`, where the rows get `cell`) |
+| 4 | The emotion effect (plus and minus) | a reaction class only. No `EmotionService` call. | new story "Pickup reaction effect" (S3); marker `NEW "Pickup reaction effect"` (D-65) | that story starts | `PickupEventService.gd` (`open_after_win`, where `reaction` is stored) |
 | 5 | Swap with equipped or in-use items | swap legality ignores equipment | V2-ITEM-003 (S4) | equipping exists | `PickupSwapRules.gd` |
-| 6 | Recycle route for the dropped item | the dropped item is lost | V2-ITEM-004 (S4) | recycle exists | `PickupEventService.commit_swap` |
-| 7 | Pack size by progression and per Echo | pack size is read from config only | V2-CONTINUITY-002 and V2-ITEM-003 (S5) | those stories start | cap and pack readers |
+| 6 | Recycle route for the dropped item | the dropped item is lost | V2-ITEM-004 (S4) | recycle exists | `PickupEventService.gd` (`commit_swap`) |
+| 7 | Pack size by progression and per Echo | pack size is read from config only. Pack size per Echo belongs to V2-ITEM-003 (S5); it has no marker of its own | V2-CONTINUITY-002 (S5) | that story starts | `InventoryService.gd` (`box_size`, the pack size reader) |
 | 8 | Use of materials | materials show as items only | V2-ECONOMY-003 (S6) | crafting exists | none (no code) |
-| 9 | `confirm_leave_items` on future Directives | set on Scout Carefully (true) and Seek Signs (false) | V2-DIRECTIVE-003 (new Directives) | a Directive is added | `DirectiveService` |
-| 10 | Finds cap and chance numbers beyond realm.02 | bands 1.75, 2.5 and 3.5 are placeholders | V2-ITEM-002, or the story that adds realm 3 | realm 3 exists | `finds_cap_by_realm_scale` |
-| 11 | Cell limit on the cap, and the piles rule | none | the placement story | the placement story starts | the cap helper |
-| 12 | Repetition forms (short and brief intro) | Skip only | a feel pass after Jeff's playtests (no story yet: Jeff names it) | Jeff decides | `PickupEventPlan.gd` |
-| 13 | Win emotion drift is skipped after a reload on the Resolve card (pre-existing) | inherited, not fixed | no story: Jeff assigns (candidate: V2-ECONOMY-004 follow-ups) | Jeff decides | noted here only |
-| 14 | UX redesign items: pack discoverability, text size, panel placement | not touched | Jeff's UX redesign | that redesign starts | design document Q12 |
-| 15 | Debug producer, debug cap override, F1 scene menu | debug builds only | none: stays debug-only. Remove only if Jeff asks. | not applicable | `DebugController.gd` |
-| 16 | A natural freeze in real play | the freeze path is built and tested. Probe P3 measures the rate. | the pick tuning (D-09) after P3 | the P3 result | `PickupPick.gd` |
+| 9 | `confirm_leave_items` on future Directives | set on Scout Carefully (true) and Seek Signs (false) | V2-DIRECTIVE-003 (new Directives) | a Directive is added | `DirectiveService.gd` (`confirms_leave_items`) |
+| 10 | Finds cap and chance numbers beyond realm.02 | bands 1.75, 2.5 and 3.5 are placeholders | V2-ITEM-002, or the story that adds realm 3 | realm 3 exists | `FindsRules.gd` (`cap_for_scale`, key `finds_cap_by_realm_scale`) |
+| 11 | Cell limit on the cap, and the piles rule | none | `NEW "Pickup placement on the board"` | the placement story starts | `FindsRules.gd` (`cap_for_scale`) |
+| 12 | Repetition forms (short and brief intro) | Skip only | `NEW "Pickup intro short forms"` (a feel pass after Jeff's playtests; the title is a proposal, Jeff names it) | Jeff decides | `PickupSnapshotBuilder.gd` (`PHASE_INTRO`) |
+| 13 | Win emotion drift is skipped after a reload on the Resolve card (pre-existing). A reload during the pickup event also skips the win steps (emotion drift, `check_vow_discovery`, `clear_ally_fields_if_present`), because the machine is then in RESOLVE, not ENCOUNTER (found by C9 QA). | inherited, not fixed. Candidate owner: V2-ECONOMY-004 follow-ups | `NEW "Win steps after a reload"` (Jeff assigns) | Jeff decides | `FlowResolveState.gd` (`enter`, step 0: the resume of the event) |
+| 14 | UX redesign items: pack discoverability, text size, panel placement | not touched. A story title may be `NEW "Pickup UX redesign"` (proposed) | none (Jeff's UX redesign, design document Q12) | that redesign starts | none (no code: a UX redesign) |
+| 15 | Debug producer, debug cap override, F1 scene menu | debug builds only. Core is built (C10): `inventory produce event` and `arm`, `debug.pickup.scene.check` and `.apply`, console `pickup scene check` and `apply`. The F1 menu (U11a) is not built. The return to the path from an event-now card runs the real stage-entry steps (vow stage entry, session reset) as if a fight was won. | none: stays debug-only. Remove only if Jeff asks. | not applicable | none (debug-only; in `DebugController` and `PickupDebug`) |
+| 16 | A natural freeze in real play | the freeze path is built and tested. Probe P3 (100 real fights, 2026-11-15) shows a chooser freezes exactly when its status AT THE EVENT is strained or worse (hollow, fraying, strained freeze; pressed 0.487 and burdened never, at `freeze_at` 0.5). The status at the event is often one step worse than before the fight. P3 cannot say how often a real party reaches that status: that needs a campaign-length measurement. | a later tuning story (no code yet): `NEW "Pickup tuning from real play"` | after Jeff has played the event | `PickupPick.gd` (`frozen`) |
+| 17 | `realm.seed` is a 63-bit int stored as a JSON number. After a reload it can lose digits. Every seeded stream that reads it after a reload is affected. Found by C9 QA. Needs an opus determinism check. | not fixed (pre-existing, project-wide) | `NEW "Realm seed survives a save reload"` | Jeff decides | `PickupEventService.gd` (`open_after_win`: finds roll, chooser draw), `PickupSnapshotBuilder.gd` (`build`: pointer) |
+| 18 | Order of the win relief and the pickup event: the event opens in the fight-ending dispatch, the win relief (fear -5, morale +10) runs in a LATER dispatch, so a chooser freezes on its fear from BEFORE the relief (found by C11 QA) | built as is; not changed | `NEW "Pickup event after the win relief"` (Jeff decides) | Jeff decides | `FlowRuntime.gd` (`_open_pickup_event`) |
 
 ## Other open items (not unwired code)
 - The pass line for the Standing 1 against Standing 9 probe (D-09). Needs a number from `mid-game-designer`, approved by Jeff, before step C4 closes.
@@ -32,6 +34,6 @@ The design record is `decisions.md` (D-01 onward). The cross-story design is `do
 - Jeff reviews ALL player-facing copy in one pass at the end (D-56).
 
 ## Convention for a new unwired part
-1. Add one marker line at the seam: `# UNWIRED (target: <story code>): <what>`.
-2. Add one row to this table with the trigger.
+1. Add one marker line at the seam: `# UNWIRED (target: <story code or NEW "title">): <what>`.
+2. Add one row to this table with the trigger. Name the marker file as `File.gd` in "Marker site" and put the marker target in "Target story".
 3. Add the target story to section 13 of the design document if it is not there.

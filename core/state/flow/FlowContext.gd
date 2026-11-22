@@ -150,6 +150,7 @@ var pending_inventory_refusal: Dictionary = {}  # one-shot: { action: "move"|"di
 var pending_return_confirm: bool = false      # one-shot: the standoff card asked for the Sanctum return confirmation; the next stage_explore snapshot shows it, then dispatch() clears it. Never persisted
 var pickup_session: Dictionary = {}  # volatile pickup event state { phase, swap_origin, swap_target, selected } (PickupController). Never persisted; a reload resumes at idle
 var pickup_armed: Array = []  # debug finds for the next won fight (PickupFinds). Never persisted
+var pickup_armed_opts: Dictionary = {}  # debug options of the armed finds { count?, cap?, chooser_id? }. Never persisted
 
 # V2-INFRA-003: single choke point for requesting a save. Sets save_request and, when a
 # reason is given, accumulates it into save_request_reason (pipe-joined) so multiple

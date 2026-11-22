@@ -6,7 +6,7 @@
 #
 # The session { phase, swap_origin, swap_target, selected } lives in `FlowContext.pickup_session` and is never
 # saved. Every action is refused (nothing changes, one log line `inventory.pickup.denied`, error_code = the
-# reason key) when no event is open ("no_event") or the live snapshot is not `flow.pickup` ("not_pickup").
+# reason key) when no event is open ("no_event"), the live snapshot is not `flow.pickup` ("not_pickup") or the event has ended ("ended").
 # `commit_swap` trusts its caller, so the phase checks here are the only guard against a swap outside the event.
 # The phase is read from the built snapshot, not the raw session: the builder already falls back to idle for a
 # swap phase the record cannot support.
@@ -20,16 +20,11 @@
 # pickup.swap.confirm  swap_preview. Commits the one swap, back to idle. The save request is made inside
 #                      `commit_swap` through `flow_ctx.request_save`, not on the outcome.
 # pickup.swap.cancel   swap_pick or swap_preview -> idle (the mockup's Cancel and Back are the same step).
-# pickup.continue      idle. Ends the event through `finish`.
-# Refusal keys: no_event, not_pickup, bad_payload, wrong_phase, not_selectable, no_target, not_partner, bad_pair,
-# plus the `PickupSwapRules` keys (swap not offered or refused at commit).
-#
-# C9 TODO (not built here):
-#  - the event end mark, written by `finish` (durable), and the double-continue guard;
-#  - the pending-result hold rule, before any flow.pickup publish;
-#  - intro seeding: `pickup_session = { phase: intro }` on open, `{}` on resume;
-#  - the bark-clear gate in FlowRuntime.dispatch for flow.pickup;
-#  - what `pickup.continue` publishes.
+# pickup.continue      idle. Ends the event through `finish` (durable end mark) and publishes the held Resolve card
+#                      with `data.pickup_result`: live from `ectx.final_snapshot`, after a reload from the pending
+#                      result. The result is also attached to the pending result, so a reload on Resolve shows it.
+# Refusal keys: no_event, ended, not_pickup, bad_payload, wrong_phase, not_selectable, no_target, not_partner,
+# bad_pair, plus the `PickupSwapRules` keys (swap not offered or refused at commit).
 
 class_name PickupController
 extends RefCounted
@@ -159,22 +154,61 @@ func handle_swap_cancel(action: Dictionary, t: int) -> FlowActionOutcome:
 	return _published(t)
 
 
-## Only idle ends the event. It publishes nothing: what comes next belongs to the hook that opened the event.
+## Only idle ends the event. The final items, and on a stage-clearing card the stage payout and `items` blocks,
+## are read AFTER any swap, so the card shows what the party carries.
+## A debug "event now" record (`debug_event`) has no fight behind it: a plain win card with the final items is built
+## and the machine moves to RESOLVE, so the card's own Continue (`flow.go_state`) is not a no-op on the path view.
+## With no held card (no fight behind the event and no pending result) it publishes nothing.
 func handle_continue(action: Dictionary, t: int) -> FlowActionOutcome:
 	var gate := _gate()
 	if not gate.is_empty():
 		return _deny(action, gate, t)
 	if _phase(t) != PickupSnapshotBuilder.PHASE_IDLE:
 		return _deny(action, "wrong_phase", t)
+	var record := PickupEventService.record_of(FlowStageExploreState._get_current_stage(flow_ctx))
+	var pickup_result := PickupSnapshotBuilder.result_of(record)
 	finish(t)
-	return FlowActionOutcome.handled_outcome()
+	if bool(record.get("debug_event", false)):
+		return _event_now_card(record, pickup_result, t)
+	PendingResultService.attach_pickup_result(flow_ctx, int(record.get("win_t", -1)), pickup_result)
+	var ectx: EncounterContext = flow_ctx.encounter_ctx
+	var resolve: Dictionary = {}
+	if ectx != null and not ectx.final_snapshot.is_empty():
+		resolve = ectx.final_snapshot.duplicate(true)
+		(resolve["meta"] as Dictionary)["t"] = t
+		ResolveSnapshotBuilder.add_pickup_result(resolve["data"], pickup_result)
+		StageSettlementService.refresh_card(flow_ctx, resolve["data"])
+	else:
+		resolve = PendingResultService.build_snapshot(flow_ctx, t)
+	if resolve.is_empty():
+		return FlowActionOutcome.handled_outcome()
+	return FlowActionOutcome.snapshot_outcome(resolve)
 
 
-## Ends the event: clears the session and returns what the caller needs to route on. Changes nothing else.
+## The Continue of this card runs the real stage-entry steps (vow stage entry, explore session reset), as after a
+## won fight. That is the cost of going back through RESOLVE; it is not a bug of the debug scene.
+func _event_now_card(record: Dictionary, pickup_result: Dictionary, t: int) -> FlowActionOutcome:
+	var actions := { "cta.continue": { "type": "flow.go_state", "to": str(record.get("return_to", FlowStateIds.STAGE_EXPLORE)),
+		"label": "Back to the path", "slot": "cta.continue" } }
+	var card := ResolveSnapshotBuilder.build(t, actions)
+	ResolveSnapshotBuilder.add_victory_flag(card["data"], true)
+	ResolveSnapshotBuilder.add_grade_rank(card["data"], str(record.get("rank", "")))
+	ResolveSnapshotBuilder.add_pickup_result(card["data"], pickup_result)
+	var outcome := FlowActionOutcome.snapshot_outcome(card)
+	outcome.transition_to = FlowStateIds.RESOLVE
+	outcome.transition_reason = "debug.pickup.event_now"
+	return outcome
+
+
+## Ends the event: writes the durable end mark (`phase` "done"), requests a save, clears the session and returns
+## what the caller needs to route on.
 func finish(t: int) -> Dictionary:
 	var record := PickupEventService.record_of(FlowStageExploreState._get_current_stage(flow_ctx))
 	var result := { "situation_id": str(record.get("situation_id", "")), "run_count": int(record.get("run_count", 0)),
 		"return_to": str(record.get("return_to", "")), "swap_used": not (record.get("swap", {}) as Dictionary).is_empty() }
+	if not record.is_empty():
+		record["phase"] = PickupEventService.PHASE_DONE
+		flow_ctx.request_save("inventory.pickup.finish")
 	flow_ctx.pickup_session = {}
 	logger.info(t, "inventory.pickup.finish", "Pickup event finished", result)
 	return result
@@ -182,8 +216,11 @@ func finish(t: int) -> Dictionary:
 
 ## "" when the event is open and the live snapshot is the pickup one, else the refusal key.
 func _gate() -> String:
-	if PickupEventService.record_of(FlowStageExploreState._get_current_stage(flow_ctx)).is_empty():
+	var record := PickupEventService.record_of(FlowStageExploreState._get_current_stage(flow_ctx))
+	if record.is_empty():
 		return "no_event"
+	if PickupEventService.is_ended(record):
+		return "ended"
 	if str(flow_ctx.last_snapshot.get("type", "")) != FlowStateIds.PICKUP:
 		return "not_pickup"
 	return ""
