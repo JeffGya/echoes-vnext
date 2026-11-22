@@ -36,6 +36,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/selected_is_valid_only_for_the_record", Callable(PickupSnapshotTests, "_t_selected"))
 	runner.register_test("pickup_snapshot/board_actors_come_from_the_durable_result_after_a_reload", Callable(PickupSnapshotTests, "_t_pending_board"))
 	runner.register_test("pickup_snapshot/tried_find_and_pack_slot_fields", Callable(PickupSnapshotTests, "_t_tried_and_slots"))
+	runner.register_test("pickup_snapshot/find_and_pack_rows_carry_the_001a_stack_limit", Callable(PickupSnapshotTests, "_t_stack_limit"))
 	runner.register_test("pickup_snapshot/chooser_standing_return_to_and_tick", Callable(PickupSnapshotTests, "_t_standing_meta"))
 	runner.register_test("pickup_snapshot/build_leaves_the_flow_context_alone_and_terrain_is_a_copy", Callable(PickupSnapshotTests, "_t_context_untouched"))
 	PickupPlacementBoardsTests.register(runner)
@@ -724,6 +725,34 @@ static func _t_tried_and_slots() -> Dictionary:
 		for k in want[id]:
 			if str(by_id[id].get(k)) != str(want[id][k]):
 				m.append("slot %s: %s is '%s', expected '%s'" % [id, k, by_id[id].get(k), want[id][k]])
+	return _result(m)
+
+
+static func _t_stack_limit() -> Dictionary:
+	var m: Array = []
+	var ctx := PickupStateTests._ctx(2, 3)
+	ItemPacksTests._hold(ctx, 1)
+	ctx.save_data["inventory"]["pack_stacks"] = [{ "type_id": "ph_consumable_a", "kind": "consumable",
+		"quantity": 3, "slot": 1 }]
+	PickupStateTests._open(ctx, PickupStateTests._finds(["ph_consumable_a", "ph_charm_a"]))
+	var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+	var d: Dictionary = _build(ctx)["data"]
+	var held_rows: Array = InventoryService.snapshot(ctx.save_data, cfg)["pack_stacks"]
+	var want: int = int(held_rows[0]["stack_limit"])
+	if want <= 0 or want != InventoryService.stack_limit_of(cfg, "ph_consumable_a"):
+		m.append("InventoryService limit is %d, expected a positive value from stack_limit_of" % want)
+	var seen_stack := 0
+	var rows: Array = (d["finds"] as Array) + (d["pack"]["slots"] as Array)
+	for r: Dictionary in rows:
+		var is_stack := InventoryService.STACK_KINDS.has(str(r["kind"]))
+		if is_stack:
+			seen_stack += 1
+			if int(r.get("stack_limit", -1)) != want:
+				m.append("%s row of the stack has stack_limit %s, expected %d" % [r.get("id", r.get("find_id")), str(r.get("stack_limit")), want])
+		elif r.has("stack_limit"):
+			m.append("piece row %s has a stack_limit, 001a piece rows have none" % str(r.get("type_id")))
+	if seen_stack != 3:
+		m.append("saw %d stack rows (find, held stack slot, gathered slot), expected 3" % seen_stack)
 	return _result(m)
 
 

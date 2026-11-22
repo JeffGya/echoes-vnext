@@ -878,6 +878,11 @@ static func def_of(cfg: Dictionary, type_id: String) -> Dictionary:
 	return {}
 
 
+## The stack limit of one type, the same value a `snapshot` stack row reports.
+static func stack_limit_of(cfg: Dictionary, type_id: String) -> int:
+	return _stack_limit(cfg, def_of(cfg, type_id))
+
+
 static func _stack_limit(cfg: Dictionary, def: Dictionary) -> int:
 	var override := _to_int(def.get("stack_limit", 0))
 	return override if override > 0 else _cfg_int(cfg, "stack_limit_default")

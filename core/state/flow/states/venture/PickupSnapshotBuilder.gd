@@ -15,6 +15,7 @@ extends RefCounted
 ## Board tiles (D-72, `PickupPlacement`, derived on every build, never saved): `row[].tile` and `finds[].tile` are
 ## { col, row }. `finds[].cell` stays the index in the record. `camera_frame` is the camera tunables (D-73).
 ## `pointer_look` is the feel values of the pointer mote (D-77): { path, tables, mote, items, reduced, buttons, timing, reasons, tempo }, see `pointer_look`.
+## `finds[]` and `pack.slots[]` of a stack kind also carry `stack_limit` (D-85), the value of a 001a stack row.
 ## `swap.targets` is keyed by BOTH sides: left find id -> legal pack ids, pack id -> legal left find ids.
 ##
 ## Actions (slot-keyed; no `nav.back`, the event has no way out except Continue):
@@ -105,7 +106,7 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		"selected": _selected(str(session.get("selected", "")), phase, record, pack),
 		"reason": str(record.get("reason", "")), "case": str(record.get("case", "")),
 		"frozen": bool(record.get("frozen", false)), "reaction": str(record.get("reaction", "")),
-		"finds": _find_rows(record, phase),
+		"finds": _find_rows(record, phase, inv_cfg),
 		"pack": pack,
 		"swap_left": 0 if swap_spent else 1,
 		"destroy_left": 0 if InventoryRules.discard_used(flow_ctx) else 1,
@@ -304,7 +305,7 @@ static func result_of(record: Dictionary) -> Dictionary:
 		return {}
 	var out := { "taken": [], "left": [], "lost": [], "dropped": {},
 		"swap_used": not (record.get("swap", {}) as Dictionary).is_empty() }
-	for f: Dictionary in _find_rows(record, PHASE_IDLE):
+	for f: Dictionary in _find_rows(record, PHASE_IDLE, {}):
 		var bucket := str(f["status"]) if str(f["status"]) != STATUS_TRIED else STATUS_LEFT
 		(out[bucket] as Array).append(_item_row(f))
 	var dropped := _dropped(record)
@@ -363,7 +364,7 @@ static func _actions(phase: String, offered: bool) -> Dictionary:
 ## Status: taken (in the pack), tried (held up, did not fit), left, lost. A frozen chooser loses every find
 ## (D-43). A hidden find (intro) is not selectable (D-45), so `revealed` is the whole rule. `pick_index` = the
 ## place in the taken list (pick order), -1 when not taken. Ints are cast: a JSON reload turns them into floats.
-static func _find_rows(record: Dictionary, phase: String) -> Array:
+static func _find_rows(record: Dictionary, phase: String, inv_cfg: Dictionary) -> Array:
 	var taken: Array = record.get("taken", [])
 	var frozen := bool(record.get("frozen", false))
 	var out: Array = []
@@ -380,7 +381,14 @@ static func _find_rows(record: Dictionary, phase: String) -> Array:
 			"kind": str(f.get("kind", "")), "grade": str(f.get("grade", "")), "quantity": int(f.get("quantity", 1)),
 			"cell": int(f.get("cell", 0)), "status": status, "revealed": phase != PHASE_INTRO,
 			"pick_index": taken.find(fid) })
+		_add_limit(out[-1], inv_cfg)
 	return out
+
+
+## `stack_limit` on stack kinds only, as a 001a stack row has it; a piece row has no such key.
+static func _add_limit(row: Dictionary, inv_cfg: Dictionary) -> void:
+	if InventoryService.STACK_KINDS.has(str(row["kind"])):
+		row["stack_limit"] = InventoryService.stack_limit_of(inv_cfg, str(row["type_id"]))
 
 
 ## Every listed pack entry (held pieces and stacks, then the open item rows of this stage). `free` and `tone`
@@ -408,6 +416,7 @@ static func _pack(save: Dictionary, inv_cfg: Dictionary, entries: Array, record:
 			var item: Dictionary = items[0] if not items.is_empty() and items[0] is Dictionary else {}
 			slot.merge({ "kind": str(item.get("kind", "")), "grade": str(item.get("grade", "")),
 				"quantity": int(item.get("quantity", 1)), "source": "gathered", "mark_index": -1 })
+		_add_limit(slot, inv_cfg)
 		slots.append(slot)
 	var load_info := PickupCase.pack_room(save, inv_cfg)
 	var carried := int(load_info["carried"])
