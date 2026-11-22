@@ -961,8 +961,10 @@ static func test_purity_dispatch_clears_pending_flags_after_publish() -> Diction
 	}
 	ctx.pending_return_notification = notice.duplicate(true)
 
+	sanctum["ase_flame"]["awakened"] = true
 	var economy: Dictionary = ctx.save_data["economy"]
 	economy["last_settle_unix"] = 1_700_000_000
+	var ase_before := runtime.econ.get_ase()
 	var settle_unix := 1_700_000_240
 	var out: Dictionary = runtime.dispatch({ "type": "sanctum.party.toggle", "payload": { "echo_id": echo_id } })
 
@@ -975,7 +977,7 @@ static func test_purity_dispatch_clears_pending_flags_after_publish() -> Diction
 	if not ctx.pending_return_notification.is_empty():
 		mismatches.append("expected pending_return_notification emptied after dispatch() returns")
 
-	# The bank timer renders the cached snapshot. A fresh build would hide the replay.
+	# Bank a gain against the cached snapshot after publishing both notices.
 	var out2 := runtime.dispatch({
 		"type": "economy.settle_time",
 		"now_unix": settle_unix,
@@ -983,6 +985,8 @@ static func test_purity_dispatch_clears_pending_flags_after_publish() -> Diction
 	})
 	if int(economy["last_settle_unix"]) != settle_unix:
 		mismatches.append("expected economy.settle_time to update the settlement timestamp")
+	if runtime.econ.get_ase() <= ase_before or out2.get("data", {}).get("ase_balance") != runtime.econ.get_ase():
+		mismatches.append("expected the bank tick to credit Ase and refresh the cached balance")
 	if out2.get("type") != FlowStateIds.SANCTUM or out2.get("meta", {}).get("t") != first_tick:
 		mismatches.append("expected settlement to reuse the Sanctum snapshot's build tick")
 

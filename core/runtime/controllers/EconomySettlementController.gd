@@ -32,15 +32,8 @@
 # reach the same settle logic without duplicating it. See EconomySettlementService.gd's header
 # for the full three-settlements/three-clocks writeup.
 #
-# THE REFRESH-SNAPSHOT TRANSLATION: none of these three handlers build a new/rebuilt snapshot —
-# pre-extraction they all ended with a bare `flow_machine.refresh_snapshot(flow_ctx, logger, t)`
-# call (economy.ase.add and economy.ase.spend directly; economy.settle_time via the settle
-# function's own unconditional call at its end, now removed — see EconomySettlementService.gd).
-# Same translation DebugController.gd's header documents: each handler below returns
-# `FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot)` — assigning last_snapshot back to
-# itself is a no-op, and _apply_action_outcome()'s has_replacement_snapshot branch then calls
-# flow_machine.refresh_snapshot() on FlowRuntime's behalf, exactly matching the pre-extraction
-# call.
+# FlowRuntime validates the returned snapshot without re-entering the state. The bank timer
+# can update the Sanctum balance in that snapshot while keeping the rest of the screen data.
 #
 # economy.ase.spend's pre-extraction body called _handle_economy_settle_time inline (with its
 # own unconditional refresh) BEFORE spend_ase(), then refreshed AGAIN at the end — two refresh
@@ -76,13 +69,23 @@ func _init(_flow_ctx: FlowContext, _config_service: ConfigService, _econ: Econom
 	logger = _logger
 
 
-## economy.settle_time — the dispatched bank-timer settle action (Sanctum bank interval / debug
-## commands). Delegates the actual settlement to EconomySettlementService.settle(), which
-## already requests its own save; this handler's only remaining job is the refresh-snapshot
-## translation described above.
+## economy.settle_time — settle Ase and show the balance from the bank tick in Sanctum.
 func handle_settle_time(action: Dictionary, t: int) -> FlowActionOutcome:
 	_settlement_service().settle(action, t)
-	return FlowActionOutcome.snapshot_outcome(flow_ctx.last_snapshot)
+	var snapshot := flow_ctx.last_snapshot
+	if action.get("source") != "bank.interval" or snapshot.get("type") != FlowStateIds.SANCTUM:
+		return FlowActionOutcome.snapshot_outcome(snapshot)
+
+	var data: Dictionary = snapshot["data"]
+	var balance := econ.get_ase()
+	if data.get("ase_balance") == balance:
+		return FlowActionOutcome.snapshot_outcome(snapshot)
+
+	var updated := snapshot.duplicate()
+	var updated_data := data.duplicate()
+	updated_data["ase_balance"] = balance
+	updated["data"] = updated_data
+	return FlowActionOutcome.snapshot_outcome(updated)
 
 
 ## economy.ase.add — direct Ase grant (debug / reward paths that don't go through settle).
