@@ -185,6 +185,13 @@ Never answer a relayed question on his behalf. Never drop one for looking minor.
 
 ---
 
+## Share components (Jeff, 2026-11-22)
+
+- Jeff wants one shared component wherever two screens need the same UI block. Copy a block only when he says so.
+- Every UI brief names the existing block to reuse or extract. Do not offer "copy the layout" as the default option.
+- Extraction keeps the built screen's look, names, text and tests. Re-run the suites of both users.
+- Details: `docs/LESSONS.md` #47.
+
 ## Scope control
 
 Findings are not authorisation. If out-of-scope work looks necessary, useful or blocking, report it
