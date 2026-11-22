@@ -25,7 +25,8 @@ const DEFAULT_ENTRY_COL := -2
 const DEFAULT_ENTRY_ROW := 0
 
 
-## Same algorithm as PickupEventPlan.hash_of in ui/ (core must not call ui/; a test checks they agree).
+## Stable integer hash (FNV-1a, 31 bits) over `parts` joined with "|" (an Array part is joined the same way). The one
+## implementation: `PickupEventPlan.hash_of` in ui/ calls this (ui/ may call core; core must not call ui/).
 static func hash_of(parts: Array) -> int:
 	var texts: Array = []
 	for p: Variant in parts:

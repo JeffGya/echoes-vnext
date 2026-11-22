@@ -28,7 +28,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/placement_with_no_echo_cells_centres_on_the_board", Callable(PickupPlacementTests, "_t_no_echo_cells"))
 	runner.register_test("pickup_snapshot/placement_anchor_ignores_the_fight_cells", Callable(PickupPlacementTests, "_t_anchor_ignores_cells"))
 	runner.register_test("pickup_snapshot/placement_anchor_outside_region_or_board_stays_total", Callable(PickupPlacementTests, "_t_anchor_outside"))
-	runner.register_test("pickup_snapshot/placement_hash_equals_the_ui_hash", Callable(PickupPlacementTests, "_t_hash_equal"))
+	runner.register_test("pickup_snapshot/placement_hash_is_pinned_and_the_ui_hash_calls_it", Callable(PickupPlacementTests, "_t_hash_equal"))
 	runner.register_test("pickup_snapshot/placement_constants_come_from_config", Callable(PickupPlacementTests, "_t_config"))
 	runner.register_test("pickup_snapshot/camera_frame_defaults_clamps_and_config", Callable(PickupPlacementTests, "_t_camera_config"))
 	runner.register_test("pickup_snapshot/camera_frame_validator_accepts_shipping_and_rejects_bad", Callable(PickupPlacementTests, "_t_camera_validator"))
@@ -453,13 +453,13 @@ static func _t_anchor_outside() -> Dictionary:
 
 static func _t_hash_equal() -> Dictionary:
 	var m: Array = []
-	var samples: Array = [[1], ["a", 2, 3], [_SEED, _SIT, _RUN, "f0", 3, 4], [123456789012, "stage.x", 0, 1, 2, 3],
-		[[1, 2], "b"], [], ["", ""], [-5, 0, -1], ["a|b", "c"], [[1, [2, 3]], "x"], [-9007199254740993, "é"]]
-	for s in samples:
-		var a := PickupPlacement.hash_of(s)
-		var b := PickupEventPlan.hash_of(s)
-		if a != b:
-			m.append("%s: core %d, ui %d" % [str(s), a, b])
+	# One implementation: the UI helper calls the core one. Fixed values pin the FNV-1a result (computed by hand, outside Godot).
+	var pinned: Array = [[["a"], 1678518572], [["a", 2, 3], 361284839], [[], 2166136261], [[[1, 2], "b"], 998078772]]
+	for row: Array in pinned:
+		var got := PickupPlacement.hash_of(row[0])
+		var ui := PickupEventPlan.hash_of(row[0])
+		if got != int(row[1]) or ui != got:
+			m.append("%s: core %d, ui %d, want %d" % [str(row[0]), got, ui, int(row[1])])
 	return _result(m)
 
 

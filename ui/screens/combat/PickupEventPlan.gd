@@ -68,16 +68,9 @@ const STATUS_LADDER: Array = ["hollow", "fraying", "strained", "pressed", "burde
 # ---------------------------------------------------------------------------
 
 ## Stable integer hash (FNV-1a, 31 bits) over `parts` joined with "|" (an Array part is joined the same way).
-## No engine hash: its value may change.
+## No engine hash: its value may change. The one implementation is `PickupPlacement.hash_of` in core; this is a pass-through for the planner's call sites.
 static func hash_of(parts: Array) -> int:
-	var texts: Array = []
-	for p: Variant in parts:
-		texts.append("|".join((p as Array).map(func(x: Variant) -> String: return str(x))) if p is Array else str(p))
-	var joined := "|".join(texts)
-	var h := 2166136261
-	for i in joined.length():
-		h = ((h ^ joined.unicode_at(i)) * 16777619) & 0x7FFFFFFF
-	return h
+	return PickupPlacement.hash_of(parts)
 
 
 ## The options the board and the stage build the plan with: the project's reduced-motion flag. One helper, so both build the same plan.
