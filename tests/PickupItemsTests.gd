@@ -408,8 +408,9 @@ static func _t_pacing() -> Dictionary:
 	var plan := PickupEventPlan.build(snap)
 	var look: Dictionary = plan["items_look"]
 	var errors: Array = []
-	if float(plan["total"]) <= 9.0:
-		errors.append("the plan total %s is not longer than 9.0 s" % plan["total"])
+	var reduced_total := float(PickupEventPlan.build(snap, { "reduced": true })["total"])
+	if float(plan["total"]) <= reduced_total:
+		errors.append("the plan total %s is not longer than the reduced one %s" % [plan["total"], reduced_total])
 	var taken: Array = (plan["finds"] as Array).filter(func(x: Dictionary) -> bool: return bool(x["walked"]) and not bool(x["is_try"]))
 	taken.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["lift0"]) < float(b["lift0"]))
 	for k in taken.size():

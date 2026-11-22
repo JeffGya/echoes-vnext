@@ -62,13 +62,14 @@ func apply_snapshot(snapshot: Dictionary) -> void:
 ## The intro as a function of the clock: `landed` = the find ids whose flight has ended, `tone` = the plan's tone at that time.
 ## A gathered slot shows its item once its find has landed; before that the slot is empty, in the place it has in the idle strip, so
 ## the strip at the end of the intro equals the strip of the idle snapshot. Idempotent.
-func apply_intro_frame(snapshot: Dictionary, landed: Array, tone: String) -> void:
+func apply_intro_frame(snapshot: Dictionary, landed: Array, tone: String, appear: Dictionary = {}) -> void:
 	var data := _dict(snapshot.get("data", {}))
-	var key := "%s#%d|%s|%s" % [str(data.get("situation_id", "")), int(data.get("run_count", 0)), ",".join(PackedStringArray(landed)), tone]
+	var key := "%s#%d|%s|%s|%s" % [str(data.get("situation_id", "")), int(data.get("run_count", 0)), ",".join(PackedStringArray(landed)), tone,
+		JSON.stringify(appear)]
 	if key == _frame_key:
 		return
 	_frame_key = key
-	_view = view_of(snapshot, { "landed": landed, "tone": tone })
+	_view = view_of(snapshot, { "landed": landed, "tone": tone, "appear": appear })
 	_slot_of_find = slot_map_of(snapshot)
 	if is_node_ready():
 		_render()
@@ -141,7 +142,7 @@ func view() -> Dictionary:
 
 
 ## Pure: snapshot -> { count, tone, cells[{kind: item|unlisted|empty, row}], swap_left, destroy_left }.
-## `frame` ({ landed, tone }, optional) is the intro at a time: a gathered slot whose find has not landed is an empty cell
+## `frame` ({ landed, tone, appear }, optional; `appear` is find id -> alpha of a slot that is fading in) is the intro at a time: a gathered slot whose find has not landed is an empty cell
 ## in its idle place, and the tone is the frame's.
 static func view_of(snapshot: Dictionary, frame: Dictionary = {}) -> Dictionary:
 	var data: Dictionary = _dict(snapshot.get("data", {}))
@@ -156,6 +157,10 @@ static func view_of(snapshot: Dictionary, frame: Dictionary = {}) -> Dictionary:
 				continue
 			if not _arr(frame.get("landed", [])).has(str(s.get("find_id", ""))):
 				cells.append({ "kind": "empty", "row": {} })
+				continue
+			var appear: Dictionary = _dict(frame.get("appear", {}))
+			if appear.has(str(s.get("find_id", ""))):
+				cells.append({ "kind": "item", "row": s, "alpha": float(appear[str(s.get("find_id", ""))]) })
 				continue
 		cells.append({ "kind": "item", "row": s })
 	var unlisted: int = maxi(0, int(pack.get("carried", 0)) - listed.size())
@@ -208,6 +213,7 @@ func _render() -> void:
 			continue
 		var cell: Dictionary = _dict(cells[i])
 		var kind: String = str(cell.get("kind", "empty"))
+		slot.modulate.a = float(cell.get("alpha", 1.0))
 		var back: Panel = slot.get_node("Back") as Panel
 		slot.call("setup", "pack", i, _bed)
 		if kind == "item":

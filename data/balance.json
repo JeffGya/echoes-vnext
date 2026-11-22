@@ -3770,7 +3770,7 @@
 					"margin_px": 48,
 					"tween_seconds": 0.45
 				},
-				"_pointer_look_comment": "V2-ITEM-001b D-77 (ANSWERS #83): the feel of the pickup pointer mote (D-76); it travels in the snapshot as data.pointer_look. Presentation only: the chooser is decided before the pointer starts. PROPOSED DEFAULTS (the values the UI had on 2026-11-19): Jeff tunes in play. A missing key reads its default (PickupSnapshotBuilder.POINTER_LOOK_RULES). Times are seconds. path: pointer_start = wait before the pointer starts (after the camera tween); pointer_lead = rest while the mote fades in; hold and hold_reduced = pause between the landing and the chooser's step out (normal, reduced motion); pointer_reduced = the reduced-motion rest above the chooser; path_pace = cruise seconds per Echo spacing; path_first_k = the first move is this many times longer; path_slow_n = how many last moves slow down; path_slow_k = each of those takes this many times the move before; path_final_k = the final move takes this many times its predecessor; path_turn_min and path_turn_max = shortest and longest end turn; path_arc_fast and path_arc_span = a move of arc_fast s or less is a fast hop, one of arc_fast + arc_span s or more a slow one (the hop arc grows between); walk_time_scale = factor on the chooser's walk legs between finds; walk_ease = 0 constant speed to 1 eased out for the chooser's legs. The UI derives the landing length from mote.wind_up_len + mote.sink_len. tables = authored arrival times by 'Echo count:chooser index', used only when the length is 3n - 1 - chooser index; other rows use the path law. mote (pixels at 1280x720, 128 px tile): rise = how far the mote rises while it fades in; fade_scale_from = its scale at the start of the fade; above_head = height above the token top; arc_min and arc_max = hop arc of a fast and a slow move; trail_count, trail_dt, trail_alpha, trail_scale, trail_scale_step = number of trail samples (the scene has 5 sprites), seconds between samples, first sample alpha, first sample scale, scale lost per sample; mote_radius = drawn radius; wind_up and wind_up_len = lift before the sink and its time; sink, sink_len, sink_scale, sink_fade_from = sink depth, time, scale lost, and the part of the sink after which it fades; halo_diameter_tiles = halo size in tile widths; halo_alpha, halo_start_alpha, halo_open = halo alpha, its alpha when it starts to open, its open time; halo_breath and halo_breath_period = breath size (part of the alpha) and period; halo_fade_out = seconds the halo, the mote and the chooser's brightness take to fade out when the chooser starts to walk; brighten and brighten_len = how much the chooser brightens and how fast; shadow_scale_y, shadow_alpha_drop, shadow_scale_drop, shadow_radius = ground shadow squash, alpha and scale lost at the top of an arc, radius. items (the finds in the intro; times in seconds): reveal_len = the card flip; carry_len = a taken find rises to the chooser's head; carry_hold = it stays there; carry_above = the height of the card CENTRE above the token top, board px at 1280x720 (at the default 28 the card bottom is 8 px above the token top); fly_len = its flight into the pack strip; step_gap = pause after a landing before the chooser's next step; arc_px = height of the flight arc; shadow_scale_drop = the ground shadow loses this part of its size at the top of the carry.",
+				"_pointer_look_comment": "V2-ITEM-001b D-77 (ANSWERS #83): the feel of the pickup pointer mote (D-76); it travels in the snapshot as data.pointer_look. Presentation only: the chooser is decided before the pointer starts. PROPOSED DEFAULTS (the values the UI had on 2026-11-19): Jeff tunes in play. A missing key reads its default (PickupSnapshotBuilder.POINTER_LOOK_RULES). Times are seconds. path: pointer_start = wait before the pointer starts (after the camera tween); pointer_lead = rest while the mote fades in; hold and hold_reduced = pause between the landing and the chooser's step out (normal, reduced motion); pointer_reduced = the reduced-motion rest above the chooser; path_pace = cruise seconds per Echo spacing; path_first_k = the first move is this many times longer; path_slow_n = how many last moves slow down; path_slow_k = each of those takes this many times the move before; path_final_k = the final move takes this many times its predecessor; path_turn_min and path_turn_max = shortest and longest end turn; path_arc_fast and path_arc_span = a move of arc_fast s or less is a fast hop, one of arc_fast + arc_span s or more a slow one (the hop arc grows between); walk_time_scale = factor on the chooser's walk legs between finds; walk_ease = 0 constant speed to 1 eased out for the chooser's legs. The UI derives the landing length from mote.wind_up_len + mote.sink_len. tables = authored arrival times by 'Echo count:chooser index', used only when the length is 3n - 1 - chooser index; other rows use the path law. mote (pixels at 1280x720, 128 px tile): rise = how far the mote rises while it fades in; fade_scale_from = its scale at the start of the fade; above_head = height above the token top; arc_min and arc_max = hop arc of a fast and a slow move; trail_count, trail_dt, trail_alpha, trail_scale, trail_scale_step = number of trail samples (the scene has 5 sprites), seconds between samples, first sample alpha, first sample scale, scale lost per sample; mote_radius = drawn radius; wind_up and wind_up_len = lift before the sink and its time; sink, sink_len, sink_scale, sink_fade_from = sink depth, time, scale lost, and the part of the sink after which it fades; halo_diameter_tiles = halo size in tile widths; halo_alpha, halo_start_alpha, halo_open = halo alpha, its alpha when it starts to open, its open time; halo_breath and halo_breath_period = breath size (part of the alpha) and period; halo_fade_out = seconds the halo, the mote and the chooser's brightness take to fade out when the chooser starts to walk; brighten and brighten_len = how much the chooser brightens and how fast; shadow_scale_y, shadow_alpha_drop, shadow_scale_drop, shadow_radius = ground shadow squash, alpha and scale lost at the top of an arc, radius. items (the finds in the intro; times in seconds): reveal_len = the card flip; carry_len = a taken find rises to the chooser's head; carry_hold = it stays there; carry_above = the height of the card CENTRE above the token top, board px at 1280x720 (at the default 28 the card bottom is 8 px above the token top); fly_len = its flight into the pack strip; step_gap = pause after a landing before the chooser's next step; arc_px = height of the flight arc; shadow_scale_drop = the ground shadow loses this part of its size at the top of the carry. try_lift_extra = extra seconds of a tried find's lift (the chooser also leaves a tried find this long before the lift ends); try_bark_gap = seconds after a tried find's lift before the bark; bark_after_last = seconds after the last landing before the bark (the tempo delay adds to it, so the bark always comes after the last landing); lit_fade = seconds the lit glow of a slot fades (the glow is not drawn). buttons = timing of the skip and continue button opacity of the plan frame (skip_in_from and skip_in_to = the skip button fades in between these times, skip_out_len = it fades out this long before the end, cont_in_len = the continue button fades in this long before the end). skip_fade (in mote) = seconds the mote, halo and brightness fade out when the intro is skipped. reduced (reduced motion, seconds; the pointer rest and the hold stay in path as pointer_reduced and hold_reduced): step_len = the chooser's step out, reveal_len = the face swap, leg_len = each walk leg, carry_len and fly_len = the find's lift and flight window (the card stays in place and fades), frozen_wait = the frozen chooser's wait.",
 				"pointer_look": {
 					"path": {
 						"pointer_start": 0.5,
@@ -3824,7 +3824,8 @@
 						"shadow_scale_y": 0.4,
 						"shadow_alpha_drop": 0.4,
 						"shadow_scale_drop": 0.3,
-						"shadow_radius": 14
+						"shadow_radius": 14,
+						"skip_fade": 0.18
 					},
 					"items": {
 						"reveal_len": 0.34,
@@ -3834,7 +3835,25 @@
 						"fly_len": 0.49,
 						"step_gap": 0.26,
 						"arc_px": 34,
-						"shadow_scale_drop": 0.3
+						"shadow_scale_drop": 0.3,
+						"try_lift_extra": 0.1,
+						"try_bark_gap": 0.05,
+						"bark_after_last": 0.15,
+						"lit_fade": 0.25
+					},
+					"buttons": {
+						"skip_in_from": 0.2,
+						"skip_in_to": 0.35,
+						"skip_out_len": 0.1,
+						"cont_in_len": 0.25
+					},
+					"reduced": {
+						"step_len": 0.15,
+						"reveal_len": 0.15,
+						"leg_len": 0.15,
+						"carry_len": 0.15,
+						"fly_len": 0.15,
+						"frozen_wait": 0.4
 					}
 				}
 			},

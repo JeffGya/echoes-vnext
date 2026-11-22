@@ -20,6 +20,8 @@ const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_ui/planner_beats_are_in_order_with_monotonic_times", Callable(PickupPlannerTests, "_t_beats"))
 	runner.register_test("pickup_ui/planner_pointer_steps_start_end_and_lap", Callable(PickupPlannerTests, "_t_pointer"))
+	runner.register_test("pickup_ui/planner_bark_comes_after_the_last_landing_for_every_standing", Callable(PickupPlannerTests, "_t_bark_after_last"))
+	runner.register_test("pickup_ui/planner_missing_look_key_gives_no_plan", Callable(PickupPlannerTests, "_t_missing_look_keys"))
 	runner.register_test("pickup_ui/planner_fade_starts_when_the_chooser_starts_to_walk", Callable(PickupPlannerTests, "_t_fade_t"))
 	runner.register_test("pickup_ui/planner_reads_the_pointer_look_from_the_snapshot", Callable(PickupPlannerTests, "_t_look_config"))
 	runner.register_test("pickup_ui/planner_is_deterministic_and_follows_the_pointer_key", Callable(PickupPlannerTests, "_t_deterministic"))
@@ -270,6 +272,39 @@ static func _t_beats() -> Dictionary:
 
 
 ## The racetrack of the mote (D-76): authored knots, monotone s(t), the end on the chooser, the times it moves in the plan.
+## Decision A: the bark time is after the last landing whatever the tempo delay (Standing 1, 5 and 9 have delays 0.2, 0.1 and 0).
+static func _t_bark_after_last() -> Dictionary:
+	for standing: int in [1, 5, 9]:
+		for reduced: bool in [false, true]:
+			var snap := _snap({ "phase": "intro", "standing": [standing, standing, standing, standing, standing],
+				"finds": [["f0", "t_a", "taken", 0], ["f1", "t_b", "taken", 1]] })
+			var plan := PickupEventPlan.build(snap, { "reduced": reduced })
+			var last_fly := 0.0
+			for f: Dictionary in plan["finds"]:
+				last_fly = maxf(last_fly, float(f["fly1"]))
+			if last_fly <= 0.0 or float(plan["bark"]["t0"]) <= last_fly:
+				return _fail("standing %d reduced %s: the bark at %s is not after the last landing at %s" % [standing, reduced, plan["bark"]["t0"], last_fly])
+	return { "ok": true }
+
+
+## Every key of the look that the planner reads: a snapshot without one of them is not playable.
+static func _t_missing_look_keys() -> Dictionary:
+	var groups := { "reduced": PickupEventPlan.LOOK_REDUCED_KEYS, "items": PickupEventPlan.LOOK_ITEMS_KEYS, "buttons": PickupEventPlan.LOOK_BUTTONS_KEYS,
+		"mote": PickupEventPlan.LOOK_MOTE_KEYS, "path": PickupEventPlan.LOOK_PATH_KEYS }
+	for group: String in groups:
+		for key: String in groups[group]:
+			var snap := _case("C1", "intro")
+			((snap["data"]["pointer_look"] as Dictionary)[group] as Dictionary).erase(key)
+			if bool(PickupEventPlan.build(snap)["valid"]):
+				return _fail("a pointer_look with no %s.%s should give no plan" % [group, key])
+	for gone: String in ["reduced", "buttons"]:
+		var snap := _case("C1", "intro")
+		(snap["data"]["pointer_look"] as Dictionary).erase(gone)
+		if bool(PickupEventPlan.build(snap)["valid"]):
+			return _fail("a pointer_look with no %s group should give no plan" % gone)
+	return { "ok": true }
+
+
 ## The mote fades when the chooser starts to walk: at the first leg's start, else at `times.step0`.
 static func _t_fade_t() -> Dictionary:
 	var none := PickupEventPlan.build(_snap({ "phase": "intro" }))
@@ -1015,14 +1050,12 @@ static func _t_unlisted_and_tone() -> Dictionary:
 static func _t_constants() -> Dictionary:
 	var map: Dictionary = (load("res://ui/screens/combat/PickupEventPlan.gd") as GDScript).get_script_constant_map()
 	var table: Array = [
-		["STEP_LEN", 0.45], ["STEP_LEN_REDUCED", 0.15],  # lines 670, 671
-		["REVEAL_LEN_REDUCED", 0.15],  # line 774 (reduced motion)
-		["BARK_AFTER_LAST", 0.15], ["IDLE_AFTER_BARK", 0.3], ["IDLE_AFTER_DEPOSIT", 0.45],  # lines 778, 780
+		["STEP_LEN", 0.45],  # line 670
+		["IDLE_AFTER_BARK", 0.3], ["IDLE_AFTER_DEPOSIT", 0.45],  # lines 778, 780
 		["WALK_CAP", 3.4], ["TYPE_CPS", 24.0],  # line 619
 		["DIST_SCALE_MIN", 0.6], ["DIST_SCALE_MAX", 1.35],  # line 688
 		["WORTH_DWELL", 0.45], ["SAFE_PRE_EXTRA", 0.25],  # lines 716, 679
 		["FROZEN_STEP", 0.35], ["FROZEN_WAIT", 1.35],  # lines 757 to 760
-		["TRY_LIFT_EXTRA", 0.1],  # line 748
 		["PACK_SLOTS_DEFAULT", 4],  # line 312
 		["REF_TILES_FIRST", 3.0], ["REF_TILES_NEXT", 2.0],  # provisional feel values: 90 and 60 px at 30 px a tile (D-75)
 	]
@@ -1033,7 +1066,7 @@ static func _t_constants() -> Dictionary:
 			"POINTER_T_STEP", "POINTER_T_BASE", "POINTER_T_VARY", "POINTER_T_STEPS", "POINTER_SAMPLE_DT",
 			"POINTER_START", "POINTER_LEAD", "HOLD", "HOLD_REDUCED", "POINTER_REDUCED", "LAND_PHASE_LEN", "PATH_PACE", "PATH_FIRST_K",
 			"PATH_SLOW_N", "PATH_SLOW_K", "PATH_FINAL_K", "PATH_TURN_MIN", "PATH_TURN_MAX", "PATH_ARC_FAST", "PATH_ARC_SPAN", "PATH_TABLES",
-			"REVEAL_LEN", "FLY_LEN"]:
+			"REVEAL_LEN", "FLY_LEN", "STEP_LEN_REDUCED", "REVEAL_LEN_REDUCED", "TRY_LIFT_EXTRA", "BARK_AFTER_LAST"]:
 		if map.has(gone):
 			return _fail("old pointer constant %s is still in the planner" % gone)
 	# The pixel and body constants of the mockup are gone: the plan runs on tiles and paths.

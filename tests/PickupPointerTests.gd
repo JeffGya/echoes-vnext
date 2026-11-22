@@ -434,6 +434,8 @@ static func _t_no_mote() -> Dictionary:
 	var idle := snap.duplicate(true)
 	idle["data"]["phase"] = "idle"
 	(fx["realm"] as RealmShell).set_snapshot(idle)
+	# The mote fades out over `mote.skip_fade` after the flip; once the fade is over nothing is left.
+	(fx["combat"] as Node).call("_process", 1.0)
 	if mote.visible or stage.is_clock_running() or stage.is_processing() or not (layer.get("_brighten") as Dictionary).is_empty():
 		errors.append("mote, clock or brightness after the flip to idle")
 	var idle_first := PickupUiHostTests._mount(_real("0", "idle"))

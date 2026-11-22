@@ -76,7 +76,8 @@ func show_finds(data: Dictionary, board: TileMapLayer) -> void:
 ## find id and returns { center: screen position of the pack slot, bed: its edge in screen px } or {}. The camera can pan and zoom,
 ## so the slot is turned into board coordinates here on every call. Draws the same marks as `show_finds` (all finds in the intro).
 ## `chooser_pos` is the board position of the chooser's token centre at this time (INF when unknown); a carried find is held above it.
-func show_intro(data: Dictionary, board: TileMapLayer, items: Dictionary, look: Dictionary, target: Callable, chooser_pos: Vector2 = Vector2.INF) -> void:
+func show_intro(data: Dictionary, board: TileMapLayer, items: Dictionary, look: Dictionary, target: Callable, chooser_pos: Vector2 = Vector2.INF,
+		reduced: bool = false) -> void:
 	show_finds(data, board)
 	var finds := ground_finds(data)
 	var xf := get_global_transform_with_canvas()
@@ -98,7 +99,7 @@ func show_intro(data: Dictionary, board: TileMapLayer, items: Dictionary, look: 
 				_fly_from[fid] = head if head != Vector2.INF else _centers[i]
 		else:
 			_fly_from.erase(fid)
-		var pose := item_pose(item, str(f.get("status", "")), _centers[i], look, world, head, _fly_from.get(fid, head))
+		var pose := item_pose(item, str(f.get("status", "")), _centers[i], look, world, head, _fly_from.get(fid, head), reduced)
 		var tile := _marks[i]
 		tile.visible = bool(pose["visible"])
 		_shadows[i] = float(pose["shadow"]) if bool(pose["visible"]) else 0.0
@@ -113,6 +114,7 @@ func show_intro(data: Dictionary, board: TileMapLayer, items: Dictionary, look: 
 		tile.scale = Vector2(float(pose["flip"]) * float(pose["scale"]), float(pose["scale"]))
 		tile.position = (pose["center"] as Vector2) - tile.size * 0.5
 		tile.z_index = int(pose["z"])
+		tile.modulate.a = float(pose["alpha"])
 	queue_redraw()
 
 
@@ -130,19 +132,24 @@ static func to_board_target(xf: Transform2D, screen_center: Vector2, bed: float,
 ## lifted: the find is carried from its tile up to `head` (the held place above the chooser's token) and stays there; it draws
 ## above the tokens (z 1) once it moves; the ground shadow stays on its tile and shrinks. flying: from `fly_from` (the carried place
 ## when the flight began) to the slot with an arc of `arc_px`, growing to the slot size, above the tokens (z 1), no shadow. pack: gone.
-## A `tried` find is only revealed: it never lifts (the held item is not built).
+## A `tried` find is only revealed: it never lifts (the held item is not built). `reduced`: no flip squash (the face changes at once at the
+## middle of the reveal), no carry and no arc; a flying find stays on its tile and fades out (`alpha`).
 static func item_pose(item: Dictionary, status: String, center: Vector2, look: Dictionary, target: Dictionary, head: Vector2 = Vector2.INF,
-		fly_from: Vector2 = Vector2.INF) -> Dictionary:
+		fly_from: Vector2 = Vector2.INF, reduced: bool = false) -> Dictionary:
 	var state := str(item.get("state", "hidden"))
 	if status == "tried" and state in ["lifted", "flying", "pack"]:
 		state = "revealed"
 	var p := float(item.get("p", 0.0))
 	var rev := float(item.get("rev", 0.0))
-	var out := { "visible": true, "center": center, "flip": 1.0, "scale": 1.0, "face_real": false, "shadow": 1.0, "z": 0, "state": state }
+	var out := { "visible": true, "center": center, "flip": 1.0, "scale": 1.0, "face_real": false, "shadow": 1.0, "z": 0, "state": state, "alpha": 1.0 }
 	if state != "hidden":
 		# The flip runs on its own clock: it can still be turning while the find already rises.
 		out["face_real"] = rev >= 0.5
-		out["flip"] = absf(1.0 - 2.0 * rev) if rev < 1.0 else 1.0
+		out["flip"] = 1.0 if reduced else (absf(1.0 - 2.0 * rev) if rev < 1.0 else 1.0)
+	if reduced and state in ["lifted", "flying"]:
+		# Reduced motion: the card is revealed in place, then fades from the ground as its pack slot appears. No rise, no arc, no flip.
+		out["alpha"] = 1.0 - p if state == "flying" else 1.0
+		return out
 	match state:
 		"lifted":
 			out["center"] = center.lerp(head, p) if head != Vector2.INF else center
@@ -212,6 +219,7 @@ func _apply(finds: Array, shown: bool) -> void:
 		tile.size = Vector2(edge, edge)
 		tile.scale = Vector2.ONE
 		tile.z_index = 0
+		tile.modulate.a = 1.0
 		tile.position = _centers[i] - Vector2(edge, edge) * 0.5
 	queue_redraw()
 

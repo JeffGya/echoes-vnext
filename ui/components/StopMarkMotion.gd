@@ -4,6 +4,7 @@ extends RefCounted
 ## `target` is the control that appears, settles and is pressed; `host` also dims on a press.
 ## `reduced` is the one reduced-motion flag. A settings story will set it; nothing sets it today.
 
+# UNWIRED (target: NEW "Reduced motion setting"): nothing sets this flag outside tests and screenshots; a player setting must.
 static var reduced := false
 
 var _target: Control

@@ -196,6 +196,11 @@ var _pickup_legs_started: int = 0
 var _pickup_base_actors: Array = []
 # The snapshot of the event on show: the intro finds and the pack strip are drawn from it at the clock time.
 var _pickup_snap: Dictionary = {}
+# The intro was on show at the last render; the last mote pose; seconds left (and in total) of the fade after a skip (< 0 = none).
+var _pickup_intro_on: bool = false
+var _pickup_last_pose: Dictionary = {}
+var _pickup_skip_left: float = -1.0
+var _pickup_skip_total: float = 0.0
 # Bark bubbles stay in screen space, so they are re-anchored whenever the camera view changes.
 var _last_canvas_xform: Transform2D = Transform2D.IDENTITY
 
@@ -313,6 +318,9 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		camera.deselect()
 		camera.has_manual_override = false
 		_pickup_bark_key = ""
+		_pickup_skip_left = -1.0
+		_pickup_last_pose = {}
+		_pickup_intro_on = false
 		_hide_pickup_mote()
 		if _bark_popup_layer != null:
 			_bark_popup_layer.clear_all()
@@ -330,7 +338,7 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 	_center_board(_current_cols, _current_rows)
 	var identity := PickupEventStage.identity_of(data)
 	if identity != _pickup_plan_identity:
-		_pickup_plan = PickupEventPlan.build(snap)
+		_pickup_plan = PickupEventPlan.build(snap, PickupEventPlan.board_opts())
 		_pickup_plan_identity = identity
 		_pickup_legs_started = 0
 	_pickup_base_actors = pickup_row_actors(data)
@@ -347,10 +355,18 @@ func _render_pickup(snap: Dictionary, data: Dictionary) -> void:
 		_draw_tokens(actors, "", {})
 	_pickup_row_positions = pickup_row_positions(data)
 	_pickup_lateral = pickup_lateral(data, _pickup_row_positions)
-	if phase != "intro":
-		_hide_pickup_mote()
+	if phase == "intro":
+		_pickup_intro_on = true
+	else:
+		# The intro ended (Skip or its end): the mote, halo and brightness fade out; everything else is the idle picture at once.
+		if _pickup_intro_on and not _pickup_last_pose.is_empty() and bool(_pickup_plan.get("valid", false)):
+			_pickup_skip_total = float((_pickup_plan["pointer"] as Dictionary)["mote"]["skip_fade"])
+			_pickup_skip_left = _pickup_skip_total
+		elif _pickup_skip_left < 0.0:
+			_hide_pickup_mote()
+		_pickup_intro_on = false
 	_finds_layer.show_finds(data, _board)
-	_show_pickup_bark(data, actors)
+	_show_pickup_bark(data, actors, 0.0 if new_event else _pickup_stage.clock_time())
 	_update_bark_positions(actors)
 	_push_camera_follow_target()
 	_stall_level = 0
@@ -388,8 +404,38 @@ func _on_pickup_clock(t: float) -> void:
 			if centre != Vector2.INF:
 				pose["halo_pos"] = centre
 		_pickup_mote.apply_pose(pose, (plan["pointer"] as Dictionary)["mote"], float(_board.tile_set.tile_size.x))
+		_pickup_last_pose = pose
 	else:
 		_pickup_mote.hide_all()
+		_pickup_last_pose = {}
+	_token_layer.set_brighten(_pickup_chooser_id, float(pose["brighten"]))
+	_advance_pickup_bark(t)
+
+
+## The intro bark at clock time `t`: shown by `_show_pickup_bark` once `t` reaches the plan's bark time.
+func _advance_pickup_bark(t: float) -> void:
+	if not bool(_pickup_plan.get("valid", false)) or _pickup_snap.is_empty():
+		return
+	var cell: Dictionary = PickupEventPlan.chooser_target_at(_pickup_plan, t)["cell"]
+	var actors := pickup_actors_at(_pickup_base_actors, _pickup_chooser_id, { "cell": cell })
+	_show_pickup_bark(_pickup_snap["data"] as Dictionary, actors, t)
+
+
+## The fade of the mote, halo and brightness after a skip: the last pose with its alphas scaled down linearly.
+func _step_pickup_skip_fade(delta: float) -> void:
+	_pickup_skip_left -= delta
+	var k := maxf(_pickup_skip_left, 0.0) / maxf(_pickup_skip_total, 0.0001)
+	if _pickup_skip_left <= 0.0 or _pickup_last_pose.is_empty():
+		_pickup_skip_left = -1.0
+		_pickup_last_pose = {}
+		_hide_pickup_mote()
+		return
+	var pose := _pickup_last_pose.duplicate()
+	for key: String in ["alpha", "halo_alpha", "shadow_alpha", "brighten"]:
+		pose[key] = float(pose[key]) * k
+	pose["trail"] = []
+	var plan_mote: Dictionary = (_pickup_plan["pointer"] as Dictionary)["mote"]
+	_pickup_mote.apply_pose(pose, plan_mote, float(_board.tile_set.tile_size.x))
 	_token_layer.set_brighten(_pickup_chooser_id, float(pose["brighten"]))
 
 
@@ -417,12 +463,19 @@ func _advance_pickup_items(t: float) -> void:
 	var frame := PickupEventPlan.frame_at(_pickup_plan, t)
 	var items: Dictionary = frame["items"]
 	var landed: Array = []
+	var appear := {}
+	var reduced := bool(_pickup_plan["reduced"])
 	for find_id: Variant in items:
-		if str((items[find_id] as Dictionary)["state"]) == "pack":
+		var state := str((items[find_id] as Dictionary)["state"])
+		if state == "pack":
 			landed.append(str(find_id))
-	_pickup_stage.pack_strip().apply_intro_frame(_pickup_snap, landed, str((frame["pack"] as Dictionary)["tone"]))
+		elif reduced and state == "flying":
+			# Reduced motion: the slot fades in while the ground card fades out.
+			landed.append(str(find_id))
+			appear[str(find_id)] = float((items[find_id] as Dictionary)["p"])
+	_pickup_stage.pack_strip().apply_intro_frame(_pickup_snap, landed, str((frame["pack"] as Dictionary)["tone"]), appear)
 	_finds_layer.show_intro(_pickup_snap["data"] as Dictionary, _board, items, _pickup_plan["items_look"] as Dictionary, _pickup_slot_target,
-		_pickup_chooser_centre(t))
+		_pickup_chooser_centre(t), reduced)
 
 
 ## Where a find lands: the centre of its strip slot and the slot's edge, in viewport px. {} when the find has no slot.
@@ -637,13 +690,18 @@ static func pickup_bark_text(data: Dictionary) -> String:
 	return ""
 
 
-## The bark stays over the chooser's token (on its end tile) in the finished picture (not in the intro, which U6 plays). It shows once per
-## event, chooser and text; a repeat snapshot keeps the same popup.
-func _show_pickup_bark(data: Dictionary, actors: Array) -> void:
+## The bark stays over the chooser's token for the rest of the event. In idle it shows at once (on the end tile); in the intro it shows
+## when the clock reaches the plan's bark time `intro_t`, over the tile the plan says the chooser stands on. It shows once per event,
+## chooser and text, so the flip to idle keeps the same popup; a repeat snapshot keeps it too.
+func _show_pickup_bark(data: Dictionary, actors: Array, intro_t: float = 0.0) -> void:
 	if _bark_popup_layer == null:
 		return
 	var chooser_id := pickup_chooser_id(data)
-	var text := "" if str(data.get("phase", "")) == "intro" or chooser_id.is_empty() else pickup_bark_text(data)
+	var text := ""
+	if str(data.get("phase", "")) != "intro":
+		text = pickup_bark_text(data)
+	elif bool(_pickup_plan.get("valid", false)) and intro_t >= float((_pickup_plan["bark"] as Dictionary)["t0"]):
+		text = str((_pickup_plan["bark"] as Dictionary)["text"])
 	if text.is_empty():
 		if not _pickup_bark_key.is_empty():
 			_bark_popup_layer.clear_all()
@@ -669,6 +727,9 @@ static func pickup_chooser_id(data: Dictionary) -> String:
 
 
 func _leave_pickup() -> void:
+	_pickup_intro_on = false
+	_pickup_last_pose = {}
+	_pickup_skip_left = -1.0
 	_pickup_bark_key = ""
 	_pickup_snap = {}
 	_pickup_plan = {}
@@ -1775,7 +1836,9 @@ static func _objective_instruction_text(obj_type: String, obj_state: Dictionary)
 # Board camera (ANSWERS.md #74-79, decisions.md #70-72): real Camera2D, universal selection-lock
 # -------------------------
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if _pickup_skip_left >= 0.0:
+		_step_pickup_skip_fade(delta)
 	# A locked actor's token animates between cells, so the target follows the drawn token each frame.
 	if camera.mode == BoardCameraController.Mode.FOLLOW_ACTOR and is_visible_in_tree():
 		_push_camera_follow_target()

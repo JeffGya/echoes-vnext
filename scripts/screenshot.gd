@@ -111,6 +111,7 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 	for _c in range(clip_extra):
 		await process_frame
 	harness.queue_free()
+	StopMarkMotion.reduced = false
 	await process_frame
 
 
@@ -223,6 +224,12 @@ func _fixtures() -> Dictionary:
 		"pickup_intro_pointer_hold": ["real_pickup:many:intro:seed=0", "pointer_at:4.89"],
 		# R6b stills (seed 0): end of the first leg (the out leg), and the plan total, where the chooser stands on chooser_end_cell. Both read the plan.
 		# R6c stills: the first taken find at its reveal, mid-flight, and the intro end (strip filled, tone changed). `empty` has two taken finds.
+		"pickup_intro_empty_clip": ["real_pickup:empty:intro:seed=0"],
+		"pickup_intro_reduced": ["reduced:1", "real_pickup:empty:intro:seed=0"],
+		"pickup_intro_bark": ["real_pickup:empty:intro:seed=0", "pointer_at_bark"],
+		"pickup_intro_reduced_hold": ["reduced:1", "real_pickup:empty:intro:seed=0", "pointer_at_find:0:hold"],
+		"pickup_intro_reduced_flight": ["reduced:1", "real_pickup:empty:intro:seed=0", "pointer_at_find:0:flight"],
+		"pickup_intro_reduced_end": ["reduced:1", "real_pickup:empty:intro:seed=0", "pointer_at_total"],
 		"pickup_intro_reveal": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:reveal"],
 		"pickup_intro_carry": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:lift"],
 		"pickup_intro_hold": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:hold"],
@@ -414,6 +421,17 @@ func _run_step(harness: Node, step: String) -> void:
 		if board_camera != null and board_camera.owner != null and parts[0] == "cam_frame":
 			board_camera.owner.call("frame_pickup_camera", false)
 			print("CAM zoom after reframe: %s" % board_camera.zoom.x)
+	if parts[0] == "reduced":
+		# reduced:1 sets the project's reduced-motion flag (before the snapshot, so the plan is built reduced); it is cleared after the shot.
+		StopMarkMotion.reduced = parts[1] == "1"
+	if parts[0] == "pointer_at_bark":
+		# Moves the intro clock to just after the chooser's bark time (the plan's `bark.t0`) and stops it.
+		var bark_stage := harness.find_child("PickupEventStage", true, false)
+		if bark_stage != null:
+			var bark_plan: Dictionary = bark_stage.call("plan")
+			var bark_at := float((bark_plan.get("bark", {}) as Dictionary).get("t0", 0.0)) + 0.05
+			bark_stage.call("advance", maxf(bark_at - float(bark_stage.call("clock_time")), 0.0))
+			bark_stage.set_process(false)
 	if parts[0] == "pointer_at_find":
 		# pointer_at_find:<k>:<phase> moves the intro clock to a moment of the k-th taken find (in the order the chooser takes them) and
 		# stops it. phase: reveal (middle of the flip), lift (middle of the carry), hold (middle of the hold at the head), flight (middle), landed (the end of the flight). Reads the plan.

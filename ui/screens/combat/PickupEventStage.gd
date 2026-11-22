@@ -77,7 +77,7 @@ func is_clock_running() -> bool:
 
 
 func _start(snapshot: Dictionary) -> void:
-	var plan := PickupEventPlan.build(snapshot)
+	var plan := PickupEventPlan.build(snapshot, PickupEventPlan.board_opts())
 	if not bool(plan.get("valid", false)):
 		return
 	_plan = plan

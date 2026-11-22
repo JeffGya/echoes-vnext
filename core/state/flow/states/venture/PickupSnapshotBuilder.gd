@@ -14,7 +14,7 @@ extends RefCounted
 ## valid now (a hidden find in the intro, an id of no find and no pack slot).
 ## Board tiles (D-72, `PickupPlacement`, derived on every build, never saved): `row[].tile` and `finds[].tile` are
 ## { col, row }. `finds[].cell` stays the index in the record. `camera_frame` is the camera tunables (D-73).
-## `pointer_look` is the feel values of the pointer mote (D-77): { path, tables, mote }, see `pointer_look`.
+## `pointer_look` is the feel values of the pointer mote (D-77): { path, tables, mote, items, reduced, buttons }, see `pointer_look`.
 ## `swap.targets` is keyed by BOTH sides: left find id -> legal pack ids, pack id -> legal left find ids.
 ##
 ## Actions (slot-keyed; no `nav.back`, the event has no way out except Continue):
@@ -163,11 +163,21 @@ const POINTER_LOOK_RULES := {
 		"brighten": [0.20, 0.0, INF, false], "brighten_len": [0.15, 0.001, INF, false],
 		"shadow_scale_y": [0.4, 0.001, INF, false], "shadow_alpha_drop": [0.4, 0.0, 1.0, false],
 		"shadow_scale_drop": [0.3, 0.0, 1.0, false], "shadow_radius": [14.0, 0.001, INF, false],
+		"skip_fade": [0.18, 0.001, INF, false],
 	},
 	"items": {
 		"reveal_len": [0.34, 0.001, INF, false], "carry_len": [0.34, 0.001, INF, false], "carry_hold": [0.19, 0.0, INF, false],
 		"carry_above": [28.0, 0.0, INF, false], "fly_len": [0.49, 0.001, INF, false], "step_gap": [0.26, 0.0, INF, false],
-		"arc_px": [34.0, 0.0, INF, false], "shadow_scale_drop": [0.3, 0.0, 1.0, false],
+		"arc_px": [34.0, 0.0, INF, false], "shadow_scale_drop": [0.3, 0.0, 1.0, false], "try_lift_extra": [0.1, 0.0, INF, false],
+		"try_bark_gap": [0.05, 0.0, INF, false], "bark_after_last": [0.15, 0.001, INF, false], "lit_fade": [0.25, 0.001, INF, false],
+	},
+	"buttons": {
+		"skip_in_from": [0.2, 0.0, INF, false], "skip_in_to": [0.35, 0.0, INF, false], "skip_out_len": [0.1, 0.0, INF, false],
+		"cont_in_len": [0.25, 0.0, INF, false],
+	},
+	"reduced": {
+		"step_len": [0.15, 0.001, INF, false], "reveal_len": [0.15, 0.001, INF, false], "leg_len": [0.15, 0.001, INF, false],
+		"carry_len": [0.15, 0.001, INF, false], "fly_len": [0.15, 0.001, INF, false], "frozen_wait": [0.4, 0.0, INF, false],
 	},
 }
 ## Authored arrival times of the racetrack by "n:land_index" (seconds after the path clock starts). A table is used only when
@@ -178,7 +188,7 @@ const POINTER_LOOK_TABLES := {
 }
 
 
-## `data.pointer_look` { path, tables, mote } from `inv_cfg.pickup.pointer_look` (D-77). Presentation only. A missing or
+## `data.pointer_look` { path, tables, mote, items, reduced, buttons } from `inv_cfg.pickup.pointer_look` (D-77). Presentation only. A missing or
 ## non-number key reads its default; a number is clamped into its range; whole keys are ints. turn_max and arc_max never
 ## read below turn_min and arc_min. A missing `tables` reads the defaults; a given `tables` replaces them, and an entry that
 ## is not an Array of numbers, or whose times do not rise from above `pointer_lead`, is dropped.
