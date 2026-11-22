@@ -52,6 +52,7 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("foundation_ui/bank_timer_stays_off_on_boot_failure", _t_bank_timer_stays_off_on_boot_failure)
 	runner.register_test("foundation_ui/bank_timer_starts_and_stops_with_play", _t_bank_timer_starts_and_stops_with_play)
 	runner.register_test("foundation_ui/bank_timer_on_loaded_and_recovered_campaigns", _t_bank_timer_on_loaded_and_recovered_campaigns)
+	runner.register_test("foundation_ui/bank_timer_updates_visible_sanctum_ase", _t_bank_timer_updates_visible_sanctum_ase)
 
 static func _t_bank_timer_stays_off_on_boot_failure() -> Dictionary:
 	return _with_bank_timer_app(func(app: Node, timer: Timer) -> String:
@@ -142,14 +143,18 @@ static func _t_bank_timer_on_loaded_and_recovered_campaigns() -> Dictionary:
 		return ""
 	)
 
-static func _check_bank_timer_on_continue(app: Node, timer: Timer, path: String, mode: String) -> String:
+static func _bank_test_campaign(offline_seconds: int) -> Dictionary:
 	var save := SaveService.make_new_save(12346)
 	save["first_boot"] = false
 	save["sanctum"]["name"] = "Bank Test House"
 	save["onboarding"]["chapter_one_complete"] = true
 	save["onboarding"]["keeper_intro_complete"] = true
 	save["sanctum"]["ase_flame"]["awakened"] = true
-	save["economy"]["last_offline_unix"] = int(Time.get_unix_time_from_system()) - 8 * 3600
+	save["economy"]["last_offline_unix"] = int(Time.get_unix_time_from_system()) - offline_seconds
+	return save
+
+static func _check_bank_timer_on_continue(app: Node, timer: Timer, path: String, mode: String) -> String:
+	var save := _bank_test_campaign(8 * 3600)
 	var target := path if mode == "primary" else path + ".bak1"
 	if not _write_bank_test_file(target, JSON.stringify(save)):
 		return "Could not prepare campaign"
@@ -190,6 +195,7 @@ static func _check_bank_timer_on_continue(app: Node, timer: Timer, path: String,
 	var realm: Dictionary = app.get("_last_snapshot")
 	if realm.get("type") != FlowStateIds.REALM_SELECT or not is_equal_approx(timer.time_left, 37.0):
 		return "Navigation restarted or stopped the running countdown"
+	var realm_before := realm.duplicate(true)
 
 	runtime.get_save_data()["economy"]["last_settle_unix"] = int(Time.get_unix_time_from_system()) - int(interval)
 	ase_before = runtime.econ.get_ase()
@@ -205,6 +211,76 @@ static func _check_bank_timer_on_continue(app: Node, timer: Timer, path: String,
 	var expected_gain := EconomyAccrualService.compute_online_settle_gain(elapsed, rate, 1.0)
 	if expected_gain <= 0 or runtime.econ.get_ase() != ase_before + expected_gain or timer.is_stopped():
 		return "The timeout did not credit Ase once and keep the timer running"
+	if app.get("_last_snapshot") != realm_before:
+		return "The timeout changed the Realm Select screen data"
+	app.call("_on_ui_action_selected", {"type": "flow.go_state", "to": FlowStateIds.SANCTUM})
+	var shell := app.get("_sanctum_shell") as SanctumShell
+	var screen := shell.get("_active_overlay") as SanctumScreen
+	if screen == null or screen.ase_label.text != str(runtime.econ.get_ase()):
+		return "Returning to Sanctum did not show the credited balance"
+	return ""
+
+static func _t_bank_timer_updates_visible_sanctum_ase() -> Dictionary:
+	var path := TestSaveHarness.fresh_save_path("visible_ase.json", "bank_timer")
+	var result := _with_bank_timer_app(func(app: Node, timer: Timer) -> String:
+		var save := _bank_test_campaign(0)
+		save["economy"]["ase"] = 100
+		if not _write_bank_test_file(path, JSON.stringify(save)):
+			return "Could not prepare the Sanctum campaign"
+		var runtime := _bank_test_runtime(ConfigService.new(), path)
+		var splash := runtime.boot()
+		app.set("runtime", runtime)
+		app.call("_render_snapshot", splash)
+		app.call("_on_ui_action_selected", splash["actions"]["main.cta_primary"])
+		var menu: Dictionary = app.get("_last_snapshot")
+		app.call("_on_ui_action_selected", menu["actions"]["main.cta_primary"])
+		var shell := app.get("_sanctum_shell") as SanctumShell
+		var screen := shell.get("_active_overlay") as SanctumScreen if shell != null else null
+		if screen == null or not screen.ase_label.is_visible_in_tree() or timer.is_stopped():
+			return "Expected a visible Sanctum balance and a running bank timer"
+		if screen.ase_label.text != "100" or runtime.econ.get_ase() != 100:
+			return "The fixture did not start with 100 Ase"
+
+		for elapsed_seconds: int in [int(timer.wait_time), 0, 7200]:
+			var error := _check_visible_ase_after_timeout(app, timer, runtime, screen, elapsed_seconds)
+			if not error.is_empty():
+				return "%d seconds: %s" % [elapsed_seconds, error]
+		return ""
+	)
+	TestSaveHarness.remove_save_artifacts(path)
+	return result
+
+static func _check_visible_ase_after_timeout(app: Node, timer: Timer, runtime: FlowRuntime, screen: SanctumScreen, elapsed_seconds: int) -> String:
+	var before := runtime.econ.get_ase()
+	var previous: Dictionary = app.get("_last_snapshot")
+	var expected := previous.duplicate(true)
+	var previous_pulse: Tween = screen.get("_ase_tween")
+	var previous_tick := runtime.get_tick()
+	var time_left := timer.time_left
+	runtime.get_save_data()["economy"]["last_settle_unix"] = int(Time.get_unix_time_from_system()) - elapsed_seconds
+	timer.timeout.emit()
+	if runtime.get_tick() != previous_tick + 1 or not is_equal_approx(timer.time_left, time_left):
+		return "The timeout did not settle once and keep the countdown"
+
+	var config := ConfigService.get_economy_cfg(runtime.config_service)
+	var rate := float(config["ase_online_per_min_base"]) / 60.0
+	var gain := EconomyAccrualService.compute_online_settle_gain(mini(elapsed_seconds, 3600), rate, 1.0)
+	var after := before + gain
+	var loaded := SaveService.load_from_file(runtime.save_path)
+	if loaded["status"] != SaveService.LOAD_LOADED or runtime.econ.get_ase() != after or int(loaded["data"]["economy"]["ase"]) != after:
+		return "The account and primary save did not record the expected balance of %d" % after
+	if screen.ase_label.text != str(after):
+		return "Sanctum shows %s Ase after banking, but the account and save hold %d" % [screen.ase_label.text, after]
+	if int(previous["data"]["ase_balance"]) != before:
+		return "The bank timeout changed the previous screen response"
+	expected["data"]["ase_balance"] = after
+	if app.get("_last_snapshot") != expected:
+		return "The bank timeout changed screen data other than Ase"
+	var pulse: Tween = screen.get("_ase_tween")
+	if gain == 0 and pulse != previous_pulse:
+		return "The balance pulsed after zero gain"
+	if gain > 0 and (pulse == null or pulse == previous_pulse):
+		return "The balance did not pulse after a gain"
 	return ""
 
 static func _expect_bank_timer_off(app: Node, timer: Timer, runtime: FlowRuntime, label: String) -> String:
