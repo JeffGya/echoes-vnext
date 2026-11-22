@@ -779,7 +779,18 @@ static func _t_pad() -> Dictionary:
 	_pad(o, JOY_BUTTON_DPAD_DOWN)
 	if layer.focus_index() != 0:
 		errors.append("D-pad down with no focus entered find %d, wanted 0" % layer.focus_index())
-	# Not read: a stick (InputEventJoypadMotion) never enters. The engine's default `ui_accept` has no joypad event, so a pad cannot press a mark.
+	# `project.godot` adds the pad's bottom button (A) to `ui_accept`, so a pad can press a focused mark.
+	var pad_a := InputEventJoypadButton.new()
+	pad_a.button_index = JOY_BUTTON_A
+	pad_a.pressed = true
+	if not InputMap.event_is_action(pad_a, "ui_accept"):
+		errors.append("ui_accept has no joypad A event")
+	var space := InputEventKey.new()
+	space.keycode = KEY_SPACE
+	space.pressed = true
+	if not InputMap.event_is_action(space, "ui_accept"):
+		errors.append("ui_accept lost Space")
+	# Not read: a stick (InputEventJoypadMotion) never enters.
 	var stick := InputEventJoypadMotion.new()
 	stick.axis = JOY_AXIS_LEFT_X
 	stick.axis_value = 1.0
