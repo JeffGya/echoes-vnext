@@ -1,0 +1,73 @@
+# res://tests/fixtures/PickupRealBoard.gd
+# A REAL flow.pickup snapshot for screenshots (V2-ITEM-001b U4). It plays a real won fight on realm.01 stage.0
+# through FlowRuntime (the same helpers the pickup tests use), with armed finds and held pieces, and returns the
+# snapshot the app would publish: real board size, terrain, placement seed, actors, pack, swap and allowances.
+# Nothing is hand-written. It writes save files under ECHOES_TEST_SAVE_DIR (or the test default) and removes them.
+# Run it only from tools that set ECHOES_TEST_SAVE_DIR to a fresh directory (scripts/screenshot.gd, step "real_pickup:").
+extends RefCounted
+
+const SCENES := {
+	"empty": { "held": [], "finds": ["ph_weapon_a", "ph_relic_a"], "cap": 2 },
+	"near": { "held": ["ph_armor_a", "ph_charm_a"], "finds": ["ph_consumable_a"], "cap": 1 },
+	"full": { "held": ["ph_armor_a", "ph_charm_a", "ph_relic_a", "ph_weapon_a"], "finds": ["ph_consumable_a"], "cap": 1 },
+	"many": { "held": ["ph_armor_a", "ph_charm_a", "ph_relic_a", "ph_weapon_a"], "finds": ["ph_consumable_a", "ph_weapon_a", "ph_relic_a"], "cap": 3 },
+}
+
+
+## `kind`: empty (pack empty, two finds taken), near (two held pieces, one find taken), full (pack full, one find left), many (pack full, three finds left on the ground).
+## `phase`: "idle" (the intro is skipped), "intro" (the first publish) or "resolve" (Continue was pressed: the held Resolve card). {} when the fight did not reach the event.
+## `variant`: "" keeps the real event. "plus" sets reaction plus on the real event. "none" sets reaction none. "frozen" turns
+## the chooser frozen: every find lost, nothing in the pack from this event. Only the event keys change (U5 screenshots);
+## board, actors, terrain and the rest stay real.
+## `seed_text`: "" keeps the fight's placement seed. A number replaces it, then the real builder runs again, so core
+## recomputes `row[].tile` and `finds[].tile` (the row axis depends on the seed). Nothing is edited by hand.
+static func snapshot(kind: String, phase: String = "idle", variant: String = "", seed_text: String = "") -> Dictionary:
+	var spec_v: Variant = SCENES.get(kind, {})
+	if not (spec_v is Dictionary) or (spec_v as Dictionary).is_empty():
+		return {}
+	var spec: Dictionary = spec_v
+	var held: Array = spec["held"]
+	var finds: Array = spec["finds"]
+	var cfg := PickupFlowTests._cfg(4, int(spec["cap"]))
+	var prepare := func(env: Dictionary) -> void:
+		PickupFlowTests._prepare(env, cfg, PickupStateTests._finds(finds), false, -1)
+		var fc_prepare: FlowContext = env["flow_ctx"]
+		for i in held.size():
+			ItemPacksTests._hold(fc_prepare, 1, i + 1, str(held[i]))
+	var env := PickupCharacterizationTests._won_fight("pickup_shot_" + kind, prepare)
+	if not bool(env.get("ok", false)):
+		return {}
+	var rt: FlowRuntime = env["rt"]
+	var fc: FlowContext = env["fc"]
+	if phase != "intro":
+		rt.dispatch({ "type": "pickup.skip", "payload": {} })
+	if phase == "resolve":
+		rt.dispatch({ "type": "pickup.continue", "payload": {} })
+	if seed_text != "" and fc.encounter_ctx != null:
+		fc.encounter_ctx.placement_seed = seed_text.to_int()
+		fc.last_snapshot = PickupSnapshotBuilder.build(fc, int((fc.last_snapshot.get("meta", {}) as Dictionary).get("t", 0)), fc.pickup_session)
+	var snap: Dictionary = fc.last_snapshot.duplicate(true)
+	PickupFlowTests._done(env)
+	if str(snap.get("type", "")) != (FlowStateIds.RESOLVE if phase == "resolve" else FlowStateIds.PICKUP):
+		return {}
+	_vary(snap, variant)
+	return snap
+
+
+static func _vary(snap: Dictionary, variant: String) -> void:
+	var data: Dictionary = snap["data"]
+	match variant:
+		"plus", "none":
+			data["reaction"] = variant
+		"frozen":
+			data["frozen"] = true
+			data["case"] = "frozen"
+			data["reason"] = "froze"
+			data["reaction"] = "none"
+			for f: Dictionary in data["finds"]:
+				f["status"] = "lost"
+				f["pick_index"] = -1
+			var pack: Dictionary = data["pack"]
+			var kept: Array = (pack["slots"] as Array).filter(func(slot: Dictionary) -> bool: return str(slot.get("find_id", "")) == "")
+			pack["carried"] = int(pack["carried"]) - ((pack["slots"] as Array).size() - kept.size())
+			pack["slots"] = kept

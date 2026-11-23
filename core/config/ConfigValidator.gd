@@ -191,7 +191,7 @@ static func validate_pick(pick: Dictionary, calling_behavior: Dictionary = {}, l
 		_fail(logger, t, "balance.inventory.pick", p)
 	return out
 
-# data.inventory.pickup (pointer laps, severe band). One problem string per broken rule; [] = valid.
+# data.inventory.pickup (severe band, placement, camera, pointer_look). One problem string per broken rule; [] = valid.
 # Test-only caller, like validate_finds; the game does not run it at load.
 static func validate_pickup(inv_cfg: Dictionary, logger: StructuredLogger = null, t: int = -1) -> Array:
 	var out: Array = []
@@ -200,17 +200,97 @@ static func validate_pickup(inv_cfg: Dictionary, logger: StructuredLogger = null
 		out.append("pickup is missing or not a Dictionary")
 	else:
 		var pk: Dictionary = pk_v
-		var lo: Variant = pk.get("pointer_laps_min", null)
-		var hi: Variant = pk.get("pointer_laps_max", null)
-		if not _is_whole(lo) or int(lo) < 1:
-			out.append("pickup.pointer_laps_min is not a whole number of 1 or more")
-		if not _is_whole(hi) or (_is_whole(lo) and int(hi) < int(lo)):
-			out.append("pickup.pointer_laps_max is not a whole number at or above pointer_laps_min")
 		if not EmotionService.STATUS_LADDER.has(str(pk.get("severe_from_status", ""))):
 			out.append("pickup.severe_from_status is not a status on EmotionService.STATUS_LADDER")
+		var pl_v: Variant = pk.get("placement", null)
+		if pl_v != null:
+			var pl: Dictionary = pl_v if pl_v is Dictionary else {}
+			var near: Variant = pl.get("near", null)
+			var far: Variant = pl.get("far", null)
+			if not _is_whole(near) or int(near) < 0:
+				out.append("pickup.placement.near is not a whole number of 0 or more")
+			if not _is_whole(far) or (_is_whole(near) and int(far) < int(near)):
+				out.append("pickup.placement.far is not a whole number at or above near")
+			var sp: Variant = pl.get("spacing", null)
+			if not _is_whole(sp) or int(sp) < 1:
+				out.append("pickup.placement.spacing is not a whole number of 1 or more")
+			var eo_v: Variant = pl.get("entry_offset", null)
+			if eo_v != null:
+				var eo: Dictionary = eo_v if eo_v is Dictionary else {}
+				if not _is_whole(eo.get("col", null)) or not _is_whole(eo.get("row", null)):
+					out.append("pickup.placement.entry_offset is not { col, row } of whole numbers")
+		var cam_v: Variant = pk.get("camera", null)
+		if cam_v != null:
+			var cam: Dictionary = cam_v if cam_v is Dictionary else {}
+			if not _is_finite_num(cam.get("floor_zoom", null)) or float(cam.get("floor_zoom", 0)) <= 0.0:
+				out.append("pickup.camera.floor_zoom is not a number above 0")
+			if not _is_finite_num(cam.get("margin_px", null)) or float(cam.get("margin_px", -1)) < 0.0:
+				out.append("pickup.camera.margin_px is not a number of 0 or more")
+			if not _is_finite_num(cam.get("tween_seconds", null)) or float(cam.get("tween_seconds", -1)) < 0.0:
+				out.append("pickup.camera.tween_seconds is not a number of 0 or more")
+		if pk.get("pointer_look", null) != null:
+			_check_pointer_look(out, pk["pointer_look"])
 	for p in out:
 		_fail(logger, t, "balance.inventory.pickup", p)
 	return out
+
+# Every key of PickupSnapshotBuilder.POINTER_LOOK_RULES is optional. A given key must be a finite number in its range
+# (whole where the rule says so). A `tables` entry must be keyed "n:land" (n >= 2, 0 <= land < n) and hold
+# 3n - 1 - land rising times, the first above path.pointer_lead.
+static func _check_pointer_look(out: Array, pl_v: Variant) -> void:
+	if not (pl_v is Dictionary):
+		out.append("pickup.pointer_look is not a Dictionary")
+		return
+	var pl: Dictionary = pl_v
+	var rules_all: Dictionary = PickupSnapshotBuilder.POINTER_LOOK_RULES
+	for group: String in rules_all:
+		var g_v: Variant = pl.get(group, {})
+		if not (g_v is Dictionary):
+			out.append("pickup.pointer_look.%s is not a Dictionary" % group)
+			continue
+		for key: Variant in (g_v as Dictionary):
+			var v: Variant = (g_v as Dictionary)[key]
+			if not (rules_all[group] as Dictionary).has(key):
+				out.append("pickup.pointer_look.%s has an unknown key %s" % [group, str(key)])
+				continue
+			var rule: Array = rules_all[group][key]
+			if not _is_finite_num(v) or float(v) < float(rule[1]) or float(v) > float(rule[2]) or (bool(rule[3]) and not _is_whole(v)):
+				out.append("pickup.pointer_look.%s.%s is not a %s from %s to %s" % [group, key,
+					"whole number" if bool(rule[3]) else "number", str(rule[1]), str(rule[2])])
+	if _look_num(pl, "path", "path_turn_max") < _look_num(pl, "path", "path_turn_min"):
+		out.append("pickup.pointer_look.path.path_turn_max is below path_turn_min")
+	if _look_num(pl, "mote", "arc_max") < _look_num(pl, "mote", "arc_min"):
+		out.append("pickup.pointer_look.mote.arc_max is below arc_min")
+	var tb_v: Variant = pl.get("tables", null)
+	if tb_v == null:
+		return
+	if not (tb_v is Dictionary):
+		out.append("pickup.pointer_look.tables is not a Dictionary")
+		return
+	for key: Variant in (tb_v as Dictionary):
+		var parts := str(key).split(":")
+		if parts.size() != 2 or not parts[0].is_valid_int() or not parts[1].is_valid_int() \
+				or int(parts[0]) < 2 or int(parts[1]) < 0 or int(parts[1]) >= int(parts[0]):
+			out.append("pickup.pointer_look.tables key %s is not n:land with n >= 2 and 0 <= land < n" % str(key))
+			continue
+		var want := 3 * int(parts[0]) - 1 - int(parts[1])
+		var arr_v: Variant = (tb_v as Dictionary)[key]
+		var ok := arr_v is Array and (arr_v as Array).size() == want
+		var prev := _look_num(pl, "path", "pointer_lead")
+		if ok:
+			for x: Variant in arr_v:
+				if not _is_finite_num(x) or float(x) <= prev:
+					ok = false
+					break
+				prev = float(x)
+		if not ok:
+			out.append("pickup.pointer_look.tables.%s is not %d rising times above pointer_lead" % [str(key), want])
+
+# The given number of pointer_look.<group>.<key>, else its default.
+static func _look_num(pl: Dictionary, group: String, key: String) -> float:
+	var g_v: Variant = pl.get(group, {})
+	var v: Variant = (g_v as Dictionary).get(key, null) if g_v is Dictionary else null
+	return float(v) if _is_finite_num(v) else float(PickupSnapshotBuilder.POINTER_LOOK_RULES[group][key][0])
 
 # `row` must be a Dictionary of finite numbers with only the four kinds. It must name all four unless `subset`
 # (a signature may name any subset). `zero_sum`: the values sum to 0. `limit`: no value is larger in size.

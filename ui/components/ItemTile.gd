@@ -30,6 +30,9 @@ var box := ""
 var slot := -1
 var state := ""
 var drag_enabled := false
+## Set by `setup` (opts `ring`): the cream ring shows for selection and for keyboard focus, on any bed.
+var ring := false
+var _on := false
 ## Set by the owning ItemSlot: a drop on the tile is a drop on the slot.
 var drop_check: Callable = Callable()
 var drop_apply: Callable = Callable()
@@ -38,13 +41,19 @@ var _ghost: Tween = null
 var _reveal: Tween = null
 
 
+func _ready() -> void:
+	focus_entered.connect(_paint_ring)
+	focus_exited.connect(_paint_ring)
+
+
 ## opts: box ("sanctum"|"pack"|""), slot, state ("", "at_risk", "kept", "lost"), source ("held"|"gathered"|""),
-## bed (edge length, 72 or 80), drag (bool).
+## bed (edge length, 72 or 80), drag (bool), ring (bool, default false).
 func setup(new_row: Dictionary, opts: Dictionary = {}) -> void:
 	row = new_row
 	box = str(opts.get("box", ""))
 	slot = int(opts.get("slot", -1))
 	drag_enabled = bool(opts.get("drag", false))
+	ring = bool(opts.get("ring", false))
 	var bed := float(opts.get("bed", 72))
 	custom_minimum_size = Vector2(bed, bed)
 	var kind := str(row.get("kind", ""))
@@ -115,8 +124,13 @@ func describe() -> String:
 
 
 func set_selected(on: bool) -> void:
-	_selected.theme_type_variation = &"ItemTileSelectedDark" if box == "pack" else &"ItemTileSelected"
-	_selected.visible = on
+	_on = on
+	_paint_ring()
+
+
+func _paint_ring() -> void:
+	_selected.theme_type_variation = &"ItemTileSelectedDark" if box == "pack" or ring else &"ItemTileSelected"
+	_selected.visible = _on or (ring and has_focus())
 
 
 ## Sets the state at once. Kept: bronze 3 line, no leaf. Lost: ghost fill, dashed outline, lifted body.

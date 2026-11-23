@@ -1,17 +1,12 @@
 class_name PickupChooser
 extends RefCounted
 
-## Who chooses in the pickup event (D-05) and how the pointer plays it (D-21). Pure statics, no writes.
+## Who chooses in the pickup event (D-05). Pure statics, no writes.
 ## Stream: `inventory.pick.<stage_id>.<run_count>.<situation_id>`. It must never share a path with
 ## `stage.settle.*`, `inventory.leave.*` or `inventory.finds.*`.
 
 static func stream_path(stage_id: String, run_count: int, situation_id: String) -> String:
 	return "inventory.pick.%s.%d.%s" % [stage_id, run_count, situation_id]
-
-
-## A hash path, never a stream: the pointer plan draws nothing.
-static func pointer_path(stage_id: String, run_count: int, situation_id: String) -> String:
-	return "inventory.pointer.%s.%d.%s" % [stage_id, run_count, situation_id]
 
 
 ## The Echoes that may be drawn: `party_ids` in its own order (pass `sanctum.active_party_ids`, which is
@@ -45,19 +40,3 @@ static func draw_with(rng: RandomNumberGenerator, n: int) -> int:
 		return -1
 	return rng.randi_range(0, n - 1)
 
-
-## { n, start, laps } for the pointer light. Start is never the chooser when n >= 2. n == 1 gives start 0.
-## An empty row or a chooser index outside the row gives { n, -1, 0 }.
-## Laps come from `inv_cfg.pickup.pointer_laps_min/max` (presentation only). A missing key reads as 1 and 2
-## because test configs lack the block. A min below 1 reads as 1; a max below the min reads as the min.
-static func pointer(inv_cfg: Dictionary, realm_seed: int, stage_id: String, run_count: int, situation_id: String, n: int,
-		chooser_index: int) -> Dictionary:
-	if n < 1 or chooser_index < 0 or chooser_index >= n:
-		return { "n": maxi(n, 0), "start": -1, "laps": 0 }
-	var cfg: Variant = inv_cfg.get("pickup", {})
-	var pk: Dictionary = cfg if cfg is Dictionary else {}
-	var laps_min := maxi(1, int(pk.get("pointer_laps_min", 1)))
-	var laps_max := maxi(laps_min, int(pk.get("pointer_laps_max", 2)))
-	var h := CampaignSeed.derive_from(realm_seed, pointer_path(stage_id, run_count, situation_id))
-	var start: int = 0 if n == 1 else (chooser_index + 1 + h % (n - 1)) % n
-	return { "n": n, "start": start, "laps": laps_min + (h >> 32) % (laps_max - laps_min + 1) }

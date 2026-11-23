@@ -5,7 +5,7 @@
 [ext_resource type="Script" path="res://ui/components/ItemMeter.gd" id="3_meter"]
 [ext_resource type="Script" path="res://ui/components/ItemLoadMark.gd" id="4_load"]
 [ext_resource type="Script" path="res://ui/components/ItemTileGlyphs.gd" id="5_glyph"]
-[ext_resource type="PackedScene" path="res://ui/components/ItemTile.tscn" id="6_tile"]
+[ext_resource type="PackedScene" path="res://ui/components/ItemDetailsBlock.tscn" id="7_block"]
 
 [node name="InventoryPanels" type="Control"]
 layout_mode = 3
@@ -297,50 +297,9 @@ layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 8
 
-[node name="Top" type="HBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 12
-
-[node name="BigTile" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top" instance=ExtResource("6_tile")]
+[node name="DetailsBlock" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull" instance=ExtResource("7_block")]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 0
-focus_mode = 0
-mouse_filter = 2
-
-[node name="Lines" type="VBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top"]
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 2
-theme_override_constants/separation = 2
-
-[node name="NameLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(160, 0)
-layout_mode = 2
-theme_type_variation = &"ItemTitleLight"
-autowrap_mode = 3
-
-[node name="KindLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTextLight"
-
-[node name="GradeLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTextLight"
-
-[node name="CountLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull/Top/Lines"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTextLight"
-
-[node name="WhereLabel" type="Label" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"ItemTextLightMuted"
 
 [node name="Buttons" type="HBoxContainer" parent="Work/Row/Column/DetailsPanel/DetailsBox/DetailsFull"]
 layout_mode = 2

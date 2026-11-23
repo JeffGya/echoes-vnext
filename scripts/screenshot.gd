@@ -15,12 +15,19 @@
 # The layer hierarchy (RealmShell on layer 10, ModalHost on layer 40, as in Approot.tscn) lives
 # in screenshot_harness.tscn (AGENTS.md "Build structure in .tscn"). This script only instances it,
 # feeds it a hand-built snapshot and saves the frame. It never boots FlowRuntime, so it writes no save and does not touch the test save
-# directory. A fixture's snapshots are applied in order; a flow.resolve snapshot opens as the
+# directory. Step real_pickup:<kind>[:idle|intro][:<variant>][:seed=<n>]; a seed makes core place the row again (pickup_idle_axis_a
+# seed 0 gives the row axis, falling to the right; pickup_idle_axis_b seed 1 the col axis, rising to the right).
+# EXCEPTION: the fixtures pickup_pack_*, pickup_idle_* and pickup_intro_* play a real won fight through
+# FlowRuntime (tests/fixtures/PickupRealBoard.gd) and publish its real flow.pickup snapshot. pickup_idle_* then set only
+# the event keys reaction (plus, none) or frozen; the board stays real. pickup_intro_* publish the real first (intro) snapshot. Run them with
+# ECHOES_TEST_SAVE_DIR=<fresh dir>; they write and delete save files there. ECHOES_CLIP_EXTRA=<frames> keeps the app running that many frames after the shot (for --write-movie recordings). Fixture pickup_host stays the hand-built U1 frame.
+# A fixture's snapshots are applied in order; a flow.resolve snapshot opens as the
 # resolve modal over the board before it. To add a screen state, add a FIXTURES entry.
 # A fixture copies the snapshot contract; update it when that contract changes.
 extends SceneTree
 
 const InventoryUIFixtures := preload("res://tests/fixtures/InventoryUIFixtures.gd")
+const PickupRealBoard := preload("res://tests/fixtures/PickupRealBoard.gd")
 const HarnessScene := preload("res://scripts/screenshot_harness.tscn")
 const SanctumHarnessScene := preload("res://scripts/screenshot_harness_sanctum.tscn")
 const SETTLE_FRAMES := 45
@@ -69,6 +76,26 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 		if snap is Dictionary and snap.has("_modal"):
 			var req: Dictionary = snap["_modal"]
 			modal_host.call("present_modal_for_id", req["id"], shell.call("modal_scene_for", req["id"]), req["payload"])
+		elif snap is String and (snap as String).begins_with("real_pickup:"):
+			var real_parts: PackedStringArray = (snap as String).split(":")
+			var real_phase := "idle"
+			var real_variant := ""
+			var real_seed := ""
+			for token in real_parts.slice(2):
+				if token.begins_with("seed="):
+					real_seed = token.substr(5)
+				elif token == "idle" or token == "intro":
+					real_phase = token
+				else:
+					real_variant = token
+			var real_snap: Dictionary = PickupRealBoard.snapshot(real_parts[1], real_phase, real_variant, real_seed)
+			if real_snap.is_empty():
+				push_error("real_pickup fixture %s did not reach the pickup event" % real_parts[1])
+			else:
+				shell.call("set_snapshot", real_snap)
+		elif snap is String and (snap as String).begins_with("wait:"):
+			for _w in range(int((snap as String).substr(5))):
+				await process_frame
 		elif snap is String:
 			_run_step(harness, snap)
 		else:
@@ -81,7 +108,13 @@ func _render_fixture(fixture_name: String, snapshots: Array, out_dir: String, pr
 	var path := out_dir.path_join(file_name + ".png")
 	var err := root.get_texture().get_image().save_png(path)
 	print("SHOT %s -> %s (err=%d)" % [fixture_name, ProjectSettings.globalize_path(path), err])
+	# Video proof: run godot with --write-movie <file.avi> --fixed-fps 30 and ECHOES_CLIP_EXTRA=<frames>; the extra frames
+	# keep the scene alive after the shot so a recording shows the motion.
+	var clip_extra := int(OS.get_environment("ECHOES_CLIP_EXTRA")) if OS.get_environment("ECHOES_CLIP_EXTRA").is_valid_int() else 0
+	for _c in range(clip_extra):
+		await process_frame
 	harness.queue_free()
+	StopMarkMotion.reduced = false
 	await process_frame
 
 
@@ -175,6 +208,66 @@ func _fixtures() -> Dictionary:
 		"standoff_froze_two": [_combat(6, recover), _standoff_card(2, true, "froze", ["Ama", "Kofi"], [])],
 		"standoff_calm": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"])],
 		"standoff_fight_gone": [_combat(6, recover), _standoff_card(3, true, "froze", ["Ama", "Kofi"], ["Ama", "Kofi"], false)],
+		"pickup_host": [_pickup_host()],
+		"pickup_pack_empty": ["real_pickup:empty"],
+		"pickup_pack_near": ["real_pickup:near"],
+		"pickup_pack_full": ["real_pickup:full"],
+		"pickup_idle_plus": ["real_pickup:empty:idle:plus"],
+		"pickup_idle_none": ["real_pickup:full:idle:none"],
+		"pickup_idle_frozen": ["real_pickup:near:idle:frozen"],
+		"pickup_intro_many": ["real_pickup:many:intro"],
+		"pickup_intro_many_b": ["real_pickup:many:intro:seed=1"],
+		"pickup_intro_pointer": ["real_pickup:many:intro:seed=0"],
+		"pickup_intro_pointer_b": ["real_pickup:many:intro:seed=1"],
+		# Fixed-time stills of the mote (seed 0, 5 Echoes, chooser index 2: path 3.79 s, P0 0.5 s; intro time = path time + 0.5).
+		# 2.5 = path 2.0, mid-glide on the return leg; 1.7 = path 1.2, the first half turn; 4.49 = 0.2 s into the landing; 4.89 = end of the hold.
+		"pickup_intro_pointer_t1": ["real_pickup:many:intro:seed=0", "pointer_at:2.5"],
+		"pickup_intro_pointer_turn": ["real_pickup:many:intro:seed=0", "pointer_at:1.7"],
+		"pickup_intro_pointer_land": ["real_pickup:many:intro:seed=0", "pointer_at:4.49"],
+		"pickup_intro_pointer_hold": ["real_pickup:many:intro:seed=0", "pointer_at:4.89"],
+		# R6b stills (seed 0): end of the first leg (the out leg), and the plan total, where the chooser stands on chooser_end_cell. Both read the plan.
+		# R6c stills: the first taken find at its reveal, mid-flight, and the intro end (strip filled, tone changed). `empty` has two taken finds.
+		"pickup_intro_empty_clip": ["real_pickup:empty:intro:seed=0"],
+		"pickup_intro_reduced": ["reduced:1", "real_pickup:empty:intro:seed=0"],
+		"pickup_intro_bark": ["real_pickup:empty:intro:seed=0", "pointer_at_bark"],
+		"pickup_intro_reduced_hold": ["reduced:1", "real_pickup:empty:intro:seed=0", "pointer_at_find:0:hold"],
+		"pickup_intro_reduced_flight": ["reduced:1", "real_pickup:empty:intro:seed=0", "pointer_at_find:0:flight"],
+		"pickup_intro_reduced_end": ["reduced:1", "real_pickup:empty:intro:seed=0", "pointer_at_total"],
+		"pickup_intro_reveal": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:reveal"],
+		"pickup_intro_carry": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:lift"],
+		"pickup_intro_hold": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:hold"],
+		"pickup_intro_flight": ["real_pickup:empty:intro:seed=0", "pointer_at_find:0:flight"],
+		"pickup_intro_end": ["real_pickup:empty:intro:seed=0", "pointer_at_total"],
+		"pickup_intro_reveal_many": ["real_pickup:many:intro:seed=0", "pointer_at_find:0:reveal"],
+		"pickup_intro_flight_many": ["real_pickup:many:intro:seed=0", "pointer_at_find:0:flight"],
+		"pickup_intro_end_many": ["real_pickup:many:intro:seed=0", "pointer_at_total"],
+		"pickup_intro_walk_out": ["real_pickup:many:intro:seed=0", "pointer_at_leg_end"],
+		"pickup_intro_walk_end": ["real_pickup:many:intro:seed=0", "pointer_at_total"],
+		"pickup_intro_empty": ["real_pickup:empty:intro"],
+		"pickup_intro_near": ["real_pickup:near:intro"],
+		"pickup_intro_full": ["real_pickup:full:intro"],
+		"pickup_intro_axis_a": ["real_pickup:empty:intro:seed=0"],
+		"pickup_intro_axis_b": ["real_pickup:empty:intro:seed=1"],
+		"pickup_idle_many": ["real_pickup:many:idle:none"],
+		"pickup_idle_many_b": ["real_pickup:many:idle:none:seed=1"],
+		"pickup_idle_axis_a": ["real_pickup:empty:idle:plus:seed=0"],
+		"pickup_idle_axis_b": ["real_pickup:empty:idle:plus:seed=1"],
+		"pickup_idle_zoomed_out": ["real_pickup:empty:idle:plus", "cam_zoom:0.3", "cam_frame"],
+		"pickup_select_find": ["real_pickup:many:idle:none", "select_find:0"],
+		"pickup_select_find_last": ["real_pickup:many:idle:none", "select_find:2"],
+		"pickup_select_pack": ["real_pickup:many:idle:none", "select_pack:0"],
+		"pickup_select_pack_last": ["real_pickup:many:idle:none", "select_pack:last"],
+		"pickup_select_pack_2": ["real_pickup:many:idle:none", "select_pack:1"],
+		"pickup_select_pack_3": ["real_pickup:many:idle:none", "select_pack:2"],
+		"pickup_select_find_row": ["real_pickup:many:idle:none", "select_find:row"],
+		"pickup_select_pack_gathered": ["real_pickup:empty:idle:plus", "select_pack:0"],
+		"pickup_focus_find": ["real_pickup:many:idle:none", "focus_at:find:0"],
+		"pickup_focus_pack": ["real_pickup:many:idle:none", "focus_at:pack:0"],
+		"pickup_focus_token": ["real_pickup:many:idle:none", "focus_at:token:swap"],
+		"pickup_hit_overlay": ["real_pickup:many:idle:none", "hit_overlay"],
+		"pickup_hit_overlay_floor": ["real_pickup:many:idle:none", "cam_zoom_by:0.05", "hit_overlay"],
+		"pickup_select_clip": ["real_pickup:many:idle:none", "wait:20", "select_find:0", "wait:40", "select_find:1", "wait:40", "select_pack:0", "wait:40",
+			"focus_at:find:2", "wait:40", "select_none"],
 		"warning_level_1": [_combat_stall(1, "")],
 		"warning_level_2": [_combat_stall(2, "Ama")],
 		"prebattle_stalled": [_prebattle({ "stalled_before": true })],
@@ -259,6 +352,20 @@ func _combat(round_num: int, objective_state: Dictionary) -> Dictionary:
 	}
 
 
+## U1 host fixture: the flow.pickup shape (board keys and actors, idle phase) with no event content.
+func _pickup_host() -> Dictionary:
+	return {
+		"type": "flow.pickup",
+		"meta": { "t": 1 },
+		"data": {
+			"phase": "idle", "situation_id": "screenshot_pickup", "run_count": 1,
+			"encounter_id": "screenshot", "board_cols": 10, "board_rows": 10,
+			"terrain": {}, "placement_seed": 0, "actors": _actors(),
+		},
+		"actions": { "cta.continue": { "type": "pickup.continue", "slot": "cta.continue" } },
+	}
+
+
 ## Eight initiative rows: five echoes, the escorted spirit and two enemies, with some action text.
 func _combat_initiative(objective_state: Dictionary) -> Dictionary:
 	var snap := _combat(5, objective_state)
@@ -309,6 +416,90 @@ func _resolve(victory: bool, reason: String, round_ended: int, rank: String, pac
 	return { "type": "flow.resolve", "meta": { "t": 2 }, "data": data, "actions": actions }
 
 
+## U7 steps on the pickup board. select_find:<k> / select_pack:<k> (or last) / select_none set `data.selected` the way the builder writes it and
+## publish the snapshot again; focus_at:find:<k>, focus_at:pack:<k> or focus_at:token:swap puts the keyboard focus there; cam_zoom_by:<f>
+## zooms the camera by a factor (it stops at the minimum); hit_overlay draws the hit targets (circles of the real hit radius, `_pickup_find_half`) and the 8 px gap rings over
+## the finds. The overlay exists only here, in the harness.
+func _run_pickup_input_step(harness: Node, parts: PackedStringArray) -> void:
+	var stage := harness.find_child("PickupEventStage", true, false)
+	var board := stage.get_parent() if stage != null else null
+	if board == null:
+		push_error("step %s: no pickup board" % parts[0])
+		return
+	var layer := board.get_node("%PickupFindsLayer") as PickupFindsLayer
+	var strip := (stage as PickupEventStage).pack_strip()
+	var snap: Dictionary = (board.get("_pickup_snap") as Dictionary).duplicate(true)
+	var data: Dictionary = snap["data"]
+	match parts[0]:
+		"select_find":
+			var k := int(parts[1]) if parts[1] != "row" else _find_nearest_row(board, layer)
+			data["selected"] = { "id": layer.find_id_at(k), "side": "find" }
+			board.call("set_snapshot", snap)
+		"select_pack":
+			var slots: Array = (data["pack"] as Dictionary)["slots"]
+			var at := slots.size() - 1 if parts[1] == "last" else int(parts[1])
+			data["selected"] = { "id": str(slots[at]["id"]), "side": "pack" }
+			board.call("set_snapshot", snap)
+		"select_none":
+			data["selected"] = {}
+			board.call("set_snapshot", snap)
+		"focus_at":
+			match parts[1]:
+				"find":
+					layer.set_focus_index(int(parts[2]))
+				"pack":
+					strip.focus_targets()[2 + int(parts[2])].grab_focus()
+				"token":
+					(strip.get_node("%SwapToken") as Control).grab_focus()
+		"cam_zoom_by":
+			var cam := board.get("camera") as Camera2D
+			cam.call("_zoom_by", float(parts[1]), Vector2(root.size) * 0.5)
+			print("CAM zoom now %s (minimum %s)" % [cam.zoom.x, cam.get("_min_zoom")])
+			# Probe: why the minimum is what it is. The floor is (48 + 8) / the nearest pair of ground finds in board px.
+			var tiles := board.get("_board") as TileMapLayer
+			var pts: Array = []
+			for f: Dictionary in PickupFindsLayer.ground_finds(data):
+				pts.append(tiles.map_to_local(Vector2i(int(f["tile"]["col"]), int(f["tile"]["row"]))))
+			var pairs: Array = []
+			for i in pts.size():
+				for j in range(i + 1, pts.size()):
+					pairs.append("%d-%d: %.1f" % [i, j, (pts[i] as Vector2).distance_to(pts[j] as Vector2)])
+			print("FLOOR _pickup_zoom_floor %s, board-fit minimum %s, pair distances (board px) %s" % [board.get("_pickup_zoom_floor"),
+				board.call("_min_zoom_for_span", board.get("_board_span_px")), pairs])
+		"hit_overlay":
+			var overlay := Control.new()
+			overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+			overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			stage.add_child(overlay)
+			overlay.draw.connect(func() -> void:
+				var half := float(board.call("_pickup_find_half"))
+				for c: Vector2 in layer.screen_centers():
+					overlay.draw_arc(c, half, 0.0, TAU, 48, Color(1.0, 0.25, 0.25, 0.95), 2.0)
+					overlay.draw_arc(c, half + PickupHitRules.GAP, 0.0, TAU, 48, Color(0.3, 0.8, 1.0, 0.8), 1.0))
+			overlay.queue_redraw()
+
+
+## The find whose screen centre lies nearest to the middle of the Echo tokens (select_find:row).
+func _find_nearest_row(board: Node, layer: PickupFindsLayer) -> int:
+	var tokens := board.get_node("%TokenLayer") as CombatTokenLayer
+	var xf := tokens.get_global_transform_with_canvas()
+	var sum := Vector2.ZERO
+	var n := 0
+	for a: Dictionary in board.get("_last_actors"):
+		var at := tokens.display_cell_position(str(a["id"]))
+		if at != Vector2.INF:
+			sum += xf * at
+			n += 1
+	var middle := sum / maxf(float(n), 1.0)
+	var best := 0
+	var centers := layer.screen_centers()
+	for i in centers.size():
+		if (centers[i] as Vector2).distance_to(middle) < (centers[best] as Vector2).distance_to(middle):
+			best = i
+	print("ROW middle %s, find %d at %s" % [middle, best, centers[best]])
+	return best
+
+
 ## A fixture step that is a String acts on the live scene. "focus_cause:N" focuses the Nth (i) button.
 func _run_step(harness: Node, step: String) -> void:
 	var parts := step.split(":")
@@ -322,6 +513,75 @@ func _run_step(harness: Node, step: String) -> void:
 			panels.call("toggle_pack")
 		elif parts[1] == "select":
 			panels.call("_on_slot_chosen", parts[2], int(parts[3]))
+	if parts[0] == "cam_zoom" or parts[0] == "cam_frame":
+		var board_camera := harness.find_child("BoardCamera", true, false) as Camera2D
+		if board_camera != null and board_camera.owner != null and parts[0] == "cam_zoom":
+			# The opening tween would overwrite the zoom, so it is killed first.
+			board_camera.owner.call("_kill_pickup_camera_tween")
+			board_camera.zoom = Vector2(float(parts[1]), float(parts[1]))
+			print("CAM zoom before reframe: %s" % board_camera.zoom.x)
+		if board_camera != null and board_camera.owner != null and parts[0] == "cam_frame":
+			board_camera.owner.call("frame_pickup_camera", false)
+			print("CAM zoom after reframe: %s" % board_camera.zoom.x)
+	if parts[0] in ["select_find", "select_pack", "select_none", "focus_at", "hit_overlay", "cam_zoom_by"]:
+		_run_pickup_input_step(harness, parts)
+	if parts[0] == "reduced":
+		# reduced:1 sets the project's reduced-motion flag (before the snapshot, so the plan is built reduced); it is cleared after the shot.
+		StopMarkMotion.reduced = parts[1] == "1"
+	if parts[0] == "pointer_at_bark":
+		# Moves the intro clock to just after the chooser's bark time (the plan's `bark.t0`) and stops it.
+		var bark_stage := harness.find_child("PickupEventStage", true, false)
+		if bark_stage != null:
+			var bark_plan: Dictionary = bark_stage.call("plan")
+			var bark_at := float((bark_plan.get("bark", {}) as Dictionary).get("t0", 0.0)) + 0.05
+			bark_stage.call("advance", maxf(bark_at - float(bark_stage.call("clock_time")), 0.0))
+			bark_stage.set_process(false)
+	if parts[0] == "pointer_at_find":
+		# pointer_at_find:<k>:<phase> moves the intro clock to a moment of the k-th taken find (in the order the chooser takes them) and
+		# stops it. phase: reveal (middle of the flip), lift (middle of the carry), hold (middle of the hold at the head), flight (middle), landed (the end of the flight). Reads the plan.
+		var find_stage := harness.find_child("PickupEventStage", true, false)
+		if find_stage != null:
+			var find_plan: Dictionary = find_stage.call("plan")
+			var taken: Array = (find_plan.get("finds", []) as Array).filter(func(f: Dictionary) -> bool: return bool(f["walked"]) and not bool(f["is_try"]))
+			taken.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["lift0"]) < float(b["lift0"]))
+			var k := int(parts[1])
+			if k < taken.size():
+				var f: Dictionary = taken[k]
+				var at := 0.0
+				match parts[2]:
+					"reveal":
+						at = float(f["reveal"]) + float(f["reveal_len"]) * 0.5
+					"lift":
+						at = (float(f["lift0"]) + float(f["lift1"])) * 0.5
+					"hold":
+						at = (float(f["lift1"]) + float(f["fly0"])) * 0.5
+					"flight":
+						at = (float(f["fly0"]) + float(f["fly1"])) * 0.5
+					_:
+						at = float(f["fly1"])
+				find_stage.call("advance", maxf(at - float(find_stage.call("clock_time")), 0.0))
+				find_stage.set_process(false)
+	if parts[0] in ["pointer_advance", "pointer_at", "pointer_at_leg_end", "pointer_at_total"]:
+		# pointer_advance:<s> moves the intro clock on by <s> in one tick; pointer_at:<t> moves it to the intro time <t> and then
+		# stops it, so the PNG shows that exact moment (later frames would add time). pointer_at_leg_end moves it to the end of the
+		# chooser's first leg and pointer_at_total to the plan total: both read the plan, so the stills follow the config.
+		var stage := harness.find_child("PickupEventStage", true, false)
+		if stage != null:
+			var plan: Dictionary = stage.call("plan")
+			var now := float(stage.call("clock_time"))
+			var delta := 0.0
+			match parts[0]:
+				"pointer_advance":
+					delta = float(parts[1])
+				"pointer_at":
+					delta = maxf(float(parts[1]) - now, 0.0)
+				"pointer_at_leg_end":
+					delta = maxf(float((plan["legs"] as Array)[0]["t1"]) - now, 0.0) if not (plan.get("legs", []) as Array).is_empty() else 0.0
+				"pointer_at_total":
+					delta = maxf(float(plan.get("total", now)) - now, 0.0)
+			stage.call("advance", delta)
+			if parts[0] != "pointer_advance":
+				stage.set_process(false)
 	if parts[0] == "freeze_motion":
 		for node in harness.find_children("*", "Control", true, false):
 			if node.has_method("skip_motion") and node.get("_motion") != null:

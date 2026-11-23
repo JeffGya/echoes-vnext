@@ -1,0 +1,48 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/screens/combat/PickupDetailsCard.gd" id="1_card"]
+[ext_resource type="PackedScene" path="res://ui/components/ItemDetailsBlock.tscn" id="2_block"]
+
+[node name="PickupDetailsCard" type="Control"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_card")
+
+[node name="Arrow" type="Panel" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(14, 14)
+layout_mode = 0
+offset_right = 14.0
+offset_bottom = 14.0
+pivot_offset = Vector2(7, 7)
+rotation = 0.7853982
+mouse_filter = 2
+theme_type_variation = &"PickupCardArrow"
+
+[node name="Panel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 0
+offset_right = 320.0
+theme_type_variation = &"ItemDetailsPanel"
+
+[node name="Box" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Block" parent="Panel/Box" instance=ExtResource("2_block")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="CloseButton" type="Button" parent="Panel/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(96, 48)
+layout_mode = 2
+theme_type_variation = &"ItemButtonOutline"

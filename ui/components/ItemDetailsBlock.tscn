@@ -1,0 +1,55 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/components/ItemDetailsBlock.gd" id="1_block"]
+[ext_resource type="PackedScene" path="res://ui/components/ItemTile.tscn" id="2_tile"]
+
+[node name="ItemDetailsBlock" type="VBoxContainer"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+script = ExtResource("1_block")
+
+[node name="Top" type="HBoxContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="BigTile" parent="Top" instance=ExtResource("2_tile")]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 0
+focus_mode = 0
+mouse_filter = 2
+
+[node name="Lines" type="VBoxContainer" parent="Top"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="NameLabel" type="Label" parent="Top/Lines"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+theme_type_variation = &"ItemTitleLight"
+autowrap_mode = 3
+
+[node name="KindLabel" type="Label" parent="Top/Lines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="GradeLabel" type="Label" parent="Top/Lines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="CountLabel" type="Label" parent="Top/Lines"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLight"
+
+[node name="WhereLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextLightMuted"

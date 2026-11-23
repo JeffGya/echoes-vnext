@@ -401,8 +401,7 @@ static func _t_reload() -> Dictionary:
 
 
 ## Messages for the keys of a reloaded idle snapshot that must equal the live idle snapshot. `row` is compared
-## without `status`: flow.continue runs the wall-clock emotion recovery, which can move a status. `pointer` reads
-## realm.seed (follow-ups row 17): a difference is reported on its own line as evidence, never hidden.
+## without `status`: flow.continue runs the wall-clock emotion recovery, which can move a status.
 static func _same_idle(live: Dictionary, reloaded: Dictionary) -> Array:
 	var m: Array = []
 	for k in ["finds", "pack", "chooser", "swap", "order", "fallen", "case", "reason", "reaction", "frozen"]:
@@ -412,14 +411,6 @@ static func _same_idle(live: Dictionary, reloaded: Dictionary) -> Array:
 		return ItemPacksTests._norm((rows as Array).map(func(r): return [r["id"], r["name"], int(r["standing"]), r["is_chooser"]]))
 	if strip.call(live.get("row", [])) != strip.call(reloaded.get("row", [])):
 		m.append("reload changed 'row' (ids, names, standing, chooser)")
-	# KNOWN DEFECT, not asserted (follow-ups row 17): `realm.seed` is a 63-bit int saved as a JSON number and loses
-	# digits on a reload, so the pointer plan (presentation only, shown at the intro) differs after a reload. Measured
-	# on 2026-11-15: pointer start 0 -> 1. The idle phase does not play the pointer. Fix with the realm.seed story.
-	# Only `n` and `laps` range are checked here; `start` must still be a valid row index.
-	var p: Dictionary = reloaded.get("pointer", {})
-	if int(p.get("n", -1)) != int((live.get("pointer", {}) as Dictionary).get("n", -2)) \
-			or int(p.get("start", -1)) < 0 or int(p.get("start", -1)) >= int(p.get("n", 0)):
-		m.append("reloaded pointer plan is not valid: %s" % ItemPacksTests._norm(p))
 	return m
 
 

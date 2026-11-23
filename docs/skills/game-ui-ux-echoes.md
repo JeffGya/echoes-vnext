@@ -140,6 +140,7 @@ Every screen reads a snapshot of shape `{ type, meta, data, actions }`. The mapp
 | 10 | Active screen content |
 | 20 | Persistent BottomRail/EchoBar/navigation |
 | 30 | Non-modal barks, transitions, placement controls, notifications |
+| 31 | Pickup details card (`CardLayer` in `PickupEventStage`): above the bark layer, below the modal |
 | 40 | AppRoot blocking ModalHost |
 | 128 | Recovery/debug/emergency |
 

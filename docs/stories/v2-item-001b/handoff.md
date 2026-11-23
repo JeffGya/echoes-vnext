@@ -1,14 +1,14 @@
 # V2-ITEM-001b: running handoff
 
-Written in STE. Keep this file current. Last update: 2026-11-15, after the C12 build (not committed; the main chat runs the suites and the shard map check).
+Written in STE. Keep this file current. Last update: 2026-11-22, after the U7 build and its QA fixes (not committed; the main chat runs the long suites).
 
 ## Where things are
-- Backend steps C0 to C12 are DONE after C12 is verified and committed. C0 to C8 are in PR 131 (merged). C9 to C11 are committed locally. C12 is built and waits for the main chat (import, suite run, shard map check) and for QA.
-- Branch: `claude/echoes-v2-item-001b-pr2`. It is LOCAL: Jeff keeps it unpushed. Worktree: `/Users/jeffreygyamfi/Sites/echoes-vnext/.claude/worktrees/v2-economy-004-item-costs-f68f4c` (the folder name says economy-004; the story is 001b). Jeff says when to push or open PR 2.
-- Next: the UI steps U1 to U12 (`ui-ux-designer`). PR 2 = C9 to C12 and U1 to U7. PR 3 = U8 to U12 and the end copy review (D-56).
+- Backend steps C0 to C12 are DONE (C0 to C8 are in PR 131, merged). UI steps U1 to U7 are built; U7 (taps, keys, details card, camera floor) is in QA. U8 to U12 are not started.
+- Branch: `claude/echoes-v2-item-001b-ui`. It is LOCAL: Jeff keeps it unpushed. Worktree: `/Users/jeffreygyamfi/Sites/echoes-vnext/.claude/worktrees/v2-economy-004-item-costs-f68f4c` (the folder name says economy-004; the story is 001b). Jeff says when to push or open a PR (D-86 l).
+- Next: the UI steps (`ui-ux-designer`). U1 to U7 are built (U7 is in QA). PR split (D-86 l): PR 3 = the UI through U7; PR 4 = U8 to U12 and the end copy review (D-56). Push only when Jeff says.
 - Real play never opens the event until V2-ITEM-002 gives real finds. Only the debug producer (`inventory produce event` and `arm`) and the debug scenes reach it. One test (`pickup_flow`) drives a real won fight with armed finds.
-- The approved plan: `/Users/jeffreygyamfi/.claude/plans/atomic-snacking-cat.md` (rows C0 to C12, U1 to U12, test plan, three-PR split). It can be stale in two places: the plan says U8 uses `pickup.swap.apply`; the real actions are `pickup.swap.start`, `pickup.swap.pick`, `pickup.swap.confirm` and `pickup.swap.cancel`. The plan also names `PickupEventPlan.gd` for register row 12; the real file is `PickupSnapshotBuilder.gd`.
-- Records: `decisions.md` (D-01 to D-67; later decisions win), `pick-numbers.md`, `follow-ups.md` (the unwired register), `docs/inventory-and-items-design.md` (status tags now BUILT for the backend), `CONVENTIONS.md` section "Pickup event (V2-ITEM-001b)" (the contract), `docs/resolve-snapshot-block-spec.md` (block 18), `ANSWERS.md` #91 and #92.
+- The approved plan: `/Users/jeffreygyamfi/.claude/plans/atomic-snacking-cat.md` (rows C0 to C12, U1 to U12, test plan, three-PR split; replaced by the four-PR split of D-86 l). It can be stale in two places: the plan says U8 uses `pickup.swap.apply`; the real actions are `pickup.swap.start`, `pickup.swap.pick`, `pickup.swap.confirm` and `pickup.swap.cancel`. The plan also names `PickupEventPlan.gd` for register row 12; the real file is `PickupSnapshotBuilder.gd`.
+- Records: `decisions.md` (D-01 to D-86; later decisions win), `pick-numbers.md`, `follow-ups.md` (the unwired register), `docs/inventory-and-items-design.md` (status tags now BUILT for the backend), `CONVENTIONS.md` section "Pickup event (V2-ITEM-001b)" (the contract), `docs/resolve-snapshot-block-spec.md` (block 18), `ANSWERS.md` #91 and #92.
 - The UI contract: `docs/visual-plans/pickup-event/pickup-event-playable.html` (approved by playtest, D-36). The art kit is `art-kit.html` in the same folder.
 
 ## Corrected facts (use these; older notes in the history are wrong)
@@ -20,7 +20,7 @@ Written in STE. Keep this file current. Last update: 2026-11-15, after the C12 b
 | The pending result keeps `terrain`, `placement_seed` (String) and `bounds { w, h }` as top-level keys, only when held behind an event. | D-66 |
 | `sense_base` is 0.0 (was 0.3). `worth_weight` stays 6. Probe P2 at full size: M1 17.1%, M3 +0.609, M4 99.0% (a narrow pass). | D-67 |
 | The reaction key for "no effect" is `none`, not "neutral". The design document is fixed. Values: `plus`, `none`, `minus`. | `PickupCase.gd`, C12 |
-| `realm.seed` is a 63-bit int saved as a JSON number. After a reload it can lose digits. Every seeded stream that reads it is affected (finds roll, chooser draw, pointer). Pre-existing and project-wide. Needs an opus determinism check. | register row 17 |
+| `realm.seed` is a 63-bit int saved as a JSON number. After a reload it can lose digits. Every seeded stream that reads it is affected (finds roll, chooser draw; the pointer no longer reads `realm.seed`, D-77). Pre-existing and project-wide. Needs an opus determinism check. | register row 17 |
 | The event opens in the fight-ending dispatch. The win relief (fear -5, morale +10) runs in a LATER dispatch. A chooser therefore freezes on its fear from BEFORE the relief. Built as is. Jeff decides. | register row 18, probe P3 |
 | Probe P3 (100 real fights): a chooser freezes exactly when its status at the event is strained or worse. The rate in a real campaign is not measured. | register row 16 |
 | A reload during the event skips the win steps (emotion drift, vow discovery check, ally field clear), because the machine is then in RESOLVE. Pre-existing for the Resolve card; same for the event. | register row 13 |
@@ -29,7 +29,7 @@ Written in STE. Keep this file current. Last update: 2026-11-15, after the C12 b
 | The three `clear_path_marks` sites: `StageSettlementService.gd` (path end), `VentureController.gd` (early leave), `ActiveStageService.gd` (defeat). | C0 |
 
 ## The design in one paragraph
-After a won fight with finds, an event plays on the combat board before Resolve (snapshot type `flow.pickup`, a phase of the encounter, not a machine state, D-58). The finds count is a rolling chance by encounter rank, capped by realm scale (D-46 to D-51). One standing Echo is drawn with equal chance; a pointer shows it (D-05, D-21). The chooser scores the finds by its own traits (D-06, D-12); a frozen chooser takes nothing and no swap is offered (D-39, D-43). Items show as hidden icons and are revealed when chosen (D-37, D-45). Items go into the Travel pack; an item that does not fit is held up near the Echo (D-41, D-55). The Keeper has one swap per path, only when the pack is full (D-27, D-28). Details float next to any visible item (D-25). The Directive decides the "Leave these behind?" prompt (D-35). Reaction is a class only (D-29, D-33, D-34). Items are placed in a simple row (D-52). Jeff reviews ALL copy at the end (D-56).
+After a won fight with finds, an event plays on the combat board before Resolve (snapshot type `flow.pickup`, a phase of the encounter, not a machine state, D-58). The finds count is a rolling chance by encounter rank, capped by realm scale (D-46 to D-51). One standing Echo is drawn with equal chance; a pointer shows it (D-05, D-21). The chooser scores the finds by its own traits (D-06, D-12); a frozen chooser takes nothing and no swap is offered (D-39, D-43). Items show as hidden icons and are revealed when chosen (D-37, D-45). Items go into the Travel pack; an item that does not fit is held up near the Echo (D-41, D-55). The Keeper has one swap per path, only when the pack is full (D-27, D-28). Details float next to any visible item (D-25). The Directive decides the "Leave these behind?" prompt (D-35). Reaction is a class only (D-29, D-33, D-34). Echoes and finds stand on real board tiles chosen by a seeded rule in core (D-72; `row[].tile`, `finds[].tile`). Jeff reviews ALL copy at the end (D-56).
 
 ## What the UI steps need (the backend contract)
 - Snapshot shape: the header of `core/state/flow/states/venture/PickupSnapshotBuilder.gd`. Data keys include `order`, `pick_index`, `selected`, `swap.targets` (keyed from both sides) and `swap.dropped`. Core emits keys and ids, never player text.
@@ -53,20 +53,19 @@ Rows 1 to 18. Every row has a Target cell with a story code, a `NEW "<title>"`, 
 4. Row 13: who owns the skipped win steps after a reload (no story).
 5. What Resolve shows beyond the `data.pickup_result` block (D-16).
 6. The real size of the emotion plus and minus (the reaction story). Open question Q4 in the design document.
-7. Constants `LAPS_MIN`, `LAPS_MAX` and `SEVERE_FROM` are now in `data.inventory.pickup`. An upper bound for laps and a limit for `severe_from_status` are still Jeff's numbers.
+7. `SEVERE_FROM` is now `severe_from_status` in `data.inventory.pickup`. `LAPS_MIN` and `LAPS_MAX` are retired by D-77 (the pointer feel moved to `pointer_look`). A limit for `severe_from_status` is still Jeff's number.
 8. Whether to write short notes on the Notion rows of V2-ITEM-001, V2-ITEM-002 and the other target stories (his yes first).
 9. The end review of ALL player-facing copy (D-56).
 
 ## `NEW "<title>"` story rows to create in Notion
-The suite `pickup_unwired` prints this list from the markers. Titles marked "proposed" were chosen by the builder; Jeff names them. There are 7 distinct titles with markers.
+The suite `pickup_unwired` prints this list from the markers. Titles marked "proposed" were chosen by the builder; Jeff names them. There are 6 distinct titles with markers.
 | Title | Marker site (file:line at C12) | Register row |
 |---|---|---|
-| `NEW "Pickup placement on the board"` | `PickupEventService.gd:135`, `FindsRules.gd:24` | 3, 11 |
-| `NEW "Pickup reaction effect"` | `PickupEventService.gd:139` | 4 |
+| `NEW "Pickup reaction effect"` | `PickupEventService.gd:148` | 4 |
 | `NEW "Win steps after a reload"` (proposed) | `FlowResolveState.gd:39` | 13 |
-| `NEW "Pickup intro short forms"` (proposed) | `PickupSnapshotBuilder.gd:25` | 12 |
+| `NEW "Pickup intro short forms"` (proposed) | `PickupSnapshotBuilder.gd:28` | 12 |
 | `NEW "Pickup tuning from real play"` | `PickupPick.gd:51` | 16 |
-| `NEW "Realm seed survives a save reload"` | `PickupEventService.gd:78`, `PickupSnapshotBuilder.gd:93` | 17 |
+| `NEW "Realm seed survives a save reload"` | `PickupEventService.gd:87` (the `PickupSnapshotBuilder.gd:93` site is retired by D-77) | 17 |
 | `NEW "Pickup event after the win relief"` | `FlowRuntime.gd:1857` | 18 |
 Proposed title with NO marker (row 14 is exempt, no code site; D-65 lists it): `NEW "Pickup UX redesign"`.
 Real story codes in markers (all found in the CSV): `V2-ITEM-002` (rows 1, 2, 10; row 2 at `PickupSnapshotBuilder.gd:235`), `V2-ITEM-003` (row 5), `V2-ITEM-004` (row 6), `V2-CONTINUITY-002` (row 7), `V2-DIRECTIVE-003` (row 9). Row 8 targets `V2-ECONOMY-003` (no code).

@@ -1,0 +1,172 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/screens/combat/PickupPackStrip.gd" id="1_strip"]
+[ext_resource type="PackedScene" path="res://ui/components/ItemSlot.tscn" id="2_slot"]
+
+[node name="PickupPackStrip" type="Control"]
+layout_mode = 3
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -170.0
+offset_top = -164.0
+offset_right = 170.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("1_strip")
+
+[node name="Panel" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"ItemPanelPack"
+
+[node name="Box" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Header" type="HBoxContainer" parent="Panel/Box"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Titles" type="VBoxContainer" parent="Panel/Box/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="TitleLabel" type="Label" parent="Panel/Box/Header/Titles"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTitleDark"
+
+[node name="WordLabel" type="Label" parent="Panel/Box/Header/Titles"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTextDark"
+
+[node name="SwapToken" type="PanelContainer" parent="Panel/Box/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 48)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 2
+theme_type_variation = &"PickupAllowance"
+
+[node name="Row" type="HBoxContainer" parent="Panel/Box/Header/SwapToken"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Icon" type="Control" parent="Panel/Box/Header/SwapToken/Row"]
+custom_minimum_size = Vector2(30, 22)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="ArrowTop" type="Line2D" parent="Panel/Box/Header/SwapToken/Row/Icon"]
+points = PackedVector2Array(4, 7, 26, 7)
+width = 2.5
+default_color = Color(0.9608, 0.9020, 0.8275, 1)
+
+[node name="HeadTop" type="Line2D" parent="Panel/Box/Header/SwapToken/Row/Icon"]
+points = PackedVector2Array(21, 2, 26, 7, 21, 12)
+width = 2.5
+default_color = Color(0.9608, 0.9020, 0.8275, 1)
+
+[node name="ArrowLow" type="Line2D" parent="Panel/Box/Header/SwapToken/Row/Icon"]
+points = PackedVector2Array(26, 16, 4, 16)
+width = 2.5
+default_color = Color(0.9608, 0.9020, 0.8275, 1)
+
+[node name="HeadLow" type="Line2D" parent="Panel/Box/Header/SwapToken/Row/Icon"]
+points = PackedVector2Array(9, 11, 4, 16, 9, 21)
+width = 2.5
+default_color = Color(0.9608, 0.9020, 0.8275, 1)
+
+[node name="SwapCount" type="Label" parent="Panel/Box/Header/SwapToken/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTitleDark"
+text = "0"
+
+[node name="DestroyToken" type="PanelContainer" parent="Panel/Box/Header"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 48)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 2
+theme_type_variation = &"PickupAllowance"
+
+[node name="Row" type="HBoxContainer" parent="Panel/Box/Header/DestroyToken"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Icon" type="Control" parent="Panel/Box/Header/DestroyToken/Row"]
+custom_minimum_size = Vector2(30, 22)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
+[node name="Frame" type="Line2D" parent="Panel/Box/Header/DestroyToken/Row/Icon"]
+points = PackedVector2Array(3, 3, 27, 3, 27, 19, 3, 19, 3, 3)
+width = 2.5
+default_color = Color(0.9608, 0.9020, 0.8275, 1)
+
+[node name="Slash" type="Line2D" parent="Panel/Box/Header/DestroyToken/Row/Icon"]
+points = PackedVector2Array(6, 17, 24, 5)
+width = 3.0
+default_color = Color(0.9608, 0.9020, 0.8275, 1)
+
+[node name="DestroyCount" type="Label" parent="Panel/Box/Header/DestroyToken/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"ItemTitleDark"
+text = "0"
+
+[node name="SlotsRow" type="CenterContainer" parent="Panel/Box"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Slots" type="HBoxContainer" parent="Panel/Box/SlotsRow"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Slot0" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2
+
+[node name="Slot1" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2
+
+[node name="Slot2" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2
+
+[node name="Slot3" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2
+
+[node name="Slot4" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2
+
+[node name="Slot5" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2
+
+[node name="Slot6" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2
+
+[node name="Slot7" parent="Panel/Box/SlotsRow/Slots" instance=ExtResource("2_slot")]
+layout_mode = 2

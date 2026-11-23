@@ -60,7 +60,7 @@ var flow_machine: FlowStateMachine
 
 # INFRA-001: Two-shell router. All bespoke screens live inside their respective shell.
 # SanctumShell — flow.sanctum, flow.summon, flow.echo_party, flow.realm_select
-# RealmShell   — flow.stage_map, flow.stage, flow.encounter, flow.resolve
+# RealmShell   — flow.stage_map, flow.stage, flow.encounter, flow.pickup, flow.resolve
 var _sanctum_shell: SanctumShell
 var _sanctum_shell_scene := preload("res://ui/shells/SanctumShell.tscn")
 
@@ -669,6 +669,18 @@ func _run_tests(parts: Array) -> void:
 	PickupDebugTests.register(runner)  # V2-ITEM-001b step C10: debug producer modes event and arm, scene check and apply
 	PickupProbeTests.register(runner)  # V2-ITEM-001b step C11: probes P1 finds chance, P2 pick rule Standing 1 vs 9, P3 real freeze rate (env-gated)
 	PickupUnwiredTests.register(runner)  # V2-ITEM-001b step C12: code markers of the unwired register match follow-ups.md
+	PickupUiHostTests.register(runner)  # V2-ITEM-001b step U1: flow.pickup routes to the combat board, the empty stage, the debug placeholder
+	PickupUiTextTests.register(runner)  # V2-ITEM-001b step U2: pickup text module, proposed-copy fixture, theme variations, contrast
+	PickupPlannerTests.register(runner)  # V2-ITEM-001b step U3: pure intro timeline and swap planners
+	PickupPackStripTests.register(runner)  # V2-ITEM-001b step U4: the Travel pack strip, tone, tokens, 24 px above the EchoBar
+	PickupCameraFrameTests.register(runner)  # V2-ITEM-001b R2b: pickup camera framing (D-73), planner and real board host
+	PickupFindsLayerTests.register(runner)  # V2-ITEM-001b R3: finds on their board tiles during the pickup event
+	PickupBarkTests.register(runner)  # V2-ITEM-001b R4: the chooser bark over the row token in the idle picture
+	PickupIntroTests.register(runner)  # V2-ITEM-001b R6d: the intro bark, the skip transition and reduced motion
+	PickupInputTests.register(runner)  # V2-ITEM-001b U7: taps, keys, the details card, the camera floor, the allowance tooltips (suite pickup_ui, `input_*`; two tests in inventory_ui)
+	PickupItemsTests.register(runner)  # V2-ITEM-001b R6c: the finds reveal, are carried to the chooser's head and fly into the pack strip (suite pickup_ui, `items_*`)
+	PickupWalkTests.register(runner)  # V2-ITEM-001b R6b: the chooser walks its legs on the token layer; the idle picture
+	PickupPointerTests.register(runner)  # V2-ITEM-001b R6a: the intro clock and the drifting pointer mote (no selection ring)
 	# REGISTER LAST, ALWAYS. V2-COMBAT-003 phase 10 owner decision 7: this suite reads the
 	# legacy-selector ledger every earlier suite fills, so it must run after all of them.
 	MovementFallbackGuardTests.register(runner)
@@ -1533,6 +1545,7 @@ const VENTURE_FAMILY: Array = [
 	"flow.stage_explore",  # V2-STAGE-001
 	"flow.encounter",
 	"flow.keeper_trial",
+	"flow.pickup",         # V2-ITEM-001b: a snapshot type only, hosted on the combat board
 	"flow.resolve",
 ]
 const ONBOARDING_FAMILY: Array = [

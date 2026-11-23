@@ -9,8 +9,8 @@ extends RefCounted
 const _SIT := "s0"
 const _ACTION_TYPES := { "overlay.skip": "pickup.skip", "cta.continue": "pickup.continue", "cta.swap": "pickup.swap.start",
 	"back": "pickup.swap.cancel", "cta.confirm": "pickup.swap.confirm" }
-const _DATA_KEYS := ["actors", "board_cols", "board_rows", "case", "chooser", "confirm_leave_items", "destroy_left",
-	"encounter_id", "fallen", "finds", "frozen", "order", "pack", "phase", "placement_seed", "pointer", "reaction",
+const _DATA_KEYS := ["actors", "board_cols", "board_rows", "camera_frame", "case", "chooser", "confirm_leave_items", "destroy_left",
+	"encounter_id", "fallen", "finds", "frozen", "order", "pack", "phase", "placement_seed", "pointer_look", "reaction",
 	"reason", "return_to", "row", "run_count", "selected", "situation_id", "swap", "swap_left", "terrain"]
 
 
@@ -19,10 +19,11 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/actions_per_phase_and_no_nav_back", Callable(PickupSnapshotTests, "_t_actions"))
 	runner.register_test("pickup_snapshot/hidden_in_intro_revealed_after", Callable(PickupSnapshotTests, "_t_revealed"))
 	runner.register_test("pickup_snapshot/pack_tone_follows_the_load_level", Callable(PickupSnapshotTests, "_t_tone"))
+	runner.register_test("pickup_snapshot/pack_tone_before_leaves_out_the_finds_of_this_event", Callable(PickupSnapshotTests, "_t_tone_before"))
 	runner.register_test("pickup_snapshot/swap_offered_and_refused_keys", Callable(PickupSnapshotTests, "_t_swap_keys"))
 	runner.register_test("pickup_snapshot/swap_phase_falls_back_when_unsupported", Callable(PickupSnapshotTests, "_t_phase_fallback"))
 	runner.register_test("pickup_snapshot/swap_and_destroy_left_and_leave_flag", Callable(PickupSnapshotTests, "_t_tokens_and_directive"))
-	runner.register_test("pickup_snapshot/row_chooser_fallen_and_pointer", Callable(PickupSnapshotTests, "_t_row_pointer"))
+	runner.register_test("pickup_snapshot/row_chooser_and_fallen", Callable(PickupSnapshotTests, "_t_row_chooser"))
 	runner.register_test("pickup_snapshot/board_keys_and_actors_for_a_redraw", Callable(PickupSnapshotTests, "_t_board"))
 	runner.register_test("pickup_snapshot/build_is_pure_and_repeatable", Callable(PickupSnapshotTests, "_t_pure"))
 	runner.register_test("pickup_snapshot/no_record_gives_the_error_snapshot", Callable(PickupSnapshotTests, "_t_no_record"))
@@ -35,8 +36,12 @@ static func register(runner: CoreTestRunner) -> void:
 	runner.register_test("pickup_snapshot/selected_is_valid_only_for_the_record", Callable(PickupSnapshotTests, "_t_selected"))
 	runner.register_test("pickup_snapshot/board_actors_come_from_the_durable_result_after_a_reload", Callable(PickupSnapshotTests, "_t_pending_board"))
 	runner.register_test("pickup_snapshot/tried_find_and_pack_slot_fields", Callable(PickupSnapshotTests, "_t_tried_and_slots"))
+	runner.register_test("pickup_snapshot/find_and_pack_rows_carry_the_001a_stack_limit", Callable(PickupSnapshotTests, "_t_stack_limit"))
 	runner.register_test("pickup_snapshot/chooser_standing_return_to_and_tick", Callable(PickupSnapshotTests, "_t_standing_meta"))
 	runner.register_test("pickup_snapshot/build_leaves_the_flow_context_alone_and_terrain_is_a_copy", Callable(PickupSnapshotTests, "_t_context_untouched"))
+	PickupPlacementBoardsTests.register(runner)
+	PickupPlacementTests.register(runner)  # D-72: board tiles; no ui/ edit needed, the suite name stays pickup_snapshot
+	PickupPointerLookTests.register(runner)
 
 
 # ---------------------------------------------------------------------------
@@ -152,11 +157,11 @@ static func _t_shape() -> Dictionary:
 		if counts["taken"] + counts["tried"] + counts["left"] + counts["lost"] != (d["finds"] as Array).size():
 			m.append("%s: a find has an unknown status" % kind)
 		for f: Dictionary in d["finds"]:
-			for k in ["find_id", "type_id", "name", "kind", "grade", "quantity", "cell", "status", "revealed", "pick_index"]:
+			for k in ["find_id", "type_id", "name", "kind", "grade", "quantity", "cell", "tile", "status", "revealed", "pick_index"]:
 				if not f.has(k):
 					m.append("%s: find row misses %s" % [kind, k])
 		var pk: Dictionary = d["pack"]
-		if str(_keys(pk)) != str(["capacity", "carried", "free", "slots", "tone"]):
+		if str(_keys(pk)) != str(["capacity", "carried", "free", "slots", "tone", "tone_before"]):
 			m.append("%s: pack keys %s" % [kind, str(_keys(pk))])
 		var gathered := (pk["slots"] as Array).filter(func(s): return str(s["source"]) == "gathered").size()
 		if gathered != counts["taken"]:
@@ -223,6 +228,34 @@ static func _t_tone() -> Dictionary:
 		if str(pk["tone"]) != c[1] or int(pk["carried"]) != c[2] or int(pk["free"]) != c[3] or int(pk["capacity"]) != c[2] + c[3]:
 			m.append("%s: tone %s carried %s free %s capacity %s, expected %s" % [c[0], pk["tone"], pk["carried"],
 				pk["free"], pk["capacity"], str(c)])
+	return _result(m)
+
+
+## `tone_before` counts only what was carried before the event, with the same `warn_pack_free_at` rule.
+static func _t_tone_before() -> Dictionary:
+	var m: Array = []
+	# Nothing held, two finds fill a pack of two: tone full, tone_before plain.
+	var a: Dictionary = _build(_event("C2")["ctx"])["data"]["pack"]
+	if str(a["tone"]) != "full" or str(a["tone_before"]) != "plain":
+		m.append("empty before, full after: tone %s tone_before %s" % [a["tone"], a["tone_before"]])
+	# Three held in a pack of four, one find: one free slot before (near), full after.
+	var ctx: FlowContext = PickupStateTests._ctx(1, 4)
+	ItemPacksTests._hold(ctx, 3)
+	PickupStateTests._open(ctx, PickupStateTests._finds(["ph_weapon_a"]), "S", [])
+	var b: Dictionary = _build(ctx)["data"]["pack"]
+	if str(b["tone"]) != "full" or str(b["tone_before"]) != "near":
+		m.append("one free before: tone %s tone_before %s" % [b["tone"], b["tone_before"]])
+	# Two held in a pack of four, two finds: two free before. Plain at warn 1, near at warn 2.
+	for c in [[1, "plain"], [2, "near"]]:
+		var ctx2: FlowContext = PickupStateTests._ctx(2, 4)
+		ItemPacksTests._hold(ctx2, 2)
+		var inv: Dictionary = ConfigService.get_inventory_cfg(ctx2.config_service).duplicate(true)
+		inv["warn_pack_free_at"] = c[0]
+		ctx2.config_service.set("inv", inv)
+		PickupStateTests._open(ctx2, PickupStateTests._finds(["ph_weapon_a", "ph_relic_a"]), "S", [])
+		var pk: Dictionary = _build(ctx2)["data"]["pack"]
+		if str(pk["tone_before"]) != c[1]:
+			m.append("warn_pack_free_at %d: tone_before %s, expected %s" % [c[0], pk["tone_before"], c[1]])
 	return _result(m)
 
 
@@ -320,7 +353,7 @@ static func _t_tokens_and_directive() -> Dictionary:
 	return _result(m)
 
 
-static func _t_row_pointer() -> Dictionary:
+static func _t_row_chooser() -> Dictionary:
 	var m: Array = []
 	var ev := _event("C1", ["e1"])
 	var ctx: FlowContext = ev["ctx"]
@@ -341,13 +374,8 @@ static func _t_row_pointer() -> Dictionary:
 			if str(a["id"]) == str(r["id"]) and (str(r["status"]) != EmotionStatusLean.status_of(a) or str(r["name"]) != str(a["name"])
 					or int(r["standing"]) != int(a["rank"])):
 				m.append("row %s: status/name/standing differ from the actor" % r["id"])
-	var inv_cfg := ConfigService.get_inventory_cfg(ctx.config_service)
-	var seed_v := int(RealmService.get_active(ctx).get("seed", 0))
-	var want := PickupChooser.pointer(inv_cfg, seed_v, ctx.stage_id, int(rec["run_count"]), _SIT, 4,
-		(rec["standing_ids"] as Array).find(rec["chooser"]))
-	var pt: Dictionary = d["pointer"]
-	if str(pt) != str(want) or int(pt["n"]) != 4 or int(pt["start"]) == ids.find(str(rec["chooser"])):
-		m.append("pointer %s, expected %s (start must not be the chooser)" % [str(pt), str(want)])
+	if d.has("pointer"):
+		m.append("the retired pointer plan is still published (D-77)")
 	return _result(m)
 
 
@@ -570,8 +598,8 @@ static func _t_json_ints() -> Dictionary:
 	var ints: Array = []
 	for k in ["run_count", "swap_left", "destroy_left", "board_cols", "board_rows", "placement_seed"]:
 		ints.append([k, d[k]])
-	for k in ["n", "start", "laps"]:
-		ints.append(["pointer." + k, d["pointer"][k]])
+	ints.append(["pointer_look.path.path_slow_n", d["pointer_look"]["path"]["path_slow_n"]])
+	ints.append(["pointer_look.mote.trail_count", d["pointer_look"]["mote"]["trail_count"]])
 	for k in ["free", "capacity", "carried"]:
 		ints.append(["pack." + k, d["pack"][k]])
 	ints.append(["chooser.standing", d["chooser"]["standing"]])
@@ -697,6 +725,34 @@ static func _t_tried_and_slots() -> Dictionary:
 		for k in want[id]:
 			if str(by_id[id].get(k)) != str(want[id][k]):
 				m.append("slot %s: %s is '%s', expected '%s'" % [id, k, by_id[id].get(k), want[id][k]])
+	return _result(m)
+
+
+static func _t_stack_limit() -> Dictionary:
+	var m: Array = []
+	var ctx := PickupStateTests._ctx(2, 3)
+	ItemPacksTests._hold(ctx, 1)
+	ctx.save_data["inventory"]["pack_stacks"] = [{ "type_id": "ph_consumable_a", "kind": "consumable",
+		"quantity": 3, "slot": 1 }]
+	PickupStateTests._open(ctx, PickupStateTests._finds(["ph_consumable_a", "ph_charm_a"]))
+	var cfg := ConfigService.get_inventory_cfg(ctx.config_service)
+	var d: Dictionary = _build(ctx)["data"]
+	var held_rows: Array = InventoryService.snapshot(ctx.save_data, cfg)["pack_stacks"]
+	var want: int = int(held_rows[0]["stack_limit"])
+	if want <= 0 or want != InventoryService.stack_limit_of(cfg, "ph_consumable_a"):
+		m.append("InventoryService limit is %d, expected a positive value from stack_limit_of" % want)
+	var seen_stack := 0
+	var rows: Array = (d["finds"] as Array) + (d["pack"]["slots"] as Array)
+	for r: Dictionary in rows:
+		var is_stack := InventoryService.STACK_KINDS.has(str(r["kind"]))
+		if is_stack:
+			seen_stack += 1
+			if int(r.get("stack_limit", -1)) != want:
+				m.append("%s row of the stack has stack_limit %s, expected %d" % [r.get("id", r.get("find_id")), str(r.get("stack_limit")), want])
+		elif r.has("stack_limit"):
+			m.append("piece row %s has a stack_limit, 001a piece rows have none" % str(r.get("type_id")))
+	if seen_stack != 3:
+		m.append("saw %d stack rows (find, held stack slot, gathered slot), expected 3" % seen_stack)
 	return _result(m)
 
 

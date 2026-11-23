@@ -81,20 +81,23 @@ static func pack_free(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> i
 	return maxi(0, _cfg_int(cfg, "pack_capacity") - pack_count(save) - maxi(0, reserved))
 
 
-## Level rule: 0 none (nothing carried); 3 full (no free slot); 2 heavy (free <= `warn_pack_free_at`);
-## 1 light (anything else carried).
+## Level rule: 0 none (nothing carried); 3 full (no free slot); 2 heavy (free <= `warn_free_at`);
+## 1 light (anything else carried). Pure: the one place the rule lives.
+static func level_of(carried: int, capacity: int, warn_free_at: int) -> int:
+	var free := maxi(0, capacity - carried)
+	if carried <= 0:
+		return 0
+	if free <= 0:
+		return 3
+	return 2 if free <= warn_free_at else 1
+
+
 static func pack_load(save: Dictionary, cfg: Dictionary, reserved: int = 0) -> Dictionary:
 	var carried := pack_count(save) + maxi(0, reserved)
 	var capacity := _cfg_int(cfg, "pack_capacity")
 	var free := pack_free(save, cfg, reserved)
-	var level := 1
-	if carried <= 0:
-		level = 0
-	elif free <= 0:
-		level = 3
-	elif free <= _cfg_int(cfg, "warn_pack_free_at"):
-		level = 2
-	return { "carried": carried, "capacity": capacity, "free": free, "level": level }
+	return { "carried": carried, "capacity": capacity, "free": free,
+		"level": level_of(carried, capacity, _cfg_int(cfg, "warn_pack_free_at")) }
 
 
 ## How many different marks the UI has: `data.inventory.mark_count`, or 6 when it is missing or below 1.
@@ -873,6 +876,11 @@ static func def_of(cfg: Dictionary, type_id: String) -> Dictionary:
 	if defs is Dictionary and (defs as Dictionary).get(type_id, null) is Dictionary:
 		return ((defs as Dictionary)[type_id] as Dictionary).duplicate()
 	return {}
+
+
+## The stack limit of one type, the same value a `snapshot` stack row reports.
+static func stack_limit_of(cfg: Dictionary, type_id: String) -> int:
+	return _stack_limit(cfg, def_of(cfg, type_id))
 
 
 static func _stack_limit(cfg: Dictionary, def: Dictionary) -> int:

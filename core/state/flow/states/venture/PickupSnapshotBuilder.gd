@@ -12,6 +12,10 @@ extends RefCounted
 ## other side. `selected` = the id of the item whose details show (`pickup.select` writes it, `pickup.swap.start`
 ## reads it as the origin). The snapshot key `selected` is { id, side: "find"|"pack" }, or {} when the id is not
 ## valid now (a hidden find in the intro, an id of no find and no pack slot).
+## Board tiles (D-72, `PickupPlacement`, derived on every build, never saved): `row[].tile` and `finds[].tile` are
+## { col, row }. `finds[].cell` stays the index in the record. `camera_frame` is the camera tunables (D-73).
+## `pointer_look` is the feel values of the pointer mote (D-77): { path, tables, mote, items, reduced, buttons, timing, reasons, tempo }, see `pointer_look`.
+## `finds[]` and `pack.slots[]` of a stack kind also carry `stack_limit` (D-85), the value of a 001a stack row.
 ## `swap.targets` is keyed by BOTH sides: left find id -> legal pack ids, pack id -> legal left find ids.
 ##
 ## Actions (slot-keyed; no `nav.back`, the event has no way out except Continue):
@@ -90,11 +94,6 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		if bool(r["is_chooser"]):
 			chooser = { "id": r["id"], "name": r["name"], "standing": r["standing"] }
 
-	# UNWIRED (target: NEW "Realm seed survives a save reload"): realm.seed can lose digits through JSON; the pointer plan reads it
-	var realm_seed := int(RealmService.get_active(flow_ctx).get("seed", 0))
-	var pointer := PickupChooser.pointer(inv_cfg, realm_seed, flow_ctx.stage_id, int(record.get("run_count", 0)),
-		str(record.get("situation_id", "")), standing.size(), standing.find(chooser_id))
-
 	var directives_cfg := ConfigService.get_directives_cfg(flow_ctx.config_service)
 	var pack := _pack(save, inv_cfg, entries, record, stage)
 	var data := {
@@ -103,21 +102,186 @@ static func build(flow_ctx: FlowContext, t: int, session: Dictionary = {}) -> Di
 		"run_count": int(record.get("run_count", 0)),
 		"return_to": str(record.get("return_to", "")),
 		"chooser": chooser, "row": row, "fallen": record.get("fallen_names", []),
-		"pointer": pointer,
 		"order": record.get("order", []),
 		"selected": _selected(str(session.get("selected", "")), phase, record, pack),
 		"reason": str(record.get("reason", "")), "case": str(record.get("case", "")),
 		"frozen": bool(record.get("frozen", false)), "reaction": str(record.get("reaction", "")),
-		"finds": _find_rows(record, phase),
+		"finds": _find_rows(record, phase, inv_cfg),
 		"pack": pack,
 		"swap_left": 0 if swap_spent else 1,
 		"destroy_left": 0 if InventoryRules.discard_used(flow_ctx) else 1,
 		"swap": { "offered": offered, "reason_key": str(offer["reason_key"]), "spent": swap_spent,
 			"origin": origin, "target": target, "twins": twins, "targets": targets, "dropped": _dropped(record) },
 		"confirm_leave_items": DirectiveService.confirms_leave_items(directives_cfg, DirectiveService.active_id(save)),
+		"camera_frame": camera_frame(inv_cfg),
+		"pointer_look": pointer_look(inv_cfg),
 	}
 	data.merge(_board(flow_ctx))
+	_add_tiles(data, inv_cfg)
 	return { "type": FlowStateIds.PICKUP, "data": data, "actions": _actions(phase, offered), "meta": { "t": t } }
+
+
+## `data.camera_frame` { floor_zoom, margin_px, tween_seconds } from `inv_cfg.pickup.camera` (D-73): the framing the UI
+## applies at event start. A missing key reads as 0.75, 48 and 0.45; floor_zoom is clamped to 0.05..2.2, the other two
+## to 0 or more.
+static func camera_frame(inv_cfg: Dictionary) -> Dictionary:
+	var pk_v: Variant = inv_cfg.get("pickup", {})
+	var pk: Dictionary = pk_v if pk_v is Dictionary else {}
+	var cam_v: Variant = pk.get("camera", {})
+	var cam: Dictionary = cam_v if cam_v is Dictionary else {}
+	return { "floor_zoom": clampf(float(cam.get("floor_zoom", 0.75)), 0.05, 2.2),
+		"margin_px": maxf(0.0, float(cam.get("margin_px", 48))),
+		"tween_seconds": maxf(0.0, float(cam.get("tween_seconds", 0.45))) }
+
+
+## Rules of `data.inventory.pickup.pointer_look`, group -> key -> [default, lowest, highest, whole]. `ConfigValidator` reads
+## the same table. A lowest of 0.001 means "above 0": the UI divides by the key, or zero means nothing.
+## The `mote` sizes are pixels at 1280x720 with a 128 px wide tile. The scene has five trail sprites: more samples show no more.
+const POINTER_LOOK_RULES := {
+	"path": {
+		"pointer_start": [0.5, 0.0, INF, false], "pointer_lead": [0.30, 0.001, INF, false],
+		"hold": [0.60, 0.0, INF, false], "hold_reduced": [0.2, 0.0, INF, false],
+		"pointer_reduced": [0.5, 0.001, INF, false],
+		"walk_time_scale": [1.13, 0.001, INF, false], "walk_ease": [0.7, 0.0, 1.0, false],
+		"path_pace": [0.19, 0.001, INF, false], "path_first_k": [1.5, 0.001, INF, false],
+		"path_slow_n": [5, 1, INF, true], "path_slow_k": [1.25, 0.001, INF, false],
+		"path_final_k": [1.6, 0.001, INF, false], "path_turn_min": [0.26, 0.001, INF, false],
+		"path_turn_max": [0.64, 0.001, INF, false], "path_arc_fast": [0.18, 0.0, INF, false],
+		"path_arc_span": [0.72, 0.001, INF, false],
+	},
+	"mote": {
+		"rise": [16.0, 0.0, INF, false], "fade_scale_from": [0.5, 0.0, INF, false],
+		"above_head": [36.0, 0.0, INF, false], "arc_min": [6.0, 0.0, INF, false], "arc_max": [14.0, 0.001, INF, false],
+		"trail_count": [5, 0, 16, true], "trail_dt": [0.035, 0.0, INF, false], "trail_alpha": [0.30, 0.0, 1.0, false],
+		"trail_scale": [0.9, 0.0, INF, false], "trail_scale_step": [0.08, 0.0, INF, false],
+		"mote_radius": [30.0, 0.001, INF, false], "wind_up": [4.0, 0.0, INF, false],
+		"wind_up_len": [0.08, 0.001, INF, false], "sink": [20.0, 0.0, INF, false], "sink_len": [0.28, 0.001, INF, false],
+		"sink_scale": [0.4, 0.0, 1.0, false], "sink_fade_from": [0.4, 0.0, 0.99, false],
+		"halo_diameter_tiles": [0.703, 0.001, INF, false], "halo_alpha": [0.55, 0.0, 1.0, false],
+		"halo_start_alpha": [0.2, 0.0, 1.0, false], "halo_open": [0.30, 0.001, INF, false],
+		"halo_breath": [0.08, 0.0, 1.0, false], "halo_breath_period": [1.6, 0.001, INF, false],
+		"halo_fade_out": [0.30, 0.001, INF, false],
+		"brighten": [0.20, 0.0, INF, false], "brighten_len": [0.15, 0.001, INF, false],
+		"shadow_scale_y": [0.4, 0.001, INF, false], "shadow_alpha_drop": [0.4, 0.0, 1.0, false],
+		"shadow_scale_drop": [0.3, 0.0, 1.0, false], "shadow_radius": [14.0, 0.001, INF, false],
+		"skip_fade": [0.18, 0.001, INF, false],
+	},
+	"items": {
+		"reveal_len": [0.34, 0.001, INF, false], "carry_len": [0.34, 0.001, INF, false], "carry_hold": [0.19, 0.0, INF, false],
+		"carry_above": [28.0, 0.0, INF, false], "fly_len": [0.49, 0.001, INF, false], "step_gap": [0.26, 0.0, INF, false],
+		"arc_px": [34.0, 0.0, INF, false], "shadow_scale_drop": [0.3, 0.0, 1.0, false], "try_lift_extra": [0.1, 0.0, INF, false],
+		"try_bark_gap": [0.05, 0.0, INF, false], "bark_after_last": [0.15, 0.001, INF, false], "lit_fade": [0.25, 0.001, INF, false],
+	},
+	"buttons": {
+		"skip_in_from": [0.2, 0.0, INF, false], "skip_in_to": [0.35, 0.0, INF, false], "skip_out_len": [0.1, 0.0, INF, false],
+		"cont_in_len": [0.25, 0.0, INF, false],
+	},
+	"timing": {
+		"step_len": [0.45, 0.001, INF, false],
+		"walk_cap": [3.4, 0.001, INF, false],
+		"type_cps": [24.0, 0.001, INF, false],
+		"dist_scale_min": [0.6, 0.001, INF, false],
+		"dist_scale_max": [1.35, 0.001, INF, false],
+		"worth_dwell": [0.45, 0.0, INF, false],
+		"safe_pre_extra": [0.25, 0.0, INF, false],
+		"frozen_step": [0.35, 0.0, INF, false],
+		"frozen_wait": [1.35, 0.0, INF, false],
+		"idle_after_bark": [0.3, 0.0, INF, false],
+		"idle_after_deposit": [0.45, 0.0, INF, false],
+		"pulse_len": [0.4, 0.001, INF, false],
+		"ref_tiles_first": [3.0, 0.001, INF, false],
+		"ref_tiles_next": [2.0, 0.001, INF, false],
+	},
+	"reasons": {
+		"likes_walk_first": [0.7, 0.001, INF, false], "likes_walk_next": [0.6, 0.001, INF, false], "likes_touch": [0.1, 0.0, INF, false], "likes_ease_back": [1, 0, 1, true],
+		"worth_walk_first": [0.6, 0.001, INF, false], "worth_walk_next": [0.6, 0.001, INF, false], "worth_touch": [0.1, 0.0, INF, false], "worth_ease_back": [0, 0, 1, true],
+		"safe_walk_first": [0.95, 0.001, INF, false], "safe_walk_next": [0.7, 0.001, INF, false], "safe_touch": [0.1, 0.0, INF, false], "safe_ease_back": [0, 0, 1, true],
+		"bold_walk_first": [0.5, 0.001, INF, false], "bold_walk_next": [0.4, 0.001, INF, false], "bold_touch": [0.1, 0.0, INF, false], "bold_ease_back": [1, 0, 1, true],
+		"fit_walk_first": [0.45, 0.001, INF, false], "fit_walk_next": [0.45, 0.001, INF, false], "fit_touch": [0.0, 0.0, INF, false], "fit_ease_back": [0, 0, 1, true],
+	},
+	"tempo": {
+		"pre_1": [0.6, 0.0, INF, false],
+		"pre_5": [0.35, 0.0, INF, false],
+		"pre_9": [0.1, 0.0, INF, false],
+		"hitch_1": [0.12, 0.0, INF, false],
+		"hitch_5": [0.06, 0.0, INF, false],
+		"hitch_9": [0.0, 0.0, INF, false],
+		"pace_1": [0.8, 0.001, INF, false],
+		"pace_5": [0.95, 0.001, INF, false],
+		"pace_9": [1.0, 0.001, INF, false],
+		"delay_1": [0.2, 0.0, INF, false],
+		"delay_5": [0.1, 0.0, INF, false],
+		"delay_9": [0.0, 0.0, INF, false],
+	},
+	"reduced": {
+		"step_len": [0.15, 0.001, INF, false], "reveal_len": [0.15, 0.001, INF, false], "leg_len": [0.15, 0.001, INF, false],
+		"carry_len": [0.15, 0.001, INF, false], "fly_len": [0.15, 0.001, INF, false], "frozen_wait": [0.4, 0.0, INF, false],
+	},
+}
+## Authored arrival times of the racetrack by "n:land_index" (seconds after the path clock starts). A table is used only when
+## its length is the move count, 3n - 1 - land_index; any other row gets the slow-down law of the `path` keys.
+const POINTER_LOOK_TABLES := {
+	"5:2": [0.58, 0.78, 0.96, 1.14, 1.40, 1.58, 1.77, 2.01, 2.31, 2.81, 3.19, 3.79],
+	"3:1": [0.68, 0.96, 1.42, 1.72, 2.06, 2.70, 3.60],
+}
+
+
+## `data.pointer_look` { path, tables, mote, items, reduced, buttons, timing, reasons, tempo } from `inv_cfg.pickup.pointer_look` (D-77). Presentation only. A missing or
+## non-number key reads its default; a number is clamped into its range; whole keys are ints. turn_max and arc_max never
+## read below turn_min and arc_min. A missing `tables` reads the defaults; a given `tables` replaces them, and an entry that
+## is not an Array of numbers, or whose times do not rise from above `pointer_lead`, is dropped.
+static func pointer_look(inv_cfg: Dictionary) -> Dictionary:
+	var pk_v: Variant = inv_cfg.get("pickup", {})
+	var pk: Dictionary = pk_v if pk_v is Dictionary else {}
+	var pl_v: Variant = pk.get("pointer_look", {})
+	var pl: Dictionary = pl_v if pl_v is Dictionary else {}
+	var out := {}
+	for group: String in POINTER_LOOK_RULES:
+		var src_v: Variant = pl.get(group, {})
+		var src: Dictionary = src_v if src_v is Dictionary else {}
+		var vals := {}
+		for key: String in POINTER_LOOK_RULES[group]:
+			var rule: Array = POINTER_LOOK_RULES[group][key]
+			var v: Variant = src.get(key, null)
+			var x := float(v) if (typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT) and is_finite(float(v)) else float(rule[0])
+			x = clampf(x, float(rule[1]), float(rule[2]))
+			vals[key] = int(x) if bool(rule[3]) else x
+		out[group] = vals
+	out["path"]["path_turn_max"] = maxf(out["path"]["path_turn_max"], out["path"]["path_turn_min"])
+	out["mote"]["arc_max"] = maxf(out["mote"]["arc_max"], out["mote"]["arc_min"])
+	out["timing"]["dist_scale_max"] = maxf(out["timing"]["dist_scale_max"], out["timing"]["dist_scale_min"])
+	var tables: Dictionary = POINTER_LOOK_TABLES.duplicate(true)
+	if pl.get("tables", null) is Dictionary:
+		tables = {}
+		for key: Variant in pl["tables"]:
+			var arr_v: Variant = pl["tables"][key]
+			if arr_v is Array and (arr_v as Array).all(func(x: Variant) -> bool:
+					return (typeof(x) == TYPE_INT or typeof(x) == TYPE_FLOAT) and is_finite(float(x))):
+				var times: Array = (arr_v as Array).map(func(x: Variant) -> float: return float(x))
+				var prev: float = out["path"]["pointer_lead"]
+				var rising := true
+				for t: float in times:
+					rising = rising and t > prev
+					prev = t
+				if rising:
+					tables[str(key)] = times
+	out["tables"] = tables
+	return out
+
+
+## Adds `row[].tile` and `finds[].tile` (board tiles, `PickupPlacement`; derived on every build, never saved).
+## `cell` stays the index of a find in the record.
+static func _add_tiles(data: Dictionary, inv_cfg: Dictionary) -> void:
+	var row: Array = data["row"]
+	var finds: Array = data["finds"]
+	var placed := PickupPlacement.place(data["terrain"] as Dictionary, int(data["board_cols"]), int(data["board_rows"]),
+		int(data["placement_seed"]), str(data["situation_id"]), int(data["run_count"]), data["actors"] as Array,
+		row.map(func(r: Dictionary) -> String: return str(r["id"])),
+		finds.map(func(f: Dictionary) -> String: return str(f["find_id"])), inv_cfg)
+	for r: Dictionary in row:
+		r["tile"] = (placed["row"] as Dictionary)[str(r["id"])]
+	for f: Dictionary in finds:
+		f["tile"] = (placed["finds"] as Dictionary)[str(f["find_id"])]
 
 
 static func _selected(id: String, phase: String, record: Dictionary, pack: Dictionary) -> Dictionary:
@@ -141,7 +305,7 @@ static func result_of(record: Dictionary) -> Dictionary:
 		return {}
 	var out := { "taken": [], "left": [], "lost": [], "dropped": {},
 		"swap_used": not (record.get("swap", {}) as Dictionary).is_empty() }
-	for f: Dictionary in _find_rows(record, PHASE_IDLE):
+	for f: Dictionary in _find_rows(record, PHASE_IDLE, {}):
 		var bucket := str(f["status"]) if str(f["status"]) != STATUS_TRIED else STATUS_LEFT
 		(out[bucket] as Array).append(_item_row(f))
 	var dropped := _dropped(record)
@@ -200,7 +364,7 @@ static func _actions(phase: String, offered: bool) -> Dictionary:
 ## Status: taken (in the pack), tried (held up, did not fit), left, lost. A frozen chooser loses every find
 ## (D-43). A hidden find (intro) is not selectable (D-45), so `revealed` is the whole rule. `pick_index` = the
 ## place in the taken list (pick order), -1 when not taken. Ints are cast: a JSON reload turns them into floats.
-static func _find_rows(record: Dictionary, phase: String) -> Array:
+static func _find_rows(record: Dictionary, phase: String, inv_cfg: Dictionary) -> Array:
 	var taken: Array = record.get("taken", [])
 	var frozen := bool(record.get("frozen", false))
 	var out: Array = []
@@ -217,7 +381,14 @@ static func _find_rows(record: Dictionary, phase: String) -> Array:
 			"kind": str(f.get("kind", "")), "grade": str(f.get("grade", "")), "quantity": int(f.get("quantity", 1)),
 			"cell": int(f.get("cell", 0)), "status": status, "revealed": phase != PHASE_INTRO,
 			"pick_index": taken.find(fid) })
+		_add_limit(out[-1], inv_cfg)
 	return out
+
+
+## `stack_limit` on stack kinds only, as a 001a stack row has it; a piece row has no such key.
+static func _add_limit(row: Dictionary, inv_cfg: Dictionary) -> void:
+	if InventoryService.STACK_KINDS.has(str(row["kind"])):
+		row["stack_limit"] = InventoryService.stack_limit_of(inv_cfg, str(row["type_id"]))
 
 
 ## Every listed pack entry (held pieces and stacks, then the open item rows of this stage). `free` and `tone`
@@ -245,12 +416,21 @@ static func _pack(save: Dictionary, inv_cfg: Dictionary, entries: Array, record:
 			var item: Dictionary = items[0] if not items.is_empty() and items[0] is Dictionary else {}
 			slot.merge({ "kind": str(item.get("kind", "")), "grade": str(item.get("grade", "")),
 				"quantity": int(item.get("quantity", 1)), "source": "gathered", "mark_index": -1 })
+		_add_limit(slot, inv_cfg)
 		slots.append(slot)
 	var load_info := PickupCase.pack_room(save, inv_cfg)
-	var level := int(load_info["level"])
-	return { "slots": slots, "free": int(load_info["free"]), "capacity": int(load_info["capacity"]),
-		"carried": int(load_info["carried"]),
-		"tone": TONE_FULL if level >= 3 else (TONE_NEAR if level == 2 else TONE_PLAIN) }
+	var carried := int(load_info["carried"])
+	var capacity := int(load_info["capacity"])
+	var gathered := slots.filter(func(s: Dictionary) -> bool: return str(s["find_id"]) != "").size()
+	var before := InventoryService.level_of(maxi(0, carried - gathered), capacity,
+		int(inv_cfg.get("warn_pack_free_at", 0)))
+	return { "slots": slots, "free": int(load_info["free"]), "capacity": capacity, "carried": carried,
+		"tone": _tone_of(int(load_info["level"])), "tone_before": _tone_of(before) }
+
+
+## `tone_before` is the tone without the finds of this event, for the intro phase.
+static func _tone_of(level: int) -> String:
+	return TONE_FULL if level >= 3 else (TONE_NEAR if level == 2 else TONE_PLAIN)
 
 
 static func _row_entry(actor: Dictionary, is_chooser: bool) -> Dictionary:

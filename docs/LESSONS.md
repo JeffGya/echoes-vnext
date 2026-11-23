@@ -13,6 +13,19 @@ Reviewed at the start of each session.
 
 ## Lessons (most recent first)
 
+### 47 — Share one component whenever possible; copy only when Jeff says so
+
+**Rule:** When two screens need the same UI block, build or extract ONE shared component and use it in both. Do not copy a block into a second scene. Copy only when Jeff says so.
+**Why:** Jeff, 2026-11-22 (V2-ITEM-001b U7): "Whenever possible I like to share a component unless I state otherwise." The builder proposed a copied scene of the 001a item detail block. Jeff chose a shared component. A copy means every later look or text change must be made in two places.
+**How to apply:**
+- Before you write a UI brief or a proposal, grep for an existing block that does the same job. Name it and plan to reuse or extract it.
+- Extraction may touch a built screen. The built screen keeps its look, node names, text and tests. Re-run the suites of both users. Add a test that both users build from the same component.
+- If the extraction forces a visible change in the built screen, stop and ask Jeff.
+- Do not offer "copy" as the default option. Offer it only with the cost named, as the alternative.
+**Mistake count:** 1 (U7 proposal defaulted to a copy)
+
+---
+
 ### 46 — A green suite proved nothing in these cases; a deliberate rule break found each one
 
 **Rule:** For every rule a story adds, break the rule on purpose in the code (a mutation), run the suite, and expect a red test. If the suite stays green, the rule has no test. Add the test, then restore the code and compare it with `cmp`.

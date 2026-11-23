@@ -21,7 +21,6 @@ const SCALE_EPS := 0.000001
 ## uses the first band. NO_CAP when the band list is missing or empty.
 static func cap_for_scale(inv_cfg: Dictionary, realm_scale: float) -> int:
 	# UNWIRED (target: V2-ITEM-002): the bands above realm.02 (1.75, 2.5, 3.5) are placeholders until realm 3 exists
-	# UNWIRED (target: NEW "Pickup placement on the board"): the cap has no limit by free board cells and no piles rule
 	var bands_v: Variant = inv_cfg.get("finds_cap_by_realm_scale", null)
 	if not (bands_v is Array) or (bands_v as Array).is_empty():
 		return NO_CAP

@@ -1,0 +1,204 @@
+{
+ "_header": "All lines are AGENT-WRITTEN PROPOSALS until Jeff reviews all copy at the end (ANSWERS #89, D-56). Source mockup = pickup-event-playable.html; source agent = written for a case the mockup does not show.",
+ "bark.froze.0": {
+  "text": "Just grab it. Grab it and go.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.afraid.0": {
+  "text": "I want to leave here.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.full.0": {
+  "text": "My pack is full.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.full.1": {
+  "text": "No room in the pack. I can't take more.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.fits.0": {
+  "text": "Room for all of it. Good.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.fits.1": {
+  "text": "That's everything. Easy.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.some.0": {
+  "text": "Took what I could carry.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.some.1": {
+  "text": "I wish I had more room.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.some_low.0": {
+  "text": "Is this one okay? I'll take this one.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "bark.some_high.0": {
+  "text": "This one. Leave the rest.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "line.swap_done": {
+  "text": "Swapped. The other one stays behind.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "line.pick": {
+  "text": "Pick one to trade.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.swap": {
+  "text": "Swap",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.swap_confirm": {
+  "text": "Swap them",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.keep": {
+  "text": "Keep as it is",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.continue": {
+  "text": "Continue",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.skip": {
+  "text": "Skip",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.back": {
+  "text": "Back",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.close": {
+  "text": "Close",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.leave": {
+  "text": "Leave",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "btn.stay": {
+  "text": "Stay",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "leave.prompt": {
+  "text": "Leave these behind?",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "where.ground": {
+  "text": "On the ground",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "where.carried": {
+  "text": "Carried",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "count.one": {
+  "text": "1 piece",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "allow.swap_left": {
+  "text": "1 swap left on this path.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "allow.swap_none": {
+  "text": "No swap left.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "refuse.used": {
+  "text": "The swap is used.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "refuse.has_room": {
+  "text": "The pack has room.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "refuse.nothing_left": {
+  "text": "Nothing is left to swap.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "refuse.same": {
+  "text": "These two are the same.",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "refuse.no_target": {
+  "text": "Nothing here can be swapped.",
+  "status": "proposal",
+  "source": "agent"
+ },
+ "refuse.frozen": {
+  "text": "",
+  "status": "proposal",
+  "source": "agent",
+  "intentionally_empty": true
+ },
+ "a11y.sealed": {
+  "text": "Sealed item",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "a11y.empty_slot": {
+  "text": "Empty slot",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "a11y.on_ground": {
+  "text": ", on the ground",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "a11y.held_up": {
+  "text": ", held up",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "a11y.in_pack": {
+  "text": ", in the pack",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "a11y.details": {
+  "text": "Item details",
+  "status": "proposal",
+  "source": "mockup"
+ },
+ "a11y.board": {
+  "text": "Combat board after the fight",
+  "status": "proposal",
+  "source": "mockup"
+ }
+}
