@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echoes · Combat skills</title>
+<style>
+:root{color-scheme:dark;background:#201b18;color:#fff1d8;font:15px/1.5 system-ui,sans-serif;--gold:#f1cb87;--muted:#d0bba5;--line:#66513e}
+*{box-sizing:border-box}
+body{margin:0}
+main{max-width:1300px;margin:auto;padding:26px 18px 44px}
+h1,h2,h3,p,figure{margin:0}
+h1,h2{font:500 clamp(1.8rem,4vw,3rem)/1.13 Georgia,serif}
+h2{font-size:1.9rem}
+h3{font-size:1rem}
+a{color:var(--gold)}
+header p,.note,figcaption{color:var(--muted)}
+header p{margin-top:6px}
+nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:6px;margin:20px 0}
+button,select{color:inherit;background:#332920;border:1px solid #896d51;border-radius:4px;padding:7px 11px;min-height:44px;font:inherit;cursor:pointer}
+button[aria-pressed=true],#play{background:var(--gold);color:#251a13;font-weight:700}
+:focus-visible{outline:2px solid #badff0;outline-offset:3px}
+.skill-head{display:grid;gap:5px;margin-bottom:12px}
+#classification{color:var(--gold);font-size:.82rem}
+.controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;background:#2b231e;border:1px solid var(--line);padding:8px 11px}
+.controls label{font-size:.86rem}
+#timeline{flex:1;min-width:130px;min-height:34px;accent-color:var(--gold)}
+#stage{min-height:1.6em;margin:8px 0;font-weight:690;color:var(--gold)}
+.result{margin:10px 0 0;padding:8px 12px;border-left:3px solid var(--gold);background:#30261e}
+.result strong{color:var(--gold)}
+.boards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+figure{border:1px solid var(--line);background:#2a231e}
+figcaption{padding:7px 11px;font-weight:700}
+svg{display:block;width:100%;height:auto;background:#392820}
+.observer{padding:7px 11px;min-height:48px;font-size:.84rem;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.observer strong{color:var(--gold)}
+.chip{font-size:.77rem;border-radius:4px;padding:1px 6px;background:#5a6878;color:#fff7e6}
+.chip[data-emotion=Grounded]{background:#2a5c45}
+.chip[data-changed=true]{box-shadow:0 0 0 2px #7eb799;transform:translateY(-1px)}
+.note{margin-top:12px}
+footer{display:flex;flex-wrap:wrap;gap:14px;margin-top:18px;font-size:.88rem}
+[hidden]{display:none!important}
+@media(max-width:660px){.boards{grid-template-columns:1fr}nav{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Combat skills</h1>
+  <p data-study-status="unfinished"><strong>Unfinished.</strong> Paused for a fuller skill rework.</p>
+  <p>Compare skills any Calling can use in the updated design. The study uses working action names.</p>
+</header>
+<nav id="skills" aria-label="Choose a skill"></nav>
+<section aria-labelledby="skill-name">
+  <div class="skill-head">
+    <p id="classification"></p>
+    <h2 id="skill-name"></h2>
+    <p id="summary"></p>
+  </div>
+  <div class="controls" aria-label="Study playback">
+    <button id="play" type="button">Play</button>
+    <label for="state">Example</label><select id="state"></select>
+    <label for="timeline">Timeline</label><input id="timeline" type="range" min="0" max="1" step=".01" value="0">
+  </div>
+  <p id="stage"></p>
+  <div class="boards">
+    <figure>
+      <figcaption>Storybook</figcaption>
+      <svg id="storybook" viewBox="292 155 420 285" role="img" aria-label="Storybook action preview"></svg>
+      <div class="observer" id="storybook-observer"></div>
+    </figure>
+    <figure>
+      <figcaption>Tokens</figcaption>
+      <svg id="tokens" viewBox="292 155 420 285" role="img" aria-label="Token action preview"></svg>
+      <div class="observer" id="tokens-observer"></div>
+    </figure>
+  </div>
+  <p class="result" id="result" hidden><strong id="result-name"></strong> <span id="result-detail"></span></p>
+  <p id="detail" class="note"></p>
+</section>
+<details class="note">
+  <summary>Reference games</summary>
+  <p>XCOM 2’s GREMLIN gives support an identifiable delivery. Gears Tactics’ Overwatch makes the affected space explicit. Chaos Gate’s action events and over-unit icons distinguish a move from its consequence. In this study, a named action appears over the board, the gesture or footprint identifies what the Echo is doing, and the result stays with the recipient or destination.</p>
+  <ul>
+    <li><a href="https://www.pokemon.com/us/features/rock-your-toughest-foes-with-lycanroc">Pokémon · Swords Dance raises Attack before a later hit</a></li>
+    <li><a href="https://new-guide.fire-emblem-heroes.com/en-US/feh-2490.html">Fire Emblem Heroes · status icons, duration, and combat effects</a></li>
+    <li><a href="https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/268500/manuals/XCOM2_Manual_English.pdf?t=1646157374">XCOM 2 · official manual</a></li>
+    <li><a href="https://www.gearsofwar.com/en-us/news/dev-blog-gameplay/">Gears Tactics · The Coalition’s gameplay breakdown</a></li>
+    <li><a href="https://steamcommunity.com/app/1611910/announcements/">Chaos Gate – Daemonhunters · official combat presentation updates</a></li>
+  </ul>
+</details>
+<footer>
+  <a href="combat-visual-inventory.md#4-authored-skills--all-14-definitions">Combat inventory</a>
+  <a href="combat-actors-objects-study.html#storybook-title">Storybook encounter</a>
+  <a href="combat-battlefield-overlay-study.html">Battlefield overlays</a>
+  <a href="combat-shared-actions-mockup.html">Shared actions</a>
+</footer>
+<noscript><p>Enable JavaScript to play the comparisons.</p></noscript>
+</main>
+<script src="combat-storybook-board.js"></script>
+<script src="combat-storybook-figures.js"></script>
+<script src="combat-skills-study.js"></script>
+</body>
+</html>
