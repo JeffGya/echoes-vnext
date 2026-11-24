@@ -45,7 +45,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible,su
 .roster button{text-align:left;min-width:118px;padding:5px 9px;font-size:13px;line-height:1.3}
 .roster button[aria-pressed=true]{box-shadow:inset 0 -2px var(--blue);background:#263137}
 .roster small{display:block;color:var(--muted)}
-.sample-pair{display:flex;gap:10px;margin:9px 0 12px}
+.sample-pair{display:flex;flex-wrap:wrap;gap:10px;margin:9px 0 12px}
 .sample-pair figure{margin:0;text-align:center;color:var(--muted);font-size:11px}
 .sample-pair svg{display:block;background:#6e3128;border:1px solid #7d5642}
 .review{margin:22px 0;padding:14px 0;border-block:1px solid var(--line)}
@@ -54,6 +54,10 @@ button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible,su
 .carry-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 28px;margin-top:12px}
 .carry h3{font-size:14px;margin-bottom:3px}
 .carry-grid p{color:var(--muted);font-size:13px}
+.concept{margin:0 0 24px}
+.concept img{display:block;width:100%;height:auto;margin:10px 0;border:1px solid var(--line)}
+.concept figcaption{display:grid;gap:6px;color:var(--muted)}
+.concept strong{color:var(--cream)}
 .reference summary{cursor:pointer;min-height:48px;padding:12px 0;color:var(--gold);font-weight:700}
 .table-wrap{overflow:auto}
 table{width:100%;min-width:680px;border-collapse:collapse;font-size:13px}
@@ -66,6 +70,7 @@ tbody td:nth-child(3){width:17%;color:var(--muted)}
 footer{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:20px;font-size:13px}
 @media(max-width:680px){main{padding:13px 12px 34px}.masthead,.study,.carry-grid{grid-template-columns:1fr}.study section+section{border-left:0;border-top:1px solid var(--line)}}
 </style>
+<link rel="stylesheet" href="combat-storybook-preview.css">
 </head>
 <body>
 <main>
@@ -78,9 +83,70 @@ footer{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:20px;font-size:13px}
   <a href="#coverage">ACT-01–24 reference</a>
 </header>
 
+<section class="storybook-preview" aria-labelledby="storybook-title">
+  <header class="storybook-heading">
+    <div>
+      <h2 id="storybook-title">Storybook encounter</h2>
+      <p>Watch a scripted Purify Shrine battle or jump to a moment.</p>
+    </div>
+    <a href="#battlefield">Compare static treatments</a>
+  </header>
+  <div class="storybook-controls" role="group" aria-label="Study playback">
+    <div class="storybook-transport">
+      <button type="button" id="storybook-play" aria-controls="storybook-stage">Play</button>
+      <button type="button" id="storybook-restart" aria-controls="storybook-stage">Restart</button>
+      <label for="storybook-speed">Speed</label>
+      <select id="storybook-speed">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.5">1.5×</option>
+      </select>
+      <label for="storybook-jump">Jump to</label>
+      <select id="storybook-jump"></select>
+    </div>
+    <div class="storybook-timeline">
+      <div class="storybook-timeline-read">
+        <label for="storybook-scrub">Timeline</label>
+        <p id="storybook-moment">Encounter start</p>
+        <span id="storybook-time"></span>
+      </div>
+      <input id="storybook-scrub" type="range" min="0" max="1" value="0" step="0.01">
+    </div>
+  </div>
+  <div class="storybook-view">
+    <div class="storybook-objective">
+      <p id="storybook-objective">Protect the Shrine</p>
+      <p id="storybook-round"></p>
+    </div>
+    <svg id="storybook-stage" viewBox="0 0 1000 570" width="1000" height="570" role="img" aria-labelledby="storybook-board-title">
+      <title id="storybook-board-title">Purify Shrine isometric battlefield</title>
+      <g id="storybook-map"></g>
+      <g id="storybook-actors"></g>
+      <g id="storybook-cues"></g>
+    </svg>
+    <aside class="storybook-observer" aria-labelledby="storybook-observer-title">
+      <h3 id="storybook-observer-title">Observer</h3>
+      <div id="storybook-observer"></div>
+    </aside>
+  </div>
+</section>
+
+<section aria-labelledby="concept-title">
+  <p class="eyebrow">Art proposal</p>
+  <h2 id="concept-title">Storybook figures on the battlefield</h2>
+  <figure class="concept">
+    <img src="../concept_art/combat/actors_objects_storybook_board_v02.png" width="1536" height="1024" alt="Isometric clay battlefield with two human Echoes, a floating spirit, a thin faceless Dust Wanderer, a low four-legged stone Vale Brute, a cloth Shrine, a chipped Relic and a carved Charge.">
+    <figcaption>
+      <p><strong>Echoes and spirits.</strong> Echoes have planted feet, visible faces and large cloth shapes. The guided spirit keeps its human outline with a lifted hem and gold edge.</p>
+      <p><strong>Enemies.</strong> The Dust Wanderer leans into a narrow, torn shape. The Vale Brute sits low on heavy stone limbs. Use different body plans across the enemy roster so each reads before colour or initials.</p>
+      <p><strong>Objectives.</strong> The Shrine is a low shelter, the Relic a small fragment close to the ground, and the Charge a tall, bound post. Keep each base within its cell.</p>
+      <p>The painted plate is enlarged. <a href="#battlefield">Try the simplified shapes at board scale</a> with health, Guard and targeting visible.</p>
+    </figcaption>
+  </figure>
+</section>
+
 <section class="carry" aria-labelledby="carry-title">
-  <p class="eyebrow">Approved carry-forward</p>
-  <h2 id="carry-title">Decisions already in place</h2>
+  <h2 id="carry-title">Decisions from the token studies</h2>
   <div class="carry-grid">
     <div>
       <h3>Token shape and role</h3>
@@ -105,11 +171,12 @@ footer{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:20px;font-size:13px}
   </div>
 </section>
 
-<section aria-label="Battlefield recognition study">
+<section id="battlefield" aria-label="Battlefield recognition study">
   <div class="toolbar">
-    <div class="segment" role="group" aria-label="Token treatment">
-      <button id="baseline" aria-pressed="true">Approved reference</button>
-      <button id="proposed" aria-pressed="false">Proposed interiors</button>
+    <div class="segment" role="group" aria-label="Board artwork">
+      <button data-treatment="storybook" aria-pressed="true">Storybook shapes</button>
+      <button data-treatment="interiors" aria-pressed="false">Token interiors</button>
+      <button data-treatment="baseline" aria-pressed="false">Approved tokens</button>
     </div>
     <label><span class="label-text">Board</span><select id="scene"></select></label>
     <label id="state-control" hidden><span class="label-text">State</span><select id="state"></select></label>
@@ -130,8 +197,8 @@ footer{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:20px;font-size:13px}
 <div class="study" aria-label="Study controls outside the battlefield">
   <section aria-labelledby="roster-title">
     <p class="eyebrow">Study roster</p>
-    <h2 id="roster-title">Inspect a token</h2>
-    <p class="muted">Select on the board or in the roster to see the two treatments.</p>
+    <h2 id="roster-title">Inspect an actor or object</h2>
+    <p class="muted">Select on the board or in the roster to compare all three treatments.</p>
     <div id="roster" class="roster"></div>
   </section>
   <section aria-live="polite" aria-atomic="true">
@@ -146,7 +213,7 @@ footer{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:20px;font-size:13px}
 <div class="review">
   <p class="eyebrow">What to look for</p>
   <p>Hide initials and switch treatments. Can you pick out the two spirit roles, tell the enemy types apart and find the objective before the action target pulls your eye?</p>
-  <p class="muted">The mixed board is an authored recognition plate. The objective boards show selected static states, and the inspector is a review tool outside the battlefield. Both modes use the same low object initials so you can compare the proposed interiors directly.</p>
+  <p class="muted">Switch objective states to compare the same situation across treatments. The storybook figures are simplified placeholders drawn from the painted concept. The boards are static snapshots.</p>
 </div>
 
 <details id="coverage" class="reference">
@@ -164,8 +231,11 @@ footer{display:flex;gap:8px 20px;flex-wrap:wrap;margin-top:20px;font-size:13px}
   <a href="combat-objectives-mockup.html">Locked Objectives</a>
   <a href="combat-calling-signatures-study.html">Locked Calling signatures</a>
 </footer>
-<noscript><p>Enable JavaScript to compare the token treatments.</p></noscript>
+<noscript><p>Enable JavaScript to play the scripted encounter and compare the token treatments.</p></noscript>
 </main>
+<script src="combat-storybook-board.js"></script>
+<script src="combat-storybook-figures.js"></script>
+<script src="combat-storybook-encounter.js"></script>
 <script>
 'use strict';
 const byId = id => document.getElementById(id);
@@ -186,6 +256,58 @@ const objects = {
   relic: '<path d="M0,-14 L11,-5 L9,9 L0,14 L-9,9 L-11,-5 Z" fill="#ebd8b6" stroke="#39333a" stroke-width="1.5"/><path d="M0,-10 V10 M-7,-4 L0,1 L7,-4" stroke="#55464a" fill="none" stroke-width="1.5"/>',
   charge: '<path d="M-10,-14 H10 L8,-5 H5 V8 H9 V14 H-9 V8 H-5 V-5 H-8 Z" fill="#ebd8b6" stroke="#39333a" stroke-width="1.5"/><path d="M-6,-9 H6 M-4,1 H4" stroke="#55464a" stroke-width="1.5"/>'
 };
+const treatments = {
+  storybook: 'Storybook shapes',
+  interiors: 'Token interiors',
+  baseline: 'Approved tokens'
+};
+
+// Coordinates are relative to the cell centre at ground level.
+const figures = {
+  ama: '<path fill="#513329" d="M-9-16 -15-1 -8 0 0-14 7-2 14-2 9-19Z"/><path fill="#356b70" d="M-8-36 9-34 12-16 4-12 -4-17 -14-12 -11-27Z"/><path fill="#c78653" d="M-9-33 -18-23 -15-21 -6-27M9-33 17-24 22-25 23-22 16-19 7-26"/><path fill="#e1b178" d="M-8-35 7-36 10-30 -10-20 -11-25Z"/><path fill="#9c613e" d="M-7-45Q-3-52 6-47L9-42 4-35 -4-36Z"/><path fill="#332622" d="M-8-41Q-14-43-11-49Q-17-55-10-58Q-7-63-2-59Q5-62 8-55L6-48 -1-49 -5-43Z"/><path fill="none" stroke="#dfad67" d="M-5-22 -2-18M2-26 5-22M7-29 9-26"/>',
+  esi: '<path fill="#5c382d" d="M-11-16 -16-1 -7 0 -2-12 6-12 8 0 17-1 13-17Z"/><path fill="#496873" d="M-12-35 10-36 16-14 3-11 -14-16Z"/><path fill="#af754e" d="M-12-32 -19-20 -14-17 -7-27M11-32 18-25 21-29 24-25 19-19 10-23"/><path fill="#e4c598" d="M-11-36 10-33 13-25 -11-21 -15-26Z"/><path fill="#ac714e" d="M-9-44Q-8-53 1-53Q10-52 10-44L4-36 -4-37Z"/><path fill="#322421" d="M-10-43Q-14-52-6-55Q1-59 8-54L11-47 3-49 -3-45Z"/><path fill="none" stroke="#a35f48" d="M-9-23 8-26"/>',
+  ally: '<path fill="#54382d" d="M-9-18 -12-2 -18-1 -18 1 -5 1 -1-15 5-12 8 0 18 0 17-3 13-5 12-19Z"/><path fill="#789eaa" d="M-12-39 11-38 15-15 3-13 -4-17 -15-13Z"/><path fill="#ac7352" d="M-12-34 -20-22 -17-18 -9-27M10-34 19-23 22-24 22-20 16-18 8-28"/><path fill="#cbd3bc" d="M-8-39 8-36 12-30 -12-22 -13-27Z"/><path fill="#b97d54" d="M-7-48Q-3-56 6-52L10-46 6-39 -4-39Z"/><path fill="#3e2c29" d="M-8-45 -9-52 -2-56 7-54 10-50 1-49 -4-45Z"/>',
+  spirit: '<path fill="#e4b76d" stroke="#f6d691" d="M-7-37 8-36 13-20 5-15 10-12 -2-9 -9-4 -6-13 -14-9 -10-24 -17-19 -21-22Z"/><path fill="#f3dcaa" d="M-8-35 6-34 8-26 -9-18 -10-23Z"/><path fill="#a36b4d" d="M-6-46 2-51 9-46 6-38 -3-37Z"/><path fill="#524137" stroke="#edc780" d="M-8-43Q-13-45-10-53Q-3-58 5-53L8-48 0-50 -4-44Z"/>',
+  escort: '<path fill="#5e4637" stroke="#eac77e" d="M-9-18 -13-1 -6 0 1-14 7-1 15 0 12-18Z"/><path fill="#60878a" stroke="#eac77e" d="M-8-37 9-36 15-18 4-13 -2-16 -13-14 -12-26 -19-22 -21-25Z"/><path fill="#ebce99" d="M-9-36 7-33 9-29 -10-22Z"/><path fill="#a36b4d" d="M-6-46 2-51 9-46 6-38 -3-37Z"/><path fill="#524137" stroke="#edc780" d="M-8-43Q-13-45-10-53Q-3-58 5-53L8-48 0-50 -4-44Z"/>',
+  dw: '<path fill="#835640" d="M-10-29 -15-13 -21 0 -14-3 -1-20 12-10 18 0 21-1 15-15 6-25Z"/><path fill="#b18156" d="M-18-43 -9-54 1-48 5-41 21-38 27-29 35-30 28-24 16-29 10-28 18-18 3-24 11-14 -4-22 -10-28Z"/><path fill="#47312b" d="M-15-43 -9-48 -2-40 -6-32 -12-35Z"/><path stroke="#ffb761" d="M-10-44 -7-37"/><path fill="none" stroke="#e5af78" d="M2-38 14-35 19-30M-5-30 4-26"/>',
+  ds: '<path fill="#7d5846" d="M-10-21 -17-3 -9 0 -1-17 8-1 17-3 11-24Z"/><path fill="#9d624a" d="M-21-35 -14-45 15-45 23-34 15-24 9-17 -8-17 -16-25Z"/><path fill="#c58b63" d="M-15-45 -12-54 13-54 16-46 10-36 -9-36Z"/><path stroke="#f4bb76" stroke-width="2" d="M-7-45H8"/><path stroke="#d2a477" d="M-17-34H16M-12-27H12"/>',
+  vb: '<path fill="#745046" d="M-27-20 -34-7 -31-2 -18 0 -11-13 -4-18 4-5 15-4 18-13 27-5 33-7 29-22 17-31 -3-33Z"/><path fill="#b97558" d="M-27-11 -25-29 -14-43 -4-45 0-37 -12-25 -18-11Z"/><path fill="#a4644d" d="M-3-35 13-39 27-32 32-23 25-18 16-19 12-5 1-3 -4-7 3-24Z"/><path fill="#473733" d="M-13-27 -5-32 7-28 4-21 -7-20Z"/><path stroke="#efb36e" d="M-8-26 -2-27"/><path fill="none" stroke="#d2936b" d="M-24-23 -15-29 -9-39M7-32 15-29 23-30M11-14 21-20"/>',
+  ar: '<path fill="#766166" d="M-5-25 -18-7 -12-1 -2-15 12-2 19-4 10-23Z"/><path fill="#a28d88" d="M-24-24 -13-36 -16-48 -6-44 3-56 8-43 18-39 23-28 12-30 8-16 -6-18 -14-25Z"/><path fill="#4d3d4d" d="M-5-39 1-48 6-39 3-31 -3-32Z"/><path stroke="#e8a984" d="M-2-40 3-38"/>',
+  aw: '<path fill="#85778a" d="M-24-29Q-18-54-2-51Q9-52 16-43Q18-33 29-29Q21-25 11-30Q10-20 20-16Q4-15-5-23Q-14-21-22-13Q-21-22-14-31Z"/><path fill="#4a3e56" d="M-10-40Q-4-49 3-45L9-36 -2-33Z"/><path fill="none" stroke="#d9a3a2" d="M-8-30Q1-25 7-27M-18-27 -13-31"/><path stroke="#f2bc9e" d="M-4-40 2-39"/>',
+  hg: '<path fill="#716763" d="M-19-26 -26-7 -19-2 -8-4 -4-18 4-16 8-2 23-3 26-12 18-26Z"/><path fill="#9e8a79" d="M-23-29 -22-46 -9-54 8-52 18-46 23-32 15-26 11-30 5-20 -7-20 -13-29Z"/><path fill="#4a4341" d="M-11-46 10-46 13-30 1-25 -11-31Z"/><path fill="none" stroke="#f0bc82" d="M-9-38 -4-38 0-33 4-38 10-38"/><path stroke="#c8aa8a" d="M-22-40 -15-38M14-43 20-40M-20-14 -12-14"/>',
+  ga: '<path fill="#88746a" d="M-15-16 -21-4 -10 0 -5-11 7-11 12 0 22-4 16-16Z"/><path fill="#a08871" d="M-19-32 -17-47 -8-54 10-53 19-46 22-32 13-19 -13-19Z"/><path fill="#554543" d="M-12-34 -9-46 11-46 15-34 8-25 -7-25Z"/><path stroke="#f0bc84" d="M0-44V-28M-6-35H7"/>',
+  fw: '<path fill="#7b4650" d="M-23-9 -14-24 -22-39 -11-35 -6-52 1-44 11-54 13-38 25-34 18-24 26-9 14-15 8-3 0-13 -12-4 -12-15Z"/><path fill="#c27863" d="M-12-32 -6-42 0-33 9-42 13-29 7-16 -1-23 -9-17Z"/><path fill="#513138" d="M-8-31 0-26 9-31 5-23 -3-21Z"/><path stroke="#f1ac80" d="M-6-30 0-27 5-29"/>',
+  quarry: '<path fill="#826553" d="M-13-10 -20-4 -19-1 -12-4 -5-9 5-9 12-3 20-2 17-6 14-15 22-22 17-34 9-28 -1-24 -14-22 -26-30 -21-17Z"/><path fill="#b49567" d="M-18-22 -3-26 12-28 15-19 6-12 -9-12Z"/><path fill="#4c3730" d="M13-28 18-30 21-25 15-23Z"/><path stroke="#ffc767" d="M17-27H19"/>',
+  shrine: '<path fill="#977055" d="M-26-3 -4-11 27-5 24 2 2 9 -24 3Z"/><path fill="#6b4d39" d="M-23-35H-19V0H-23ZM19-41H23V-2H19Z"/><path fill="#cf9e61" d="M-24-35Q-3-33 23-41L17-28Q-4-21-26-25Z"/><path fill="#96543d" d="M-8-15Q0-19 8-15L7-6Q2 0-6-5Z"/><path fill="none" stroke="#f3c97d" d="M-8-15Q1-12 8-15M-18-30Q-4-27 17-35"/>',
+  relic: '<path fill="#776358" d="M-22 0 -12-10 14-11 22-4 18 4 0 9 -17 6Z"/><path fill="#c48b57" d="M-10 1 -11-16 3-28 7-22 13-21 12-8 4 0Z"/><path fill="#805e4a" d="M3-28 7-22 13-21 12-8 4 0 0-8Z"/><path fill="none" stroke="#749392" d="M-10-6 -4-12 1-14 5-19"/>',
+  charge: '<path fill="#866553" d="M-14-1 -9-7 10-7 16-2 10 5 -8 5Z"/><path fill="#795034" d="M-7-46 -5 0 6 2 8-46Z"/><path fill="#d1b182" d="M-9-48 -4-53 8-50 11-44 7-39 -8-40Z"/><path fill="none" stroke="#77a3a0" stroke-width="2.5" d="M-7-36 8-27 -6-22 7-15"/><path fill="none" stroke="#c7985a" d="M-3-13 2-11 1-6 -3-5"/>',
+  corrupted: '<path fill="#7e5c55" d="M-24-1 -14-9 21-7 26 0 15 6 -13 8Z"/><path fill="#61423d" d="M-23-2 -19-39 -14-38 -17-3M16-4 12-32 18-36 22-5"/><path fill="#8c5c64" d="M-21-38 16-37 23-24 9-29 2-19 -7-28 -25-25Z"/><path fill="#503b42" d="M-9-16Q0-20 8-15L7-5 -7-6Z"/><path fill="none" stroke="#ce8784" d="M-14-35 -6-30 -2-32 4-25"/>',
+  totem: '<path fill="#a17f62" d="M-14 1 -7-9 10-8 15-2 8 4 -9 5Z"/><path fill="#925f40" d="M-10-36 -4-42 9-41 13-33 6-25 8-5 -7-4 -6-25Z"/><path fill="none" stroke="#ddae70" d="M-6-35 0-29 7-35M-4-22H5M-4-16H5"/>',
+  lost: '<path fill="#a68c73" d="M-10-18 -17-2 -11 0 -3-12 5-11 9 0 15-1 12-20Z"/><path fill="#998e79" d="M-16-36 -3-43 11-36 17-15 5-16 -3-12 -16-15Z"/><path fill="#865b47" d="M-10-46 -1-52 8-47 5-39 -4-39Z"/><path fill="#746556" d="M-14-43 -11-53 -2-57 9-52 11-43 4-49 -3-49Z"/><path fill="none" stroke="#d6b58b" d="M-10-33 9-24"/>'
+};
+
+const figureNotes = {
+  ama:'Ama uses an upright stance, a high hair shape and a diagonal stitched wrap.',
+  esi:'Esi has a compact stance and a broad cream shoulder wrap.',
+  ally:'Yaw stays human. A mist-blue accent at the feet marks the temporary alliance.',
+  spirit:'Adwoa floats above the cell with a tapered hem and warm gold edge.',
+  escort:'The same spirit gains planted feet and a combat stance. The gold edge stays.',
+  dw:'A faceless fold of sand and torn cloth leans ahead of two thin supports.',
+  ds:'A wide horizontal stone lintel and a narrow slit give the Sentinel a rigid profile.',
+  vb:'The Brute crouches on four supports, with a heavy terracotta slab over one shoulder.',
+  ar:'A broken crest and uneven ash plates give the Revenant a jagged silhouette. Its current attack reads as melee.',
+  aw:'A low, open sweep of smoke lifts clear of the ground.',
+  hg:'Stacked rock plates surround a recessed core, high and blocky above the feet.',
+  ga:'A rounded stone shell with a recessed face separates the fallback Guardian from the Golem.',
+  fw:'Uneven shards frame a visible wound, with an outline distinct from the stone creatures.',
+  quarry:'A low, stretched creature carries the same gold pursuit diamond across both states.',
+  shrine:'A low open canopy protects a clay vessel. Purification keeps the vessel standing.',
+  relic:'The chipped fragment stays on its low stone base through Hold and reset.',
+  charge:'The wrapped post stays on its cell through theft and recovery.',
+  corrupted:'A sagging canopy and a dark vessel distinguish this authored shrine template.',
+  totem:'A compact carved form with a broad head distinguishes this authored template from the tall Charge.',
+  lost:'A traveller in a weathered wrap gives this authored template a grounded silhouette.'
+};
 const cast = {
   ama: ['Ama', 'A', 'Party Echo · called', 'echo', 20, 20, 'Okofor here. Calling expression uses the locked body-local signature when the action supplies it.'],
   esi: ['Esi', 'E', 'Party Echo · Uncalled', 'echo', 16, 20, 'The same blue circle and initials identify an Uncalled Echo.'],
@@ -203,7 +325,10 @@ const cast = {
   quarry: ['Quarry', 'Q', 'Enemy · pursuit target', 'quarry', 11, 20, 'The existing gold diamond identifies the fleeing objective target.'],
   shrine: ['Ancestral Shrine', 'SH', 'Objective · Shrine', 'object', 14, 20, 'A wide roof and recessed opening give the Shrine a low, sheltered profile.'],
   relic: ['Severed Relic', 'RE', 'Objective · Relic', 'object', null, null, 'A pointed fragment sits inside the square. The stationary, invulnerable Relic omits HP.'],
-  charge: ['The Charge', 'TO', 'Objective · protected structure', 'object', 12, 20, 'A tall post with a broad cap distinguishes the Charge from the Shrine and Relic.']
+  charge: ['The Charge', 'TO', 'Objective · protected structure', 'object', 12, 20, 'A tall post with a broad cap distinguishes the Charge from the Shrine and Relic.'],
+  corrupted: ['Corrupted Shrine', 'CS', 'Authored template', 'object', null, null, 'An art sample of the template. Purify Shrine uses the Ancestral Shrine fixture.'],
+  totem: ['Ancient Totem', 'AT', 'Authored template', 'object', null, null, 'An art sample of the template. Protect uses the Charge fixture.'],
+  lost: ['Lost Wanderer', 'LW', 'Authored template', 'neutral', null, null, 'An art sample of the template. Guide Spirit uses the named Adwoa fixture.']
 };
 function place(id, col, row, state = {}) {
   const [name, initials, role, kind, hp, max, detail] = cast[id];
@@ -227,7 +352,7 @@ const scenes = {
     ['Purify applied', 'Protect the Shrine · a Purify stack reduces later drain'],
     ['Destroyed', 'Shrine destroyed']
   ], actors:i => [place('ama',7,1,{acting:i<2,action:i===1?'Purifies the Shrine':''}),place('dw',9,2,{target:false}),
-    place('shrine',8,1,{hp:i===2?0:14,damage:i===2,target:i===0})]},
+    place('shrine',8,1,{hp:i===2?0:14,damage:i===2,target:i===0,worldState:i===1?'purified':''})]},
   relic: {title:'Recover Relic', selected:'relic', states:[
     ['Unheld', 'Hold the Relic · 0 consecutive adjacent rounds'],
     ['Held', 'Hold the Relic · 2 consecutive adjacent rounds'],
@@ -240,7 +365,7 @@ const scenes = {
     ['Recovered', 'Protect the Charge · recovered'],
     ['Destroyed', 'Charge destroyed']
   ], actors:i => [place('ama',i===1||i===3?7:5,1,{acting:i<4}),place('dw',9,2,{hp:i===3?0:16,action:i===4?'Destroys the Charge':'',acting:i===4}),
-    place('charge',8,1,{hp:i===4?0:12,damage:i===4,target:i===0}),place('ds',10,1)]},
+    place('charge',8,1,{hp:i===4?0:12,damage:i===4,target:i===0,worldState:i===2?'stolen':''}),place('ds',10,1)]},
   spirits: {title:'Guide Spirit', selected:'spirit', marker:i=>i?{col:9,row:0,label:'DESTINATION'}:null, states:[
     ['Protected spirit', 'Protect Adwoa · 2 rounds left'],
     ['Escort', 'Guide Adwoa to safety'],
@@ -250,7 +375,9 @@ const scenes = {
   pursue: {title:'Pursue quarry', selected:'quarry', marker:()=>({col:9,row:0,label:'EXIT'}), states:[
     ['Fleeing', 'Contain the quarry before it reaches the exit'],
     ['Contained', 'Quarry contained']
-  ], actors:i => [place('ama',i?8:6,1,{acting:true}),place('quarry',9,1)]}
+  ], actors:i => [place('ama',i?8:6,1,{acting:true}),place('quarry',9,1)]},
+  templates: {title:'Authored templates', read:'Template art samples · Corrupted Shrine, Ancient Totem, Lost Wanderer',
+    actors:() => [place('corrupted',3,1),place('totem',5,2),place('lost',8,1)], selected:'corrupted'}
 };
 const entries = [
   ['People and opponents',[
@@ -285,7 +412,7 @@ const entries = [
   ]]
 ];
 let selection = 'dw';
-let proposed = false;
+let treatment = 'storybook';
 let hideInitials = false;
 
 function add(parent, tag, attributes = {}, content) {
@@ -320,9 +447,53 @@ function drawMarker(marker) {
   add(ground,'text',{x:0,y:28,fill:cream,'text-anchor':'middle','font-size':10,'font-weight':650,
     'paint-order':'stroke',stroke:'#6e3128','stroke-width':3},marker.label);
 }
-function drawToken(parent, actor, x, y, study, interactive = false) {
+function drawFigure(layout, actor, interactive) {
+  const {id, kind, hp} = actor;
+  const defeated = hp === 0;
+  if (interactive && !defeated) {
+    add(layout,'rect',{x:-30,y:-63,width:60,height:68,fill:'transparent'});
+    add(layout,'ellipse',{rx:34,ry:10,fill:'none',stroke:'#9ad2ee','stroke-width':2,opacity:0,class:'focus-ring'});
+  }
+  if (kind === 'ally' && !defeated) {
+    add(layout,'path',{d:'M-22 3 Q0 12 22 3',fill:'none',stroke:'#9ac5cc','stroke-width':2});
+  }
+  if (actor.acting && !defeated) {
+    add(layout,'ellipse',{rx:29,ry:8,fill:'none',stroke:'#ffeb59','stroke-width':2.5,'data-cue':'acting'});
+  }
+  if (kind === 'enemy' || kind === 'quarry') {
+    add(layout,'path',{d:'M-9 4 Q0 8 9 4',fill:'none',stroke:'#da8073','stroke-width':2.5,opacity:defeated?.36:1});
+  }
+  const figure = add(layout,'g',{
+    'data-cue':'storybook-figure',
+    transform:actor.damage?'translate(-3,0) rotate(-13) scale(1,.63)':defeated?'scale(1,.61)':'',
+    opacity:defeated?.5:actor.worldState==='stolen'?.62:1,
+    stroke:'#332622','stroke-width':1.5,'stroke-linejoin':'round','stroke-linecap':'round'
+  });
+  figure.innerHTML = figures[id];
+  if (actor.damage) {
+    add(figure,'path',{d:id==='shrine'?'M-21-30 -9-24 -2-29 8-24':'M-7-34 3-27 -4-18 5-11',fill:'none',stroke:'#2f2423','stroke-width':2.5});
+    add(layout,'path',{d:'M10 3 15-3 21 1 18 6Z M-23 2 -17-1 -14 4Z',fill:'#96654c',stroke:'#362722','stroke-width':1.5});
+  }
+  if (actor.worldState === 'purified') {
+    add(layout,'path',{d:'M-11-15 Q0-19 10-15 M-4-23 l3-3 M5-21 l3-2',fill:'none',stroke:'#ffdc91','stroke-width':2,'data-cue':'purified'});
+  }
+  if (kind === 'quarry' && !defeated) {
+    add(layout,'path',{d:'M26-30 31-25 26-20 21-25Z',fill:'#ffce69',stroke:ink,'stroke-width':1.5});
+  }
+  if (actor.target && !defeated) {
+    const corners = 'M-29,-54 H-36 V-46 M29,-54 H36 V-46 M-36,-4 V4 H-29 M36,-4 V4 H29';
+    add(layout,'path',{d:corners,fill:'none',stroke:ink,'stroke-width':5});
+    add(layout,'path',{d:corners,fill:'none',stroke:cream,'stroke-width':2.5,'data-cue':'target'});
+  }
+  if (!hideInitials) {
+    add(layout,'text',{x:0,y:18,'text-anchor':'middle',fill:cream,'font-size':10,'font-weight':750,
+      'paint-order':'stroke',stroke:ink,'stroke-width':3,opacity:defeated?.65:1},actor.initials);
+  }
+}
+
+function drawToken(parent, actor, x, y, mode, interactive = false, healthOffset = 0) {
   const {id, kind, hp, max, initials, name} = actor;
-  const square = kind === 'object' || kind === 'spirit';
+  const square = kind === 'object' || kind === 'spirit' || kind === 'neutral';
   const enemy = kind === 'enemy' || kind === 'quarry';
   const dead = hp === 0;
   const token = add(parent,'g',{
@@ -341,42 +512,47 @@ function drawToken(parent, actor, x, y, study, interactive = false) {
     });
   }
   const layout = add(token,'g',{'aria-hidden':'true'});
-  if (interactive && !dead) add(layout,'rect',{x:-24,y:-44,width:48,height:48,fill:'transparent'});
+  const storybook = mode === 'storybook';
+  if (interactive && !dead && !storybook) add(layout,'rect',{x:-24,y:-44,width:48,height:48,fill:'transparent'});
   add(layout,'ellipse',{rx:25,ry:7,fill:'#000','fill-opacity':'.28'});
-  const body = add(layout,'g',{transform:'translate(0,-20)'});
-  if (interactive && !dead) add(body,'circle',{r:34,fill:'none',stroke:'#9ad2ee','stroke-width':2,opacity:0,class:'focus-ring'});
-  const shape = add(body,'g',{opacity:dead?'.43':1});
-  if (kind === 'spirit' || kind === 'escort') {
-    add(shape,'circle',{r:26,fill:'#ffeb8c','fill-opacity':'.22'});
-    add(shape,'circle',{r:26,fill:'none',stroke:'#ffda59','stroke-opacity':'.85','stroke-width':2.5});
-    add(shape,'circle',{r:30,fill:'none',stroke:'#ffda59','stroke-opacity':'.38','stroke-width':1.75});
-  }
-  if (kind === 'ally') add(shape,'circle',{r:25,fill:'none',stroke:'#7ab5c8','stroke-width':2.5});
-  const fill = enemy?'#c0282c':square?'#85858a':'#2f66b8';
-  if (square) add(shape,'rect',{x:-20,y:-20,width:40,height:40,fill,stroke:ink,'stroke-width':2});
-  else add(shape,'circle',{r:20,fill,stroke:ink,'stroke-width':3});
-  if (study && (marks[id] || objects[id])) {
-    const interior = add(shape,'g',{'data-cue':'interior',fill:'none','stroke-width':2.5,'stroke-linecap':'square'});
-    interior.innerHTML = marks[id] || objects[id];
-  }
-  if (actor.damage) add(shape,'path',{d:'M4,-19 L-3,-7 L4,0 L-6,8 L0,19 M4,0 L19,7',fill:'none',stroke:'#3c2426','stroke-width':2.5});
-  if (kind === 'quarry') add(shape,'path',{d:'M0,-19 L7,-12 L0,-5 L-7,-12 Z',fill:'#ffb300',stroke:ink,'stroke-width':1.5});
-  if (!hideInitials) add(shape,'text',{
-    x:0,y:objects[id]?17:5,'text-anchor':'middle',fill:cream,
-    'font-family':'system-ui,sans-serif','font-size':objects[id]?10:14,'font-weight':760,
-    'paint-order':'stroke',stroke:ink,'stroke-width':2.5,'stroke-linejoin':'round'
-  },initials);
-  if (actor.acting && !dead) add(body,'circle',{r:24,fill:'none',stroke:'#ffeb59','stroke-width':3,'data-cue':'acting'});
-  if (actor.target && !dead) {
-    const corners = 'M-22,-32 H-32 V-22 M22,-32 H32 V-22 M-32,22 V32 H-22 M32,22 V32 H22';
-    add(body,'path',{d:corners,fill:'none',stroke:ink,'stroke-width':5});
-    add(body,'path',{d:corners,fill:'none',stroke:cream,'stroke-width':2.5,'data-cue':'target'});
+  if (storybook) drawFigure(layout, actor, interactive);
+  const body = add(layout,'g',{transform:storybook?'translate(0,-36)':'translate(0,-20)'});
+  if (!storybook) {
+    if (interactive && !dead) add(body,'circle',{r:34,fill:'none',stroke:'#9ad2ee','stroke-width':2,opacity:0,class:'focus-ring'});
+    const shape = add(body,'g',{opacity:dead?'.43':1});
+    if (kind === 'spirit' || kind === 'escort') {
+      add(shape,'circle',{r:26,fill:'#ffeb8c','fill-opacity':'.22'});
+      add(shape,'circle',{r:26,fill:'none',stroke:'#ffda59','stroke-opacity':'.85','stroke-width':2.5});
+      add(shape,'circle',{r:30,fill:'none',stroke:'#ffda59','stroke-opacity':'.38','stroke-width':1.75});
+    }
+    if (kind === 'ally') add(shape,'circle',{r:25,fill:'none',stroke:'#7ab5c8','stroke-width':2.5});
+    const fill = enemy?'#c0282c':square?'#85858a':'#2f66b8';
+    if (square) add(shape,'rect',{x:-20,y:-20,width:40,height:40,fill,stroke:ink,'stroke-width':2});
+    else add(shape,'circle',{r:20,fill,stroke:ink,'stroke-width':3});
+    if (mode === 'interiors' && (marks[id] || objects[id])) {
+      const interior = add(shape,'g',{'data-cue':'interior',fill:'none','stroke-width':2.5,'stroke-linecap':'square'});
+      interior.innerHTML = marks[id] || objects[id];
+    }
+    if (actor.damage) add(shape,'path',{d:'M4,-19 L-3,-7 L4,0 L-6,8 L0,19 M4,0 L19,7',fill:'none',stroke:'#3c2426','stroke-width':2.5});
+    if (kind === 'quarry') add(shape,'path',{d:'M0,-19 L7,-12 L0,-5 L-7,-12 Z',fill:'#ffb300',stroke:ink,'stroke-width':1.5});
+    if (!hideInitials) add(shape,'text',{
+      x:0,y:objects[id]?17:5,'text-anchor':'middle',fill:cream,
+      'font-family':'system-ui,sans-serif','font-size':objects[id]?10:14,'font-weight':760,
+      'paint-order':'stroke',stroke:ink,'stroke-width':2.5,'stroke-linejoin':'round'
+    },initials);
+    if (actor.acting && !dead) add(body,'circle',{r:24,fill:'none',stroke:'#ffeb59','stroke-width':3,'data-cue':'acting'});
+    if (actor.target && !dead) {
+      const corners = 'M-22,-32 H-32 V-22 M22,-32 H32 V-22 M-32,22 V32 H-22 M32,22 V32 H22';
+      add(body,'path',{d:corners,fill:'none',stroke:ink,'stroke-width':5});
+      add(body,'path',{d:corners,fill:'none',stroke:cream,'stroke-width':2.5,'data-cue':'target'});
+    }
   }
   if (hp !== null) {
+    const health = add(body,'g',{transform:`translate(${healthOffset},0)`,'data-cue':'health'});
     const ratio = hp/max;
-    add(body,'rect',{x:-20,y:-30,width:40,height:5,fill:ink});
-    add(body,'rect',{x:-20,y:-30,width:40*ratio,height:5,fill:ratio<=.25?'#f00':ratio<=.5?'#ff0':'#0b7d12'});
-    add(body,'text',{x:0,y:-36,'text-anchor':'middle',fill:cream,'font-size':10,'font-weight':650,
+    add(health,'rect',{x:-20,y:-30,width:40,height:5,fill:ink});
+    add(health,'rect',{x:-20,y:-30,width:40*ratio,height:5,fill:ratio<=.25?'#f00':ratio<=.5?'#ff0':'#0b7d12'});
+    add(health,'text',{x:0,y:-36,'text-anchor':'middle',fill:cream,'font-size':10,'font-weight':650,
       'paint-order':'stroke',stroke:'#6e3128','stroke-width':3},`${hp}/${max}`);
   }
   if (actor.guarding) add(body,'path',{
@@ -403,16 +579,17 @@ function selectActor(id) {
   const samples = byId('samples');
   samples.replaceChildren();
   byId('detail-type').textContent = actor?.role || 'Review';
-  byId('detail-title').textContent = actor?.name || 'Select a token';
-  byId('detail-text').textContent = actor?.detail || 'Choose a token or a roster entry to compare the two treatments.';
+  byId('detail-title').textContent = actor?.name || 'Select an actor or object';
+  byId('detail-text').textContent = (treatment === 'storybook' ? figureNotes[actor?.id] : actor?.detail)
+    || 'Choose an actor or object on the board or in the roster.';
   byId('detail-action').textContent = actor?.action || (actor?.hp === 0?(actor.kind==='object'?'Destroyed':'Defeated')+' · inactive':'');
   if (!actor) return;
-  for (const treatment of [false,true]) {
+  for (const [mode, label] of Object.entries(treatments)) {
     const figure = document.createElement('figure');
-    const preview = add(figure,'svg',{width:116,height:96,viewBox:'0 0 116 96','aria-hidden':'true'});
-    drawToken(preview,actor,58,79,treatment);
+    const preview = add(figure,'svg',{width:112,height:112,viewBox:'0 0 112 112','aria-hidden':'true'});
+    drawToken(preview,actor,56,90,mode);
     const caption = document.createElement('figcaption');
-    caption.textContent = treatment?'Proposed':'Approved reference';
+    caption.textContent = label;
     figure.append(caption);
     samples.append(figure);
   }
@@ -427,9 +604,13 @@ function drawScene() {
   drawTiles(board);
   const marker = scene.marker?.(index);
   if (marker) drawMarker(marker);
-  for (const actor of [...actors].sort((a,b) => a.col+a.row-b.col-b.row)) {
+  const depthOrder = [...actors].sort((a,b) => a.col+a.row-b.col-b.row);
+  const occupied = actors.map(actor => position(actor.col,actor.row));
+  for (const actor of depthOrder) {
     const {x,y} = position(actor.col,actor.row);
-    drawToken(board,actor,x,y,proposed,true);
+    // Along one isometric column, the rear figure's feet can overlap the front figure's HP.
+    const stacked = treatment === 'storybook' && occupied.some(cell => cell.x === x && cell.y === y-64);
+    drawToken(board,actor,x,y,treatment,true,stacked?-48:0);
   }
   byId('board-read').textContent = scene.states?.[index][1] || scene.read;
   const roster = byId('roster');
@@ -455,9 +636,10 @@ function changeScene() {
   drawScene();
 }
 function changeTreatment(value) {
-  proposed = value;
-  byId('baseline').setAttribute('aria-pressed', !value);
-  byId('proposed').setAttribute('aria-pressed', value);
+  treatment = value;
+  for (const button of treatmentButtons) {
+    button.setAttribute('aria-pressed', button.dataset.treatment === value);
+  }
   drawScene();
 }
 function renderInventory() {
@@ -481,8 +663,10 @@ function renderInventory() {
 sceneControl.replaceChildren(...Object.entries(scenes).map(([id, scene]) => new Option(scene.title,id)));
 sceneControl.addEventListener('change', changeScene);
 stateControl.addEventListener('change', drawScene);
-byId('baseline').addEventListener('click', () => changeTreatment(false));
-byId('proposed').addEventListener('click', () => changeTreatment(true));
+const treatmentButtons = document.querySelectorAll('[data-treatment]');
+for (const button of treatmentButtons) {
+  button.addEventListener('click', () => changeTreatment(button.dataset.treatment));
+}
 byId('hide-initials').addEventListener('change', event => {
   hideInitials = event.currentTarget.checked;
   drawScene();

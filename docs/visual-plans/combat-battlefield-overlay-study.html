@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Echoes · Battlefield overlays</title>
+<style>
+:root{color-scheme:dark;background:#1e1a17;color:#fff1d8;font:16px/1.5 system-ui,sans-serif;--line:#66513d;--gold:#f2cb85;--muted:#d0bda7}
+*{box-sizing:border-box}
+body{margin:0}
+main{max-width:1110px;margin:auto;padding:28px 18px 50px}
+h1,h2,p{margin:0}
+h1{font:500 clamp(2rem,5vw,3.1rem)/1.15 Georgia,serif}
+h2{font:500 1.45rem Georgia,serif}
+header p,.note{color:var(--muted)}
+header p{margin-top:5px}
+a{color:var(--gold)}
+nav,.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+nav{margin:20px 0 10px}
+.controls{min-height:62px;padding:8px 11px;border:1px solid var(--line);background:#2c241e}
+.controls label{font-size:.88rem}
+button,select{color:inherit;background:#322820;font:inherit;border:1px solid #8b6e50;border-radius:4px;padding:8px 12px;min-height:44px;cursor:pointer}
+button[aria-pressed=true]{color:#261c14;background:var(--gold);border-color:var(--gold);font-weight:700}
+:focus-visible{outline:2px solid #bce4f2;outline-offset:3px}
+.field{position:relative;border:1px solid var(--line)}
+svg{display:block;width:100%;height:auto}
+.observer{position:absolute;top:5%;left:2%;max-width:27%;font-size:clamp(.62rem,1.4vw,.88rem);color:#fff1d8;text-shadow:0 1px 4px #211712;pointer-events:none}
+.observer strong{color:var(--gold)}
+.caption{min-height:82px;padding:12px;border:1px solid var(--line);background:#2c241e}
+.caption p{margin-top:3px;color:var(--muted)}
+details{margin-top:20px;border-top:1px solid var(--line);padding-top:10px}
+summary{color:var(--gold);cursor:pointer}
+details ul{padding-left:22px}
+footer{display:flex;gap:16px;flex-wrap:wrap;margin-top:20px;font-size:.86rem}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Battlefield overlays</h1>
+  <p>Storybook study · Vale of Dust</p>
+</header>
+<nav aria-label="Choose a study">
+  <button data-mode="footprint" aria-pressed="true">Obstacles</button>
+  <button data-mode="reach" aria-pressed="false">Reach</button>
+  <button data-mode="intel" aria-pressed="false">Scouting intel</button>
+  <button data-mode="overlap" aria-pressed="false">Readability under overlap</button>
+</nav>
+<div class="controls">
+  <label for="variant" id="variant-label">View</label>
+  <select id="variant"></select>
+  <button type="button" id="replay" hidden>Replay the hit</button>
+</div>
+<div class="field">
+  <svg viewBox="0 0 1000 570" role="img" aria-label="Vale of Dust isometric board" aria-describedby="read-title read">
+    <defs><mask id="intel-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="570">
+      <rect width="1000" height="570" fill="white"/><g id="known-cells"></g>
+    </mask></defs>
+    <g id="terrain"></g><g id="ground"></g><g id="figures"></g><g id="foreground"></g><g id="cues"></g>
+  </svg>
+  <div class="observer" id="observer" hidden><strong>Observer</strong><p id="observer-action"></p></div>
+</div>
+<div class="caption" aria-live="polite">
+  <h2 id="read-title"></h2><p id="read"></p>
+</div>
+<details>
+  <summary>What to look for</summary>
+  <ul>
+    <li>Find the blocked cell and the reachable destination before following the route.</li>
+    <li>In Reach, identify which actor is close enough to strike, then return to the default view.</li>
+    <li>In Scouting intel, identify what the party actually saw. The blank area has no forecast hazard, enemy, objective, or route.</li>
+    <li>In Readability under overlap, compare <strong>All cues at once</strong> with <strong>Cues in action order</strong>. Identify who acted, who was hit, and what Guard changed.</li>
+  </ul>
+</details>
+<footer>
+  <a href="combat-battlefield-mockup.html">Approved battlefield reference</a>
+  <a href="combat-actors-objects-study.html#storybook-title">Approved Storybook encounter</a>
+  <a href="combat-visual-inventory.md">Combat inventory</a>
+</footer>
+</main>
+<script src="combat-storybook-board.js"></script>
+<script src="combat-storybook-figures.js"></script>
+<script src="combat-battlefield-overlay-study.js"></script>
+</body>
+</html>
